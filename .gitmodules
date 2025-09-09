@@ -1,0 +1,15 @@
+[submodule "dependencies/glfw"]
+	path = dependencies/glfw
+	url = https://github.com/g-martin772/glfw/
+[submodule "dependencies/glm"]
+	path = dependencies/glm
+	url = https://github.com/g-martin772/glm/
+[submodule "dependencies/glad"]
+	path = dependencies/glad
+	url = https://github.com/g-martin772/glad/
+[submodule "dependencies/imgui"]
+	path = dependencies/imgui
+	url = https://github.com/g-martin772/imgui/
+[submodule "dependencies/spdlog"]
+	path = dependencies/spdlog
+	url = https://github.com/g-martin772/spdlog/
