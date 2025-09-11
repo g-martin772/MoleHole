@@ -10,6 +10,7 @@
 [submodule "dependencies/imgui"]
 	path = dependencies/imgui
 	url = https://github.com/g-martin772/imgui/
+	branch = docking
 [submodule "dependencies/spdlog"]
 	path = dependencies/spdlog
 	url = https://github.com/g-martin772/spdlog/
