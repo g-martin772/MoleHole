@@ -12,6 +12,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "Buffer.h"
+#include "Camera.h"
+#include "Camera.h"
+#include "Camera.h"
+#include "Camera.h"
 
 void Renderer::Init(GlobalOptions* options) {
     globalOptions = options;
@@ -167,7 +171,14 @@ void Renderer::RenderScene(Scene *scene) {
     quadShader->Bind();
     glm::mat4 vp = camera->GetViewProjectionMatrix();
     quadShader->SetMat4("uVP", vp);
-    DrawQuad();
+    // Example: draw several quads in a grid with different rotations
+    for (int x = -2; x <= 2; ++x) {
+        for (int y = -2; y <= 2; ++y) {
+            float angle = (x + y) * 0.2f;
+            DrawQuad(glm::vec3(x, y, 0.0f), angle);
+        }
+    }
+    FlushQuads();
     quadShader->Unbind();
     glDeleteFramebuffers(1, &fbo);
     ImGui::Image((void*)(intptr_t)image->textureID, ImVec2((float)image->width, (float)image->height), ImVec2(0, 1), ImVec2(1, 0));
@@ -193,22 +204,22 @@ void Renderer::UpdateCamera(float deltaTime) {
     }
 }
 
-void Renderer::DrawQuad() {
+void Renderer::DrawQuad(const glm::vec3& position, float rotationRadians, const glm::vec3& scale) {
+    quadInstances.push_back({ position, rotationRadians, scale });
+}
+
+void Renderer::FlushQuads() {
     static VertexArray* vao = nullptr;
     static VertexBuffer* vbo = nullptr;
     static IndexBuffer* ebo = nullptr;
     if (!vao) {
         float vertices[] = {
-            // positions        // uvs
             -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
              0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
              0.5f,  0.5f, 0.0f, 1.0f, 1.0f,
             -0.5f,  0.5f, 0.0f, 0.0f, 1.0f
         };
-        unsigned int indices[] = {
-            0, 1, 2,
-            2, 3, 0
-        };
+        unsigned int indices[] = { 0, 1, 2, 2, 3, 0 };
         vao = new VertexArray();
         vbo = new VertexBuffer(vertices, sizeof(vertices));
         ebo = new IndexBuffer(indices, 6);
@@ -220,6 +231,14 @@ void Renderer::DrawQuad() {
         vao->Unbind();
     }
     vao->Bind();
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    for (const auto& quad : quadInstances) {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, quad.position);
+        model = glm::rotate(model, quad.rotation, glm::vec3(0, 0, 1));
+        model = glm::scale(model, quad.scale);
+        quadShader->SetMat4("uModel", model);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+    }
     vao->Unbind();
+    quadInstances.clear();
 }

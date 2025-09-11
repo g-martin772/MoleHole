@@ -1,6 +1,8 @@
 #pragma once
 #include "Shader.h"
 #include <memory>
+#include <glm/glm.hpp>
+#include <vector>
 
 #include "../Scene.h"
 #include "Image.h"
@@ -20,6 +22,9 @@ public:
     void RenderUI(float fps);
     void RenderScene(Scene *scene);
 
+    void DrawQuad(const glm::vec3& position, float rotationRadians = 0.0f, const glm::vec3& scale = glm::vec3(1.0f));
+    void FlushQuads();
+
     GLFWwindow* GetWindow() const { return window; }
 private:
     GLFWwindow* window = nullptr;
@@ -32,5 +37,11 @@ private:
     GlobalOptions* globalOptions = nullptr;
     int lastVsync = -1;
     void UpdateCamera(float deltaTime);
-    void DrawQuad();
+
+    struct QuadInstance {
+        glm::vec3 position;
+        float rotation;
+        glm::vec3 scale;
+    };
+    std::vector<QuadInstance> quadInstances;
 };
