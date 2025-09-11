@@ -1,9 +1,9 @@
 #include "Shader.h"
-#include <iostream>
 #include <fstream>
 #include <sstream>
 #include <glad/gl.h>
 #include <spdlog/spdlog.h>
+#include <glm/gtc/type_ptr.hpp>
 
 std::string Shader::ReadFile(const char* path) {
     std::ifstream file(path);
@@ -67,4 +67,24 @@ void Shader::Bind() const {
 }
 void Shader::Unbind() const {
     glUseProgram(0);
+}
+
+void Shader::SetMat4(const std::string& name, const glm::mat4& matrix) const {
+    glUniformMatrix4fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(matrix));
+}
+
+void Shader::SetVec3(const std::string& name, const glm::vec3& vector) const {
+    glUniform3fv(GetUniformLocation(name), 1, glm::value_ptr(vector));
+}
+
+void Shader::SetFloat(const std::string& name, float value) const {
+    glUniform1f(GetUniformLocation(name), value);
+}
+
+void Shader::SetInt(const std::string& name, int value) const {
+    glUniform1i(GetUniformLocation(name), value);
+}
+
+int Shader::GetUniformLocation(const std::string& name) const {
+    return glGetUniformLocation(ID, name.c_str());
 }
