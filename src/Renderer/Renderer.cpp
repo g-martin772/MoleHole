@@ -7,6 +7,11 @@
 #include "spdlog/spdlog.h"
 #include "Shader.h"
 #include <memory>
+#include "Camera.h"
+#include "Input.h"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include "Buffer.h"
 
 void Renderer::Init() {
     if (!glfwInit()) {
@@ -46,40 +51,13 @@ void Renderer::Init() {
 
     image = std::make_shared<Image>(last_img_width, last_img_height);
 
-    spdlog::trace("Loading shaders");
-    triangleShader = std::make_unique<Shader>("shaders/triangle.vert", "shaders/triangle.frag");
-    circleShader = std::make_unique<Shader>("shaders/circle.vert", "shaders/circle.frag");
-
-    float triangleVertices[] = {
-        -0.5f, -0.5f,
-         0.5f, -0.5f,
-         0.0f,  0.5f
-    };
-
-    glGenVertexArrays(1, &triangleVAO);
-    glGenBuffers(1, &triangleVBO);
-    glBindVertexArray(triangleVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, triangleVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVertices), triangleVertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glBindVertexArray(0);
-
-    float quadVertices[] = {
-        -1.0f, -1.0f,
-         1.0f, -1.0f,
-         1.0f,  1.0f,
-        -1.0f,  1.0f
-    };
-
-    glGenVertexArrays(1, &quadVAO);
-    glGenBuffers(1, &quadVBO);
-    glBindVertexArray(quadVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glBindVertexArray(0);
+    spdlog::info("Loading shaders");
+    quadShader = std::make_unique<Shader>("../shaders/quad.vert", "../shaders/quad.frag");
+    // Camera and Input initialization
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
+    camera = std::make_unique<Camera>(45.0f, (float)width / (float)height, 0.1f, 100.0f);
+    input = std::make_unique<Input>(window);
 }
 
 void Renderer::Shutdown() {
@@ -141,8 +119,24 @@ void Renderer::RenderScene(Scene *scene) {
         image = std::make_shared<Image>(img_width, img_height);
         last_img_width = img_width;
         last_img_height = img_height;
+        if (camera) camera->SetYawPitch(camera->GetYaw(), camera->GetPitch());
     }
-
+    // Set viewport focus/hover state for input
+    bool viewport_focused = ImGui::IsWindowFocused();
+    bool viewport_hovered = ImGui::IsWindowHovered();
+    input->SetViewportFocused(viewport_focused);
+    input->SetViewportHovered(viewport_hovered);
+    // Update input and camera only if focused
+    static double lastTime = glfwGetTime();
+    double currentTime = glfwGetTime();
+    float deltaTime = static_cast<float>(currentTime - lastTime);
+    lastTime = currentTime;
+    input->Update();
+    if (viewport_focused && viewport_hovered) {
+        UpdateCamera(deltaTime);
+    } else {
+        input->SetCursorEnabled(true);
+    }
     unsigned int fbo;
     glGenFramebuffers(1, &fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -150,14 +144,63 @@ void Renderer::RenderScene(Scene *scene) {
     glViewport(0, 0, image->width, image->height);
     glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-
     // RENDERING
-
-
+    quadShader->Bind();
+    glm::mat4 vp = camera->GetViewProjectionMatrix();
+    quadShader->SetMat4("uVP", vp);
+    DrawQuad();
+    quadShader->Unbind();
     glDeleteFramebuffers(1, &fbo);
-
     ImGui::Image((void*)(intptr_t)image->textureID, ImVec2((float)image->width, (float)image->height), ImVec2(0, 1), ImVec2(1, 0));
     ImGui::End();
+}
+
+void Renderer::UpdateCamera(float deltaTime) {
+    float forward = 0.0f, right = 0.0f, up = 0.0f;
+    if (input->IsKeyDown(GLFW_KEY_W)) forward += 1.0f;
+    if (input->IsKeyDown(GLFW_KEY_S)) forward -= 1.0f;
+    if (input->IsKeyDown(GLFW_KEY_D)) right += 1.0f;
+    if (input->IsKeyDown(GLFW_KEY_A)) right -= 1.0f;
+    if (input->IsKeyDown(GLFW_KEY_E)) up += 1.0f;
+    if (input->IsKeyDown(GLFW_KEY_Q)) up -= 1.0f;
+    camera->ProcessKeyboard(forward, right, up, deltaTime);
+    if (input->IsMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT)) {
+        input->SetCursorEnabled(false);
+        double dx, dy;
+        input->GetMouseDelta(dx, dy);
+        camera->ProcessMouse((float)dx, (float)dy);
+    } else {
+        input->SetCursorEnabled(true);
+    }
+}
+
+void Renderer::DrawQuad() {
+    static VertexArray* vao = nullptr;
+    static VertexBuffer* vbo = nullptr;
+    static IndexBuffer* ebo = nullptr;
+    if (!vao) {
+        float vertices[] = {
+            // positions        // uvs
+            -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+             0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+             0.5f,  0.5f, 0.0f, 1.0f, 1.0f,
+            -0.5f,  0.5f, 0.0f, 0.0f, 1.0f
+        };
+        unsigned int indices[] = {
+            0, 1, 2,
+            2, 3, 0
+        };
+        vao = new VertexArray();
+        vbo = new VertexBuffer(vertices, sizeof(vertices));
+        ebo = new IndexBuffer(indices, 6);
+        vao->Bind();
+        vbo->Bind();
+        ebo->Bind();
+        vao->EnableAttrib(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        vao->EnableAttrib(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+        vao->Unbind();
+    }
+    vao->Bind();
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    vao->Unbind();
 }

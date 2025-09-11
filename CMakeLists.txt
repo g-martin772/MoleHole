@@ -9,7 +9,7 @@ add_subdirectory(dependencies/glad/cmake)
 add_subdirectory(dependencies/glm)
 add_subdirectory(dependencies/spdlog)
 
-file(GLOB SOURCES src/*.cpp)
+file(GLOB SOURCES src/*.cpp src/Renderer/*.cpp)
 set(IMGUI_SOURCES
     dependencies/imgui/imgui.cpp
     dependencies/imgui/imgui_draw.cpp

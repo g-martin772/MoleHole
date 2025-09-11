@@ -1,6 +1,6 @@
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
-#include "Renderer.h"
+#include "Renderer/Renderer.h"
 #include "Simulation.h"
 
 int main() {
