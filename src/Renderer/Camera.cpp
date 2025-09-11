@@ -19,6 +19,10 @@ void Camera::SetYawPitch(float y, float p) {
     UpdateCameraVectors();
 }
 
+void Camera::SetAspect(float a) {
+    aspect = a;
+}
+
 void Camera::ProcessKeyboard(float forward, float rightMove, float upMove, float deltaTime) {
     float velocity = 5.0f * deltaTime;
     position += front * forward * velocity;
@@ -65,4 +69,3 @@ void Camera::UpdateCameraVectors() {
     right = glm::normalize(glm::cross(front, worldUp));
     up = glm::normalize(glm::cross(right, front));
 }
-

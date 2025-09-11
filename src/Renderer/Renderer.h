@@ -6,17 +6,18 @@
 #include "Image.h"
 #include "Camera.h"
 #include "Input.h"
+#include "../GlobalOptions.h"
 
 struct GLFWwindow;
 
 class Renderer {
 public:
-    void Init();
+    void Init(GlobalOptions* options);
     void Shutdown();
     void BeginFrame();
     void EndFrame();
     void RenderDockspace();
-    void RenderUI();
+    void RenderUI(float fps);
     void RenderScene(Scene *scene);
 
     GLFWwindow* GetWindow() const { return window; }
@@ -28,6 +29,8 @@ private:
     std::unique_ptr<Shader> quadShader;
     std::unique_ptr<Camera> camera;
     std::unique_ptr<Input> input;
+    GlobalOptions* globalOptions = nullptr;
+    int lastVsync = -1;
     void UpdateCamera(float deltaTime);
     void DrawQuad();
 };

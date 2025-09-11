@@ -14,6 +14,7 @@ public:
     glm::vec3 GetPosition() const;
     float GetYaw() const;
     float GetPitch() const;
+    void SetAspect(float aspect);
 private:
     void UpdateCameraVectors();
     glm::vec3 position;
@@ -28,4 +29,3 @@ private:
     float nearPlane;
     float farPlane;
 };
-

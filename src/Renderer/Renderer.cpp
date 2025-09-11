@@ -13,7 +13,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "Buffer.h"
 
-void Renderer::Init() {
+void Renderer::Init(GlobalOptions* options) {
+    globalOptions = options;
+
     if (!glfwInit()) {
         spdlog::error("Failed to initialize GLFW");
         exit(-1);
@@ -70,6 +72,14 @@ void Renderer::Shutdown() {
 }
 
 void Renderer::BeginFrame() {
+    // Apply VSync if changed
+    if (globalOptions) {
+        int vsyncVal = globalOptions->vsync ? 1 : 0;
+        if (vsyncVal != lastVsync) {
+            glfwSwapInterval(vsyncVal);
+            lastVsync = vsyncVal;
+        }
+    }
     glfwPollEvents();
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -104,29 +114,38 @@ void Renderer::RenderDockspace() {
     ImGui::DockSpaceOverViewport(ImGui::GetID("DockSpace"), ImGui::GetMainViewport());
 }
 
-void Renderer::RenderUI() {
+void Renderer::RenderUI(float fps) {
     ImGui::Begin("Test");
     ImGui::Text("Hello World");
+    ImGui::Text("FPS: %.1f", fps);
+    bool vsync = globalOptions->vsync;
+    if (ImGui::Checkbox("VSync", &vsync)) {
+        globalOptions->vsync = vsync;
+    }
+    ImGui::Text("VSync State: %s", globalOptions->vsync ? "Enabled" : "Disabled");
     ImGui::End();
 }
 
 void Renderer::RenderScene(Scene *scene) {
     ImGui::Begin("Rendered Image");
     ImVec2 imgui_size = ImGui::GetContentRegionAvail();
-    int img_width = std::max(1, (int) imgui_size.x);
-    int img_height = std::max(1, (int) imgui_size.y);
+    int img_width = std::max(1, static_cast<int>(imgui_size.x));
+    int img_height = std::max(1, static_cast<int>(imgui_size.y));
     if (img_width != last_img_width || img_height != last_img_height) {
         image = std::make_shared<Image>(img_width, img_height);
         last_img_width = img_width;
         last_img_height = img_height;
-        if (camera) camera->SetYawPitch(camera->GetYaw(), camera->GetPitch());
+        if (camera) {
+            camera->SetYawPitch(camera->GetYaw(), camera->GetPitch());
+            camera->SetAspect(static_cast<float>(img_width) / static_cast<float>(img_height));
+        }
     }
-    // Set viewport focus/hover state for input
+
     bool viewport_focused = ImGui::IsWindowFocused();
     bool viewport_hovered = ImGui::IsWindowHovered();
     input->SetViewportFocused(viewport_focused);
     input->SetViewportHovered(viewport_hovered);
-    // Update input and camera only if focused
+
     static double lastTime = glfwGetTime();
     double currentTime = glfwGetTime();
     float deltaTime = static_cast<float>(currentTime - lastTime);
