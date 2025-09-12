@@ -4,11 +4,11 @@
 #include <glm/glm.hpp>
 #include <vector>
 
-#include "../Scene.h"
+#include "Scene.h"
 #include "Image.h"
 #include "Camera.h"
 #include "Input.h"
-#include "../GlobalOptions.h"
+#include "GlobalOptions.h"
 
 struct GLFWwindow;
 
@@ -22,15 +22,14 @@ public:
     void Shutdown();
     void BeginFrame();
     void EndFrame();
-    void RenderDockspace();
-    void RenderUI(float fps);
+    void RenderDockspace(Scene* scene);
+    void RenderUI(float fps, Scene *scene);
     void RenderScene(Scene *scene);
 
     void DrawQuad(const glm::vec3& position, float rotationRadians = 0.0f, const glm::vec3& scale = glm::vec3(1.0f));
     void FlushQuads();
 
     GLFWwindow* GetWindow() const { return window; }
-private:
     GLFWwindow* window = nullptr;
     int last_img_width = 800;
     int last_img_height = 600;
