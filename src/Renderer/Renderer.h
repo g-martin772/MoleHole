@@ -48,7 +48,7 @@ public:
     };
     std::vector<QuadInstance> quadInstances;
 
-    ViewportMode selectedViewport = ViewportMode::Demo1;
+    ViewportMode selectedViewport = ViewportMode::Rays2D;
     void RenderDemo1(Scene* scene);
     void Render2DRays(Scene* scene);
 };

@@ -188,6 +188,8 @@ void Renderer::RenderUI(float fps, Scene *scene) {
     }
     ImGui::Text("VSync State: %s", globalOptions->vsync ? "Enabled" : "Disabled");
 
+    ImGui::DragFloat("Ray spacing", &globalOptions->beamSpacing, 0.01f, 0.0f, 1e10f);
+
     if (ImGui::CollapsingHeader("Black Holes", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (ImGui::Button("Add Black Hole")) {
             BlackHole newHole;
