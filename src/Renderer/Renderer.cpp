@@ -55,6 +55,8 @@ void Renderer::Init(GlobalOptions *options) {
 
     spdlog::info("Loading shaders");
     quadShader = std::make_unique<Shader>("../shaders/quad.vert", "../shaders/quad.frag");
+    circleShader = std::make_unique<Shader>("../shaders/circle.vert", "../shaders/circle.frag");
+    sphereShader = std::make_unique<Shader>("../shaders/sphere.vert", "../shaders/sphere.frag");
 
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
@@ -96,8 +98,8 @@ void Renderer::EndFrame() {
     glfwSwapBuffers(window);
 }
 
-void Renderer::RenderDockspace(Scene* scene) {
-    ImGuiIO& io = ImGui::GetIO();
+void Renderer::RenderDockspace(Scene *scene) {
+    ImGuiIO &io = ImGui::GetIO();
     bool ctrl = io.KeyCtrl;
     static bool prevCtrlS = false, prevCtrlO = false;
     bool ctrlS = ctrl && ImGui::IsKeyPressed(ImGuiKey_S);
@@ -139,6 +141,9 @@ void Renderer::RenderDockspace(Scene* scene) {
             if (ImGui::MenuItem("Rays2D", nullptr, selectedRays2D)) {
                 selectedViewport = ViewportMode::Rays2D;
             }
+            if (ImGui::MenuItem("Simulation3D", nullptr, selectedViewport == ViewportMode::Simulation3D)) {
+                selectedViewport = ViewportMode::Simulation3D;
+            }
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -175,7 +180,7 @@ void Renderer::RenderUI(float fps, Scene *scene) {
     if (scene) {
         char nameBuffer[128];
         std::strncpy(nameBuffer, scene->name.c_str(), sizeof(nameBuffer));
-        nameBuffer[sizeof(nameBuffer)-1] = '\0';
+        nameBuffer[sizeof(nameBuffer) - 1] = '\0';
         if (ImGui::InputText("Scene Name", nameBuffer, sizeof(nameBuffer))) {
             scene->name = nameBuffer;
         }
@@ -237,6 +242,8 @@ void Renderer::RenderScene(Scene *scene) {
             break;
         case ViewportMode::Rays2D: title = "Viewport - 2D Rays";
             break;
+        case ViewportMode::Simulation3D: title = "Viewport - 3D Simulation";
+            break;
         default: title = "Viewport";
             break;
     }
@@ -285,6 +292,11 @@ void Renderer::RenderScene(Scene *scene) {
             glClear(GL_COLOR_BUFFER_BIT);
             Render2DRays(scene);
             break;
+        case ViewportMode::Simulation3D:
+            glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            Render3DSimulation(scene);
+            break;
         default:
             break;
     }
@@ -308,8 +320,121 @@ void Renderer::RenderDemo1(Scene *scene) {
     quadShader->Unbind();
 }
 
+void Renderer::DrawCircle(const glm::vec2& pos, float radius, const glm::vec3& color) {
+    int viewport[4];
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    float screenRadius = radius;
+    if (camera) {
+        glm::vec4 p0 = camera->GetViewProjectionMatrix() * glm::vec4(pos, 0.0f, 1.0f);
+        glm::vec4 p1 = camera->GetViewProjectionMatrix() * glm::vec4(pos + glm::vec2(radius), 0.0f, 1.0f);
+        p0 /= p0.w;
+        p1 /= p1.w;
+        float sx0 = (p0.x * 0.5f + 0.5f) * viewport[2];
+        float sx1 = (p1.x * 0.5f + 0.5f) * viewport[2];
+        screenRadius = fabs(sx1 - sx0);
+    }
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_PROGRAM_POINT_SIZE);
+    glPointSize(screenRadius * 2.0f); // diameter in pixels
+    circleShader->Bind();
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(pos, 0.0f));
+    circleShader->SetMat4("uModel", model);
+    circleShader->SetMat4("uVP", camera->GetViewProjectionMatrix());
+    circleShader->SetVec3("uColor", color);
+    float vertices[] = { 0.0f, 0.0f, 0.0f };
+    unsigned int VAO, VBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glDrawArrays(GL_POINTS, 0, 1);
+    glBindVertexArray(0);
+    glDeleteBuffers(1, &VBO);
+    glDeleteVertexArrays(1, &VAO);
+    circleShader->Unbind();
+    glDisable(GL_PROGRAM_POINT_SIZE);
+    glDisable(GL_BLEND);
+}
+
+void Renderer::DrawSphere(const glm::vec3& pos, float radius, const glm::vec3& color) {
+    static unsigned int sphereVAO = 0, sphereVBO = 0, sphereEBO = 0;
+    static int indexCount = 0;
+    if (sphereVAO == 0) {
+        // Generate a simple UV sphere (low poly for now)
+        const int X_SEGMENTS = 16;
+        const int Y_SEGMENTS = 16;
+        std::vector<float> vertices;
+        std::vector<unsigned int> indices;
+        for (int y = 0; y <= Y_SEGMENTS; ++y) {
+            for (int x = 0; x <= X_SEGMENTS; ++x) {
+                float xSegment = (float)x / (float)X_SEGMENTS;
+                float ySegment = (float)y / (float)Y_SEGMENTS;
+                float xPos = std::cos(xSegment * 2.0f * M_PI) * std::sin(ySegment * M_PI);
+                float yPos = std::cos(ySegment * M_PI);
+                float zPos = std::sin(xSegment * 2.0f * M_PI) * std::sin(ySegment * M_PI);
+                vertices.push_back(xPos);
+                vertices.push_back(yPos);
+                vertices.push_back(zPos);
+            }
+        }
+        bool oddRow = false;
+        for (int y = 0; y < Y_SEGMENTS; ++y) {
+            for (int x = 0; x <= X_SEGMENTS; ++x) {
+                indices.push_back(y       * (X_SEGMENTS + 1) + x);
+                indices.push_back((y + 1) * (X_SEGMENTS + 1) + x);
+            }
+        }
+        indexCount = indices.size();
+        glGenVertexArrays(1, &sphereVAO);
+        glGenBuffers(1, &sphereVBO);
+        glGenBuffers(1, &sphereEBO);
+        glBindVertexArray(sphereVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, sphereVBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereEBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glBindVertexArray(0);
+    }
+    sphereShader->Bind();
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, pos);
+    model = glm::scale(model, glm::vec3(radius));
+    sphereShader->SetMat4("uModel", model);
+    sphereShader->SetMat4("uVP", camera->GetViewProjectionMatrix());
+    sphereShader->SetVec3("uColor", color);
+    glBindVertexArray(sphereVAO);
+    for (int y = 0; y < 16; ++y) {
+        glDrawElements(GL_TRIANGLE_STRIP, (16 + 1) * 2, GL_UNSIGNED_INT, (void*)(sizeof(unsigned int) * (y * (16 + 1) * 2)));
+    }
+    glBindVertexArray(0);
+    sphereShader->Unbind();
+}
+
 void Renderer::Render2DRays(Scene *scene) {
-    // TODO
+    glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    if (!scene) return;
+    for (const auto& bh : scene->blackHoles) {
+        DrawCircle(glm::vec2(bh.position.x, bh.position.y), 0100000.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
+    }
+}
+
+void Renderer::Render3DSimulation(Scene *scene) {
+    glEnable(GL_DEPTH_TEST);
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    if (!scene) return;
+    for (const auto& bh : scene->blackHoles) {
+        DrawSphere(bh.position, 0.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
+    }
+    glDisable(GL_DEPTH_TEST);
 }
 
 void Renderer::UpdateCamera(float deltaTime) {
