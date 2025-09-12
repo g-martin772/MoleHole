@@ -12,12 +12,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "Buffer.h"
-#include "Camera.h"
-#include "Camera.h"
-#include "Camera.h"
-#include "Camera.h"
 
-void Renderer::Init(GlobalOptions* options) {
+void Renderer::Init(GlobalOptions *options) {
     globalOptions = options;
 
     if (!glfwInit()) {
@@ -59,10 +55,10 @@ void Renderer::Init(GlobalOptions* options) {
 
     spdlog::info("Loading shaders");
     quadShader = std::make_unique<Shader>("../shaders/quad.vert", "../shaders/quad.frag");
-    // Camera and Input initialization
+
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
-    camera = std::make_unique<Camera>(45.0f, (float)width / (float)height, 0.1f, 100.0f);
+    camera = std::make_unique<Camera>(45.0f, (float) width / (float) height, 0.1f, 100.0f);
     input = std::make_unique<Input>(window);
 }
 
@@ -100,9 +96,35 @@ void Renderer::EndFrame() {
     glfwSwapBuffers(window);
 }
 
-void Renderer::RenderDockspace() {
+void Renderer::RenderDockspace(Scene* scene) {
+    ImGuiIO& io = ImGui::GetIO();
+    bool ctrl = io.KeyCtrl;
+    static bool prevCtrlS = false, prevCtrlO = false;
+    bool ctrlS = ctrl && ImGui::IsKeyPressed(ImGuiKey_S);
+    bool ctrlO = ctrl && ImGui::IsKeyPressed(ImGuiKey_O);
+    bool doSave = false, doOpen = false;
+    if (ctrlS && !prevCtrlS) doSave = true;
+    if (ctrlO && !prevCtrlO) doOpen = true;
+    prevCtrlS = ctrlS;
+    prevCtrlO = ctrlO;
+
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) {
+                doOpen = true;
+            }
+            bool canSave = scene && !scene->currentPath.empty();
+            if (ImGui::MenuItem("Save Scene", "Ctrl+S", false, canSave)) {
+                doSave = true;
+            }
+            if (ImGui::MenuItem("Save Scene As...")) {
+                if (scene) {
+                    auto path = Scene::ShowFileDialog(true);
+                    if (!path.empty()) {
+                        scene->Serialize(path);
+                    }
+                }
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
@@ -114,12 +136,22 @@ void Renderer::RenderDockspace() {
             if (ImGui::MenuItem("Demo1", nullptr, selectedDemo1)) {
                 selectedViewport = ViewportMode::Demo1;
             }
-            if (ImGui::MenuItem("2D Rays", nullptr, selectedRays2D)) {
+            if (ImGui::MenuItem("Rays2D", nullptr, selectedRays2D)) {
                 selectedViewport = ViewportMode::Rays2D;
             }
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
+    }
+
+    if (doOpen && scene) {
+        auto path = Scene::ShowFileDialog(false);
+        if (!path.empty()) {
+            scene->Deserialize(path);
+        }
+    }
+    if (doSave && scene && !scene->currentPath.empty()) {
+        scene->Serialize(scene->currentPath);
     }
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
@@ -129,16 +161,25 @@ void Renderer::RenderDockspace() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGuiWindowFlags dockspace_flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+                                       ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
+                                       |
+                                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
     ImGui::Begin("##DockSpace", nullptr, dockspace_flags);
     ImGui::DockSpace(ImGui::GetID("DockSpace"), ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
     ImGui::End();
     ImGui::PopStyleVar(2);
 }
 
-void Renderer::RenderUI(float fps) {
+void Renderer::RenderUI(float fps, Scene *scene) {
     ImGui::Begin("Test");
+    if (scene) {
+        char nameBuffer[128];
+        std::strncpy(nameBuffer, scene->name.c_str(), sizeof(nameBuffer));
+        nameBuffer[sizeof(nameBuffer)-1] = '\0';
+        if (ImGui::InputText("Scene Name", nameBuffer, sizeof(nameBuffer))) {
+            scene->name = nameBuffer;
+        }
+    }
     ImGui::Text("Hello World");
     ImGui::Text("FPS: %.1f", fps);
     bool vsync = globalOptions->vsync;
@@ -146,15 +187,56 @@ void Renderer::RenderUI(float fps) {
         globalOptions->vsync = vsync;
     }
     ImGui::Text("VSync State: %s", globalOptions->vsync ? "Enabled" : "Disabled");
+
+    if (ImGui::CollapsingHeader("Black Holes", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::Button("Add Black Hole")) {
+            BlackHole newHole;
+            newHole.mass = 1.0f;
+            newHole.position = glm::vec3(0.0f);
+            newHole.showAccretionDisk = true;
+            newHole.accretionDiskDensity = 1.0f;
+            newHole.accretionDiskSize = 1.0f;
+            newHole.accretionDiskColor = glm::vec3(1.0f, 0.8f, 0.2f);
+            scene->blackHoles.push_back(newHole);
+        }
+        int idx = 0;
+        for (auto it = scene->blackHoles.begin(); it != scene->blackHoles.end();) {
+            ImGui::PushID(idx);
+            bool open = ImGui::TreeNode("Black Hole");
+            ImGui::SameLine();
+            bool remove = ImGui::Button("Remove");
+            if (open) {
+                BlackHole &bh = *it;
+                ImGui::DragFloat("Mass", &bh.mass, 0.01f, 0.0f, 1e10f);
+                ImGui::DragFloat3("Position", &bh.position[0], 0.01f);
+                ImGui::Checkbox("Show Accretion Disk", &bh.showAccretionDisk);
+                ImGui::DragFloat("Accretion Disk Density", &bh.accretionDiskDensity, 0.01f, 0.0f, 1e6f);
+                ImGui::DragFloat("Accretion Disk Size", &bh.accretionDiskSize, 0.01f, 0.0f, 1e6f);
+                ImGui::ColorEdit3("Accretion Disk Color", &bh.accretionDiskColor[0]);
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+            if (remove) {
+                it = scene->blackHoles.erase(it);
+            } else {
+                ++it;
+            }
+            idx++;
+        }
+    }
+
     ImGui::End();
 }
 
 void Renderer::RenderScene(Scene *scene) {
-    const char* title = nullptr;
+    const char *title = nullptr;
     switch (selectedViewport) {
-        case ViewportMode::Demo1: title = "Viewport - Demo1"; break;
-        case ViewportMode::Rays2D: title = "Viewport - 2D Rays"; break;
-        default: title = "Viewport"; break;
+        case ViewportMode::Demo1: title = "Viewport - Demo1";
+            break;
+        case ViewportMode::Rays2D: title = "Viewport - 2D Rays";
+            break;
+        default: title = "Viewport";
+            break;
     }
     ImGui::Begin(title);
     ImVec2 imgui_size = ImGui::GetContentRegionAvail();
@@ -205,11 +287,12 @@ void Renderer::RenderScene(Scene *scene) {
             break;
     }
     glDeleteFramebuffers(1, &fbo);
-    ImGui::Image((void*)(intptr_t)image->textureID, ImVec2((float)image->width, (float)image->height), ImVec2(0, 1), ImVec2(1, 0));
+    ImGui::Image((void *) (intptr_t) image->textureID, ImVec2((float) image->width, (float) image->height),
+                 ImVec2(0, 1), ImVec2(1, 0));
     ImGui::End();
 }
 
-void Renderer::RenderDemo1(Scene* scene) {
+void Renderer::RenderDemo1(Scene *scene) {
     quadShader->Bind();
     glm::mat4 vp = camera->GetViewProjectionMatrix();
     quadShader->SetMat4("uVP", vp);
@@ -223,7 +306,7 @@ void Renderer::RenderDemo1(Scene* scene) {
     quadShader->Unbind();
 }
 
-void Renderer::Render2DRays(Scene* scene) {
+void Renderer::Render2DRays(Scene *scene) {
     // TODO
 }
 
@@ -240,40 +323,40 @@ void Renderer::UpdateCamera(float deltaTime) {
         input->SetCursorEnabled(false);
         double dx, dy;
         input->GetMouseDelta(dx, dy);
-        camera->ProcessMouse((float)dx, (float)dy);
+        camera->ProcessMouse((float) dx, (float) dy);
     } else {
         input->SetCursorEnabled(true);
     }
 }
 
-void Renderer::DrawQuad(const glm::vec3& position, float rotationRadians, const glm::vec3& scale) {
-    quadInstances.push_back({ position, rotationRadians, scale });
+void Renderer::DrawQuad(const glm::vec3 &position, float rotationRadians, const glm::vec3 &scale) {
+    quadInstances.push_back({position, rotationRadians, scale});
 }
 
 void Renderer::FlushQuads() {
-    static VertexArray* vao = nullptr;
-    static VertexBuffer* vbo = nullptr;
-    static IndexBuffer* ebo = nullptr;
+    static VertexArray *vao = nullptr;
+    static VertexBuffer *vbo = nullptr;
+    static IndexBuffer *ebo = nullptr;
     if (!vao) {
         float vertices[] = {
             -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
-             0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
-             0.5f,  0.5f, 0.0f, 1.0f, 1.0f,
-            -0.5f,  0.5f, 0.0f, 0.0f, 1.0f
+            0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+            0.5f, 0.5f, 0.0f, 1.0f, 1.0f,
+            -0.5f, 0.5f, 0.0f, 0.0f, 1.0f
         };
-        unsigned int indices[] = { 0, 1, 2, 2, 3, 0 };
+        unsigned int indices[] = {0, 1, 2, 2, 3, 0};
         vao = new VertexArray();
         vbo = new VertexBuffer(vertices, sizeof(vertices));
         ebo = new IndexBuffer(indices, 6);
         vao->Bind();
         vbo->Bind();
         ebo->Bind();
-        vao->EnableAttrib(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-        vao->EnableAttrib(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+        vao->EnableAttrib(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *) 0);
+        vao->EnableAttrib(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *) (3 * sizeof(float)));
         vao->Unbind();
     }
     vao->Bind();
-    for (const auto& quad : quadInstances) {
+    for (const auto &quad: quadInstances) {
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, quad.position);
         model = glm::rotate(model, quad.rotation, glm::vec3(0, 0, 1));

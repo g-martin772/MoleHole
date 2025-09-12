@@ -8,6 +8,8 @@ add_subdirectory(dependencies/glfw)
 add_subdirectory(dependencies/glad/cmake)
 add_subdirectory(dependencies/glm)
 add_subdirectory(dependencies/spdlog)
+add_subdirectory(dependencies/yaml-cpp)
+add_subdirectory(dependencies/nativefiledialog-extended)
 
 file(GLOB SOURCES src/*.cpp src/Renderer/*.cpp)
 set(IMGUI_SOURCES
@@ -22,21 +24,26 @@ set(IMGUI_SOURCES
 add_executable(MoleHole ${SOURCES} ${IMGUI_SOURCES})
 
 include_directories(
+    src
     dependencies/glfw/include
     dependencies/glad/include
     dependencies/glm
     dependencies/imgui
     dependencies/imgui/backends
     dependencies/spdlog/include
+    dependencies/yaml-cpp/include
+    dependencies/nativefiledialog-extended/src/include
 )
 
-glad_add_library(glad_gl_core_43 STATIC REPRODUCIBLE LOADER API gl:core=4.3)
+glad_add_library(glad_gl_core_46 STATIC REPRODUCIBLE LOADER API gl:core=4.6)
 
 target_link_libraries(MoleHole
     glfw
-    glad_gl_core_43
+    glad_gl_core_46
     glm
     spdlog::spdlog
+    yaml-cpp
+    nfd
 )
 
 if (UNIX)

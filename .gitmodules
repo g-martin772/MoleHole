@@ -14,3 +14,9 @@
 [submodule "dependencies/spdlog"]
 	path = dependencies/spdlog
 	url = https://github.com/g-martin772/spdlog/
+[submodule "dependencies/yaml-cpp"]
+	path = dependencies/yaml-cpp
+	url = https://github.com/g-martin772/yaml-cpp/
+[submodule "dependencies/nativefiledialog-extended"]
+	path = dependencies/nativefiledialog-extended
+	url = https://github.com/g-martin772/nativefiledialog-extended/

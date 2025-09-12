@@ -13,15 +13,24 @@ int main() {
     renderer.Init(&globalOptions);
 
     Simulation simulation;
+
+    {
+        auto scene = simulation.GetScene();
+        if (scene && std::filesystem::exists("scene.yaml")) {
+            scene->Deserialize("scene.yaml");
+        }
+    }
+
     FpsCounter fpsCounter;
     while (!glfwWindowShouldClose(renderer.GetWindow())) {
         fpsCounter.Frame();
         simulation.Update();
         renderer.BeginFrame();
 
-        renderer.RenderDockspace();
-        renderer.RenderUI(fpsCounter.GetFps());
-        renderer.RenderScene(simulation.GetScene());
+        auto scene = simulation.GetScene();
+        renderer.RenderDockspace(scene);
+        renderer.RenderUI(fpsCounter.GetFps(), scene);
+        renderer.RenderScene(scene);
 
         renderer.EndFrame();
     }

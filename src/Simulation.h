@@ -4,6 +4,7 @@
 
 class Simulation {
 public:
+    Simulation();
     void Update();
 
     Scene* GetScene();
