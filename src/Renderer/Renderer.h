@@ -1,5 +1,6 @@
 #pragma once
 #include "Shader.h"
+#include "BlackHoleRenderer.h"
 #include <memory>
 #include <glm/glm.hpp>
 #include <vector>
@@ -41,6 +42,7 @@ public:
     std::unique_ptr<Shader> quadShader;
     std::unique_ptr<Shader> circleShader;
     std::unique_ptr<Shader> sphereShader;
+    std::unique_ptr<BlackHoleRenderer> blackHoleRenderer;
     std::unique_ptr<Camera> camera;
     std::unique_ptr<Input> input;
     GlobalOptions* globalOptions = nullptr;
@@ -54,7 +56,7 @@ public:
     };
     std::vector<QuadInstance> quadInstances;
 
-    ViewportMode selectedViewport = ViewportMode::Rays2D;
+    ViewportMode selectedViewport = ViewportMode::Simulation3D;
     void RenderDemo1(Scene* scene);
     void Render2DRays(Scene* scene);
     void Render3DSimulation(Scene *scene);
