@@ -14,6 +14,10 @@ struct GLFWwindow;
 
 class Renderer {
 public:
+    enum class ViewportMode {
+        Demo1 = 0,
+        Rays2D = 1
+    };
     void Init(GlobalOptions* options);
     void Shutdown();
     void BeginFrame();
@@ -44,4 +48,8 @@ private:
         glm::vec3 scale;
     };
     std::vector<QuadInstance> quadInstances;
+
+    ViewportMode selectedViewport = ViewportMode::Demo1;
+    void RenderDemo1(Scene* scene);
+    void Render2DRays(Scene* scene);
 };
