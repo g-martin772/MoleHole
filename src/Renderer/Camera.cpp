@@ -3,7 +3,7 @@
 #include <glm/gtc/constants.hpp>
 
 Camera::Camera(float fov, float aspect, float nearPlane, float farPlane)
-    : position(0.0f, 0.0f, 3.0f), worldUp(0.0f, 1.0f, 0.0f), yaw(-90.0f), pitch(0.0f),
+    : position(0.0f, 20.0f, 100.0f), worldUp(0.0f, 1.0f, 0.0f), yaw(-90.0f), pitch(0.0f),
       fov(fov), aspect(aspect), nearPlane(nearPlane), farPlane(farPlane) {
     UpdateCameraVectors();
 }

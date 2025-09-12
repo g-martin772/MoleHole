@@ -1,0 +1,188 @@
+#version 460 core
+
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(rgba32f, binding = 0) uniform image2D outputImage;
+
+uniform vec3 u_cameraPos;
+uniform vec3 u_cameraFront;
+uniform vec3 u_cameraUp;
+uniform vec3 u_cameraRight;
+uniform float u_fov;
+uniform float u_aspect;
+uniform int u_numBlackHoles;
+uniform vec3 u_blackHolePositions[8];  // Support up to 8 black holes
+uniform float u_blackHoleMasses[8];
+uniform bool u_showAccretionDisks[8];
+uniform float u_accretionDiskSizes[8];
+uniform vec3 u_accretionDiskColors[8];
+uniform float u_time;
+
+// Physics constants
+// const float G = 6.67430e-11;  // Gravitational constant
+// const float c = 299792458.0;  // Speed of light
+// const float c2 = c * c;
+
+// Physics constants - using normalized units for simulation
+const float G = 1.0;  // Normalized gravitational constant
+const float c = 1.0;  // Normalized speed of light
+const float c2 = c * c;
+
+const int MAX_STEPS = 256;
+const float MIN_DISTANCE = 0.001;
+const float MAX_DISTANCE = 1000.0;
+const float STEP_SIZE = 0.1;
+
+float schwarzschildRadius(float mass) {
+    return (2.0 * G * mass) / c2;
+}
+
+vec3 generateStarfield(vec3 direction) {
+    vec3 color = vec3(0.02, 0.02, 0.05);
+
+    float star1 = sin(direction.x * 1547.3) * sin(direction.y * 2341.7) * sin(direction.z * 3571.1);
+    float star2 = sin(direction.x * 2847.1) * sin(direction.y * 1241.9) * sin(direction.z * 4571.3);
+    float star3 = sin(direction.x * 3247.7) * sin(direction.y * 2741.3) * sin(direction.z * 1971.7);
+
+    star1 = pow(max(0.0, star1), 50.0);
+    star2 = pow(max(0.0, star2), 80.0);
+    star3 = pow(max(0.0, star3), 120.0);
+
+    color += star1 * vec3(1.0, 1.0, 1.0) * 2.0;      // White stars
+    color += star2 * vec3(1.0, 0.8, 0.6) * 1.5;      // Orange stars
+    color += star3 * vec3(0.6, 0.8, 1.0) * 1.8;      // Blue stars
+
+    float nebula = sin(direction.x * 10.0) * sin(direction.y * 10.0) * sin(direction.z * 10.0);
+    nebula = pow(max(0.0, nebula), 8.0);
+    color += nebula * vec3(0.3, 0.1, 0.5) * 0.1;
+
+    return color;
+}
+
+// Gravitational lensing effect
+vec3 deflectRay(vec3 rayPos, vec3 rayDir, vec3 blackHolePos, float mass) {
+    vec3 toBlackHole = blackHolePos - rayPos;
+    float distance = length(toBlackHole);
+
+    if (distance < MIN_DISTANCE) return rayDir;
+
+    float rs = schwarzschildRadius(mass);
+
+    // Calculate gravitational deflection using Einstein's formula
+    // Simplified approximation for real-time rendering
+    float deflectionStrength = (2.0 * rs) / distance;
+
+    vec3 normalized = normalize(toBlackHole);
+    vec3 perpendicular = cross(rayDir, cross(rayDir, normalized));
+
+    return normalize(rayDir + perpendicular * deflectionStrength * 0.5);
+}
+
+bool hitEventHorizon(vec3 rayPos, vec3 blackHolePos, float mass) {
+    float distance = length(rayPos - blackHolePos);
+    float rs = schwarzschildRadius(mass);
+    return distance <= rs * 1.1;
+}
+
+vec3 renderAccretionDisk(vec3 rayPos, vec3 rayDir, vec3 blackHolePos, float mass, vec3 diskColor, float diskSize) {
+    vec3 toBlackHole = blackHolePos - rayPos;
+    float distance = length(toBlackHole);
+    float rs = schwarzschildRadius(mass);
+
+    // simplified as horizontal disk
+    float t = (blackHolePos.y - rayPos.y) / rayDir.y;
+    if (t > 0.0) {
+        vec3 intersectionPoint = rayPos + rayDir * t;
+        float diskDistance = length(intersectionPoint.xz - blackHolePos.xz);
+
+        if (diskDistance > 3.0 * rs && diskDistance < diskSize * rs) {
+            // Temperature gradient (hotter closer to black hole)
+            float temp = 1.0 - (diskDistance - 3.0 * rs) / ((diskSize - 3.0) * rs);
+
+            // Spiral pattern
+            float angle = atan(intersectionPoint.z - blackHolePos.z, intersectionPoint.x - blackHolePos.x);
+            float spiral = sin(angle * 8.0 + u_time * 2.0 + diskDistance * 0.1) * 0.5 + 0.5;
+
+            // Color based on temperature
+            vec3 color = mix(diskColor * 0.3, diskColor * 2.0, temp);
+            return color * spiral * temp * 0.8;
+        }
+    }
+
+    return vec3(0.0);
+}
+
+void main() {
+    ivec2 texCoords = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imageSize = imageSize(outputImage);
+
+    if (texCoords.x >= imageSize.x || texCoords.y >= imageSize.y) {
+        return;
+    }
+
+    vec2 uv = (vec2(texCoords) + 0.5) / vec2(imageSize);
+    uv = uv * 2.0 - 1.0;
+    uv.x *= u_aspect;
+
+    float tanHalfFov = tan(radians(u_fov) * 0.5);
+    vec3 rayDir = normalize(u_cameraFront + u_cameraRight * uv.x * tanHalfFov + u_cameraUp * uv.y * tanHalfFov);
+    vec3 rayPos = u_cameraPos;
+
+    vec3 finalColor = vec3(0.0);
+    bool hitSomething = false;
+
+    // Ray marching with gravitational lensing
+    for (int step = 0; step < MAX_STEPS; step++) {
+        // Check for event horizon collision
+        for (int i = 0; i < u_numBlackHoles; i++) {
+            if (hitEventHorizon(rayPos, u_blackHolePositions[i], u_blackHoleMasses[i])) {
+                finalColor = vec3(0.0); // Pure black
+                hitSomething = true;
+                break;
+            }
+        }
+
+        if (hitSomething) break;
+
+        // Apply gravitational deflection from all black holes
+        vec3 originalDir = rayDir;
+        for (int i = 0; i < u_numBlackHoles; i++) {
+            rayDir = deflectRay(rayPos, rayDir, u_blackHolePositions[i], u_blackHoleMasses[i]);
+        }
+
+        // Check accretion disk intersection
+        for (int i = 0; i < u_numBlackHoles; i++) {
+            if (u_showAccretionDisks[i]) {
+                vec3 diskColor = renderAccretionDisk(rayPos, rayDir, u_blackHolePositions[i],
+                                                   u_blackHoleMasses[i], u_accretionDiskColors[i],
+                                                   u_accretionDiskSizes[i]);
+                if (length(diskColor) > 0.0) {
+                    finalColor += diskColor;
+                    hitSomething = true;
+                    break;
+                }
+            }
+        }
+
+        if (hitSomething) break;
+
+        // March ray forward
+        rayPos += rayDir * STEP_SIZE;
+
+        // If ray goes too far, sample starfield
+        if (length(rayPos - u_cameraPos) > MAX_DISTANCE) {
+            finalColor = generateStarfield(rayDir);
+            break;
+        }
+    }
+
+    // If nothing was hit, sample starfield
+    if (!hitSomething && length(finalColor) == 0.0) {
+        finalColor = generateStarfield(rayDir);
+    }
+
+    // Tone mapping and gamma correction
+    finalColor = finalColor / (finalColor + vec3(1.0));
+    finalColor = pow(finalColor, vec3(1.0 / 2.2));
+
+    imageStore(outputImage, texCoords, vec4(finalColor, 1.0));
+}

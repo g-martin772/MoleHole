@@ -58,6 +58,9 @@ void Renderer::Init(GlobalOptions *options) {
     circleShader = std::make_unique<Shader>("../shaders/circle.vert", "../shaders/circle.frag");
     sphereShader = std::make_unique<Shader>("../shaders/sphere.vert", "../shaders/sphere.frag");
 
+    blackHoleRenderer = std::make_unique<BlackHoleRenderer>();
+    blackHoleRenderer->Init(last_img_width, last_img_height);
+
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
     camera = std::make_unique<Camera>(45.0f, (float) width / (float) height, 0.1f, 100.0f);
@@ -198,11 +201,11 @@ void Renderer::RenderUI(float fps, Scene *scene) {
     if (ImGui::CollapsingHeader("Black Holes", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (ImGui::Button("Add Black Hole")) {
             BlackHole newHole;
-            newHole.mass = 1.0f;
-            newHole.position = glm::vec3(0.0f);
+            newHole.mass = 10.0f;  // Increased from 1.0 for more visible effect
+            newHole.position = glm::vec3(0.0f, 0.0f, -5.0f);  // Place in front of camera
             newHole.showAccretionDisk = true;
             newHole.accretionDiskDensity = 1.0f;
-            newHole.accretionDiskSize = 1.0f;
+            newHole.accretionDiskSize = 15.0f;  // Increased from 1.0 for visibility
             newHole.accretionDiskColor = glm::vec3(1.0f, 0.8f, 0.2f);
             scene->blackHoles.push_back(newHole);
         }
@@ -258,6 +261,10 @@ void Renderer::RenderScene(Scene *scene) {
         if (camera) {
             camera->SetYawPitch(camera->GetYaw(), camera->GetPitch());
             camera->SetAspect(static_cast<float>(img_width) / static_cast<float>(img_height));
+        }
+
+        if (blackHoleRenderer) {
+            blackHoleRenderer->Resize(img_width, img_height);
         }
     }
     bool viewport_focused = ImGui::IsWindowFocused();
@@ -430,10 +437,10 @@ void Renderer::Render3DSimulation(Scene *scene) {
     glEnable(GL_DEPTH_TEST);
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    if (!scene) return;
-    for (const auto& bh : scene->blackHoles) {
-        DrawSphere(bh.position, 0.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
-    }
+    if (!scene || !blackHoleRenderer) return;
+    float currentTime = static_cast<float>(glfwGetTime());
+    blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime);
+    blackHoleRenderer->RenderToScreen();
     glDisable(GL_DEPTH_TEST);
 }
 
