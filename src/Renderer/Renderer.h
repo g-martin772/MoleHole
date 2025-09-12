@@ -16,7 +16,8 @@ class Renderer {
 public:
     enum class ViewportMode {
         Demo1 = 0,
-        Rays2D = 1
+        Rays2D = 1,
+        Simulation3D = 2
     };
     void Init(GlobalOptions* options);
     void Shutdown();
@@ -29,12 +30,17 @@ public:
     void DrawQuad(const glm::vec3& position, float rotationRadians = 0.0f, const glm::vec3& scale = glm::vec3(1.0f));
     void FlushQuads();
 
+    void DrawCircle(const glm::vec2& pos, float radius, const glm::vec3& color);
+    void DrawSphere(const glm::vec3& pos, float radius, const glm::vec3& color);
+
     GLFWwindow* GetWindow() const { return window; }
     GLFWwindow* window = nullptr;
     int last_img_width = 800;
     int last_img_height = 600;
     std::shared_ptr<Image> image;
     std::unique_ptr<Shader> quadShader;
+    std::unique_ptr<Shader> circleShader;
+    std::unique_ptr<Shader> sphereShader;
     std::unique_ptr<Camera> camera;
     std::unique_ptr<Input> input;
     GlobalOptions* globalOptions = nullptr;
@@ -51,4 +57,5 @@ public:
     ViewportMode selectedViewport = ViewportMode::Rays2D;
     void RenderDemo1(Scene* scene);
     void Render2DRays(Scene* scene);
+    void Render3DSimulation(Scene *scene);
 };
