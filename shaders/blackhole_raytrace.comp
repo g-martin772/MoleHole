@@ -22,10 +22,10 @@ const float G = 1.0;
 const float c = 1.0;
 const float c2 = c * c;
 
-const int MAX_STEPS = 256;
+const int MAX_STEPS = 1000; //256;
 const float MIN_DISTANCE = 0.001;
 const float MAX_DISTANCE = 1000.0;
-const float STEP_SIZE = 0.1;
+const float STEP_SIZE = 0.01;
 const float PI = 3.14159265359;
 
 float schwarzschildRadius(float mass) {
@@ -48,25 +48,51 @@ vec3 sampleSkybox(vec3 direction) {
     return texture(u_skyboxTexture, uv).rgb;
 }
 
-vec3 deflectRay(vec3 rayPos, vec3 rayDir, vec3 blackHolePos, float mass) {
-    vec3 toBlackHole = blackHolePos - rayPos;
-    float distance = length(toBlackHole);
-
-    if (distance < MIN_DISTANCE) return rayDir;
-
+float blackHoleDistance(vec3 pos, vec3 blackHolePos, float mass) {
+    float dist = distance(pos, blackHolePos);
     float rs = schwarzschildRadius(mass);
-    float deflectionStrength = (2.0 * rs) / distance;
-
-    vec3 normalized = normalize(toBlackHole);
-    vec3 perpendicular = cross(rayDir, cross(rayDir, normalized));
-
-    return normalize(rayDir + perpendicular * deflectionStrength * 0.5);
+    return dist - rs;
 }
 
-bool hitEventHorizon(vec3 rayPos, vec3 blackHolePos, float mass) {
-    float distance = length(rayPos - blackHolePos);
-    float rs = schwarzschildRadius(mass);
-    return distance <= rs * 1.1;
+float sceneDistance(vec3 pos) {
+    float minDist = MAX_DISTANCE;
+
+    for (int i = 0; i < u_numBlackHoles; i++) {
+        float dist = blackHoleDistance(pos, u_blackHolePositions[i], u_blackHoleMasses[i]);
+        minDist = min(minDist, dist);
+    }
+
+    return minDist;
+}
+
+vec3 rayMarch(vec3 rayPos, vec3 rayDir) {
+    vec3 currentPos = rayPos;
+    vec3 color = vec3(0.0);
+    float totalDistance = 0.0;
+    bool hitBlackHole = false;
+
+    for (int step = 0; step < MAX_STEPS; step++) {
+        float dist = sceneDistance(currentPos);
+
+        if (dist < MIN_DISTANCE) {
+            hitBlackHole = true;
+            color = vec3(0.0); // Black holes are black
+            break;
+        }
+
+        currentPos += rayDir * max(dist, STEP_SIZE);
+        totalDistance += max(dist, STEP_SIZE);
+
+        if (totalDistance > MAX_DISTANCE) {
+            break;
+        }
+    }
+
+    if (!hitBlackHole && length(color) < 0.01) {
+        color = sampleSkybox(rayDir);
+    }
+
+    return color;
 }
 
 void main() {
@@ -85,35 +111,7 @@ void main() {
     vec3 rayDir = normalize(u_cameraFront + u_cameraRight * uv.x * tanHalfFov + u_cameraUp * uv.y * tanHalfFov);
     vec3 rayPos = u_cameraPos;
 
-    vec3 finalColor = vec3(0.0);
-    bool hitSomething = false;
-
-    for (int step = 0; step < MAX_STEPS; step++) {
-        for (int i = 0; i < u_numBlackHoles; i++) {
-            if (hitEventHorizon(rayPos, u_blackHolePositions[i], u_blackHoleMasses[i])) {
-                finalColor = vec3(0.0);
-                hitSomething = true;
-                break;
-            }
-        }
-
-        if (hitSomething) break;
-
-        for (int i = 0; i < u_numBlackHoles; i++) {
-            rayDir = deflectRay(rayPos, rayDir, u_blackHolePositions[i], u_blackHoleMasses[i]);
-        }
-
-        rayPos += rayDir * STEP_SIZE;
-
-        if (length(rayPos - u_cameraPos) > MAX_DISTANCE) {
-            finalColor = sampleSkybox(rayDir);
-            break;
-        }
-    }
-
-    if (!hitSomething && length(finalColor) == 0.0) {
-        finalColor = sampleSkybox(rayDir);
-    }
+    vec3 finalColor = rayMarch(rayPos, rayDir);
 
     finalColor = finalColor / (finalColor + vec3(1.0));
     finalColor = pow(finalColor, vec3(1.0 / 2.2));
