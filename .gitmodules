@@ -20,3 +20,6 @@
 [submodule "dependencies/nativefiledialog-extended"]
 	path = dependencies/nativefiledialog-extended
 	url = https://github.com/g-martin772/nativefiledialog-extended/
+[submodule "dependencies/stb-image"]
+	path = dependencies/stb-image
+	url = https://github.com/nothings/stb/

@@ -23,8 +23,16 @@ void BlackHoleRenderer::Init(int width, int height) {
 
     CreateComputeTexture();
     CreateFullscreenQuad();
+    LoadSkybox();
 
     spdlog::info("BlackHoleRenderer initialized with {}x{} resolution", width, height);
+}
+
+void BlackHoleRenderer::LoadSkybox() {
+    m_skyboxTexture = std::unique_ptr<Image>(Image::LoadHDR("../assets/space.hdr"));
+    if (!m_skyboxTexture) {
+        spdlog::error("Failed to load skybox texture");
+    }
 }
 
 void BlackHoleRenderer::CreateComputeTexture() {
@@ -72,6 +80,12 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const C
     UpdateUniforms(blackHoles, camera, time);
 
     m_computeShader->Bind();
+
+    if (m_skyboxTexture) {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, m_skyboxTexture->textureID);
+        m_computeShader->SetInt("u_skyboxTexture", 1);
+    }
 
     // (16x16 local groups)
     unsigned int groupsX = (m_width + 15) / 16;
