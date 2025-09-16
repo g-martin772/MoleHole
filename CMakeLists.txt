@@ -33,6 +33,7 @@ include_directories(
     dependencies/spdlog/include
     dependencies/yaml-cpp/include
     dependencies/nativefiledialog-extended/src/include
+    dependencies/stb-image
 )
 
 glad_add_library(glad_gl_core_46 STATIC REPRODUCIBLE LOADER API gl:core=4.6)
