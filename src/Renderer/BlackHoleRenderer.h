@@ -22,6 +22,10 @@ public:
     static float CalculateSchwarzschildRadius(float mass);
     static float GetEventHorizonRadius(float mass);
 
+    bool isKerrLutGenerating() const { return m_kerrLutManager.isGenerating(); }
+    int getKerrLutProgress() const { return m_kerrLutManager.getGenerationProgress(); }
+    void forceRegenerateKerrLuts() { m_kerrLutManager.forceRegenerateAll(); }
+
 private:
     void CreateComputeTexture();
     void CreateFullscreenQuad();

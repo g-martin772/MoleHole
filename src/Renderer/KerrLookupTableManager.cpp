@@ -52,7 +52,6 @@ GLuint KerrLookupTableManager::getLookupTable(const BlackHole& blackHole) {
         return 0;
     }
 
-    // Check if we already have this LUT cached
     auto it = m_lookupCache.find(blackHole);
     if (it != m_lookupCache.end()) {
         it->second.lastUsed = getCurrentTime();
@@ -61,16 +60,13 @@ GLuint KerrLookupTableManager::getLookupTable(const BlackHole& blackHole) {
         return m_currentLookupTable;
     }
 
-    // Need to generate new LUT
     GLuint newTextureId = 0;
     createTexture3D(newTextureId);
 
-    // Check cache size and evict if necessary
     if (m_lookupCache.size() >= MAX_CACHE_SIZE) {
         evictOldestEntry();
     }
 
-    // Add to cache
     LookupTableEntry entry;
     entry.textureId = newTextureId;
     entry.blackHole = blackHole;
@@ -79,7 +75,6 @@ GLuint KerrLookupTableManager::getLookupTable(const BlackHole& blackHole) {
 
     m_lookupCache[blackHole] = entry;
 
-    // Generate the LUT
     generateLookupTable(blackHole, newTextureId);
     m_lookupCache[blackHole].isGenerated = true;
 
@@ -95,23 +90,24 @@ void KerrLookupTableManager::generateLookupTable(const BlackHole& blackHole, GLu
         return;
     }
 
-    // Bind the 3D texture as image
+    m_isGenerating = true;
+    m_generationProgress = 0;
+
     glBindImageTexture(0, textureId, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
-    // Use the existing Shader utility
     m_kerrLutShader->Bind();
 
-    // Set uniforms using existing Shader methods
     bindUniforms(blackHole);
 
-    // Dispatch compute shader using existing Shader utility
     int workGroupSize = 8; // matches local_size in shader
     int numWorkGroups = (m_lutResolution + workGroupSize - 1) / workGroupSize;
 
     m_kerrLutShader->Dispatch(numWorkGroups, numWorkGroups, numWorkGroups);
 
-    // Wait for completion
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+    m_generationProgress = 100;
+    m_isGenerating = false;
 
     m_kerrLutShader->Unbind();
     glBindImageTexture(0, 0, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
@@ -139,7 +135,6 @@ void KerrLookupTableManager::regenerateLookupTable(const BlackHole& blackHole) {
         it->second.isGenerated = true;
         it->second.lastUsed = getCurrentTime();
     } else {
-        // Create new entry
         getLookupTable(blackHole);
     }
 }
@@ -155,7 +150,6 @@ void KerrLookupTableManager::cleanup() {
 void KerrLookupTableManager::setLutResolution(int resolution) {
     if (resolution != m_lutResolution) {
         m_lutResolution = resolution;
-        // Clear cache as resolution changed
         cleanup();
     }
 }
@@ -163,25 +157,35 @@ void KerrLookupTableManager::setLutResolution(int resolution) {
 void KerrLookupTableManager::setMaxDistance(float distance) {
     if (distance != m_maxDistance) {
         m_maxDistance = distance;
-        // Clear cache as max distance changed
         cleanup();
     }
 }
 
-double KerrLookupTableManager::getCurrentTime() {
+void KerrLookupTableManager::forceRegenerateAll() {
+    for (auto& pair : m_lookupCache) {
+        pair.second.isGenerated = false;
+        generateLookupTable(pair.second.blackHole, pair.second.textureId);
+        pair.second.isGenerated = true;
+        pair.second.lastUsed = getCurrentTime();
+    }
+}
+
+double KerrLookupTableManager::getCurrentTime() const {
     auto now = std::chrono::high_resolution_clock::now();
     auto duration = now.time_since_epoch();
-    return std::chrono::duration<double>(duration).count();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count() / 1000.0;
 }
 
 void KerrLookupTableManager::evictOldestEntry() {
     if (m_lookupCache.empty()) return;
 
-    auto oldestIt = std::min_element(m_lookupCache.begin(), m_lookupCache.end(),
-        [](const auto& a, const auto& b) {
-            return a.second.lastUsed < b.second.lastUsed;
-        });
+    auto oldest = m_lookupCache.begin();
+    for (auto it = m_lookupCache.begin(); it != m_lookupCache.end(); ++it) {
+        if (it->second.lastUsed < oldest->second.lastUsed) {
+            oldest = it;
+        }
+    }
 
-    deleteTexture3D(oldestIt->second.textureId);
-    m_lookupCache.erase(oldestIt);
+    deleteTexture3D(oldest->second.textureId);
+    m_lookupCache.erase(oldest);
 }
