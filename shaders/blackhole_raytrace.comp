@@ -18,6 +18,11 @@ uniform float u_accretionDiskSizes[8];
 uniform vec3 u_accretionDiskColors[8];
 uniform float u_time;
 
+uniform sampler3D u_kerrLookupTable;
+uniform bool u_useKerrDistortion;
+uniform float u_kerrLutMaxDistance;
+uniform int u_kerrLutResolution;
+
 const float G = 1.0;
 const float c = 1.0;
 const float c2 = c * c;
@@ -65,8 +70,75 @@ float sceneDistance(vec3 pos) {
     return minDist;
 }
 
+vec2 sampleKerrDeflection(vec3 pos, vec3 blackHolePos, float maxDistance, int lutResolution) {
+    vec3 relPos = pos - blackHolePos;
+    float distance = length(relPos);
+
+    // Convert to spherical coordinates for LUT sampling
+    float theta = acos(relPos.y / distance);
+    float phi = atan(relPos.z, relPos.x);
+    if (phi < 0.0) phi += 2.0 * PI;
+
+    // Convert to normalized LUT coordinates
+    float minDist = schwarzschildRadius(1.0) * 2.0; // Assuming mass normalization
+    float distanceNorm = log(distance / minDist) / log(maxDistance / minDist);
+    distanceNorm = clamp(distanceNorm, 0.0, 1.0);
+
+    vec3 lutCoord = vec3(
+        distanceNorm,
+        theta / PI,
+        phi / (2.0 * PI)
+    );
+
+    vec4 lutData = texture(u_kerrLookupTable, lutCoord);
+
+    // Check validity flag
+    if (lutData.a < 0.5) {
+        return vec2(0.0); // Invalid/extreme deflection
+    }
+
+    return lutData.xy;
+}
+
+vec3 applyKerrDistortion(vec3 rayPos, vec3 rayDir, int blackHoleIndex) {
+    if (!u_useKerrDistortion) {
+        return rayDir;
+    }
+
+    vec3 bhPos = u_blackHolePositions[blackHoleIndex];
+    float distance = length(rayPos - bhPos);
+
+    float rs = schwarzschildRadius(u_blackHoleMasses[blackHoleIndex]);
+    float influenceRadius = rs * 50.0;
+
+    if (distance > influenceRadius) {
+        return rayDir;
+    }
+
+    vec2 deflection = sampleKerrDeflection(rayPos, bhPos, u_kerrLutMaxDistance, u_kerrLutResolution);
+
+    // Convert ray direction to spherical coordinates
+    vec3 normDir = normalize(rayDir);
+    float currentTheta = acos(normDir.y);
+    float currentPhi = atan(normDir.z, normDir.x);
+
+    // Apply deflection
+    float newTheta = currentTheta + deflection.x;
+    float newPhi = currentPhi + deflection.y;
+
+    // Convert back to Cartesian
+    vec3 deflectedDir = vec3(
+        sin(newTheta) * cos(newPhi),
+        cos(newTheta),
+        sin(newTheta) * sin(newPhi)
+    );
+
+    return normalize(deflectedDir);
+}
+
 vec3 rayMarch(vec3 rayPos, vec3 rayDir) {
     vec3 currentPos = rayPos;
+    vec3 currentDir = rayDir;
     vec3 color = vec3(0.0);
     float totalDistance = 0.0;
     bool hitBlackHole = false;
@@ -80,7 +152,17 @@ vec3 rayMarch(vec3 rayPos, vec3 rayDir) {
             break;
         }
 
-        currentPos += rayDir * max(dist, STEP_SIZE);
+        for (int i = 0; i < u_numBlackHoles; i++) {
+            vec3 bhPos = u_blackHolePositions[i];
+            float bhDistance = length(currentPos - bhPos);
+            float rs = schwarzschildRadius(u_blackHoleMasses[i]);
+
+            if (bhDistance < rs * 50.0) {
+                currentDir = applyKerrDistortion(currentPos, currentDir, i);
+            }
+        }
+
+        currentPos += currentDir * max(dist, STEP_SIZE);
         totalDistance += max(dist, STEP_SIZE);
 
         if (totalDistance > MAX_DISTANCE) {
@@ -89,7 +171,7 @@ vec3 rayMarch(vec3 rayPos, vec3 rayDir) {
     }
 
     if (!hitBlackHole && length(color) < 0.01) {
-        color = sampleSkybox(rayDir);
+        color = sampleSkybox(currentDir);
     }
 
     return color;

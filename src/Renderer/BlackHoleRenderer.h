@@ -5,7 +5,9 @@
 #include "Shader.h"
 #include "Scene.h"
 #include "Camera.h"
+#include "GlobalOptions.h"
 #include "Image.h"
+#include "KerrLookupTableManager.h"
 
 class BlackHoleRenderer {
 public:
@@ -13,7 +15,7 @@ public:
     ~BlackHoleRenderer();
 
     void Init(int width, int height);
-    void Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time);
+    void Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time, const GlobalOptions* globalOptions);
     void Resize(int width, int height);
     void RenderToScreen();
 
@@ -25,6 +27,9 @@ private:
     void CreateFullscreenQuad();
     void LoadSkybox();
     void UpdateUniforms(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time);
+    void UpdateKerrLookupTables(const std::vector<BlackHole>& blackHoles, const GlobalOptions* globalOptions);
+
+    KerrLookupTableManager m_kerrLutManager;
 
     std::unique_ptr<Shader> m_computeShader;
     std::unique_ptr<Shader> m_displayShader;
@@ -34,6 +39,11 @@ private:
     unsigned int m_quadVAO, m_quadVBO;
 
     int m_width, m_height;
+
+    std::vector<BlackHole> m_lastBlackHoles;
+    bool m_lastKerrEnabled = false;
+    int m_lastKerrResolution = 64;
+    float m_lastKerrMaxDistance = 100.0f;
 
     static constexpr float G = 6.67430e-11f;
     static constexpr float c = 299792458.0f;

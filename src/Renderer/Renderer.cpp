@@ -12,6 +12,11 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "Buffer.h"
+#include <cmath>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 void Renderer::Init(GlobalOptions *options) {
     globalOptions = options;
@@ -198,15 +203,41 @@ void Renderer::RenderUI(float fps, Scene *scene) {
 
     ImGui::DragFloat("Ray spacing", &globalOptions->beamSpacing, 0.01f, 0.0f, 1e10f);
 
+    if (ImGui::CollapsingHeader("Kerr Distortion", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool changed = false;
+        if (ImGui::Checkbox("Enable Kerr Distortion", &globalOptions->kerrDistortionEnabled)) {
+            changed = true;
+        }
+
+        if (globalOptions->kerrDistortionEnabled) {
+            if (ImGui::SliderInt("LUT Resolution", &globalOptions->kerrLutResolution, 32, 256)) {
+                changed = true;
+            }
+
+            if (ImGui::DragFloat("Max Distance", &globalOptions->kerrMaxDistance, 1.0f, 10.0f, 1000.0f)) {
+                changed = true;
+            }
+
+            ImGui::TextWrapped("Higher LUT resolution = more accurate light bending but slower generation");
+        }
+
+        // Trigger scene update when Kerr parameters change
+        if (changed && scene) {
+            // Mark scene as dirty to trigger re-rendering
+        }
+    }
+
     if (ImGui::CollapsingHeader("Black Holes", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (ImGui::Button("Add Black Hole")) {
             BlackHole newHole;
-            newHole.mass = 10.0f;  // Increased from 1.0 for more visible effect
-            newHole.position = glm::vec3(0.0f, 0.0f, -5.0f);  // Place in front of camera
+            newHole.mass = 10.0f;
+            newHole.position = glm::vec3(0.0f, 0.0f, -5.0f);
             newHole.showAccretionDisk = true;
             newHole.accretionDiskDensity = 1.0f;
-            newHole.accretionDiskSize = 15.0f;  // Increased from 1.0 for visibility
-            newHole.accretionDiskColor = glm::vec3(1.0f, 0.8f, 0.2f);
+            newHole.accretionDiskSize = 15.0f;
+            newHole.accretionDiskColor = glm::vec3(1.0f, 0.5f, 0.0f);
+            newHole.spinAxis = glm::vec3(0.0f, 1.0f, 0.0f);
+            newHole.spin = 0.5f;
             scene->blackHoles.push_back(newHole);
         }
         int idx = 0;
@@ -217,8 +248,9 @@ void Renderer::RenderUI(float fps, Scene *scene) {
             bool remove = ImGui::Button("Remove");
             if (open) {
                 BlackHole &bh = *it;
-                ImGui::DragFloat("Mass", &bh.mass, 0.01f, 0.0f, 1e10f);
-                ImGui::DragFloat3("Position", &bh.position[0], 0.01f);
+                ImGui::DragFloat("Mass", &bh.mass, 0.02f, 0.0f, 1e10f);
+                ImGui::DragFloat("Spin", &bh.spin, 0.01f, 0.0f, 1.0f);
+                ImGui::DragFloat3("Position", &bh.position[0], 0.05f);
                 ImGui::Checkbox("Show Accretion Disk", &bh.showAccretionDisk);
                 ImGui::DragFloat("Accretion Disk Density", &bh.accretionDiskDensity, 0.01f, 0.0f, 1e6f);
                 ImGui::DragFloat("Accretion Disk Size", &bh.accretionDiskSize, 0.01f, 0.0f, 1e6f);
@@ -343,7 +375,7 @@ void Renderer::DrawCircle(const glm::vec2& pos, float radius, const glm::vec3& c
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_PROGRAM_POINT_SIZE);
-    glPointSize(screenRadius * 2.0f); // diameter in pixels
+    glPointSize(screenRadius * 2.0f);
     circleShader->Bind();
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, glm::vec3(pos, 0.0f));
@@ -372,7 +404,6 @@ void Renderer::DrawSphere(const glm::vec3& pos, float radius, const glm::vec3& c
     static unsigned int sphereVAO = 0, sphereVBO = 0, sphereEBO = 0;
     static int indexCount = 0;
     if (sphereVAO == 0) {
-        // Generate a simple UV sphere (low poly for now)
         const int X_SEGMENTS = 16;
         const int Y_SEGMENTS = 16;
         std::vector<float> vertices;
@@ -389,7 +420,6 @@ void Renderer::DrawSphere(const glm::vec3& pos, float radius, const glm::vec3& c
                 vertices.push_back(zPos);
             }
         }
-        bool oddRow = false;
         for (int y = 0; y < Y_SEGMENTS; ++y) {
             for (int x = 0; x <= X_SEGMENTS; ++x) {
                 indices.push_back(y       * (X_SEGMENTS + 1) + x);
@@ -428,9 +458,13 @@ void Renderer::Render2DRays(Scene *scene) {
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     if (!scene) return;
+
+    float currentTime = static_cast<float>(glfwGetTime());
+
     for (const auto& bh : scene->blackHoles) {
-        DrawCircle(glm::vec2(bh.position.x, bh.position.y), 0100000.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
+        DrawCircle(glm::vec2(bh.position.x, bh.position.y), 0.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
     }
+    blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime, globalOptions);
 }
 
 void Renderer::Render3DSimulation(Scene *scene) {
@@ -438,8 +472,14 @@ void Renderer::Render3DSimulation(Scene *scene) {
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     if (!scene || !blackHoleRenderer) return;
+
     float currentTime = static_cast<float>(glfwGetTime());
-    blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime);
+
+    for (const auto& bh : scene->blackHoles) {
+        DrawSphere(bh.position, 0.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
+    }
+
+    blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime, globalOptions);
     blackHoleRenderer->RenderToScreen();
     glDisable(GL_DEPTH_TEST);
 }
