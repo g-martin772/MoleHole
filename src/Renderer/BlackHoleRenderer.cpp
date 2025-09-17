@@ -26,6 +26,8 @@ void BlackHoleRenderer::Init(int width, int height) {
     LoadSkybox();
 
     spdlog::info("BlackHoleRenderer initialized with {}x{} resolution", width, height);
+
+    m_kerrLutManager.initialize(m_lastKerrResolution, m_lastKerrMaxDistance);
 }
 
 void BlackHoleRenderer::LoadSkybox() {
@@ -76,8 +78,10 @@ void BlackHoleRenderer::CreateFullscreenQuad() {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
 }
 
-void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time) {
+void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time, const GlobalOptions* globalOptions) {
     UpdateUniforms(blackHoles, camera, time);
+
+    UpdateKerrLookupTables(blackHoles, globalOptions);
 
     m_computeShader->Bind();
 
@@ -87,10 +91,23 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const C
         m_computeShader->SetInt("u_skyboxTexture", 1);
     }
 
-    // (16x16 local groups)
+    if (globalOptions->kerrDistortionEnabled && !blackHoles.empty()) {
+        GLuint kerrLut = m_kerrLutManager.getCurrentLookupTable();
+        if (kerrLut != 0) {
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_3D, kerrLut);
+            m_computeShader->SetInt("u_kerrLookupTable", 2);
+        }
+
+        m_computeShader->SetInt("u_useKerrDistortion", 1);
+        m_computeShader->SetFloat("u_kerrLutMaxDistance", globalOptions->kerrMaxDistance);
+        m_computeShader->SetInt("u_kerrLutResolution", globalOptions->kerrLutResolution);
+    } else {
+        m_computeShader->SetInt("u_useKerrDistortion", 0);
+    }
+
     unsigned int groupsX = (m_width + 15) / 16;
     unsigned int groupsY = (m_height + 15) / 16;
-
     m_computeShader->Dispatch(groupsX, groupsY, 1);
 
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
@@ -171,4 +188,45 @@ float BlackHoleRenderer::CalculateSchwarzschildRadius(float mass) {
 
 float BlackHoleRenderer::GetEventHorizonRadius(float mass) {
     return CalculateSchwarzschildRadius(mass);
+}
+
+void BlackHoleRenderer::UpdateKerrLookupTables(const std::vector<BlackHole>& blackHoles, const GlobalOptions* globalOptions) {
+    if (!globalOptions->kerrDistortionEnabled || blackHoles.empty()) {
+        return;
+    }
+
+    const BlackHole& primaryBH = blackHoles[0];
+
+    bool globalOptionsChanged = (globalOptions->kerrDistortionEnabled != m_lastKerrEnabled ||
+                                globalOptions->kerrLutResolution != m_lastKerrResolution ||
+                                globalOptions->kerrMaxDistance != m_lastKerrMaxDistance);
+
+    bool blackHoleChanged = false;
+    if (m_lastBlackHoles.empty() ||
+        glm::distance(primaryBH.position, m_lastBlackHoles[0].position) > 0.1f ||
+        std::abs(primaryBH.mass - m_lastBlackHoles[0].mass) > 0.01f ||
+        std::abs(primaryBH.spin - m_lastBlackHoles[0].spin) > 0.01f) {
+        blackHoleChanged = true;
+    }
+
+    bool needsUpdate = globalOptionsChanged || blackHoleChanged;
+
+    if (globalOptionsChanged) {
+        m_kerrLutManager.setLutResolution(globalOptions->kerrLutResolution);
+        m_kerrLutManager.setMaxDistance(globalOptions->kerrMaxDistance);
+
+        m_lastKerrEnabled = globalOptions->kerrDistortionEnabled;
+        m_lastKerrResolution = globalOptions->kerrLutResolution;
+        m_lastKerrMaxDistance = globalOptions->kerrMaxDistance;
+    }
+
+    if (needsUpdate || m_kerrLutManager.needsRegeneration(primaryBH)) {
+        m_kerrLutManager.getLookupTable(primaryBH);
+
+        m_lastBlackHoles.clear();
+        m_lastBlackHoles.push_back(primaryBH);
+
+        spdlog::info("Generated Kerr lookup table for black hole at ({:.2f}, {:.2f}, {:.2f}) with mass {:.2f} and spin {:.2f}",
+                     primaryBH.position.x, primaryBH.position.y, primaryBH.position.z, primaryBH.mass, primaryBH.spin);
+    }
 }

@@ -19,6 +19,8 @@ void Scene::Serialize(const std::filesystem::path& path) {
         out << YAML::Key << "accretion_disk_density" << YAML::Value << bh.accretionDiskDensity;
         out << YAML::Key << "accretion_disk_size" << YAML::Value << bh.accretionDiskSize;
         out << YAML::Key << "accretion_disk_color" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.accretionDiskColor.r << bh.accretionDiskColor.g << bh.accretionDiskColor.b << YAML::EndSeq;
+        out << YAML::Key << "spin" << YAML::Value << bh.spin;
+        out << YAML::Key << "spin_axis" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.spinAxis.x << bh.spinAxis.y << bh.spinAxis.z << YAML::EndSeq;
         out << YAML::EndMap;
     }
     out << YAML::EndSeq;
@@ -47,6 +49,20 @@ void Scene::Deserialize(const std::filesystem::path& path) {
         bh.accretionDiskSize = node["accretion_disk_size"].as<float>();
         auto color = node["accretion_disk_color"];
         bh.accretionDiskColor = glm::vec3(color[0].as<float>(), color[1].as<float>(), color[2].as<float>());
+
+        if (node["spin"]) {
+            bh.spin = node["spin"].as<float>();
+        } else {
+            bh.spin = 0.0f;
+        }
+
+        if (node["spin_axis"]) {
+            auto spinAxis = node["spin_axis"];
+            bh.spinAxis = glm::vec3(spinAxis[0].as<float>(), spinAxis[1].as<float>(), spinAxis[2].as<float>());
+        } else {
+            bh.spinAxis = glm::vec3(0.0f, 1.0f, 0.0f);
+        }
+
         blackHoles.push_back(bh);
     }
 }
