@@ -26,6 +26,10 @@ public:
     void setLutResolution(int resolution);
     void setMaxDistance(float distance);
 
+    bool isGenerating() const { return m_isGenerating; }
+    void forceRegenerateAll();
+    int getGenerationProgress() const { return m_generationProgress; }
+
 private:
     struct LookupTableEntry {
         uint textureId = 0;
@@ -49,8 +53,10 @@ private:
     static const int MAX_CACHE_SIZE = 8;
 
     bool m_initialized;
+    bool m_isGenerating = false;
+    int m_generationProgress = 0; // 0-100
 
     void bindUniforms(const BlackHole& blackHole);
-    double getCurrentTime();
+    double getCurrentTime() const;
     void evictOldestEntry();
 };

@@ -218,12 +218,37 @@ void Renderer::RenderUI(float fps, Scene *scene) {
                 changed = true;
             }
 
-            ImGui::TextWrapped("Higher LUT resolution = more accurate light bending but slower generation");
+            ImGui::Separator();
+
+            if (blackHoleRenderer) {
+                if (blackHoleRenderer->isKerrLutGenerating()) {
+                    int progress = blackHoleRenderer->getKerrLutProgress();
+                    ImGui::Text("Generating Kerr LUT... %d%%", progress);
+                    ImGui::ProgressBar(progress / 100.0f);
+                } else {
+                    ImGui::Text("Ready");
+                }
+
+                if (ImGui::Button("Force Regenerate All LUTs")) {
+                    blackHoleRenderer->forceRegenerateKerrLuts();
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(?)");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Regenerate all cached lookup tables.\nUse this if the visual effects look wrong.");
+                }
+            }
         }
 
-        // Trigger scene update when Kerr parameters change
         if (changed && scene) {
-            // Mark scene as dirty to trigger re-rendering
+            if (blackHoleRenderer) {
+                std::vector<BlackHole> tempBH = scene->blackHoles;
+                if (!tempBH.empty()) {
+                    if (globalOptions->kerrDistortionEnabled) {
+                        blackHoleRenderer->forceRegenerateKerrLuts();
+                    }
+                }
+            }
         }
     }
 
@@ -248,13 +273,21 @@ void Renderer::RenderUI(float fps, Scene *scene) {
             bool remove = ImGui::Button("Remove");
             if (open) {
                 BlackHole &bh = *it;
-                ImGui::DragFloat("Mass", &bh.mass, 0.02f, 0.0f, 1e10f);
-                ImGui::DragFloat("Spin", &bh.spin, 0.01f, 0.0f, 1.0f);
-                ImGui::DragFloat3("Position", &bh.position[0], 0.05f);
+                bool bhChanged = false;
+
+                if (ImGui::DragFloat("Mass", &bh.mass, 0.02f, 0.0f, 1e10f)) bhChanged = true;
+                if (ImGui::DragFloat("Spin", &bh.spin, 0.01f, 0.0f, 1.0f)) bhChanged = true;
+                if (ImGui::DragFloat3("Position", &bh.position[0], 0.05f)) bhChanged = true;
+                if (ImGui::DragFloat3("Spin Axis", &bh.spinAxis[0], 0.01f, -1.0f, 1.0f)) bhChanged = true;
                 ImGui::Checkbox("Show Accretion Disk", &bh.showAccretionDisk);
                 ImGui::DragFloat("Accretion Disk Density", &bh.accretionDiskDensity, 0.01f, 0.0f, 1e6f);
                 ImGui::DragFloat("Accretion Disk Size", &bh.accretionDiskSize, 0.01f, 0.0f, 1e6f);
                 ImGui::ColorEdit3("Accretion Disk Color", &bh.accretionDiskColor[0]);
+
+                if (bhChanged && blackHoleRenderer && globalOptions->kerrDistortionEnabled) {
+                    blackHoleRenderer->forceRegenerateKerrLuts();
+                }
+
                 ImGui::TreePop();
             }
             ImGui::PopID();
