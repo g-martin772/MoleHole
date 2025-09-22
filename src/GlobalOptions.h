@@ -10,4 +10,5 @@ struct GlobalOptions {
 
     // Debug: visualize Kerr LUT overlay
     bool kerrDebugLut = false;
+    int kerrDebugMode = 0;
 };
