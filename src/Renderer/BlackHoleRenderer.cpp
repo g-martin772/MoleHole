@@ -20,6 +20,7 @@ void BlackHoleRenderer::Init(int width, int height) {
 
     m_computeShader = std::make_unique<Shader>("../shaders/blackhole_raytrace.comp", true);
     m_displayShader = std::make_unique<Shader>("../shaders/blackhole_display.vert", "../shaders/blackhole_display.frag");
+    m_kerrLutDebugShader = std::make_unique<Shader>("../shaders/blackhole_display.vert", "../shaders/kerr_lut_debug.frag");
 
     CreateComputeTexture();
     CreateFullscreenQuad();
@@ -158,7 +159,8 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     m_computeShader->Unbind();
 }
 
-void BlackHoleRenderer::RenderToScreen() {
+void BlackHoleRenderer::RenderToScreen(const GlobalOptions* globalOptions) {
+    // Draw the main raytraced image fullscreen
     m_displayShader->Bind();
 
     glActiveTexture(GL_TEXTURE0);
@@ -170,6 +172,39 @@ void BlackHoleRenderer::RenderToScreen() {
     glBindVertexArray(0);
 
     m_displayShader->Unbind();
+
+    // Optionally draw a LUT debug overlay in the corner
+    if (!globalOptions) return;
+    if (!globalOptions->kerrDistortionEnabled || !globalOptions->kerrDebugLut) return;
+
+    GLuint kerrLut = m_kerrLutManager.getCurrentLookupTable();
+    if (kerrLut == 0 || !m_kerrLutDebugShader) return;
+
+    // Save current viewport
+    GLint prevViewport[4];
+    glGetIntegerv(GL_VIEWPORT, prevViewport);
+
+    // Set a small viewport in the top-left corner
+    int overlaySize = 256;
+    int x = 10;
+    int y = prevViewport[3] - overlaySize - 10; // 10px margin from top
+    glViewport(x, y, overlaySize, overlaySize);
+
+    m_kerrLutDebugShader->Bind();
+
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_3D, kerrLut);
+    m_kerrLutDebugShader->SetInt("u_kerrLut", 3);
+    m_kerrLutDebugShader->SetFloat("u_sliceX", 0.5f); // middle slice by default
+
+    glBindVertexArray(m_quadVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+
+    m_kerrLutDebugShader->Unbind();
+
+    // Restore viewport
+    glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
 }
 
 void BlackHoleRenderer::Resize(int width, int height) {

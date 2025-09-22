@@ -17,7 +17,7 @@ public:
     void Init(int width, int height);
     void Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time, const GlobalOptions* globalOptions);
     void Resize(int width, int height);
-    void RenderToScreen();
+    void RenderToScreen(const GlobalOptions* globalOptions);
 
     static float CalculateSchwarzschildRadius(float mass);
     static float GetEventHorizonRadius(float mass);
@@ -37,6 +37,7 @@ private:
 
     std::unique_ptr<Shader> m_computeShader;
     std::unique_ptr<Shader> m_displayShader;
+    std::unique_ptr<Shader> m_kerrLutDebugShader;
     std::unique_ptr<Image> m_skyboxTexture;
 
     unsigned int m_computeTexture;
