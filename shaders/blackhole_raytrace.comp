@@ -37,6 +37,20 @@ const float MAX_DISTANCE = 1000.0;
 const float STEP_SIZE = 0.01;
 const float PI = 3.14159265359;
 
+const float EVENT_HORIZON_SAFETY_FACTOR = 1.5;
+const float KERR_INFLUENCE_RADIUS_FACTOR = 100.0;
+const float KERR_DISTANCE_FALLOFF_FACTOR = 20.0;
+const float FRAME_DRAG_STRENGTH_MULTIPLIER = 0.1;
+const float MAX_GRAVITATIONAL_DEFLECTION = 0.5;
+const float MAX_FRAME_DRAG_DEFLECTION = 0.2;
+const float MIN_IMPACT_PARAMETER = 1e-6;
+const float MIN_DISTANCE_THRESHOLD = 1e-6;
+
+const float DEBUG_DEFLECTION_THRESHOLD = 0.001;
+const float DEBUG_DEFLECTION_SCALE = 10.0;
+const float DEBUG_GRAVITATIONAL_SCALE = 100.0;
+const float DEBUG_GRAVITATIONAL_RADIUS_FACTOR = 10.0;
+
 float schwarzschildRadius(float mass) {
     return (2.0 * G * mass) / c2;
 }
@@ -78,7 +92,7 @@ vec2 computeKerrDeflection(vec3 pos, vec3 rayDir, vec3 bhPos, float mass, float 
     vec3 r_vec = pos - bhPos;
     float r = length(r_vec);
 
-    if (r < 1e-6) return vec2(0.0);
+    if (r < MIN_DISTANCE_THRESHOLD) return vec2(0.0);
 
     float rs = schwarzschildRadius(mass);
 
@@ -88,12 +102,10 @@ vec2 computeKerrDeflection(vec3 pos, vec3 rayDir, vec3 bhPos, float mass, float 
     vec3 b_vec = cross(r_vec, k);
     float b = length(b_vec);
 
-    if (b < 1e-6) return vec2(0.0);
-
-    vec3 b_unit = b_vec / b;
+    if (b < MIN_IMPACT_PARAMETER) return vec2(0.0);
 
     float gravitational_strength = rs / (r * r);
-    float distance_falloff = exp(-r / (rs * 20.0));
+    float distance_falloff = exp(-r / (rs * KERR_DISTANCE_FALLOFF_FACTOR));
 
     vec3 toward_bh = -r_unit;
     float radial_component = dot(k, toward_bh);
@@ -103,7 +115,7 @@ vec2 computeKerrDeflection(vec3 pos, vec3 rayDir, vec3 bhPos, float mass, float 
 
     float alpha = 2.0 * rs / b;
     alpha *= distance_falloff;
-    alpha = clamp(alpha, 0.0, 0.5);
+    alpha = clamp(alpha, 0.0, MAX_GRAVITATIONAL_DEFLECTION);
 
     vec3 frame_drag_axis = normalize(spinAxis);
     vec3 angular_momentum = cross(r_vec, k);
@@ -111,14 +123,14 @@ vec2 computeKerrDeflection(vec3 pos, vec3 rayDir, vec3 bhPos, float mass, float 
     frame_drag_strength *= distance_falloff;
 
     vec3 frame_drag_direction = cross(frame_drag_axis, angular_momentum);
-    if (length(frame_drag_direction) > 1e-6) {
+    if (length(frame_drag_direction) > MIN_DISTANCE_THRESHOLD) {
         frame_drag_direction = normalize(frame_drag_direction);
     } else {
         frame_drag_direction = vec3(0.0);
     }
 
-    float beta = frame_drag_strength * 0.1;
-    beta = clamp(beta, 0.0, 0.2);
+    float beta = frame_drag_strength * FRAME_DRAG_STRENGTH_MULTIPLIER;
+    beta = clamp(beta, 0.0, MAX_FRAME_DRAG_DEFLECTION);
 
     vec3 deflected_dir = k + alpha * perp_deflection + beta * frame_drag_direction;
     deflected_dir = normalize(deflected_dir);
@@ -145,7 +157,8 @@ vec3 applyKerrDistortion(vec3 rayPos, vec3 rayDir, int blackHoleIndex) {
     float distance = length(rayPos - bhPos);
 
     float rs = schwarzschildRadius(u_blackHoleMasses[blackHoleIndex]);
-    float influenceRadius = rs * 100.0;
+
+    float influenceRadius = rs * KERR_INFLUENCE_RADIUS_FACTOR;
 
     if (distance > influenceRadius) {
         return rayDir;
@@ -183,28 +196,30 @@ vec3 debugVisualization(vec3 rayPos, vec3 rayDir) {
         float rs = schwarzschildRadius(u_blackHoleMasses[i]);
 
         if (u_debugMode == 1) {
-            float influence = rs * 100.0;
-            if (distance < influence) {
+            float influence = rs * KERR_INFLUENCE_RADIUS_FACTOR;
+            if (distance < influence && distance > rs * EVENT_HORIZON_SAFETY_FACTOR) {
                 float intensity = 1.0 - (distance / influence);
                 return vec3(intensity, 0.0, 0.0);
             }
         }
 
         if (u_debugMode == 2) {
-            vec2 deflection = computeKerrDeflection(rayPos, rayDir, bhPos,
-                                                  u_blackHoleMasses[i],
-                                                  u_blackHoleSpins[i],
-                                                  u_blackHoleSpinAxes[i]);
-            float deflectionMag = length(deflection);
-            if (deflectionMag > 0.001) {
-                return vec3(deflectionMag * 10.0, deflectionMag * 5.0, 0.0);
+            if (distance > rs * EVENT_HORIZON_SAFETY_FACTOR) {
+                vec2 deflection = computeKerrDeflection(rayPos, rayDir, bhPos,
+                                                      u_blackHoleMasses[i],
+                                                      u_blackHoleSpins[i],
+                                                      u_blackHoleSpinAxes[i]);
+                float deflectionMag = length(deflection);
+                if (deflectionMag > DEBUG_DEFLECTION_THRESHOLD) {
+                    return vec3(deflectionMag * DEBUG_DEFLECTION_SCALE, deflectionMag * DEBUG_DEFLECTION_SCALE * 0.5, 0.0);
+                }
             }
         }
 
         if (u_debugMode == 3) {
-            if (distance < rs * 10.0) {
+            if (distance < rs * DEBUG_GRAVITATIONAL_RADIUS_FACTOR && distance > rs * EVENT_HORIZON_SAFETY_FACTOR) {
                 float gravStrength = rs / (distance * distance);
-                return vec3(0.0, gravStrength * 100.0, 0.0);
+                return vec3(0.0, gravStrength * DEBUG_GRAVITATIONAL_SCALE, 0.0);
             }
         }
     }
@@ -239,7 +254,7 @@ vec3 rayMarch(vec3 rayPos, vec3 rayDir) {
                 float bhDistance = length(currentPos - bhPos);
                 float rs = schwarzschildRadius(u_blackHoleMasses[i]);
 
-                if (bhDistance < rs * 100.0) {
+                if (bhDistance < rs * KERR_INFLUENCE_RADIUS_FACTOR) {
                     currentDir = applyKerrDistortion(currentPos, currentDir, i);
                 }
             }
