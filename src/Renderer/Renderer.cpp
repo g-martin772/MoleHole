@@ -232,25 +232,52 @@ void Renderer::RenderUI(float fps, Scene *scene) {
                     "Faint grid helps gauge indices.");
             }
 
-            ImGui::Separator();
+            const char* debugModeItems[] = {
+                "Normal Rendering",
+                "Influence Zones",
+                "Deflection Magnitude",
+                "Gravitational Field",
+                "Spherical Shape"
+            };
 
-            if (blackHoleRenderer) {
-                if (blackHoleRenderer->isKerrLutGenerating()) {
-                    int progress = blackHoleRenderer->getKerrLutProgress();
-                    ImGui::Text("Generating Kerr LUT... %d%%", progress);
-                    ImGui::ProgressBar(progress / 100.0f);
-                } else {
-                    ImGui::Text("Ready");
-                }
+            if (ImGui::Combo("Debug Mode", &globalOptions->kerrDebugMode, debugModeItems, IM_ARRAYSIZE(debugModeItems))) {
+                // Mode changed
+            }
 
-                if (ImGui::Button("Force Regenerate All LUTs")) {
-                    blackHoleRenderer->forceRegenerateKerrLuts();
+            ImGui::SameLine();
+            ImGui::TextDisabled("(?)");
+            if (ImGui::IsItemHovered()) {
+                const char* tooltip = "";
+                switch (globalOptions->kerrDebugMode) {
+                    case 0:
+                        tooltip = "Normal rendering with no debug visualization";
+                        break;
+                    case 1:
+                        tooltip = "Red zones showing gravitational influence areas\n"
+                                 "Brighter red = closer to black hole\n"
+                                 "Only shows outside event horizon safety zone";
+                        break;
+                    case 2:
+                        tooltip = "Yellow/orange visualization of deflection strength\n"
+                                 "Brightness indicates how much light rays are bent\n"
+                                 "Helps visualize Kerr distortion effects";
+                        break;
+                    case 3:
+                        tooltip = "Green visualization of gravitational field strength\n"
+                                 "Brighter green = stronger gravitational effects\n"
+                                 "Shows field within 10x Schwarzschild radius";
+                        break;
+                    case 4:
+                        tooltip = "Blue gradient showing black hole's spherical shape\n"
+                                 "Black interior = event horizon (no escape)\n"
+                                 "Blue gradient = distance from event horizon\n"
+                                 "Helps verify proper sphere geometry";
+                        break;
+                    default:
+                        tooltip = "Unknown debug mode";
+                        break;
                 }
-                ImGui::SameLine();
-                ImGui::TextDisabled("(?)");
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Regenerate all cached lookup tables.\nUse this if the visual effects look wrong.");
-                }
+                ImGui::SetTooltip("%s", tooltip);
             }
         }
 
