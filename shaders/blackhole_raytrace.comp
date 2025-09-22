@@ -70,7 +70,7 @@ float sceneDistance(vec3 pos) {
     return minDist;
 }
 
-vec2 sampleKerrDeflection(vec3 pos, vec3 blackHolePos, float maxDistance, int lutResolution) {
+vec2 sampleKerrDeflection(vec3 pos, vec3 blackHolePos, float bhMass, float maxDistance, int lutResolution) {
     vec3 relPos = pos - blackHolePos;
     float distance = length(relPos);
 
@@ -80,7 +80,7 @@ vec2 sampleKerrDeflection(vec3 pos, vec3 blackHolePos, float maxDistance, int lu
     if (phi < 0.0) phi += 2.0 * PI;
 
     // Convert to normalized LUT coordinates
-    float minDist = schwarzschildRadius(1.0) * 2.0; // Assuming mass normalization
+    float minDist = schwarzschildRadius(bhMass) * 2.0; // match generator's distance axis
     float distanceNorm = log(distance / minDist) / log(maxDistance / minDist);
     distanceNorm = clamp(distanceNorm, 0.0, 1.0);
 
@@ -97,7 +97,10 @@ vec2 sampleKerrDeflection(vec3 pos, vec3 blackHolePos, float maxDistance, int lu
         return vec2(0.0); // Invalid/extreme deflection
     }
 
-    return lutData.xy;
+    // Clamp deflection to a reasonable physical range to avoid numerical explosions
+    const float PI = 3.14159265359;
+    vec2 defl = clamp(lutData.xy, vec2(-PI), vec2(PI));
+    return defl;
 }
 
 vec3 applyKerrDistortion(vec3 rayPos, vec3 rayDir, int blackHoleIndex) {
@@ -115,7 +118,7 @@ vec3 applyKerrDistortion(vec3 rayPos, vec3 rayDir, int blackHoleIndex) {
         return rayDir;
     }
 
-    vec2 deflection = sampleKerrDeflection(rayPos, bhPos, u_kerrLutMaxDistance, u_kerrLutResolution);
+    vec2 deflection = sampleKerrDeflection(rayPos, bhPos, u_blackHoleMasses[blackHoleIndex], u_kerrLutMaxDistance, u_kerrLutResolution);
 
     // Convert ray direction to spherical coordinates
     vec3 normDir = normalize(rayDir);
@@ -137,6 +140,8 @@ vec3 applyKerrDistortion(vec3 rayPos, vec3 rayDir, int blackHoleIndex) {
 }
 
 vec3 rayMarch(vec3 rayPos, vec3 rayDir) {
+    bool appliedDeflection[8];
+    for (int ai = 0; ai < 8; ++ai) appliedDeflection[ai] = false;
     vec3 currentPos = rayPos;
     vec3 currentDir = rayDir;
     vec3 color = vec3(0.0);
@@ -156,9 +161,9 @@ vec3 rayMarch(vec3 rayPos, vec3 rayDir) {
             vec3 bhPos = u_blackHolePositions[i];
             float bhDistance = length(currentPos - bhPos);
             float rs = schwarzschildRadius(u_blackHoleMasses[i]);
-
-            if (bhDistance < rs * 50.0) {
+            if (!appliedDeflection[i] && bhDistance < rs * 50.0) {
                 currentDir = applyKerrDistortion(currentPos, currentDir, i);
+                appliedDeflection[i] = true;
             }
         }
 

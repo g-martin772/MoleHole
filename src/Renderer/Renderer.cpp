@@ -218,6 +218,20 @@ void Renderer::RenderUI(float fps, Scene *scene) {
                 changed = true;
             }
 
+            ImGui::Checkbox("Debug Kerr LUT", &globalOptions->kerrDebugLut);
+            ImGui::SameLine();
+            ImGui::TextDisabled("(?)");
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip(
+                    "Kerr LUT overlay: a 2D slice of the 3D table.\n"
+                    "Horizontal = polar angle θ (0..π), Vertical = azimuth φ (0..2π).\n"
+                    "Slice: fixed distance (X axis of the LUT) at mid-range.\n"
+                    "Color: two hues mix encode deflection (R=θ defl, G=φ defl).\n"
+                    "Brightness (value) = distance factor (B channel).\n"
+                    "Magenta tint = invalid/overflow entries (A == 0).\n"
+                    "Faint grid helps gauge indices.");
+            }
+
             ImGui::Separator();
 
             if (blackHoleRenderer) {
@@ -513,7 +527,7 @@ void Renderer::Render3DSimulation(Scene *scene) {
     }
 
     blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime, globalOptions);
-    blackHoleRenderer->RenderToScreen();
+    blackHoleRenderer->RenderToScreen(globalOptions);
     glDisable(GL_DEPTH_TEST);
 }
 
