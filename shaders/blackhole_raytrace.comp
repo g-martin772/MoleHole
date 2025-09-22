@@ -222,6 +222,18 @@ vec3 debugVisualization(vec3 rayPos, vec3 rayDir) {
                 return vec3(0.0, gravStrength * DEBUG_GRAVITATIONAL_SCALE, 0.0);
             }
         }
+
+        if (u_debugMode == 4) {
+            if (distance <= rs * 3.0) {
+                if (distance <= rs) {
+                    return vec3(0.0);
+                } else {
+                    float gradient = (distance - rs) / (rs * 2.0);
+                    gradient = clamp(gradient, 0.0, 1.0);
+                    return vec3(gradient * 0.5, gradient * 0.8, gradient);
+                }
+            }
+        }
     }
 
     return vec3(0.0);
@@ -240,6 +252,13 @@ vec3 rayMarch(vec3 rayPos, vec3 rayDir) {
     }
 
     for (int step = 0; step < MAX_STEPS; step++) {
+        vec3 stepDebugColor = debugVisualization(currentPos, currentDir);
+        if (length(stepDebugColor) > 0.0) {
+            return stepDebugColor;
+        }
+
+
+
         float dist = sceneDistance(currentPos);
 
         if (dist < MIN_DISTANCE) {
