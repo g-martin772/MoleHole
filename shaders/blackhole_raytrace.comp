@@ -55,6 +55,35 @@ float schwarzschildRadius(float mass) {
     return (2.0 * G * mass) / c2;
 }
 
+
+/**
+ * KERR EVENT HORIZONS
+ * Formula: r± = M ± √(M² - a²)
+ *
+ * Outer horizon (r₊): Event horizon where nothing can escape
+ * Inner horizon (r₋): Cauchy horizon (unstable in realistic scenarios)
+ *
+ * For |a| ≤ M: Physical black hole (extremal when |a| = M)
+ * For |a| > M: Naked singularity (unphysical)
+ */
+vec2 kerrEventHorizons(float mass, float spin) {
+    float a = abs(spin);
+    float discriminant = mass * mass - a * a;
+
+    // Ensure physical black hole (avoid naked singularity)
+    if (discriminant < 0.0) {
+        // Clamp to extremal case
+        a = mass;
+        discriminant = 0.0;
+    }
+
+    float sqrt_discriminant = sqrt(discriminant);
+    float r_plus = mass + sqrt_discriminant;   // Outer event horizon
+    float r_minus = mass - sqrt_discriminant;  // Inner event horizon
+
+    return vec2(r_minus, r_plus);
+}
+
 vec2 directionToSpherical(vec3 direction) {
     vec3 d = normalize(direction);
     float theta = atan(d.z, d.x);
@@ -71,17 +100,17 @@ vec3 sampleSkybox(vec3 direction) {
     return texture(u_skyboxTexture, uv).rgb;
 }
 
-float blackHoleDistance(vec3 pos, vec3 blackHolePos, float mass) {
+float blackHoleDistance(vec3 pos, vec3 blackHolePos, float mass, float spin) {
     float dist = distance(pos, blackHolePos);
-    float rs = schwarzschildRadius(mass);
-    return dist - rs;
+    float r_plus = kerrEventHorizons(mass, spin).y;
+    return dist - r_plus;
 }
 
 float sceneDistance(vec3 pos) {
     float minDist = MAX_DISTANCE;
 
     for (int i = 0; i < u_numBlackHoles; i++) {
-        float dist = blackHoleDistance(pos, u_blackHolePositions[i], u_blackHoleMasses[i]);
+        float dist = blackHoleDistance(pos, u_blackHolePositions[i], u_blackHoleMasses[i], u_blackHoleSpins[i]);
         minDist = min(minDist, dist);
     }
 
@@ -94,7 +123,7 @@ vec2 computeKerrDeflection(vec3 pos, vec3 rayDir, vec3 bhPos, float mass, float 
 
     if (r < MIN_DISTANCE_THRESHOLD) return vec2(0.0);
 
-    float rs = schwarzschildRadius(mass);
+    float r_plus = kerrEventHorizons(mass, spin).y;
 
     vec3 k = normalize(rayDir);
     vec3 r_unit = r_vec / r;
@@ -104,8 +133,8 @@ vec2 computeKerrDeflection(vec3 pos, vec3 rayDir, vec3 bhPos, float mass, float 
 
     if (b < MIN_IMPACT_PARAMETER) return vec2(0.0);
 
-    float gravitational_strength = rs / (r * r);
-    float distance_falloff = exp(-r / (rs * KERR_DISTANCE_FALLOFF_FACTOR));
+    float gravitational_strength = r_plus / (r * r);
+    float distance_falloff = exp(-r / (r_plus * KERR_DISTANCE_FALLOFF_FACTOR));
 
     vec3 toward_bh = -r_unit;
     float radial_component = dot(k, toward_bh);
@@ -113,13 +142,13 @@ vec2 computeKerrDeflection(vec3 pos, vec3 rayDir, vec3 bhPos, float mass, float 
     vec3 perp_deflection = toward_bh - radial_component * k;
     perp_deflection = normalize(perp_deflection);
 
-    float alpha = 2.0 * rs / b;
+    float alpha = 2.0 * r_plus / b;
     alpha *= distance_falloff;
     alpha = clamp(alpha, 0.0, MAX_GRAVITATIONAL_DEFLECTION);
 
     vec3 frame_drag_axis = normalize(spinAxis);
     vec3 angular_momentum = cross(r_vec, k);
-    float frame_drag_strength = spin * rs * mass / (r * r * r);
+    float frame_drag_strength = spin * r_plus * mass / (r * r * r);
     frame_drag_strength *= distance_falloff;
 
     vec3 frame_drag_direction = cross(frame_drag_axis, angular_momentum);
@@ -153,21 +182,33 @@ vec3 applyKerrDistortion(vec3 rayPos, vec3 rayDir, int blackHoleIndex) {
         return rayDir;
     }
 
-    vec3 bhPos = u_blackHolePositions[blackHoleIndex];
+    if (blackHoleIndex < 0 || blackHoleIndex >= u_numBlackHoles) {
+        return rayDir;
+    }
+
+    // Use a loop to safely access array elements
+    vec3 bhPos = vec3(0.0);
+    float mass = 0.0;
+    float spin = 0.0;
+    vec3 spinAxis = vec3(0.0, 1.0, 0.0);
+
+    for (int i = 0; i < u_numBlackHoles; i++) {
+        bhPos = u_blackHolePositions[i];
+        mass = u_blackHoleMasses[i];
+        spin = u_blackHoleSpins[i];
+        spinAxis = u_blackHoleSpinAxes[i];
+        break;
+    }
+
     float distance = length(rayPos - bhPos);
-
-    float rs = schwarzschildRadius(u_blackHoleMasses[blackHoleIndex]);
-
-    float influenceRadius = rs * KERR_INFLUENCE_RADIUS_FACTOR;
+    float r_plus = kerrEventHorizons(mass, spin).y;
+    float influenceRadius = r_plus * KERR_INFLUENCE_RADIUS_FACTOR;
 
     if (distance > influenceRadius) {
         return rayDir;
     }
 
-    vec2 deflection = computeKerrDeflection(rayPos, rayDir, bhPos,
-                                          u_blackHoleMasses[blackHoleIndex],
-                                          u_blackHoleSpins[blackHoleIndex],
-                                          u_blackHoleSpinAxes[blackHoleIndex]);
+    vec2 deflection = computeKerrDeflection(rayPos, rayDir, bhPos, mass, spin, spinAxis);
 
     vec3 normDir = normalize(rayDir);
     float currentTheta = acos(clamp(normDir.y, -1.0, 1.0));
@@ -193,18 +234,18 @@ vec3 debugVisualization(vec3 rayPos, vec3 rayDir) {
     for (int i = 0; i < u_numBlackHoles; i++) {
         vec3 bhPos = u_blackHolePositions[i];
         float distance = length(rayPos - bhPos);
-        float rs = schwarzschildRadius(u_blackHoleMasses[i]);
+        float r_plus = kerrEventHorizons(u_blackHoleMasses[i], u_blackHoleSpins[i]).y;
 
         if (u_debugMode == 1) {
-            float influence = rs * KERR_INFLUENCE_RADIUS_FACTOR;
-            if (distance < influence && distance > rs * EVENT_HORIZON_SAFETY_FACTOR) {
+            float influence = r_plus * KERR_INFLUENCE_RADIUS_FACTOR;
+            if (distance < influence && distance > r_plus * EVENT_HORIZON_SAFETY_FACTOR) {
                 float intensity = 1.0 - (distance / influence);
                 return vec3(intensity, 0.0, 0.0);
             }
         }
 
         if (u_debugMode == 2) {
-            if (distance > rs * EVENT_HORIZON_SAFETY_FACTOR) {
+            if (distance > r_plus * EVENT_HORIZON_SAFETY_FACTOR) {
                 vec2 deflection = computeKerrDeflection(rayPos, rayDir, bhPos,
                                                       u_blackHoleMasses[i],
                                                       u_blackHoleSpins[i],
@@ -217,18 +258,18 @@ vec3 debugVisualization(vec3 rayPos, vec3 rayDir) {
         }
 
         if (u_debugMode == 3) {
-            if (distance < rs * DEBUG_GRAVITATIONAL_RADIUS_FACTOR && distance > rs * EVENT_HORIZON_SAFETY_FACTOR) {
-                float gravStrength = rs / (distance * distance);
+            if (distance < r_plus * DEBUG_GRAVITATIONAL_RADIUS_FACTOR && distance > r_plus * EVENT_HORIZON_SAFETY_FACTOR) {
+                float gravStrength = r_plus / (distance * distance);
                 return vec3(0.0, gravStrength * DEBUG_GRAVITATIONAL_SCALE, 0.0);
             }
         }
 
         if (u_debugMode == 4) {
-            if (distance <= rs * 3.0) {
-                if (distance <= rs) {
+            if (distance <= r_plus * 3.0) {
+                if (distance <= r_plus) {
                     return vec3(0.0);
                 } else {
-                    float gradient = (distance - rs) / (rs * 2.0);
+                    float gradient = (distance - r_plus) / (r_plus * 2.0);
                     gradient = clamp(gradient, 0.0, 1.0);
                     return vec3(gradient * 0.5, gradient * 0.8, gradient);
                 }
@@ -239,12 +280,59 @@ vec3 debugVisualization(vec3 rayPos, vec3 rayDir) {
     return vec3(0.0);
 }
 
+// Add new function to check if ray will hit any black hole
+bool checkEventHorizonCrossing(vec3 pos, vec3 dir, out int hitBlackHoleIndex) {
+    hitBlackHoleIndex = -1;
+
+    for (int i = 0; i < u_numBlackHoles; i++) {
+        vec3 bhPos = u_blackHolePositions[i];
+        float r_plus = kerrEventHorizons(u_blackHoleMasses[i], u_blackHoleSpins[i]).y;
+
+        vec3 toBlackHole = bhPos - pos;
+        float distanceToCenter = length(toBlackHole);
+
+        // If already inside event horizon
+        if (distanceToCenter <= r_plus) {
+            hitBlackHoleIndex = i;
+            return true;
+        }
+
+        // Check if ray direction points toward black hole and will cross event horizon
+        vec3 dirToCenter = normalize(toBlackHole);
+        float rayDotToCenter = dot(normalize(dir), dirToCenter);
+
+        // Only check rays pointing somewhat toward the black hole
+        if (rayDotToCenter > 0.0) {
+            // Calculate closest approach distance using ray-sphere intersection
+            vec3 rayToCenter = pos - bhPos;
+            float a = dot(dir, dir);
+            float b = 2.0 * dot(rayToCenter, dir);
+            float c = dot(rayToCenter, rayToCenter) - r_plus * r_plus;
+            float discriminant = b * b - 4.0 * a * c;
+
+            // If discriminant >= 0, ray intersects event horizon sphere
+            if (discriminant >= 0.0) {
+                float t1 = (-b - sqrt(discriminant)) / (2.0 * a);
+                float t2 = (-b + sqrt(discriminant)) / (2.0 * a);
+
+                // Check if intersection is in front of ray (t > 0)
+                if (t1 > 0.0 || t2 > 0.0) {
+                    hitBlackHoleIndex = i;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 vec3 rayMarch(vec3 rayPos, vec3 rayDir) {
     vec3 currentPos = rayPos;
     vec3 currentDir = rayDir;
     vec3 color = vec3(0.0);
     float totalDistance = 0.0;
     bool hitBlackHole = false;
+    int hitBlackHoleIndex = -1;
 
     vec3 debugColor = debugVisualization(rayPos, rayDir);
     if (length(debugColor) > 0.0) {
@@ -257,26 +345,36 @@ vec3 rayMarch(vec3 rayPos, vec3 rayDir) {
             return stepDebugColor;
         }
 
-
-
-        float dist = sceneDistance(currentPos);
-
-        if (dist < MIN_DISTANCE) {
+        // Check if current position or trajectory will hit any black hole
+        int crossingBlackHoleIndex;
+        if (checkEventHorizonCrossing(currentPos, currentDir, crossingBlackHoleIndex)) {
             hitBlackHole = true;
+            hitBlackHoleIndex = crossingBlackHoleIndex;
             color = vec3(0.0);
             break;
         }
 
+        float dist = sceneDistance(currentPos);
+
+        // Apply Kerr distortion before stepping
         if (u_useKerrDistortion) {
             for (int i = 0; i < u_numBlackHoles; i++) {
                 vec3 bhPos = u_blackHolePositions[i];
                 float bhDistance = length(currentPos - bhPos);
-                float rs = schwarzschildRadius(u_blackHoleMasses[i]);
+                float r_plus = kerrEventHorizons(u_blackHoleMasses[i], u_blackHoleSpins[i]).y;
 
-                if (bhDistance < rs * KERR_INFLUENCE_RADIUS_FACTOR) {
+                if (bhDistance < r_plus * KERR_INFLUENCE_RADIUS_FACTOR) {
                     currentDir = applyKerrDistortion(currentPos, currentDir, i);
                 }
             }
+        }
+
+        // After applying distortion, check again if the bent ray will hit a black hole
+        if (checkEventHorizonCrossing(currentPos, currentDir, crossingBlackHoleIndex)) {
+            hitBlackHole = true;
+            hitBlackHoleIndex = crossingBlackHoleIndex;
+            color = vec3(0.0);
+            break;
         }
 
         float stepDist = max(dist, STEP_SIZE);
