@@ -5,17 +5,49 @@
 void AppState::LoadFromFile(const std::filesystem::path& configPath) {
     m_configPath = configPath;
 
-    if (!std::filesystem::exists(configPath)) {
-        spdlog::info("Config file {} doesn't exist, using defaults", configPath.string());
-        return;
+    std::filesystem::path backupPath = configPath;
+    backupPath += ".backup";
+
+    bool loadedFromBackup = false;
+
+    if (std::filesystem::exists(configPath)) {
+        try {
+            std::ifstream file(configPath);
+            if (file.is_open() && file.peek() != std::ifstream::traits_type::eof()) {
+                YAML::Node config = YAML::LoadFile(configPath.string());
+                if (config && !config.IsNull()) {
+                    DeserializeFromYaml(config);
+                    spdlog::info("Loaded application state from {}", configPath.string());
+                    return;
+                }
+            }
+            file.close();
+        } catch (const std::exception& e) {
+            spdlog::warn("Failed to load config file {}: {}", configPath.string(), e.what());
+        }
     }
 
-    try {
-        YAML::Node config = YAML::LoadFile(configPath.string());
-        DeserializeFromYaml(config);
-        spdlog::info("Loaded application state from {}", configPath.string());
-    } catch (const std::exception& e) {
-        spdlog::error("Failed to load config file {}: {}", configPath.string(), e.what());
+    if (std::filesystem::exists(backupPath)) {
+        try {
+            std::ifstream file(backupPath);
+            if (file.is_open() && file.peek() != std::ifstream::traits_type::eof()) {
+                YAML::Node config = YAML::LoadFile(backupPath.string());
+                if (config && !config.IsNull()) {
+                    DeserializeFromYaml(config);
+                    std::filesystem::copy_file(backupPath, configPath, std::filesystem::copy_options::overwrite_existing);
+                    loadedFromBackup = true;
+                    spdlog::info("Loaded application state from backup {}", backupPath.string());
+                    return;
+                }
+            }
+            file.close();
+        } catch (const std::exception& e) {
+            spdlog::warn("Failed to load backup config file {}: {}", backupPath.string(), e.what());
+        }
+    }
+
+    if (!loadedFromBackup) {
+        spdlog::info("No valid config found, using defaults");
     }
 }
 
@@ -24,13 +56,58 @@ void AppState::SaveToFile(const std::filesystem::path& configPath) {
         m_configPath = configPath;
     }
 
+    std::filesystem::path backupPath = m_configPath;
+    backupPath += ".backup";
+
     try {
+        if (std::filesystem::exists(m_configPath)) {
+            if (std::filesystem::exists(backupPath)) {
+                std::filesystem::remove(backupPath);
+            }
+            std::filesystem::copy_file(m_configPath, backupPath);
+        }
+
         YAML::Node config = SerializeToYaml();
-        std::ofstream file(m_configPath);
-        file << config;
+
+        std::filesystem::path tempPath = m_configPath;
+        tempPath += ".tmp";
+
+        if (std::filesystem::exists(tempPath)) {
+            std::filesystem::remove(tempPath);
+        }
+
+        {
+            std::ofstream file(tempPath);
+            if (!file.is_open()) {
+                throw std::runtime_error("Failed to open temporary file for writing");
+            }
+            file << config;
+            file.flush();
+            if (file.fail()) {
+                throw std::runtime_error("Failed to write to temporary file");
+            }
+        }
+
+        if (std::filesystem::exists(m_configPath)) {
+            std::filesystem::remove(m_configPath);
+        }
+        std::filesystem::rename(tempPath, m_configPath);
         spdlog::info("Saved application state to {}", m_configPath.string());
+
     } catch (const std::exception& e) {
         spdlog::error("Failed to save config file {}: {}", m_configPath.string(), e.what());
+
+        if (std::filesystem::exists(backupPath)) {
+            try {
+                if (std::filesystem::exists(m_configPath)) {
+                    std::filesystem::remove(m_configPath);
+                }
+                std::filesystem::copy_file(backupPath, m_configPath);
+                spdlog::info("Restored config from backup after save failure");
+            } catch (const std::exception& restoreError) {
+                spdlog::error("Failed to restore backup: {}", restoreError.what());
+            }
+        }
     }
 }
 
@@ -77,6 +154,7 @@ YAML::Node AppState::SerializeToYaml() const {
     config["window"]["vsync"] = window.vsync;
 
     config["application"]["lastOpenScene"] = app.lastOpenScene;
+    config["application"]["recentScenes"] = app.recentScenes;
     config["application"]["showDemoWindow"] = app.showDemoWindow;
     config["application"]["debugMode"] = app.debugMode;
     config["application"]["useKerrDistortion"] = app.useKerrDistortion;
@@ -119,6 +197,7 @@ void AppState::DeserializeFromYaml(const YAML::Node& config) {
     if (config["application"]) {
         const auto& appNode = config["application"];
         if (appNode["lastOpenScene"]) app.lastOpenScene = appNode["lastOpenScene"].as<std::string>();
+        if (appNode["recentScenes"]) app.recentScenes = appNode["recentScenes"].as<std::vector<std::string>>();
         if (appNode["showDemoWindow"]) app.showDemoWindow = appNode["showDemoWindow"].as<bool>();
         if (appNode["debugMode"]) app.debugMode = appNode["debugMode"].as<int>();
         if (appNode["useKerrDistortion"]) app.useKerrDistortion = appNode["useKerrDistortion"].as<bool>();

@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <unordered_map>
 #include <variant>
+#include <vector>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <yaml-cpp/yaml.h>
@@ -32,6 +33,7 @@ public:
 
     struct ApplicationState {
         std::string lastOpenScene = "";
+        std::vector<std::string> recentScenes;
         bool showDemoWindow = false;
         int debugMode = 0;
         bool useKerrDistortion = true;
