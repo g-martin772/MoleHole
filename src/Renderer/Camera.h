@@ -7,7 +7,9 @@ public:
     void SetPosition(const glm::vec3& pos);
     void SetYawPitch(float yaw, float pitch);
     void ProcessKeyboard(float forward, float right, float up, float deltaTime);
+    void ProcessKeyboard(float forward, float right, float up, float deltaTime, float speed);
     void ProcessMouse(float xoffset, float yoffset, bool constrainPitch = true);
+    void ProcessMouse(float xoffset, float yoffset, float sensitivity, bool constrainPitch = true);
     glm::mat4 GetViewMatrix() const;
     glm::mat4 GetProjectionMatrix() const;
     glm::mat4 GetViewProjectionMatrix() const;
@@ -15,6 +17,10 @@ public:
     float GetYaw() const;
     float GetPitch() const;
     void SetAspect(float aspect);
+    float GetFov() const;
+    void SetFov(float newFov);
+    glm::vec3 GetFront() const;
+    glm::vec3 GetUp() const;
 private:
     void UpdateCameraVectors();
     glm::vec3 position;
