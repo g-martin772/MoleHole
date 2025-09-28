@@ -3,9 +3,8 @@
 #include <vector>
 #include <glm/glm.hpp>
 #include "Shader.h"
-#include "Scene.h"
+#include "Simulation/Scene.h"
 #include "Camera.h"
-#include "GlobalOptions.h"
 #include "Image.h"
 #include "KerrLookupTableManager.h"
 
@@ -15,9 +14,9 @@ public:
     ~BlackHoleRenderer();
 
     void Init(int width, int height);
-    void Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time, const GlobalOptions* globalOptions);
+    void Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time);
     void Resize(int width, int height);
-    void RenderToScreen(const GlobalOptions* globalOptions);
+    void RenderToScreen();
 
     static float CalculateSchwarzschildRadius(float mass);
     static float GetEventHorizonRadius(float mass);
@@ -31,7 +30,7 @@ private:
     void CreateFullscreenQuad();
     void LoadSkybox();
     void UpdateUniforms(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time);
-    void UpdateKerrLookupTables(const std::vector<BlackHole>& blackHoles, const GlobalOptions* globalOptions);
+    void UpdateKerrLookupTables(const std::vector<BlackHole>& blackHoles);
 
     KerrLookupTableManager m_kerrLutManager;
 
