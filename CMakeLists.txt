@@ -11,7 +11,11 @@ add_subdirectory(dependencies/spdlog)
 add_subdirectory(dependencies/yaml-cpp)
 add_subdirectory(dependencies/nativefiledialog-extended)
 
-file(GLOB SOURCES src/*.cpp src/Renderer/*.cpp)
+file(GLOB SOURCES
+        src/*.cpp
+        src/Application/*.cpp
+        src/Simulation/*.cpp
+        src/Renderer/*.cpp)
 set(IMGUI_SOURCES
     dependencies/imgui/imgui.cpp
     dependencies/imgui/imgui_draw.cpp

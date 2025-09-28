@@ -14,13 +14,13 @@
 #include "Buffer.h"
 #include <cmath>
 
+#include "Application/Application.h"
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
-void Renderer::Init(GlobalOptions *options) {
-    globalOptions = options;
-
+void Renderer::Init() {
     if (!glfwInit()) {
         spdlog::error("Failed to initialize GLFW");
         exit(-1);
@@ -82,12 +82,10 @@ void Renderer::Shutdown() {
 }
 
 void Renderer::BeginFrame() {
-    if (globalOptions) {
-        int vsyncVal = globalOptions->vsync ? 1 : 0;
-        if (vsyncVal != lastVsync) {
-            glfwSwapInterval(vsyncVal);
-            lastVsync = vsyncVal;
-        }
+    int vsyncVal = Application::State().window.vsync ? 1 : 0;
+    if (vsyncVal != lastVsync) {
+        glfwSwapInterval(vsyncVal);
+        lastVsync = vsyncVal;
     }
     glfwPollEvents();
     ImGui_ImplOpenGL3_NewFrame();
@@ -195,30 +193,42 @@ void Renderer::RenderUI(float fps, Scene *scene) {
     }
     ImGui::Text("Hello World");
     ImGui::Text("FPS: %.1f", fps);
-    bool vsync = globalOptions->vsync;
+    bool vsync = Application::State().window.vsync;
     if (ImGui::Checkbox("VSync", &vsync)) {
-        globalOptions->vsync = vsync;
+        Application::State().window.vsync = vsync;
     }
-    ImGui::Text("VSync State: %s", globalOptions->vsync ? "Enabled" : "Disabled");
+    ImGui::Text("VSync State: %s", Application::State().window.vsync ? "Enabled" : "Disabled");
 
-    ImGui::DragFloat("Ray spacing", &globalOptions->beamSpacing, 0.01f, 0.0f, 1e10f);
+    float beamSpacing = Application::State().GetProperty<float>("beamSpacing", 1.0f);
+    if (ImGui::DragFloat("Ray spacing", &beamSpacing, 0.01f, 0.0f, 1e10f)) {
+        Application::State().SetProperty("beamSpacing", beamSpacing);
+    }
 
     if (ImGui::CollapsingHeader("Kerr Distortion", ImGuiTreeNodeFlags_DefaultOpen)) {
         bool changed = false;
-        if (ImGui::Checkbox("Enable Kerr Distortion", &globalOptions->kerrDistortionEnabled)) {
+        bool kerrDistortionEnabled = Application::State().rendering.enableDistortion;
+        if (ImGui::Checkbox("Enable Kerr Distortion", &kerrDistortionEnabled)) {
+            Application::State().rendering.enableDistortion = kerrDistortionEnabled;
             changed = true;
         }
 
-        if (globalOptions->kerrDistortionEnabled) {
-            if (ImGui::SliderInt("LUT Resolution", &globalOptions->kerrLutResolution, 32, 256)) {
+        if (Application::State().rendering.enableDistortion) {
+            int kerrLutResolution = Application::State().rendering.kerrLutResolution;
+            if (ImGui::SliderInt("LUT Resolution", &kerrLutResolution, 32, 256)) {
+                Application::State().rendering.kerrLutResolution = kerrLutResolution;
                 changed = true;
             }
 
-            if (ImGui::DragFloat("Max Distance", &globalOptions->kerrMaxDistance, 1.0f, 10.0f, 1000.0f)) {
+            float kerrMaxDistance = Application::State().rendering.kerrMaxDistance;
+            if (ImGui::DragFloat("Max Distance", &kerrMaxDistance, 1.0f, 10.0f, 1000.0f)) {
+                Application::State().rendering.kerrMaxDistance = kerrMaxDistance;
                 changed = true;
             }
 
-            ImGui::Checkbox("Debug Kerr LUT", &globalOptions->kerrDebugLut);
+            bool kerrDebugLut = Application::State().GetProperty<bool>("kerrDebugLut", false);
+            if (ImGui::Checkbox("Debug Kerr LUT", &kerrDebugLut)) {
+                Application::State().SetProperty("kerrDebugLut", kerrDebugLut);
+            }
             ImGui::SameLine();
             ImGui::TextDisabled("(?)");
             if (ImGui::IsItemHovered()) {
@@ -232,46 +242,54 @@ void Renderer::RenderUI(float fps, Scene *scene) {
                     "Faint grid helps gauge indices.");
             }
 
-            const char* debugModeItems[] = {
+            const char *debugModeItems[] = {
                 "Normal Rendering",
                 "Influence Zones",
                 "Deflection Magnitude",
                 "Gravitational Field",
-                "Spherical Shape"
+                "Spherical Shape",
+                "LUT Visualization"
             };
 
-            if (ImGui::Combo("Debug Mode", &globalOptions->kerrDebugMode, debugModeItems, IM_ARRAYSIZE(debugModeItems))) {
-                // Mode changed
+            int debugMode = static_cast<int>(Application::State().rendering.debugMode);
+            if (ImGui::Combo("Debug Mode", &debugMode, debugModeItems, IM_ARRAYSIZE(debugModeItems))) {
+                Application::State().rendering.debugMode = static_cast<DebugMode>(debugMode);
             }
 
             ImGui::SameLine();
             ImGui::TextDisabled("(?)");
             if (ImGui::IsItemHovered()) {
-                const char* tooltip = "";
-                switch (globalOptions->kerrDebugMode) {
+                const char *tooltip = "";
+                switch (static_cast<int>(Application::State().rendering.debugMode)) {
                     case 0:
                         tooltip = "Normal rendering with no debug visualization";
                         break;
                     case 1:
                         tooltip = "Red zones showing gravitational influence areas\n"
-                                 "Brighter red = closer to black hole\n"
-                                 "Only shows outside event horizon safety zone";
+                                "Brighter red = closer to black hole\n"
+                                "Only shows outside event horizon safety zone";
                         break;
                     case 2:
                         tooltip = "Yellow/orange visualization of deflection strength\n"
-                                 "Brightness indicates how much light rays are bent\n"
-                                 "Helps visualize Kerr distortion effects";
+                                "Brightness indicates how much light rays are bent\n"
+                                "Helps visualize Kerr distortion effects";
                         break;
                     case 3:
                         tooltip = "Green visualization of gravitational field strength\n"
-                                 "Brighter green = stronger gravitational effects\n"
-                                 "Shows field within 10x Schwarzschild radius";
+                                "Brighter green = stronger gravitational effects\n"
+                                "Shows field within 10x Schwarzschild radius";
                         break;
                     case 4:
                         tooltip = "Blue gradient showing black hole's spherical shape\n"
-                                 "Black interior = event horizon (no escape)\n"
-                                 "Blue gradient = distance from event horizon\n"
-                                 "Helps verify proper sphere geometry";
+                                "Black interior = event horizon (no escape)\n"
+                                "Blue gradient = distance from event horizon\n"
+                                "Helps verify proper sphere geometry";
+                        break;
+                    case 5:
+                        tooltip = "Visualize the distortion lookup table (LUT)\n"
+                                "2D slice of the 3D LUT used for ray deflection\n"
+                                "Hue encodes deflection direction, brightness encodes distance\n"
+                                "Magenta tint indicates invalid/overflow entries";
                         break;
                     default:
                         tooltip = "Unknown debug mode";
@@ -281,12 +299,14 @@ void Renderer::RenderUI(float fps, Scene *scene) {
             }
         }
 
-        if (changed && scene) {
-            if (blackHoleRenderer) {
-                std::vector<BlackHole> tempBH = scene->blackHoles;
-                if (!tempBH.empty()) {
-                    if (globalOptions->kerrDistortionEnabled) {
-                        blackHoleRenderer->forceRegenerateKerrLuts();
+        if (changed) {
+            if (scene) {
+                if (blackHoleRenderer) {
+                    std::vector<BlackHole> tempBH = scene->blackHoles;
+                    if (!tempBH.empty()) {
+                        if (Application::State().rendering.enableDistortion) {
+                            blackHoleRenderer->forceRegenerateKerrLuts();
+                        }
                     }
                 }
             }
@@ -325,7 +345,7 @@ void Renderer::RenderUI(float fps, Scene *scene) {
                 ImGui::DragFloat("Accretion Disk Size", &bh.accretionDiskSize, 0.01f, 0.0f, 1e6f);
                 ImGui::ColorEdit3("Accretion Disk Color", &bh.accretionDiskColor[0]);
 
-                if (bhChanged && blackHoleRenderer && globalOptions->kerrDistortionEnabled) {
+                if (bhChanged && blackHoleRenderer && Application::State().rendering.enableDistortion) {
                     blackHoleRenderer->forceRegenerateKerrLuts();
                 }
 
@@ -433,7 +453,7 @@ void Renderer::RenderDemo1(Scene *scene) {
     quadShader->Unbind();
 }
 
-void Renderer::DrawCircle(const glm::vec2& pos, float radius, const glm::vec3& color) {
+void Renderer::DrawCircle(const glm::vec2 &pos, float radius, const glm::vec3 &color) {
     int viewport[4];
     glGetIntegerv(GL_VIEWPORT, viewport);
     float screenRadius = radius;
@@ -456,7 +476,7 @@ void Renderer::DrawCircle(const glm::vec2& pos, float radius, const glm::vec3& c
     circleShader->SetMat4("uModel", model);
     circleShader->SetMat4("uVP", camera->GetViewProjectionMatrix());
     circleShader->SetVec3("uColor", color);
-    float vertices[] = { 0.0f, 0.0f, 0.0f };
+    float vertices[] = {0.0f, 0.0f, 0.0f};
     unsigned int VAO, VBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -464,7 +484,7 @@ void Renderer::DrawCircle(const glm::vec2& pos, float radius, const glm::vec3& c
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *) 0);
     glDrawArrays(GL_POINTS, 0, 1);
     glBindVertexArray(0);
     glDeleteBuffers(1, &VBO);
@@ -474,7 +494,7 @@ void Renderer::DrawCircle(const glm::vec2& pos, float radius, const glm::vec3& c
     glDisable(GL_BLEND);
 }
 
-void Renderer::DrawSphere(const glm::vec3& pos, float radius, const glm::vec3& color) {
+void Renderer::DrawSphere(const glm::vec3 &pos, float radius, const glm::vec3 &color) {
     static unsigned int sphereVAO = 0, sphereVBO = 0, sphereEBO = 0;
     static int indexCount = 0;
     if (sphereVAO == 0) {
@@ -484,8 +504,8 @@ void Renderer::DrawSphere(const glm::vec3& pos, float radius, const glm::vec3& c
         std::vector<unsigned int> indices;
         for (int y = 0; y <= Y_SEGMENTS; ++y) {
             for (int x = 0; x <= X_SEGMENTS; ++x) {
-                float xSegment = (float)x / (float)X_SEGMENTS;
-                float ySegment = (float)y / (float)Y_SEGMENTS;
+                float xSegment = (float) x / (float) X_SEGMENTS;
+                float ySegment = (float) y / (float) Y_SEGMENTS;
                 float xPos = std::cos(xSegment * 2.0f * M_PI) * std::sin(ySegment * M_PI);
                 float yPos = std::cos(ySegment * M_PI);
                 float zPos = std::sin(xSegment * 2.0f * M_PI) * std::sin(ySegment * M_PI);
@@ -496,7 +516,7 @@ void Renderer::DrawSphere(const glm::vec3& pos, float radius, const glm::vec3& c
         }
         for (int y = 0; y < Y_SEGMENTS; ++y) {
             for (int x = 0; x <= X_SEGMENTS; ++x) {
-                indices.push_back(y       * (X_SEGMENTS + 1) + x);
+                indices.push_back(y * (X_SEGMENTS + 1) + x);
                 indices.push_back((y + 1) * (X_SEGMENTS + 1) + x);
             }
         }
@@ -510,7 +530,7 @@ void Renderer::DrawSphere(const glm::vec3& pos, float radius, const glm::vec3& c
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereEBO);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *) 0);
         glBindVertexArray(0);
     }
     sphereShader->Bind();
@@ -522,7 +542,8 @@ void Renderer::DrawSphere(const glm::vec3& pos, float radius, const glm::vec3& c
     sphereShader->SetVec3("uColor", color);
     glBindVertexArray(sphereVAO);
     for (int y = 0; y < 16; ++y) {
-        glDrawElements(GL_TRIANGLE_STRIP, (16 + 1) * 2, GL_UNSIGNED_INT, (void*)(sizeof(unsigned int) * (y * (16 + 1) * 2)));
+        glDrawElements(GL_TRIANGLE_STRIP, (16 + 1) * 2, GL_UNSIGNED_INT,
+                       (void *) (sizeof(unsigned int) * (y * (16 + 1) * 2)));
     }
     glBindVertexArray(0);
     sphereShader->Unbind();
@@ -535,10 +556,10 @@ void Renderer::Render2DRays(Scene *scene) {
 
     float currentTime = static_cast<float>(glfwGetTime());
 
-    for (const auto& bh : scene->blackHoles) {
+    for (const auto &bh: scene->blackHoles) {
         DrawCircle(glm::vec2(bh.position.x, bh.position.y), 0.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
     }
-    blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime, globalOptions);
+    blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime);
 }
 
 void Renderer::Render3DSimulation(Scene *scene) {
@@ -549,12 +570,12 @@ void Renderer::Render3DSimulation(Scene *scene) {
 
     float currentTime = static_cast<float>(glfwGetTime());
 
-    for (const auto& bh : scene->blackHoles) {
+    for (const auto &bh: scene->blackHoles) {
         DrawSphere(bh.position, 0.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
     }
 
-    blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime, globalOptions);
-    blackHoleRenderer->RenderToScreen(globalOptions);
+    blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime);
+    blackHoleRenderer->RenderToScreen();
     glDisable(GL_DEPTH_TEST);
 }
 

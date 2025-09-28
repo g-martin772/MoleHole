@@ -5,11 +5,10 @@
 #include <glm/glm.hpp>
 #include <vector>
 
-#include "Scene.h"
+#include "Simulation/Scene.h"
 #include "Image.h"
 #include "Camera.h"
 #include "Input.h"
-#include "GlobalOptions.h"
 
 struct GLFWwindow;
 
@@ -20,7 +19,7 @@ public:
         Rays2D = 1,
         Simulation3D = 2
     };
-    void Init(GlobalOptions* options);
+    void Init();
     void Shutdown();
     void BeginFrame();
     void EndFrame();
@@ -45,7 +44,6 @@ public:
     std::unique_ptr<BlackHoleRenderer> blackHoleRenderer;
     std::unique_ptr<Camera> camera;
     std::unique_ptr<Input> input;
-    GlobalOptions* globalOptions = nullptr;
     int lastVsync = -1;
     void UpdateCamera(float deltaTime);
 

@@ -1,12 +1,9 @@
 #pragma once
 
-#include <glm/glm.hpp>
-#include <vector>
-#include <unordered_map>
-#include <string>
 #include <memory>
-#include "Scene.h"
+#include <unordered_map>
 #include "Shader.h"
+#include "../Simulation/Scene.h"
 
 class KerrLookupTableManager {
 public:
