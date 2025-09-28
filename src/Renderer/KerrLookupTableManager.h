@@ -14,14 +14,14 @@ public:
     ~KerrLookupTableManager();
 
     void initialize(int lutResolution = 64, float maxDistance = 100.0f);
-    uint getLookupTable(const BlackHole& blackHole);
+    uint32_t getLookupTable(const BlackHole& blackHole);
     bool needsRegeneration(const BlackHole& blackHole);
     void regenerateLookupTable(const BlackHole& blackHole);
     void cleanup();
 
     int getLutResolution() const { return m_lutResolution; }
     float getMaxDistance() const { return m_maxDistance; }
-    uint getCurrentLookupTable() const { return m_currentLookupTable; }
+    uint32_t getCurrentLookupTable() const { return m_currentLookupTable; }
 
     void setLutResolution(int resolution);
     void setMaxDistance(float distance);
@@ -32,20 +32,20 @@ public:
 
 private:
     struct LookupTableEntry {
-        uint textureId = 0;
+        uint32_t textureId = 0;
         BlackHole blackHole;
         bool isGenerated = false;
         double lastUsed = 0.0;
     };
 
-    void generateLookupTable(const BlackHole& blackHole, uint textureId);
-    void createTexture3D(uint& textureId);
-    void deleteTexture3D(uint textureId);
+    void generateLookupTable(const BlackHole& blackHole, uint32_t textureId);
+    void createTexture3D(uint32_t& textureId);
+    void deleteTexture3D(uint32_t textureId);
 
     std::unique_ptr<Shader> m_kerrLutShader;
 
     std::unordered_map<BlackHole, LookupTableEntry, BlackHoleHash> m_lookupCache;
-    uint m_currentLookupTable;
+    uint32_t m_currentLookupTable;
     BlackHole m_currentBlackHole;
 
     int m_lutResolution;

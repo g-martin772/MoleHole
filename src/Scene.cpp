@@ -32,7 +32,7 @@ void Scene::Serialize(const std::filesystem::path& path) {
 void Scene::Deserialize(const std::filesystem::path& path) {
     currentPath = path;
     blackHoles.clear();
-    YAML::Node root = YAML::LoadFile(path);
+    YAML::Node root = YAML::LoadFile(path.string());
     if (root["name"]) {
         name = root["name"].as<std::string>();
     } else {
