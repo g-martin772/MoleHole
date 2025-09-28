@@ -68,7 +68,11 @@ void Renderer::Init() {
 
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
-    camera = std::make_unique<Camera>(45.0f, (float) width / (float) height, 0.1f, 100.0f);
+    camera = std::make_unique<Camera>(Application::State().rendering.fov, (float) width / (float) height, 0.1f, 100.0f);
+
+    camera->SetPosition(Application::State().camera.position);
+    camera->SetYawPitch(Application::State().camera.yaw, Application::State().camera.pitch);
+
     input = std::make_unique<Input>(window);
 }
 
@@ -328,14 +332,36 @@ void Renderer::UpdateCamera(float deltaTime) {
     if (input->IsKeyDown(GLFW_KEY_A)) right -= 1.0f;
     if (input->IsKeyDown(GLFW_KEY_E)) up += 1.0f;
     if (input->IsKeyDown(GLFW_KEY_Q)) up -= 1.0f;
-    camera->ProcessKeyboard(forward, right, up, deltaTime);
+
+    float cameraSpeed = Application::State().app.cameraSpeed;
+    camera->ProcessKeyboard(forward, right, up, deltaTime, cameraSpeed);
+
+    bool cameraChanged = false;
     if (input->IsMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT)) {
         input->SetCursorEnabled(false);
         double dx, dy;
         input->GetMouseDelta(dx, dy);
-        camera->ProcessMouse((float) dx, (float) dy);
+        float mouseSensitivity = Application::State().app.mouseSensitivity;
+        if (dx != 0.0 || dy != 0.0) {
+            camera->ProcessMouse((float) dx, (float) dy, mouseSensitivity);
+            cameraChanged = true;
+        }
     } else {
         input->SetCursorEnabled(true);
+    }
+
+    if (forward != 0.0f || right != 0.0f || up != 0.0f || cameraChanged) {
+        Application::State().UpdateCameraState(
+            camera->GetPosition(),
+            camera->GetFront(),
+            camera->GetUp(),
+            camera->GetPitch(),
+            camera->GetYaw()
+        );
+    }
+
+    if (camera->GetFov() != Application::State().rendering.fov) {
+        camera->SetFov(Application::State().rendering.fov);
     }
 }
 

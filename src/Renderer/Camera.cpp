@@ -30,8 +30,25 @@ void Camera::ProcessKeyboard(float forward, float rightMove, float upMove, float
     position += up * upMove * velocity;
 }
 
+void Camera::ProcessKeyboard(float forward, float rightMove, float upMove, float deltaTime, float speed) {
+    float velocity = speed * deltaTime;
+    position += front * forward * velocity;
+    position += right * rightMove * velocity;
+    position += up * upMove * velocity;
+}
+
 void Camera::ProcessMouse(float xoffset, float yoffset, bool constrainPitch) {
     float sensitivity = 0.1f;
+    yaw += xoffset * sensitivity;
+    pitch += yoffset * sensitivity;
+    if (constrainPitch) {
+        if (pitch > 89.0f) pitch = 89.0f;
+        if (pitch < -89.0f) pitch = -89.0f;
+    }
+    UpdateCameraVectors();
+}
+
+void Camera::ProcessMouse(float xoffset, float yoffset, float sensitivity, bool constrainPitch) {
     yaw += xoffset * sensitivity;
     pitch += yoffset * sensitivity;
     if (constrainPitch) {
@@ -59,6 +76,22 @@ glm::vec3 Camera::GetPosition() const {
 
 float Camera::GetYaw() const { return yaw; }
 float Camera::GetPitch() const { return pitch; }
+
+float Camera::GetFov() const {
+    return fov;
+}
+
+void Camera::SetFov(float newFov) {
+    fov = newFov;
+}
+
+glm::vec3 Camera::GetFront() const {
+    return front;
+}
+
+glm::vec3 Camera::GetUp() const {
+    return up;
+}
 
 void Camera::UpdateCameraVectors() {
     glm::vec3 f;
