@@ -9,7 +9,7 @@ public:
     bool IsMouseButtonDown(int button) const;
     void GetMouseDelta(double& x, double& y) const;
     void GetMousePos(double& x, double& y) const;
-    void SetCursorEnabled(bool enabled) const;
+    void SetCursorEnabled(bool enabled);
     bool IsViewportFocused() const;
     void SetViewportHovered(bool hovered);
     void SetViewportFocused(bool focused);
@@ -20,4 +20,6 @@ private:
     bool m_FirstMouse;
     bool m_ViewportHovered;
     bool m_ViewportFocused;
+    bool m_CursorDisabled;
+    double m_CenterX, m_CenterY;
 };
