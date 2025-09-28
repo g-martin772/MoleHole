@@ -170,7 +170,6 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
 }
 
 void BlackHoleRenderer::RenderToScreen() {
-    // Draw the main raytraced image fullscreen
     m_displayShader->Bind();
 
     glActiveTexture(GL_TEXTURE0);

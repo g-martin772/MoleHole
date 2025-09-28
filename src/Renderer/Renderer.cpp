@@ -315,10 +315,6 @@ void Renderer::Render3DSimulation(Scene *scene) {
 
     float currentTime = static_cast<float>(glfwGetTime());
 
-    for (const auto &bh: scene->blackHoles) {
-        DrawSphere(bh.position, 0.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
-    }
-
     blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime);
     blackHoleRenderer->RenderToScreen();
     glDisable(GL_DEPTH_TEST);
