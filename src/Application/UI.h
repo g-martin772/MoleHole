@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-#include <vector>
 #include <string>
 #include "Simulation/Scene.h"
 
@@ -26,6 +24,7 @@ private:
     void RenderSystemWindow(float fps);
     void RenderSceneWindow(Scene* scene);
     void RenderSimulationWindow(Scene* scene);
+    void RenderHelpWindow();
 
     void RenderSystemInfoSection(float fps);
     void RenderDisplaySettingsSection();
@@ -46,6 +45,7 @@ private:
     void RemoveFromRecentScenes(const std::string& path);
 
     bool m_showDemoWindow = false;
+    bool m_showHelpWindow = false;
     bool m_initialized = false;
     bool m_configDirty = false;
     float m_saveTimer = 0.0f;

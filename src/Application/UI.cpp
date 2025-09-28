@@ -95,6 +95,10 @@ void UI::RenderMainUI(float fps, Scene* scene) {
     if (m_showDemoWindow) {
         ImGui::ShowDemoWindow(&m_showDemoWindow);
     }
+
+    if (m_showHelpWindow) {
+        RenderHelpWindow();
+    }
 }
 
 void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen) {
@@ -148,6 +152,9 @@ void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen) {
         }
 
         if (ImGui::BeginMenu("Help")) {
+            if (ImGui::MenuItem("Help", "F1")) {
+                m_showHelpWindow = true;
+            }
             if (ImGui::MenuItem("About")) {
 
             }
@@ -606,4 +613,169 @@ void UI::RenderDebugModeTooltip(int debugMode) {
             break;
     }
     ImGui::SetTooltip("%s", tooltip);
+}
+
+void UI::RenderHelpWindow() {
+    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("MoleHole - Help", &m_showHelpWindow)) {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::BeginChild("HelpContent", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()));
+
+    if (ImGui::BeginTabBar("HelpTabs")) {
+        if (ImGui::BeginTabItem("Getting Started")) {
+            ImGui::TextWrapped("Welcome to MoleHole - Black Hole Physics Simulation");
+            ImGui::Separator();
+
+            ImGui::Text("Quick Start:");
+            ImGui::BulletText("Create a new scene or load an existing one from File menu");
+            ImGui::BulletText("Add black holes using the Simulation panel");
+            ImGui::BulletText("Adjust rendering settings in the System panel");
+            ImGui::BulletText("Navigate using mouse and keyboard controls");
+
+            ImGui::Spacing();
+            ImGui::Text("Basic Workflow:");
+            ImGui::BulletText("1. Set up your scene with black holes");
+            ImGui::BulletText("2. Configure physics and rendering parameters");
+            ImGui::BulletText("3. Use debug modes to visualize effects");
+            ImGui::BulletText("4. Save your scene for later use");
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Controls")) {
+            ImGui::Text("Camera Movement:");
+            ImGui::BulletText("W/A/S/D - Move forward/left/backward/right");
+            ImGui::BulletText("Q/E - Move up/down");
+            ImGui::BulletText("Right Mouse + Drag - Look around");
+            ImGui::BulletText("Mouse Wheel - Zoom in/out");
+
+            ImGui::Separator();
+            ImGui::Text("Keyboard Shortcuts:");
+            ImGui::BulletText("Ctrl+O - Open scene file");
+            ImGui::BulletText("Ctrl+S - Save current scene");
+            ImGui::BulletText("F1 - Toggle this help window");
+            ImGui::BulletText("ESC - Close dialogs/windows");
+
+            ImGui::Separator();
+            ImGui::Text("Camera Settings:");
+            ImGui::BulletText("Movement Speed - Controls how fast you move through the scene");
+            ImGui::BulletText("Mouse Sensitivity - Controls how responsive camera rotation is");
+            ImGui::BulletText("Adjust these in System > Camera Controls");
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Physics")) {
+            ImGui::Text("Black Hole Properties:");
+            ImGui::BulletText("Mass - Determines gravitational strength and event horizon size");
+            ImGui::BulletText("Spin - Kerr rotation parameter (0=Schwarzschild, 1=maximal)");
+            ImGui::BulletText("Position - 3D location of the black hole center");
+            ImGui::BulletText("Spin Axis - Direction of rotation axis");
+
+            ImGui::Separator();
+            ImGui::Text("Accretion Disk:");
+            ImGui::BulletText("Density - How thick/bright the disk appears");
+            ImGui::BulletText("Size - Outer radius of the accretion disk");
+            ImGui::BulletText("Color - RGB color tint for the disk material");
+
+            ImGui::Separator();
+            ImGui::Text("Kerr Physics:");
+            ImGui::BulletText("Kerr metric describes rotating black holes");
+            ImGui::BulletText("Spin affects light ray deflection and spacetime curvature");
+            ImGui::BulletText("Frame dragging causes space itself to rotate near the black hole");
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Rendering")) {
+            ImGui::Text("Kerr Distortion:");
+            ImGui::BulletText("Enable to simulate gravitational lensing effects");
+            ImGui::BulletText("LUT Resolution controls accuracy vs performance");
+            ImGui::BulletText("Max Distance sets the simulation boundary");
+
+            ImGui::Separator();
+            ImGui::Text("Debug Modes:");
+            ImGui::BulletText("Normal - Standard rendering with physics effects");
+            ImGui::BulletText("Influence Zones - Red areas show gravitational influence");
+            ImGui::BulletText("Deflection Magnitude - Yellow shows light ray bending");
+            ImGui::BulletText("Gravitational Field - Green shows field strength");
+            ImGui::BulletText("Spherical Shape - Blue shows black hole geometry");
+            ImGui::BulletText("LUT Visualization - Shows the distortion lookup table");
+
+            ImGui::Separator();
+            ImGui::Text("Performance Tips:");
+            ImGui::BulletText("Lower LUT Resolution for better performance");
+            ImGui::BulletText("Reduce Max Distance if experiencing slowdowns");
+            ImGui::BulletText("Disable Kerr Distortion for faster rendering");
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Scene Management")) {
+            ImGui::Text("File Operations:");
+            ImGui::BulletText("Open Scene - Load a previously saved scene file");
+            ImGui::BulletText("Save Scene - Save changes to current scene file");
+            ImGui::BulletText("Save Scene As - Save with a new filename");
+
+            ImGui::Separator();
+            ImGui::Text("Recent Scenes:");
+            ImGui::BulletText("Recently opened scenes appear in the Scene panel");
+            ImGui::BulletText("Click any recent scene to quickly switch to it");
+            ImGui::BulletText("Green highlight indicates the currently active scene");
+            ImGui::BulletText("X button removes scenes from recent list");
+
+            ImGui::Separator();
+            ImGui::Text("Scene Properties:");
+            ImGui::BulletText("Scene Name - Descriptive name for your scene");
+            ImGui::BulletText("Path - Shows where the scene file is saved");
+            ImGui::BulletText("Changes auto-save when you modify scene properties");
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Troubleshooting")) {
+            ImGui::Text("Common Issues:");
+
+            ImGui::Text("Poor Performance:");
+            ImGui::BulletText("Lower Kerr LUT Resolution (32-64 for low-end systems)");
+            ImGui::BulletText("Reduce Max Distance setting");
+            ImGui::BulletText("Disable Kerr Distortion temporarily");
+            ImGui::BulletText("Close unnecessary debug visualizations");
+
+            ImGui::Separator();
+            ImGui::Text("Scene Loading Problems:");
+            ImGui::BulletText("Check file permissions and disk space");
+            ImGui::BulletText("Verify scene file isn't corrupted");
+            ImGui::BulletText("Remove invalid entries from recent scenes");
+
+            ImGui::Separator();
+            ImGui::Text("Visual Issues:");
+            ImGui::BulletText("Try different debug modes to isolate problems");
+            ImGui::BulletText("Check black hole positions aren't overlapping");
+            ImGui::BulletText("Verify spin values are between 0 and 1");
+            ImGui::BulletText("Reset camera position if view seems stuck");
+
+            ImGui::Separator();
+            ImGui::Text("System Requirements:");
+            ImGui::BulletText("Modern GPU with OpenGL 4.6 support");
+            ImGui::BulletText("At least 4GB RAM recommended");
+            ImGui::BulletText("Updated graphics drivers");
+
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
+
+    ImGui::EndChild();
+
+    ImGui::Separator();
+    if (ImGui::Button("Close Help")) {
+        m_showHelpWindow = false;
+    }
+
+    ImGui::End();
 }
