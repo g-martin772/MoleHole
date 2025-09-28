@@ -4,6 +4,7 @@
 #include <fstream>
 #include <yaml-cpp/yaml.h>
 #include <nfd.h>
+#include <spdlog/spdlog.h>
 
 void Scene::Serialize(const std::filesystem::path& path) {
     currentPath = path;
@@ -68,19 +69,53 @@ void Scene::Deserialize(const std::filesystem::path& path) {
 }
 
 std::filesystem::path Scene::ShowFileDialog(bool save) {
-    NFD_Init();
+    spdlog::info("Opening {} dialog", save ? "save" : "open");
+
     nfdu8char_t *outPath = nullptr;
     nfdresult_t result;
+
+    nfdresult_t initResult = NFD_Init();
+    if (initResult != NFD_OKAY) {
+        spdlog::error("Failed to initialize NFD: {}", NFD_GetError());
+        return {};
+    }
+
+    nfdu8filteritem_t filterItem[2] = {
+        { "YAML Scene Files", "yaml" },
+        { "All Files", "*" }
+    };
+
     if (save) {
-        result = NFD_SaveDialogU8(&outPath, nullptr, 0, ".", "scene.yaml");
+        result = NFD_SaveDialogU8(&outPath, filterItem, 2, nullptr, "scene.yaml");
     } else {
-        result = NFD_OpenDialogU8(&outPath, nullptr, 0, nullptr);
+        spdlog::info("Calling NFD_OpenDialogU8");
+        result = NFD_OpenDialogU8(&outPath, filterItem, 1, nullptr);
     }
+
+    spdlog::info("Dialog result: {} (NFD_OKAY={}, NFD_CANCEL={}, NFD_ERROR={})",
+                 (int)result, (int)NFD_OKAY, (int)NFD_CANCEL, (int)NFD_ERROR);
+
     std::filesystem::path path;
-    if (result == NFD_OKAY && outPath) {
-        path = outPath;
-        NFD_FreePathU8(outPath);
+    if (result == NFD_OKAY) {
+        if (outPath) {
+            path = std::string(outPath);
+            spdlog::info("Dialog succeeded, path: '{}'", path.string());
+            NFD_FreePathU8(outPath);
+
+            if (save && path.extension().empty()) {
+                path += ".yaml";
+                spdlog::info("Added .yaml extension, final path: '{}'", path.string());
+            }
+        } else {
+            spdlog::error("Dialog returned NFD_OKAY but outPath is null");
+        }
+    } else if (result == NFD_CANCEL) {
+        spdlog::info("Dialog was cancelled by user");
+    } else if (result == NFD_ERROR) {
+        const char* error = NFD_GetError();
+        spdlog::error("File dialog error: {}", error ? error : "Unknown error");
     }
+
     NFD_Quit();
     return path;
 }

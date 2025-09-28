@@ -104,282 +104,28 @@ void Renderer::EndFrame() {
     glfwSwapBuffers(window);
 }
 
-void Renderer::RenderDockspace(Scene *scene) {
-    ImGuiIO &io = ImGui::GetIO();
-    bool ctrl = io.KeyCtrl;
-    static bool prevCtrlS = false, prevCtrlO = false;
-    bool ctrlS = ctrl && ImGui::IsKeyPressed(ImGuiKey_S);
-    bool ctrlO = ctrl && ImGui::IsKeyPressed(ImGuiKey_O);
-    bool doSave = false, doOpen = false;
-    if (ctrlS && !prevCtrlS) doSave = true;
-    if (ctrlO && !prevCtrlO) doOpen = true;
-    prevCtrlS = ctrlS;
-    prevCtrlO = ctrlO;
-
-    if (ImGui::BeginMainMenuBar()) {
-        if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) {
-                doOpen = true;
-            }
-            bool canSave = scene && !scene->currentPath.empty();
-            if (ImGui::MenuItem("Save Scene", "Ctrl+S", false, canSave)) {
-                doSave = true;
-            }
-            if (ImGui::MenuItem("Save Scene As...")) {
-                if (scene) {
-                    auto path = Scene::ShowFileDialog(true);
-                    if (!path.empty()) {
-                        scene->Serialize(path);
-                    }
-                }
-            }
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Edit")) {
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("View")) {
-            bool selectedDemo1 = selectedViewport == ViewportMode::Demo1;
-            bool selectedRays2D = selectedViewport == ViewportMode::Rays2D;
-            if (ImGui::MenuItem("Demo1", nullptr, selectedDemo1)) {
-                selectedViewport = ViewportMode::Demo1;
-            }
-            if (ImGui::MenuItem("Rays2D", nullptr, selectedRays2D)) {
-                selectedViewport = ViewportMode::Rays2D;
-            }
-            if (ImGui::MenuItem("Simulation3D", nullptr, selectedViewport == ViewportMode::Simulation3D)) {
-                selectedViewport = ViewportMode::Simulation3D;
-            }
-            ImGui::EndMenu();
-        }
-        ImGui::EndMainMenuBar();
-    }
-
-    if (doOpen && scene) {
-        auto path = Scene::ShowFileDialog(false);
-        if (!path.empty()) {
-            scene->Deserialize(path);
-        }
-    }
-    if (doSave && scene && !scene->currentPath.empty()) {
-        scene->Serialize(scene->currentPath);
-    }
-
-    ImGuiViewport *viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + ImGui::GetFrameHeight()));
-    ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, viewport->Size.y - ImGui::GetFrameHeight()));
-    ImGui::SetNextWindowViewport(viewport->ID);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGuiWindowFlags dockspace_flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar |
-                                       ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
-                                       |
-                                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-    ImGui::Begin("##DockSpace", nullptr, dockspace_flags);
-    ImGui::DockSpace(ImGui::GetID("DockSpace"), ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-    ImGui::End();
-    ImGui::PopStyleVar(2);
-}
-
-void Renderer::RenderUI(float fps, Scene *scene) {
-    ImGui::Begin("Test");
-    if (scene) {
-        char nameBuffer[128];
-        std::strncpy(nameBuffer, scene->name.c_str(), sizeof(nameBuffer));
-        nameBuffer[sizeof(nameBuffer) - 1] = '\0';
-        if (ImGui::InputText("Scene Name", nameBuffer, sizeof(nameBuffer))) {
-            scene->name = nameBuffer;
-        }
-    }
-    ImGui::Text("Hello World");
-    ImGui::Text("FPS: %.1f", fps);
-    bool vsync = Application::State().window.vsync;
-    if (ImGui::Checkbox("VSync", &vsync)) {
-        Application::State().window.vsync = vsync;
-    }
-    ImGui::Text("VSync State: %s", Application::State().window.vsync ? "Enabled" : "Disabled");
-
-    float beamSpacing = Application::State().GetProperty<float>("beamSpacing", 1.0f);
-    if (ImGui::DragFloat("Ray spacing", &beamSpacing, 0.01f, 0.0f, 1e10f)) {
-        Application::State().SetProperty("beamSpacing", beamSpacing);
-    }
-
-    if (ImGui::CollapsingHeader("Kerr Distortion", ImGuiTreeNodeFlags_DefaultOpen)) {
-        bool changed = false;
-        bool kerrDistortionEnabled = Application::State().rendering.enableDistortion;
-        if (ImGui::Checkbox("Enable Kerr Distortion", &kerrDistortionEnabled)) {
-            Application::State().rendering.enableDistortion = kerrDistortionEnabled;
-            changed = true;
-        }
-
-        if (Application::State().rendering.enableDistortion) {
-            int kerrLutResolution = Application::State().rendering.kerrLutResolution;
-            if (ImGui::SliderInt("LUT Resolution", &kerrLutResolution, 32, 256)) {
-                Application::State().rendering.kerrLutResolution = kerrLutResolution;
-                changed = true;
-            }
-
-            float kerrMaxDistance = Application::State().rendering.kerrMaxDistance;
-            if (ImGui::DragFloat("Max Distance", &kerrMaxDistance, 1.0f, 10.0f, 1000.0f)) {
-                Application::State().rendering.kerrMaxDistance = kerrMaxDistance;
-                changed = true;
-            }
-
-            bool kerrDebugLut = Application::State().GetProperty<bool>("kerrDebugLut", false);
-            if (ImGui::Checkbox("Debug Kerr LUT", &kerrDebugLut)) {
-                Application::State().SetProperty("kerrDebugLut", kerrDebugLut);
-            }
-            ImGui::SameLine();
-            ImGui::TextDisabled("(?)");
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip(
-                    "Kerr LUT overlay: a 2D slice of the 3D table.\n"
-                    "Horizontal = polar angle θ (0..π), Vertical = azimuth φ (0..2π).\n"
-                    "Slice: fixed distance (X axis of the LUT) at mid-range.\n"
-                    "Color: two hues mix encode deflection (R=θ defl, G=φ defl).\n"
-                    "Brightness (value) = distance factor (B channel).\n"
-                    "Magenta tint = invalid/overflow entries (A == 0).\n"
-                    "Faint grid helps gauge indices.");
-            }
-
-            const char *debugModeItems[] = {
-                "Normal Rendering",
-                "Influence Zones",
-                "Deflection Magnitude",
-                "Gravitational Field",
-                "Spherical Shape",
-                "LUT Visualization"
-            };
-
-            int debugMode = static_cast<int>(Application::State().rendering.debugMode);
-            if (ImGui::Combo("Debug Mode", &debugMode, debugModeItems, IM_ARRAYSIZE(debugModeItems))) {
-                Application::State().rendering.debugMode = static_cast<DebugMode>(debugMode);
-            }
-
-            ImGui::SameLine();
-            ImGui::TextDisabled("(?)");
-            if (ImGui::IsItemHovered()) {
-                const char *tooltip = "";
-                switch (static_cast<int>(Application::State().rendering.debugMode)) {
-                    case 0:
-                        tooltip = "Normal rendering with no debug visualization";
-                        break;
-                    case 1:
-                        tooltip = "Red zones showing gravitational influence areas\n"
-                                "Brighter red = closer to black hole\n"
-                                "Only shows outside event horizon safety zone";
-                        break;
-                    case 2:
-                        tooltip = "Yellow/orange visualization of deflection strength\n"
-                                "Brightness indicates how much light rays are bent\n"
-                                "Helps visualize Kerr distortion effects";
-                        break;
-                    case 3:
-                        tooltip = "Green visualization of gravitational field strength\n"
-                                "Brighter green = stronger gravitational effects\n"
-                                "Shows field within 10x Schwarzschild radius";
-                        break;
-                    case 4:
-                        tooltip = "Blue gradient showing black hole's spherical shape\n"
-                                "Black interior = event horizon (no escape)\n"
-                                "Blue gradient = distance from event horizon\n"
-                                "Helps verify proper sphere geometry";
-                        break;
-                    case 5:
-                        tooltip = "Visualize the distortion lookup table (LUT)\n"
-                                "2D slice of the 3D LUT used for ray deflection\n"
-                                "Hue encodes deflection direction, brightness encodes distance\n"
-                                "Magenta tint indicates invalid/overflow entries";
-                        break;
-                    default:
-                        tooltip = "Unknown debug mode";
-                        break;
-                }
-                ImGui::SetTooltip("%s", tooltip);
-            }
-        }
-
-        if (changed) {
-            if (scene) {
-                if (blackHoleRenderer) {
-                    std::vector<BlackHole> tempBH = scene->blackHoles;
-                    if (!tempBH.empty()) {
-                        if (Application::State().rendering.enableDistortion) {
-                            blackHoleRenderer->forceRegenerateKerrLuts();
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (ImGui::CollapsingHeader("Black Holes", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (ImGui::Button("Add Black Hole")) {
-            BlackHole newHole;
-            newHole.mass = 10.0f;
-            newHole.position = glm::vec3(0.0f, 0.0f, -5.0f);
-            newHole.showAccretionDisk = true;
-            newHole.accretionDiskDensity = 1.0f;
-            newHole.accretionDiskSize = 15.0f;
-            newHole.accretionDiskColor = glm::vec3(1.0f, 0.5f, 0.0f);
-            newHole.spinAxis = glm::vec3(0.0f, 1.0f, 0.0f);
-            newHole.spin = 0.5f;
-            scene->blackHoles.push_back(newHole);
-        }
-        int idx = 0;
-        for (auto it = scene->blackHoles.begin(); it != scene->blackHoles.end();) {
-            ImGui::PushID(idx);
-            bool open = ImGui::TreeNode("Black Hole");
-            ImGui::SameLine();
-            bool remove = ImGui::Button("Remove");
-            if (open) {
-                BlackHole &bh = *it;
-                bool bhChanged = false;
-
-                if (ImGui::DragFloat("Mass", &bh.mass, 0.02f, 0.0f, 1e10f)) bhChanged = true;
-                if (ImGui::DragFloat("Spin", &bh.spin, 0.01f, 0.0f, 1.0f)) bhChanged = true;
-                if (ImGui::DragFloat3("Position", &bh.position[0], 0.05f)) bhChanged = true;
-                if (ImGui::DragFloat3("Spin Axis", &bh.spinAxis[0], 0.01f, -1.0f, 1.0f)) bhChanged = true;
-                ImGui::Checkbox("Show Accretion Disk", &bh.showAccretionDisk);
-                ImGui::DragFloat("Accretion Disk Density", &bh.accretionDiskDensity, 0.01f, 0.0f, 1e6f);
-                ImGui::DragFloat("Accretion Disk Size", &bh.accretionDiskSize, 0.01f, 0.0f, 1e6f);
-                ImGui::ColorEdit3("Accretion Disk Color", &bh.accretionDiskColor[0]);
-
-                if (bhChanged && blackHoleRenderer && Application::State().rendering.enableDistortion) {
-                    blackHoleRenderer->forceRegenerateKerrLuts();
-                }
-
-                ImGui::TreePop();
-            }
-            ImGui::PopID();
-            if (remove) {
-                it = scene->blackHoles.erase(it);
-            } else {
-                ++it;
-            }
-            idx++;
-        }
-    }
-
-    ImGui::End();
-}
-
 void Renderer::RenderScene(Scene *scene) {
     const char *title = nullptr;
     switch (selectedViewport) {
-        case ViewportMode::Demo1: title = "Viewport - Demo1";
+        case ViewportMode::Demo1:
+            title = "Viewport - Demo1";
             break;
-        case ViewportMode::Rays2D: title = "Viewport - 2D Rays";
+        case ViewportMode::Rays2D:
+            title = "Viewport - 2D Rays";
             break;
-        case ViewportMode::Simulation3D: title = "Viewport - 3D Simulation";
+        case ViewportMode::Simulation3D:
+            title = "Viewport - 3D Simulation";
             break;
-        default: title = "Viewport";
+        default:
+            title = "Viewport";
             break;
     }
+
     ImGui::Begin(title);
     ImVec2 imgui_size = ImGui::GetContentRegionAvail();
     int img_width = std::max(1, static_cast<int>(imgui_size.x));
     int img_height = std::max(1, static_cast<int>(imgui_size.y));
+
     if (img_width != last_img_width || img_height != last_img_height) {
         image = std::make_shared<Image>(img_width, img_height);
         last_img_width = img_width;
@@ -388,20 +134,22 @@ void Renderer::RenderScene(Scene *scene) {
             camera->SetYawPitch(camera->GetYaw(), camera->GetPitch());
             camera->SetAspect(static_cast<float>(img_width) / static_cast<float>(img_height));
         }
-
         if (blackHoleRenderer) {
             blackHoleRenderer->Resize(img_width, img_height);
         }
     }
+
     bool viewport_focused = ImGui::IsWindowFocused();
     bool viewport_hovered = ImGui::IsWindowHovered();
     input->SetViewportFocused(viewport_focused);
     input->SetViewportHovered(viewport_hovered);
+
     static double lastTime = glfwGetTime();
     double currentTime = glfwGetTime();
     float deltaTime = static_cast<float>(currentTime - lastTime);
     lastTime = currentTime;
     input->Update();
+
     if (viewport_focused && viewport_hovered) {
         UpdateCamera(deltaTime);
     } else {
@@ -416,30 +164,27 @@ void Renderer::RenderScene(Scene *scene) {
 
     switch (selectedViewport) {
         case ViewportMode::Demo1:
-            glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
             RenderDemo1(scene);
             break;
         case ViewportMode::Rays2D:
-            glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
             Render2DRays(scene);
             break;
         case ViewportMode::Simulation3D:
-            glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
             Render3DSimulation(scene);
             break;
-        default:
-            break;
     }
+
     glDeleteFramebuffers(1, &fbo);
-    ImGui::Image((void *) (intptr_t) image->textureID, ImVec2((float) image->width, (float) image->height),
+    ImGui::Image((void *)(intptr_t)image->textureID,
+                 ImVec2((float)image->width, (float)image->height),
                  ImVec2(0, 1), ImVec2(1, 0));
     ImGui::End();
 }
 
 void Renderer::RenderDemo1(Scene *scene) {
+    glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
     quadShader->Bind();
     glm::mat4 vp = camera->GetViewProjectionMatrix();
     quadShader->SetMat4("uVP", vp);
