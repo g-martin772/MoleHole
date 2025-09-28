@@ -23,8 +23,6 @@ public:
     void Shutdown();
     void BeginFrame();
     void EndFrame();
-    void RenderDockspace(Scene* scene);
-    void RenderUI(float fps, Scene *scene);
     void RenderScene(Scene *scene);
 
     void DrawQuad(const glm::vec3& position, float rotationRadians = 0.0f, const glm::vec3& scale = glm::vec3(1.0f));
@@ -34,6 +32,10 @@ public:
     void DrawSphere(const glm::vec3& pos, float radius, const glm::vec3& color);
 
     GLFWwindow* GetWindow() const { return window; }
+
+    ViewportMode GetSelectedViewport() const { return selectedViewport; }
+    void SetSelectedViewport(ViewportMode mode) { selectedViewport = mode; }
+
     GLFWwindow* window = nullptr;
     int last_img_width = 800;
     int last_img_height = 600;

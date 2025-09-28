@@ -22,6 +22,8 @@ bool Application::Initialize() {
         InitializeRenderer();
         InitializeSimulation();
 
+        m_ui.Initialize();
+
         if (!m_state.GetLastOpenScene().empty() &&
             std::filesystem::exists(m_state.GetLastOpenScene())) {
             LoadScene(m_state.GetLastOpenScene());
@@ -98,8 +100,8 @@ void Application::Render() {
     m_renderer.BeginFrame();
 
     auto scene = m_simulation.GetScene();
-    m_renderer.RenderDockspace(scene);
-    m_renderer.RenderUI(GetFPS(), scene);
+    m_ui.RenderDockspace(scene);
+    m_ui.RenderMainUI(GetFPS(), scene);
     m_renderer.RenderScene(scene);
 
     for (const auto& [name, callback] : m_renderCallbacks) {

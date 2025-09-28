@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AppState.h"
+#include "UI.h"
 #include "Renderer/Renderer.h"
 #include "Simulation/Simulation.h"
 #include "FpsCounter.h"
@@ -57,6 +58,7 @@ private:
     Application& operator=(const Application&) = delete;
 
     AppState m_state;
+    UI m_ui;
     Renderer m_renderer;
     Simulation m_simulation;
     FpsCounter m_fpsCounter;
