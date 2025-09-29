@@ -10,22 +10,16 @@ add_subdirectory(dependencies/glm)
 add_subdirectory(dependencies/spdlog)
 add_subdirectory(dependencies/yaml-cpp)
 add_subdirectory(dependencies/nativefiledialog-extended)
+add_subdirectory(dependencies/imguizmo)
+add_subdirectory(dependencies/imgui)
 
 file(GLOB SOURCES
         src/*.cpp
         src/Application/*.cpp
         src/Simulation/*.cpp
         src/Renderer/*.cpp)
-set(IMGUI_SOURCES
-    dependencies/imgui/imgui.cpp
-    dependencies/imgui/imgui_draw.cpp
-    dependencies/imgui/imgui_tables.cpp
-    dependencies/imgui/imgui_widgets.cpp
-    dependencies/imgui/imgui_demo.cpp
-    dependencies/imgui/backends/imgui_impl_glfw.cpp
-    dependencies/imgui/backends/imgui_impl_opengl3.cpp
-)
-add_executable(MoleHole ${SOURCES} ${IMGUI_SOURCES})
+
+add_executable(MoleHole ${SOURCES})
 
 include_directories(
     src
@@ -49,6 +43,8 @@ target_link_libraries(MoleHole
     spdlog::spdlog
     yaml-cpp
     nfd
+    ImGuizmo
+    imgui
 )
 
 if (UNIX)
