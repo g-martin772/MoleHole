@@ -31,6 +31,10 @@ public:
     void DrawCircle(const glm::vec2& pos, float radius, const glm::vec3& color);
     void DrawSphere(const glm::vec3& pos, float radius, const glm::vec3& color);
 
+    void HandleMousePicking(Scene* scene);
+    glm::vec3 ScreenToWorldRay(float mouseX, float mouseY, glm::vec3& rayOrigin, glm::vec3& rayDirection);
+    void SetViewportBounds(float x, float y, float width, float height);
+
     GLFWwindow* GetWindow() const { return window; }
 
     ViewportMode GetSelectedViewport() const { return selectedViewport; }
@@ -57,6 +61,13 @@ public:
     std::vector<QuadInstance> quadInstances;
 
     ViewportMode selectedViewport = ViewportMode::Simulation3D;
+
+    float m_viewportX = 0.0f;
+    float m_viewportY = 0.0f;
+    float m_viewportWidth = 800.0f;
+    float m_viewportHeight = 600.0f;
+
+private:
     void RenderDemo1(Scene* scene);
     void Render2DRays(Scene* scene);
     void Render3DSimulation(Scene *scene);

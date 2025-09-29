@@ -1,11 +1,18 @@
 #include "UI.h"
 #include "Application.h"
 #include "imgui.h"
+#include "ImGuizmo.h"
 #include "spdlog/spdlog.h"
 #include <cstring>
 #include <filesystem>
 #include <algorithm>
 #include <set>
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 
 UI::UI() {
 }
@@ -461,6 +468,44 @@ void UI::RenderBlackHolesSection(Scene* scene) {
             return;
         }
 
+        if (scene->HasSelection()) {
+            ImGui::Text("Transform Controls:");
+            ImGui::SameLine();
+
+            if (ImGui::RadioButton("Translate", m_currentGizmoOperation == GizmoOperation::Translate)) {
+                m_currentGizmoOperation = GizmoOperation::Translate;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Rotate", m_currentGizmoOperation == GizmoOperation::Rotate)) {
+                m_currentGizmoOperation = GizmoOperation::Rotate;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Scale", m_currentGizmoOperation == GizmoOperation::Scale)) {
+                m_currentGizmoOperation = GizmoOperation::Scale;
+            }
+
+            ImGui::Checkbox("Use Snap", &m_useSnap);
+            if (m_useSnap) {
+                switch (m_currentGizmoOperation) {
+                    case GizmoOperation::Translate:
+                        ImGui::DragFloat3("Snap", m_snapTranslate, 0.1f);
+                        break;
+                    case GizmoOperation::Rotate:
+                        ImGui::DragFloat("Snap", &m_snapRotate, 1.0f);
+                        break;
+                    case GizmoOperation::Scale:
+                        ImGui::DragFloat("Snap", &m_snapScale, 0.01f);
+                        break;
+                }
+            }
+
+            if (ImGui::Button("Deselect")) {
+                scene->ClearSelection();
+            }
+
+            ImGui::Separator();
+        }
+
         if (ImGui::Button("Add Black Hole")) {
             BlackHole newHole;
             newHole.mass = 10.0f;
@@ -479,7 +524,32 @@ void UI::RenderBlackHolesSection(Scene* scene) {
         int idx = 0;
         for (auto it = scene->blackHoles.begin(); it != scene->blackHoles.end();) {
             ImGui::PushID(idx);
-            bool open = ImGui::TreeNode("Black Hole");
+
+            bool isSelected = scene->HasSelection() &&
+                             scene->selectedObject->type == Scene::ObjectType::BlackHole &&
+                             scene->selectedObject->index == static_cast<size_t>(idx);
+
+            if (isSelected) {
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.7f, 1.0f, 0.6f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.4f, 0.8f, 1.0f, 0.8f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.5f, 0.9f, 1.0f, 1.0f));
+            }
+
+            std::string label = "Black Hole #" + std::to_string(idx + 1);
+            if (isSelected) {
+                label += " (Selected)";
+            }
+
+            bool open = ImGui::TreeNode(label.c_str());
+
+            if (isSelected) {
+                ImGui::PopStyleColor(3);
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Select")) {
+                scene->SelectObject(Scene::ObjectType::BlackHole, idx);
+            }
             ImGui::SameLine();
             bool remove = ImGui::Button("Remove");
 
@@ -511,6 +581,9 @@ void UI::RenderBlackHolesSection(Scene* scene) {
             ImGui::PopID();
 
             if (remove) {
+                if (isSelected) {
+                    scene->ClearSelection();
+                }
                 it = scene->blackHoles.erase(it);
                 if (!scene->currentPath.empty()) {
                     scene->Serialize(scene->currentPath);
@@ -520,6 +593,80 @@ void UI::RenderBlackHolesSection(Scene* scene) {
             }
             idx++;
         }
+    }
+}
+
+void UI::RenderImGuizmo(Scene* scene) {
+    if (!scene || !scene->HasSelection()) {
+        return;
+    }
+
+    auto& renderer = Application::GetRenderer();
+    if (!renderer.camera) {
+        return;
+    }
+
+    glm::vec3* position = scene->GetSelectedObjectPosition();
+    if (!position) {
+        return;
+    }
+
+    ImGuizmo::SetOrthographic(false);
+    ImGuizmo::SetDrawlist();
+
+    // Use the viewport bounds from the renderer
+    ImGuizmo::SetRect(renderer.m_viewportX, renderer.m_viewportY,
+                     renderer.m_viewportWidth, renderer.m_viewportHeight);
+
+    glm::mat4 view = renderer.camera->GetViewMatrix();
+    glm::mat4 projection = renderer.camera->GetProjectionMatrix();
+
+    glm::mat4 transform = glm::translate(glm::mat4(1.0f), *position);
+
+    ImGuizmo::OPERATION operation;
+    switch (m_currentGizmoOperation) {
+        case GizmoOperation::Translate:
+            operation = ImGuizmo::TRANSLATE;
+            break;
+        case GizmoOperation::Rotate:
+            operation = ImGuizmo::ROTATE;
+            break;
+        case GizmoOperation::Scale:
+            operation = ImGuizmo::SCALE;
+            break;
+    }
+
+    float* snap = nullptr;
+    if (m_useSnap) {
+        switch (m_currentGizmoOperation) {
+            case GizmoOperation::Translate:
+                snap = m_snapTranslate;
+                break;
+            case GizmoOperation::Rotate:
+                snap = &m_snapRotate;
+                break;
+            case GizmoOperation::Scale:
+                snap = &m_snapScale;
+                break;
+        }
+    }
+
+    ImGuizmo::Enable(true);
+
+    if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(projection),
+                             operation, ImGuizmo::LOCAL, glm::value_ptr(transform),
+                             nullptr, snap)) {
+
+        glm::vec3 translation, scale;
+        glm::quat rotation;
+        glm::vec3 skew;
+        glm::vec4 perspective;
+        glm::decompose(transform, scale, rotation, translation, skew, perspective);
+
+        *position = translation;
+
+        spdlog::debug("Object moved to: ({:.2f}, {:.2f}, {:.2f})",
+                     position->x, position->y, position->z);
     }
 }
 

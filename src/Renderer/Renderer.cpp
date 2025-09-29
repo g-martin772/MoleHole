@@ -2,6 +2,7 @@
 #include "Renderer.h"
 #include <GLFW/glfw3.h>
 #include "imgui.h"
+#include "ImGuizmo.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "spdlog/spdlog.h"
@@ -11,6 +12,11 @@
 #include "Input.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/matrix_decompose.hpp>
+
 #include "Buffer.h"
 #include <cmath>
 
@@ -126,7 +132,14 @@ void Renderer::RenderScene(Scene *scene) {
     }
 
     ImGui::Begin(title);
+
+    ImVec2 viewport_pos = ImGui::GetWindowPos();
+    ImVec2 viewport_size = ImGui::GetWindowSize();
+    ImVec2 content_pos = ImGui::GetCursorScreenPos();
     ImVec2 imgui_size = ImGui::GetContentRegionAvail();
+
+    SetViewportBounds(content_pos.x, content_pos.y, imgui_size.x, imgui_size.y);
+
     int img_width = std::max(1, static_cast<int>(imgui_size.x));
     int img_height = std::max(1, static_cast<int>(imgui_size.y));
 
@@ -145,8 +158,12 @@ void Renderer::RenderScene(Scene *scene) {
 
     bool viewport_focused = ImGui::IsWindowFocused();
     bool viewport_hovered = ImGui::IsWindowHovered();
-    input->SetViewportFocused(viewport_focused);
-    input->SetViewportHovered(viewport_hovered);
+
+    bool gizmoUsing = ImGuizmo::IsUsing();
+    bool gizmoOver = ImGuizmo::IsOver();
+
+    input->SetViewportFocused(viewport_focused && !gizmoUsing);
+    input->SetViewportHovered(viewport_hovered && !gizmoOver);
 
     static double lastTime = glfwGetTime();
     double currentTime = glfwGetTime();
@@ -154,7 +171,7 @@ void Renderer::RenderScene(Scene *scene) {
     lastTime = currentTime;
     input->Update();
 
-    if (viewport_focused && viewport_hovered) {
+    if (viewport_focused && viewport_hovered && !gizmoUsing && !gizmoOver) {
         UpdateCamera(deltaTime);
     } else {
         input->SetCursorEnabled(true);
@@ -179,9 +196,54 @@ void Renderer::RenderScene(Scene *scene) {
     }
 
     glDeleteFramebuffers(1, &fbo);
+
+    ImVec2 cursor_pos = ImGui::GetCursorScreenPos();
+
     ImGui::Image((void *)(intptr_t)image->textureID,
                  ImVec2((float)image->width, (float)image->height),
                  ImVec2(0, 1), ImVec2(1, 0));
+
+    bool image_hovered = ImGui::IsItemHovered();
+    bool image_active = ImGui::IsItemActive();
+
+    if (scene && scene->HasSelection() && camera) {
+        ImGuizmo::SetOrthographic(false);
+        ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
+
+        ImVec2 image_min = ImGui::GetItemRectMin();
+        ImVec2 image_max = ImGui::GetItemRectMax();
+
+        ImGuizmo::SetRect(image_min.x, image_min.y, image_max.x - image_min.x, image_max.y - image_min.y);
+
+        glm::vec3 *position = scene->GetSelectedObjectPosition();
+        if (position) {
+            glm::mat4 view = camera->GetViewMatrix();
+            glm::mat4 projection = camera->GetProjectionMatrix();
+            glm::mat4 transform = glm::translate(glm::mat4(1.0f), *position);
+
+            ImGuizmo::Enable(true);
+
+            ImGui::PushID("BlackHoleGizmo");
+
+            ImGuizmo::OPERATION operation = ImGuizmo::TRANSLATE;
+
+            bool wasManipulated = ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(projection),
+                                     operation, ImGuizmo::LOCAL, glm::value_ptr(transform));
+
+            if (wasManipulated) {
+                glm::vec3 translation, scale;
+                glm::quat rotation;
+                glm::vec3 skew;
+                glm::vec4 perspective;
+                glm::decompose(transform, scale, rotation, translation, skew, perspective);
+                *position = translation;
+                spdlog::info("Object moved to: ({:.2f}, {:.2f}, {:.2f})", position->x, position->y, position->z);
+            }
+
+            ImGui::PopID();
+        }
+    }
+
     ImGui::End();
 }
 
@@ -325,6 +387,10 @@ void Renderer::Render3DSimulation(Scene *scene) {
 }
 
 void Renderer::UpdateCamera(float deltaTime) {
+    if (ImGuizmo::IsUsing()) {
+        return;
+    }
+
     float forward = 0.0f, right = 0.0f, up = 0.0f;
     if (input->IsKeyDown(GLFW_KEY_W)) forward += 1.0f;
     if (input->IsKeyDown(GLFW_KEY_S)) forward -= 1.0f;
@@ -402,4 +468,71 @@ void Renderer::FlushQuads() {
     }
     vao->Unbind();
     quadInstances.clear();
+}
+
+void Renderer::HandleMousePicking(Scene* scene) {
+    if (!scene || !input || !camera) return;
+
+    if (ImGuizmo::IsUsing()) {
+        return;
+    }
+
+    if (input->IsMouseButtonDown(GLFW_MOUSE_BUTTON_LEFT) && input->IsViewportFocused()) {
+        double mouseX, mouseY;
+        input->GetMousePos(mouseX, mouseY);
+
+        float relativeX = (float)mouseX - m_viewportX;
+        float relativeY = (float)mouseY - m_viewportY;
+
+        if (relativeX >= 0 && relativeX <= m_viewportWidth &&
+            relativeY >= 0 && relativeY <= m_viewportHeight) {
+
+            glm::vec3 rayOrigin, rayDirection;
+            ScreenToWorldRay(relativeX, relativeY, rayOrigin, rayDirection);
+
+            auto pickedObject = scene->PickObject(rayOrigin, rayDirection);
+            if (pickedObject.has_value()) {
+                scene->SelectObject(pickedObject->type, pickedObject->index);
+                spdlog::info("Selected {}", scene->GetSelectedObjectName());
+            } else {
+                scene->ClearSelection();
+                spdlog::info("Selection cleared");
+            }
+        }
+    }
+}
+
+glm::vec3 Renderer::ScreenToWorldRay(float mouseX, float mouseY, glm::vec3& rayOrigin, glm::vec3& rayDirection) {
+    if (!camera) {
+        rayOrigin = glm::vec3(0.0f);
+        rayDirection = glm::vec3(0.0f, 0.0f, -1.0f);
+        return rayDirection;
+    }
+
+    // Convert screen coordinates to normalized device coordinates (-1 to 1)
+    float x = (2.0f * mouseX) / m_viewportWidth - 1.0f;
+    float y = 1.0f - (2.0f * mouseY) / m_viewportHeight;
+
+    glm::mat4 projection = camera->GetProjectionMatrix();
+    glm::mat4 view = camera->GetViewMatrix();
+
+    glm::vec4 rayClip = glm::vec4(x, y, -1.0f, 1.0f);
+
+    glm::vec4 rayEye = glm::inverse(projection) * rayClip;
+    rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
+
+    glm::vec3 rayWorld = glm::vec3(glm::inverse(view) * rayEye);
+    rayWorld = glm::normalize(rayWorld);
+
+    rayOrigin = camera->GetPosition();
+    rayDirection = rayWorld;
+
+    return rayDirection;
+}
+
+void Renderer::SetViewportBounds(float x, float y, float width, float height) {
+    m_viewportX = x;
+    m_viewportY = y;
+    m_viewportWidth = width;
+    m_viewportHeight = height;
 }
