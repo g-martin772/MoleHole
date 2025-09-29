@@ -5,6 +5,8 @@
 #include <yaml-cpp/yaml.h>
 #include <nfd.h>
 #include <spdlog/spdlog.h>
+#include <limits>
+#include <cmath>
 
 void Scene::Serialize(const std::filesystem::path& path) {
     currentPath = path;
@@ -69,53 +71,90 @@ void Scene::Deserialize(const std::filesystem::path& path) {
 }
 
 std::filesystem::path Scene::ShowFileDialog(bool save) {
-    spdlog::info("Opening {} dialog", save ? "save" : "open");
-
-    nfdu8char_t *outPath = nullptr;
+    nfdchar_t* outPath = nullptr;
+    nfdfilteritem_t filterItem = { "YAML", "yaml" };
     nfdresult_t result;
 
-    nfdresult_t initResult = NFD_Init();
-    if (initResult != NFD_OKAY) {
-        spdlog::error("Failed to initialize NFD: {}", NFD_GetError());
-        return {};
-    }
-
-    nfdu8filteritem_t filterItem[2] = {
-        { "YAML Scene Files", "yaml" },
-        { "All Files", "*" }
-    };
-
     if (save) {
-        result = NFD_SaveDialogU8(&outPath, filterItem, 2, nullptr, "scene.yaml");
+        result = NFD_SaveDialog(&outPath, &filterItem, 1, nullptr, nullptr);
     } else {
-        spdlog::info("Calling NFD_OpenDialogU8");
-        result = NFD_OpenDialogU8(&outPath, filterItem, 1, nullptr);
+        result = NFD_OpenDialog(&outPath, &filterItem, 1, nullptr);
     }
 
-    spdlog::info("Dialog result: {} (NFD_OKAY={}, NFD_CANCEL={}, NFD_ERROR={})",
-                 (int)result, (int)NFD_OKAY, (int)NFD_CANCEL, (int)NFD_ERROR);
+    if (result == NFD_OKAY && outPath) {
+        std::filesystem::path path(outPath);
+        free(outPath);
+        return path;
+    }
 
-    std::filesystem::path path;
-    if (result == NFD_OKAY) {
-        if (outPath) {
-            path = std::string(outPath);
-            spdlog::info("Dialog succeeded, path: '{}'", path.string());
-            NFD_FreePathU8(outPath);
+    return {};
+}
 
-            if (save && path.extension().empty()) {
-                path += ".yaml";
-                spdlog::info("Added .yaml extension, final path: '{}'", path.string());
+void Scene::SelectObject(ObjectType type, size_t index) {
+    if (type == ObjectType::BlackHole && index < blackHoles.size()) {
+        selectedObject = SelectedObject{type, index};
+    } else {
+        ClearSelection();
+    }
+}
+
+void Scene::ClearSelection() {
+    selectedObject.reset();
+}
+
+glm::vec3* Scene::GetSelectedObjectPosition() {
+    if (!selectedObject.has_value()) return nullptr;
+
+    switch (selectedObject->type) {
+        case ObjectType::BlackHole:
+            if (selectedObject->index < blackHoles.size()) {
+                return &blackHoles[selectedObject->index].position;
             }
-        } else {
-            spdlog::error("Dialog returned NFD_OKAY but outPath is null");
+            break;
+    }
+    return nullptr;
+}
+
+std::string Scene::GetSelectedObjectName() const {
+    if (!selectedObject.has_value()) return "";
+
+    switch (selectedObject->type) {
+        case ObjectType::BlackHole:
+            if (selectedObject->index < blackHoles.size()) {
+                return "Black Hole #" + std::to_string(selectedObject->index + 1);
+            }
+            break;
+    }
+    return "";
+}
+
+std::optional<Scene::SelectedObject> Scene::PickObject(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) const {
+    float closestDistance = std::numeric_limits<float>::max();
+    std::optional<SelectedObject> closestObject;
+
+    for (size_t i = 0; i < blackHoles.size(); ++i) {
+        const auto& bh = blackHoles[i];
+
+        float schwarzschildRadius = 2.0f * bh.mass;
+        float pickingRadius = std::max(schwarzschildRadius, 1.0f);
+
+        glm::vec3 oc = rayOrigin - bh.position;
+        float a = glm::dot(rayDirection, rayDirection);
+        float b = 2.0f * glm::dot(oc, rayDirection);
+        float c = glm::dot(oc, oc) - pickingRadius * pickingRadius;
+        float discriminant = b * b - 4 * a * c;
+
+        if (discriminant >= 0) {
+            float t1 = (-b - sqrt(discriminant)) / (2.0f * a);
+            float t2 = (-b + sqrt(discriminant)) / (2.0f * a);
+            float t = (t1 > 0) ? t1 : t2;
+
+            if (t > 0 && t < closestDistance) {
+                closestDistance = t;
+                closestObject = SelectedObject{ObjectType::BlackHole, i};
+            }
         }
-    } else if (result == NFD_CANCEL) {
-        spdlog::info("Dialog was cancelled by user");
-    } else if (result == NFD_ERROR) {
-        const char* error = NFD_GetError();
-        spdlog::error("File dialog error: {}", error ? error : "Unknown error");
     }
 
-    NFD_Quit();
-    return path;
+    return closestObject;
 }

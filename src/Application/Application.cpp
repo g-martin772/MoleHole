@@ -101,6 +101,9 @@ void Application::Render() {
     m_renderer.BeginFrame();
 
     auto scene = m_simulation.GetScene();
+
+    m_renderer.HandleMousePicking(scene);
+
     m_ui.RenderDockspace(scene);
     m_ui.RenderMainUI(GetFPS(), scene);
     m_renderer.RenderScene(scene);

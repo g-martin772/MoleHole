@@ -2,6 +2,8 @@
 
 #include <string>
 #include "Simulation/Scene.h"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 class UI {
 public:
@@ -16,6 +18,7 @@ public:
 
     void RenderDockspace(Scene* scene);
     void RenderMainUI(float fps, Scene* scene);
+    void RenderImGuizmo(Scene* scene);
 
     void Update(float deltaTime);
 
@@ -50,4 +53,11 @@ private:
     bool m_configDirty = false;
     float m_saveTimer = 0.0f;
     static constexpr float SAVE_INTERVAL = 5.0f;
+
+    enum class GizmoOperation { Translate, Rotate, Scale };
+    GizmoOperation m_currentGizmoOperation = GizmoOperation::Translate;
+    bool m_useSnap = false;
+    float m_snapTranslate[3] = {1.0f, 1.0f, 1.0f};
+    float m_snapRotate = 15.0f;
+    float m_snapScale = 0.1f;
 };

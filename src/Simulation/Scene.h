@@ -2,7 +2,9 @@
 #include <vector>
 #include <filesystem>
 #include <glm/vec3.hpp>
+#include <glm/mat4x4.hpp>
 #include <string>
+#include <optional>
 
 struct BlackHole {
     float mass;
@@ -47,7 +49,27 @@ struct Scene {
     std::string name;
     std::vector<BlackHole> blackHoles;
     std::filesystem::path currentPath;
+
+    enum class ObjectType { BlackHole };
+    struct SelectedObject {
+        ObjectType type;
+        size_t index;
+
+        bool operator==(const SelectedObject& other) const {
+            return type == other.type && index == other.index;
+        }
+    };
+    std::optional<SelectedObject> selectedObject;
+
     void Serialize(const std::filesystem::path& path);
     void Deserialize(const std::filesystem::path& path);
     static std::filesystem::path ShowFileDialog(bool save);
+
+    void SelectObject(ObjectType type, size_t index);
+    void ClearSelection();
+    bool HasSelection() const { return selectedObject.has_value(); }
+    glm::vec3* GetSelectedObjectPosition();
+    std::string GetSelectedObjectName() const;
+
+    std::optional<SelectedObject> PickObject(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) const;
 };
