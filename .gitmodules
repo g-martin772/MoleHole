@@ -23,3 +23,6 @@
 [submodule "dependencies/stb-image"]
 	path = dependencies/stb-image
 	url = https://github.com/nothings/stb/
+[submodule "dependencies/imguizmo"]
+	path = dependencies/imguizmo
+	url = https://github.com/g-martin772/imguizmo
