@@ -1,4 +1,5 @@
 #include "GravityGridRenderer.h"
+#include "Buffer.h"
 #include <glad/gl.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -26,13 +27,10 @@ void GravityGridRenderer::SetResolution(int r) {
 }
 
 void GravityGridRenderer::CreatePlane() {
-    if (m_vao) {
-        glDeleteVertexArrays(1, &m_vao);
-        glDeleteBuffers(1, &m_vbo);
-        glDeleteBuffers(1, &m_ebo);
-        m_vao = m_vbo = m_ebo = 0;
-        m_indexCount = 0;
-    }
+    m_vao.reset();
+    m_vbo.reset();
+    m_ebo.reset();
+    m_indexCount = 0;
 
     int N = std::max(2, m_resolution);
     int vertsPerSide = N + 1;
@@ -68,24 +66,18 @@ void GravityGridRenderer::CreatePlane() {
     }
     m_indexCount = (int)indices.size();
 
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glGenBuffers(1, &m_ebo);
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-
-    glBindVertexArray(0);
+    m_vao = std::make_unique<VertexArray>();
+    m_vao->Bind();
+    m_vbo = std::make_unique<VertexBuffer>(vertices.data(), vertices.size() * sizeof(float));
+    m_ebo = std::make_unique<IndexBuffer>(indices.data(), indices.size());
+    m_vbo->Bind();
+    m_ebo->Bind();
+    m_vao->EnableAttrib(0, 3, GL_FLOAT, false, 3 * sizeof(float), (void*)0);
+    m_vao->Unbind();
 }
 
 void GravityGridRenderer::Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float /*time*/) {
-    if (!m_shader || m_vao == 0 || m_indexCount == 0) return;
+    if (!m_shader || m_indexCount == 0) return;
 
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
@@ -95,18 +87,7 @@ void GravityGridRenderer::Render(const std::vector<BlackHole>& blackHoles, const
 
     glm::mat4 vp = camera.GetViewProjectionMatrix();
     m_shader->SetMat4("uVP", vp);
-
-    // Displacement uniforms
     m_shader->SetFloat("u_planeY", m_planeY);
-    m_shader->SetFloat("u_displacementScale", m_displacementScale);
-    m_shader->SetFloat("u_maxDepth", m_maxDepth);
-    m_shader->SetFloat("u_exponent", m_exponent);
-
-    // Grid uniforms
-    m_shader->SetFloat("u_cellSize", m_cellSize);
-    m_shader->SetFloat("u_lineThickness", m_lineThickness);
-    m_shader->SetVec3("u_color", m_color);
-    m_shader->SetFloat("u_opacity", m_opacity);
 
     int num = (int)std::min<size_t>(blackHoles.size(), 8);
     m_shader->SetInt("u_numBlackHoles", num);
@@ -116,9 +97,13 @@ void GravityGridRenderer::Render(const std::vector<BlackHole>& blackHoles, const
         m_shader->SetFloat("u_blackHoleMasses[" + std::to_string(i) + "]", bh.mass);
     }
 
-    glBindVertexArray(m_vao);
+    m_shader->SetFloat("u_cellSize", m_cellSize);
+    m_shader->SetFloat("u_lineThickness", m_lineThickness);
+    m_shader->SetVec3("u_color", m_color);
+    m_shader->SetFloat("u_opacity", m_opacity);
+    m_vao->Bind();
     glDrawElements(GL_TRIANGLES, m_indexCount, GL_UNSIGNED_INT, (void*)0);
-    glBindVertexArray(0);
+    m_vao->Unbind();
 
     m_shader->Unbind();
 

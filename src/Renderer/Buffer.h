@@ -1,9 +1,13 @@
 #pragma once
-#include <glad/gl.h>
+
+enum class BufferUsage {
+    StaticDraw,
+    DynamicDraw
+};
 
 class VertexBuffer {
 public:
-    VertexBuffer(const void* data, unsigned int size, GLenum usage = GL_STATIC_DRAW);
+    VertexBuffer(const void* data, unsigned int size, BufferUsage usage = BufferUsage::StaticDraw);
     ~VertexBuffer();
     void Bind() const;
     void Unbind() const;
@@ -14,7 +18,7 @@ private:
 
 class IndexBuffer {
 public:
-    IndexBuffer(const unsigned int* data, unsigned int count, GLenum usage = GL_STATIC_DRAW);
+    IndexBuffer(const unsigned int* data, unsigned int count, BufferUsage usage = BufferUsage::StaticDraw);
     ~IndexBuffer();
     void Bind() const;
     void Unbind() const;
@@ -32,8 +36,7 @@ public:
     void Bind() const;
     void Unbind() const;
     unsigned int GetID() const { return m_ID; }
-    void EnableAttrib(unsigned int index, int size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer);
+    void EnableAttrib(unsigned int index, int size, int type, bool normalized, int stride, const void* pointer);
 private:
     unsigned int m_ID;
 };
-

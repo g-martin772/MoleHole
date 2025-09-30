@@ -28,7 +28,6 @@ void main() {
 
     float line = max(lineX, lineZ);
 
-    // Output only the grid lines; background is transparent
     float alpha = line * u_opacity;
     if (alpha <= 0.0) discard;
 

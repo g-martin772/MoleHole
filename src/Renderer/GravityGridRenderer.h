@@ -5,6 +5,7 @@
 #include "Shader.h"
 #include "Simulation/Scene.h"
 #include "Camera.h"
+#include "Buffer.h"
 
 class GravityGridRenderer {
 public:
@@ -16,9 +17,6 @@ public:
     void SetCellSize(float size) { m_cellSize = size; }
     void SetOpacity(float a) { m_opacity = a; }
     void SetResolution(int r);
-    void SetDisplacementScale(float s) { m_displacementScale = s; }
-    void SetMaxDepth(float d) { m_maxDepth = d; }
-    void SetExponent(float e) { m_exponent = e; }
     void SetLineThickness(float t) { m_lineThickness = t; }
     void SetColor(const glm::vec3& c) { m_color = c; }
 
@@ -27,19 +25,16 @@ public:
     float GetCellSize() const { return m_cellSize; }
     float GetOpacity() const { return m_opacity; }
     int GetResolution() const { return m_resolution; }
-    float GetDisplacementScale() const { return m_displacementScale; }
-    float GetMaxDepth() const { return m_maxDepth; }
-    float GetExponent() const { return m_exponent; }
     float GetLineThickness() const { return m_lineThickness; }
     glm::vec3 GetColor() const { return m_color; }
 
 private:
     void CreatePlane();
 
-    std::unique_ptr<Shader> m_shader; // plane grid shader
-    unsigned int m_vao = 0;
-    unsigned int m_vbo = 0;
-    unsigned int m_ebo = 0;
+    std::unique_ptr<Shader> m_shader;
+    std::unique_ptr<VertexArray> m_vao;
+    std::unique_ptr<VertexBuffer> m_vbo;
+    std::unique_ptr<IndexBuffer> m_ebo;
     int m_indexCount = 0;
 
     float m_planeY = -5.0f;
@@ -47,11 +42,8 @@ private:
     float m_cellSize = 2.0f;
     float m_opacity = 0.7f;
 
-    // Displacement and grid params
     int m_resolution = 128;
-    float m_displacementScale = 20.0f;
-    float m_maxDepth = 200.0f;
-    float m_exponent = 1.5f;
-    float m_lineThickness = 0.03f; // in cell units
+    float m_lineThickness = 0.03f;
     glm::vec3 m_color = glm::vec3(0.85f, 0.9f, 1.0f);
 };
+
