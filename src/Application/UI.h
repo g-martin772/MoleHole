@@ -2,8 +2,6 @@
 
 #include <string>
 #include "Simulation/Scene.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
 class UI {
 public:
@@ -12,9 +10,6 @@ public:
 
     void Initialize();
     void Shutdown();
-
-    void BeginFrame();
-    void EndFrame();
 
     void RenderDockspace(Scene* scene);
     void RenderMainUI(float fps, Scene* scene);

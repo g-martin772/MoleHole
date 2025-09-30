@@ -75,7 +75,8 @@ void Renderer::Init() {
 
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
-    camera = std::make_unique<Camera>(Application::State().rendering.fov, (float) width / (float) height, 0.1f, 100.0f);
+    // Set a much larger far plane for the camera to avoid grid clipping
+    camera = std::make_unique<Camera>(Application::State().rendering.fov, (float) width / (float) height, 0.01f, 10000.0f);
 
     camera->SetPosition(Application::State().camera.position);
     camera->SetYawPitch(Application::State().camera.yaw, Application::State().camera.pitch);

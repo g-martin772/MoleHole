@@ -421,19 +421,6 @@ void UI::RenderDebugSection() {
                     grid->SetOpacity(opacity);
                 }
 
-                float scale = grid->GetDisplacementScale();
-                if (ImGui::DragFloat("Displacement Scale", &scale, 0.5f, 0.0f, 1000.0f)) {
-                    grid->SetDisplacementScale(scale);
-                }
-                float exponent = grid->GetExponent();
-                if (ImGui::DragFloat("Falloff Exponent", &exponent, 0.05f, 0.1f, 4.0f)) {
-                    grid->SetExponent(exponent);
-                }
-                float maxDepth = grid->GetMaxDepth();
-                if (ImGui::DragFloat("Max Depth", &maxDepth, 0.5f, 0.0f, 5000.0f)) {
-                    grid->SetMaxDepth(maxDepth);
-                }
-
                 glm::vec3 color = grid->GetColor();
                 if (ImGui::ColorEdit3("Grid Color", &color[0])) {
                     grid->SetColor(color);
