@@ -1,14 +1,28 @@
 #version 460 core
-layout(location = 0) out vec4 FragColor;
+layout (location = 0) out vec4 FragColor;
 
 in vec3 vWorldPos;
+in float vDispplacement;
 
-uniform float u_cellSize;        // world units per grid cell
-uniform float u_lineThickness;   // fraction of a cell width (e.g., 0.03)
-uniform vec3  u_color;
+uniform float u_cellSize;
+uniform float u_lineThickness;
+uniform vec3 u_color;
 uniform float u_opacity;
+uniform int u_numBlackHoles;
+uniform vec3 u_blackHolePositions[8];
+uniform float u_blackHoleMasses[8];
 
 void main() {
+    // Hide grid inside Schwarzschild radius of any black hole
+    for (int i = 0; i < u_numBlackHoles; ++i) {
+        float mass = u_blackHoleMasses[i];
+        float rs = 2.0 * mass;
+        float r = length(vWorldPos.xz - u_blackHolePositions[i].xz);
+        if (r < rs) {
+            discard;
+        }
+    }
+
     float cell = max(0.0001, u_cellSize);
 
     // World position projected onto the XZ plane in cell units
@@ -25,11 +39,17 @@ void main() {
     // Axis-aligned line masks with smooth edges
     float lineX = 1.0 - smoothstep(halfT - ax, halfT + ax, d.x);
     float lineZ = 1.0 - smoothstep(halfT - ay, halfT + ay, d.y);
-
     float line = max(lineX, lineZ);
 
-    float alpha = line * u_opacity;
-    if (alpha <= 0.0) discard;
+    // Gradient color based on effect strength (displacement)
+    float effect = clamp(vDispplacement / 10.0, 0.0, 1.0);
+    vec3 base = u_color;
+    vec3 highlight = vec3(1.0);
+    vec3 color = mix(base, highlight, effect);
 
-    FragColor = vec4(u_color, alpha);
+    // Fade out lines as displacement increases
+    float fadeMax = 80.0; //arbitraty vizual cosntant
+    float fade = 1.0 - clamp(vDispplacement / fadeMax, 0.0, 1.0);
+
+    FragColor = vec4(color, u_opacity * line * fade);
 }
