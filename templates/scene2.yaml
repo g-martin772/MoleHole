@@ -1,0 +1,18 @@
+name: test scene
+black_holes:
+  - mass: 12.88
+    position: [56.19, 16.73, 10]
+    show_accretion_disk: true
+    accretion_disk_density: 7.6
+    accretion_disk_size: 13.93
+    accretion_disk_color: [0.8847954, 0.9264706, 0.8719723]
+    spin: 1
+    spin_axis: [0, 1, 0]
+  - mass: 7.44
+    position: [0, 0, -5]
+    show_accretion_disk: true
+    accretion_disk_density: 1
+    accretion_disk_size: 15
+    accretion_disk_color: [1, 0.5, 0]
+    spin: 1
+    spin_axis: [0, 1, 0]

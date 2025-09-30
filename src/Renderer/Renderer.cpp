@@ -494,10 +494,8 @@ void Renderer::HandleMousePicking(Scene* scene) {
             auto pickedObject = scene->PickObject(rayOrigin, rayDirection);
             if (pickedObject.has_value()) {
                 scene->SelectObject(pickedObject->type, pickedObject->index);
-                spdlog::info("Selected {}", scene->GetSelectedObjectName());
             } else {
                 scene->ClearSelection();
-                spdlog::info("Selection cleared");
             }
         }
     }

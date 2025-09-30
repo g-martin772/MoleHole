@@ -62,7 +62,7 @@ struct Scene {
     std::optional<SelectedObject> selectedObject;
 
     void Serialize(const std::filesystem::path& path);
-    void Deserialize(const std::filesystem::path& path);
+    void Deserialize(const std::filesystem::path& path, bool setCurrentPath = true);
     static std::filesystem::path ShowFileDialog(bool save);
 
     void SelectObject(ObjectType type, size_t index);
