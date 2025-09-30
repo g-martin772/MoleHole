@@ -33,6 +33,7 @@ private:
     void RenderDisplaySettingsSection();
     void RenderCameraControlsSection();
     void RenderRenderingFlagsSection();
+    void RenderDebugSection();
 
     void RenderScenePropertiesSection(Scene* scene);
     void RenderRecentScenesSection(Scene* scene);

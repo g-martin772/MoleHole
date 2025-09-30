@@ -21,6 +21,7 @@
 #include <cmath>
 
 #include "Application/Application.h"
+#include "GravityGridRenderer.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -80,6 +81,9 @@ void Renderer::Init() {
     camera->SetYawPitch(Application::State().camera.yaw, Application::State().camera.pitch);
 
     input = std::make_unique<Input>(window);
+
+    gravityGridRenderer = std::make_unique<GravityGridRenderer>();
+    gravityGridRenderer->Init();
 }
 
 void Renderer::Shutdown() {
@@ -384,6 +388,11 @@ void Renderer::Render3DSimulation(Scene *scene) {
 
     blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime);
     blackHoleRenderer->RenderToScreen();
+
+    if (Application::State().rendering.debugMode == DebugMode::GravityGrid && gravityGridRenderer) {
+        glDisable(GL_DEPTH_TEST);
+        gravityGridRenderer->Render(scene->blackHoles, *camera, currentTime);
+    }
     glDisable(GL_DEPTH_TEST);
 }
 

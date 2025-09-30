@@ -227,6 +227,7 @@ void UI::RenderSystemWindow(float fps) {
     RenderDisplaySettingsSection();
     RenderCameraControlsSection();
     RenderRenderingFlagsSection();
+    RenderDebugSection();
 
     ImGui::End();
 }
@@ -381,8 +382,63 @@ void UI::RenderRenderingFlagsSection() {
                     "Magenta tint = invalid/overflow entries (A == 0).\n"
                     "Faint grid helps gauge indices.");
             }
+        }
+    }
+}
 
-            RenderDebugModeCombo();
+void UI::RenderDebugSection() {
+    if (ImGui::CollapsingHeader("Debug Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
+        RenderDebugModeCombo();
+
+        if (Application::State().rendering.debugMode == DebugMode::GravityGrid) {
+            auto& renderer = Application::GetRenderer();
+            if (auto* grid = renderer.GetGravityGridRenderer()) {
+                ImGui::Separator();
+                ImGui::TextDisabled("Gravity Grid (Plane) Settings");
+
+                float planeY = grid->GetPlaneY();
+                if (ImGui::DragFloat("Plane Y", &planeY, 0.5f, -10000.0f, 10000.0f)) {
+                    grid->SetPlaneY(planeY);
+                }
+                float size = grid->GetPlaneSize();
+                if (ImGui::DragFloat("Plane Size", &size, 1.0f, 2.0f, 10000.0f)) {
+                    grid->SetPlaneSize(size);
+                }
+                int res = grid->GetResolution();
+                if (ImGui::SliderInt("Resolution", &res, 8, 512)) {
+                    grid->SetResolution(res);
+                }
+                float cellSize = grid->GetCellSize();
+                if (ImGui::DragFloat("Grid Cell Size", &cellSize, 0.05f, 0.01f, 100.0f)) {
+                    grid->SetCellSize(cellSize);
+                }
+                float lineThickness = grid->GetLineThickness();
+                if (ImGui::DragFloat("Line Thickness (cells)", &lineThickness, 0.005f, 0.001f, 0.5f)) {
+                    grid->SetLineThickness(lineThickness);
+                }
+                float opacity = grid->GetOpacity();
+                if (ImGui::SliderFloat("Opacity", &opacity, 0.05f, 1.0f)) {
+                    grid->SetOpacity(opacity);
+                }
+
+                float scale = grid->GetDisplacementScale();
+                if (ImGui::DragFloat("Displacement Scale", &scale, 0.5f, 0.0f, 1000.0f)) {
+                    grid->SetDisplacementScale(scale);
+                }
+                float exponent = grid->GetExponent();
+                if (ImGui::DragFloat("Falloff Exponent", &exponent, 0.05f, 0.1f, 4.0f)) {
+                    grid->SetExponent(exponent);
+                }
+                float maxDepth = grid->GetMaxDepth();
+                if (ImGui::DragFloat("Max Depth", &maxDepth, 0.5f, 0.0f, 5000.0f)) {
+                    grid->SetMaxDepth(maxDepth);
+                }
+
+                glm::vec3 color = grid->GetColor();
+                if (ImGui::ColorEdit3("Grid Color", &color[0])) {
+                    grid->SetColor(color);
+                }
+            }
         }
     }
 }
@@ -813,7 +869,8 @@ void UI::RenderDebugModeCombo() {
         "Deflection Magnitude",
         "Gravitational Field",
         "Spherical Shape",
-        "LUT Visualization"
+        "LUT Visualization",
+        "Gravity Grid"
     };
 
     int debugMode = static_cast<int>(Application::State().rendering.debugMode);
@@ -849,6 +906,9 @@ void UI::RenderDebugModeTooltip(int debugMode) {
             break;
         case 5:
             tooltip = "Visualize the distortion lookup table (LUT)\n2D slice of the 3D LUT used for ray deflection\nHue encodes deflection direction, brightness encodes distance\nMagenta tint indicates invalid/overflow entries";
+            break;
+        case 6:
+            tooltip = "Gravity Grid overlay on ground plane\nColor shows dominant black hole per cell (by mass/distance^2)\nGrid helps visualize regions of influence";
             break;
         default:
             tooltip = "Unknown debug mode";
@@ -946,6 +1006,7 @@ void UI::RenderHelpWindow() {
             ImGui::BulletText("Gravitational Field - Green shows field strength");
             ImGui::BulletText("Spherical Shape - Blue shows black hole geometry");
             ImGui::BulletText("LUT Visualization - Shows the distortion lookup table");
+            ImGui::BulletText("Gravity Grid - Grid overlay showing gravitational influence regions");
 
             ImGui::Separator();
             ImGui::Text("Performance Tips:");
