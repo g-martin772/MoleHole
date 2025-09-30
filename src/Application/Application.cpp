@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
 #include <filesystem>
+#include "LinuxGtkInit.h"
 
 Application& Application::Instance() {
     static Application instance;
@@ -15,6 +16,8 @@ bool Application::Initialize() {
     }
 
     spdlog::info("Initializing MoleHole Application");
+
+    TryInitializeGtk();
 
     m_state.LoadFromFile("config.yaml");
 

@@ -15,7 +15,8 @@ enum class DebugMode {
     DeflectionMagnitude = 2,
     GravitationalField = 3,
     SphericalShape = 4,
-    DebugLUT = 5
+    DebugLUT = 5,
+    GravityGrid = 6
 };
 
 class AppState {

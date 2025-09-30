@@ -9,6 +9,7 @@
 #include "Image.h"
 #include "Camera.h"
 #include "Input.h"
+#include "GravityGridRenderer.h"
 
 struct GLFWwindow;
 
@@ -25,6 +26,8 @@ public:
     void EndFrame();
     void RenderScene(Scene *scene);
 
+    ~Renderer() = default;
+
     void DrawQuad(const glm::vec3& position, float rotationRadians = 0.0f, const glm::vec3& scale = glm::vec3(1.0f));
     void FlushQuads();
 
@@ -39,6 +42,8 @@ public:
 
     ViewportMode GetSelectedViewport() const { return selectedViewport; }
     void SetSelectedViewport(ViewportMode mode) { selectedViewport = mode; }
+
+    GravityGridRenderer* GetGravityGridRenderer() { return gravityGridRenderer.get(); }
 
     GLFWwindow* window = nullptr;
     int last_img_width = 800;
@@ -71,4 +76,6 @@ private:
     void RenderDemo1(Scene* scene);
     void Render2DRays(Scene* scene);
     void Render3DSimulation(Scene *scene);
+
+    std::unique_ptr<GravityGridRenderer> gravityGridRenderer;
 };
