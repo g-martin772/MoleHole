@@ -42,8 +42,7 @@ private:
     float m_cellSize = 2.0f;
     float m_opacity = 0.7f;
 
-    int m_resolution = 128;
+    int m_resolution = 1028;
     float m_lineThickness = 0.03f;
-    glm::vec3 m_color = glm::vec3(0.85f, 0.9f, 1.0f);
+    glm::vec3 m_color = glm::vec3(0.1f, 0.1f, 0.8f);
 };
-

@@ -10,24 +10,30 @@ uniform vec3 u_blackHolePositions[8];
 uniform float u_blackHoleMasses[8];
 
 out vec3 vWorldPos;
+out float vDispplacement;
+
+const float visual_effect_scalar1 = 0.9; // base=1
+const float visual_effect_scalar2 = 1; // base=1
 
 void main() {
     // Start from the input vertex on the XZ plane
     vec3 p = aPos;
     p.y = u_planeY;
 
-    float disp = 0.0;
+    float displacement = 0.0;
     for (int i = 0; i < u_numBlackHoles; ++i) {
         vec3 bh = u_blackHolePositions[i];
-        vec2 toBH = p.xz - bh.xz;
-        float r = length(toBH);
-        r = max(r, 0.05); // avoid numerical issues with divide by zero
-        float contrib = u_blackHoleMasses[i] / pow(r, 2);
-        disp += contrib;
+        float mass = u_blackHoleMasses[i];
+        float rs = 2.0 * mass; // Schwarzschild radius
+        float r = length(p.xz - bh.xz);
+        if (r > rs) {
+            float lens = rs / max((r*visual_effect_scalar1) - rs, 0.01);
+            displacement += lens;
+        }
     }
-
-    p.y -= disp;
+    p.y -= displacement * visual_effect_scalar2;
 
     vWorldPos = p;
+    vDispplacement = displacement;
     gl_Position = uVP * vec4(p, 1.0);
 }

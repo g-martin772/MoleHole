@@ -101,6 +101,7 @@ void GravityGridRenderer::Render(const std::vector<BlackHole>& blackHoles, const
     m_shader->SetFloat("u_lineThickness", m_lineThickness);
     m_shader->SetVec3("u_color", m_color);
     m_shader->SetFloat("u_opacity", m_opacity);
+
     m_vao->Bind();
     glDrawElements(GL_TRIANGLES, m_indexCount, GL_UNSIGNED_INT, (void*)0);
     m_vao->Unbind();
