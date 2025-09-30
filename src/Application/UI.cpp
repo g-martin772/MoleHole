@@ -111,6 +111,10 @@ void UI::RenderMainUI(float fps, Scene* scene) {
 void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen) {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("New")) {
+                Application::Instance().NewScene();
+            }
+
             if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) {
                 doOpen = true;
             }
@@ -128,6 +132,50 @@ void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen) {
                     }
                 }
             }
+
+            if (ImGui::BeginMenu("From Template")) {
+                namespace fs = std::filesystem;
+                std::vector<fs::path> templates;
+                fs::path templatesDir = "../templates";
+                try {
+                    if (fs::exists(templatesDir) && fs::is_directory(templatesDir)) {
+                        for (const auto& entry : fs::directory_iterator(templatesDir)) {
+                            if (!entry.is_regular_file()) continue;
+                            auto ext = entry.path().extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+                            if (ext == ".yaml" || ext == ".yml") {
+                                templates.push_back(entry.path());
+                            }
+                        }
+                    }
+                } catch (const std::exception& e) {
+                    spdlog::warn("Failed to scan templates directory '{}': {}", templatesDir.string(), e.what());
+                }
+
+                std::sort(templates.begin(), templates.end(), [](const fs::path& a, const fs::path& b){ return a.filename().string() < b.filename().string(); });
+
+                if (templates.empty()) {
+                    ImGui::MenuItem("No templates found", nullptr, false, false);
+                } else {
+                    for (const auto& t : templates) {
+                        std::string label = t.filename().string();
+                        if (ImGui::MenuItem(label.c_str())) {
+                            if (scene) {
+                                try {
+                                    scene->Deserialize(t, false);
+                                    scene->currentPath.clear();
+                                    Application::Instance().GetState().SetLastOpenScene("");
+                                    spdlog::info("Loaded template: {}", t.string());
+                                } catch (const std::exception& e) {
+                                    spdlog::error("Failed to load template '{}': {}", t.string(), e.what());
+                                }
+                            }
+                        }
+                    }
+                }
+                ImGui::EndMenu();
+            }
+
             ImGui::EndMenu();
         }
 
