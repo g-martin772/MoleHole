@@ -128,15 +128,15 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     glm::vec3 cameraPos = camera.GetPosition();
     glm::mat4 viewMatrix = camera.GetViewMatrix();
 
-    glm::vec3 cameraFront = -glm::vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]);
-    glm::vec3 cameraUp = glm::vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
-    glm::vec3 cameraRight = glm::vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+    glm::vec3 cameraFront = camera.GetFront();
+    glm::vec3 cameraUp = camera.GetUp();
+    glm::vec3 cameraRight = glm::normalize(glm::cross(cameraFront, cameraUp));
 
     m_computeShader->SetVec3("u_cameraPos", cameraPos);
     m_computeShader->SetVec3("u_cameraFront", cameraFront);
     m_computeShader->SetVec3("u_cameraUp", cameraUp);
     m_computeShader->SetVec3("u_cameraRight", cameraRight);
-    m_computeShader->SetFloat("u_fov", 45.0f); // TODO: Get from camera
+    m_computeShader->SetFloat("u_fov", camera.GetFov());
     m_computeShader->SetFloat("u_aspect", (float)m_width / (float)m_height);
     m_computeShader->SetFloat("u_time", time);
 
