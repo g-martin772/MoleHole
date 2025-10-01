@@ -26,3 +26,6 @@
 [submodule "dependencies/imguizmo"]
 	path = dependencies/imguizmo
 	url = https://github.com/g-martin772/imguizmo
+[submodule "dependencies/nodes"]
+	path = dependencies/nodes
+	url = https://github.com/g-martin772/imgui-node-editor

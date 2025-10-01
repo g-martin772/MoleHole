@@ -12,6 +12,7 @@ add_subdirectory(dependencies/yaml-cpp)
 add_subdirectory(dependencies/nativefiledialog-extended)
 add_subdirectory(dependencies/imguizmo)
 add_subdirectory(dependencies/imgui)
+add_subdirectory(dependencies/nodes)
 
 file(GLOB SOURCES
         src/*.cpp
@@ -32,6 +33,7 @@ include_directories(
     dependencies/yaml-cpp/include
     dependencies/nativefiledialog-extended/src/include
     dependencies/stb-image
+    dependencies/nodes
 )
 
 glad_add_library(glad_gl_core_46 STATIC REPRODUCIBLE LOADER API gl:core=4.6)
@@ -45,6 +47,7 @@ target_link_libraries(MoleHole
     nfd
     ImGuizmo
     imgui
+    nodes
 )
 
 if (UNIX)
