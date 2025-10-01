@@ -2,6 +2,7 @@
 
 #include <string>
 #include "Simulation/Scene.h"
+#include "AnimationGraph.h"
 
 class UI {
 public:
@@ -36,6 +37,8 @@ private:
     void RenderSimulationGeneralSection();
     void RenderBlackHolesSection(Scene* scene);
 
+    void RenderAnimationGraphWindow(Scene* scene);
+
     void HandleFileOperations(Scene* scene, bool doSave, bool doOpen);
     void RenderDebugModeCombo();
     void RenderDebugModeTooltip(int debugMode);
@@ -45,6 +48,7 @@ private:
 
     bool m_showDemoWindow = false;
     bool m_showHelpWindow = false;
+    bool m_ShowAnimationGraph = true;
     bool m_initialized = false;
     bool m_configDirty = false;
     float m_saveTimer = 0.0f;
@@ -56,4 +60,6 @@ private:
     float m_snapTranslate[3] = {1.0f, 1.0f, 1.0f};
     float m_snapRotate = 15.0f;
     float m_snapScale = 0.1f;
+
+    std::unique_ptr<AnimationGraph> m_AnimationGraph;
 };

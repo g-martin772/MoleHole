@@ -7,6 +7,9 @@
 #include <filesystem>
 #include <algorithm>
 #include <set>
+#include <imgui_node_editor.h>
+#include <vector>
+#include <memory>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
@@ -14,7 +17,10 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 
+namespace ed = ax::NodeEditor;
+
 UI::UI() {
+    m_AnimationGraph = std::make_unique<AnimationGraph>();
 }
 
 UI::~UI() {
@@ -106,6 +112,10 @@ void UI::RenderMainUI(float fps, Scene* scene) {
     if (m_showHelpWindow) {
         RenderHelpWindow();
     }
+
+    if (m_ShowAnimationGraph) {
+        RenderAnimationGraphWindow(scene);
+    }
 }
 
 void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen) {
@@ -185,6 +195,7 @@ void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen) {
 
         if (ImGui::BeginMenu("View")) {
             ImGui::MenuItem("Show Demo Window", nullptr, &m_showDemoWindow);
+            ImGui::MenuItem("Show Animation Graph", nullptr, &m_ShowAnimationGraph);
 
             ImGui::Separator();
             auto& renderer = Application::GetRenderer();
@@ -685,6 +696,27 @@ void UI::RenderBlackHolesSection(Scene* scene) {
             idx++;
         }
     }
+}
+
+void UI::RenderAnimationGraphWindow(Scene *scene) {
+    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowFocus();
+    ImGui::Begin("Animation Graph");
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    ImVec2 avail = ImGui::GetContentRegionAvail();
+    float closeButtonSize = ImGui::CalcTextSize("Close").x + style.FramePadding.x * 2.0f;
+    ImGui::SetCursorPosX(avail.x - closeButtonSize);
+    if (ImGui::Button("Close")) {
+        m_ShowAnimationGraph = false;
+    }
+
+    ImGui::SetCursorPos({0,20});
+
+    if (m_AnimationGraph)
+        m_AnimationGraph->Render();
+
+    ImGui::End();
 }
 
 void UI::RenderImGuizmo(Scene* scene) {
