@@ -4,6 +4,11 @@
 #include <imgui_node_editor.h>
 #include <algorithm>
 
+#include "examples/blueprints-example/utilities/builders.h"
+#include "examples/blueprints-example/utilities/drawing.h"
+#include "examples/blueprints-example/utilities/widgets.h"
+#include "examples/blueprints-example/utilities/imgui_helper.h"
+
 namespace ed = ax::NodeEditor;
 using ax::NodeEditor::PinId;
 using ax::NodeEditor::NodeId;
@@ -183,50 +188,38 @@ void AnimationGraph::Render() {
     ed::SetCurrentEditor(m_Context.get());
     ed::Begin("Node Editor");
 
-    // Node rendering
-    for (const auto &node: m_Nodes) {
-        ed::BeginNode(node.Id);
-        ImGui::PushStyleColor(ImGuiCol_Header, GetNodeColor(node.Type, node.Name));
-        ImGui::PushStyleColor(ImGuiCol_TitleBg, GetNodeColor(node.Type, node.Name));
-        ImGui::PushStyleColor(ImGuiCol_TitleBgActive, GetNodeColor(node.Type, node.Name));
-        ImGui::PushStyleColor(ImGuiCol_TitleBgCollapsed, GetNodeColor(node.Type, node.Name));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 4));
-        ImGui::BeginGroup();
+    ax::NodeEditor::Utilities::BlueprintNodeBuilder builder(0, 256, 64);
+
+    for (const auto& node : m_Nodes) {
+        builder.Begin(node.Id);
+        builder.Header(GetNodeColor(node.Type, node.Name));
         ImGui::TextUnformatted(node.Name.c_str());
-        ImGui::Separator();
-        ImGui::EndGroup();
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(4);
-        // Inputs
-        for (const auto &pin: node.Inputs) {
-            ed::BeginPin(pin.Id, ed::PinKind::Input);
-            ImGui::PushStyleColor(ImGuiCol_Text, GetPinColor(pin.Type));
+        ImGui::Dummy(ImVec2(0, 28));
+        builder.EndHeader();
+
+        for (const auto& pin : node.Inputs) {
+            builder.Input(pin.Id);
             DrawPinIcon(pin.Type, GetPinColor(pin.Type));
             ImGui::SameLine();
-            ImGui::Text("%s", pin.Name.c_str());
-            ImGui::PopStyleColor();
-            ed::EndPin();
+            ImGui::TextUnformatted(pin.Name.c_str());
+            builder.EndInput();
         }
-        // Outputs
-        for (const auto &pin: node.Outputs) {
-            ed::BeginPin(pin.Id, ed::PinKind::Output);
-            ImGui::PushStyleColor(ImGuiCol_Text, GetPinColor(pin.Type));
-            ImGui::Text("%s", pin.Name.c_str());
+        builder.Middle();
+        for (const auto& pin : node.Outputs) {
+            builder.Output(pin.Id);
+            ImGui::TextUnformatted(pin.Name.c_str());
             ImGui::SameLine();
             DrawPinIcon(pin.Type, GetPinColor(pin.Type));
-            ImGui::PopStyleColor();
-            ed::EndPin();
+            builder.EndOutput();
         }
-        ed::EndNode();
+        ImGui::Dummy(ImVec2(0, 16));
+        builder.End();
     }
 
-    // Draw links
-    for (const auto &link: m_Links) {
+    for (const auto& link : m_Links) {
         ed::Link(link.Id, link.StartPinId, link.EndPinId);
     }
 
-    // Interactive link creation
     if (ed::BeginCreate()) {
         PinId startPinId, endPinId;
         if (ed::QueryNewLink(&startPinId, &endPinId)) {
@@ -239,7 +232,6 @@ void AnimationGraph::Render() {
     }
     ed::EndCreate();
 
-    // Interactive link deletion
     if (ed::BeginDelete()) {
         ed::LinkId deletedLinkId;
         while (ed::QueryDeletedLink(&deletedLinkId)) {
@@ -253,7 +245,6 @@ void AnimationGraph::Render() {
     }
     ed::EndDelete();
 
-    // Context menu for node creation
     if (ed::ShowBackgroundContextMenu()) {
         if (ImGui::BeginPopup("node_create_popup")) {
             if (ImGui::MenuItem("Add Print Node")) {
