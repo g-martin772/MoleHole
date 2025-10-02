@@ -15,18 +15,56 @@ public:
     enum class PinType {
         Flow,
         Bool,
-        Int,
-        Float,
+        F1, F2, F3, F4,
+        I1, I2, I3, I4,
+        RGB, RGBA, HSL, HSLA,
         String,
+        BlackHole,
+        Star,
         Object,
-        Function,
-        Delegate
+        Camera,
+        Function
     };
     enum class NodeType {
         Event,
         Function,
         Variable,
-        Math
+        Constant,
+        Decomposer,
+        Setter,
+        Control,
+        Print,
+        Other
+    };
+    enum class NodeSubType {
+        None = 0,
+
+        // Transformer
+        Add, Sub, Mul, Div,
+        Min, Max,
+        Negate,
+        Sin, Cos, Tan,
+        Asin, Acos, Atan,
+        Sqrt,
+        Exp, Log,
+        Lerp,
+        Clamp,
+        Round,
+        Floor, Ceil,
+        Sign,
+        Length,
+        Distance,
+        Color,
+
+        // Control
+        And, Or,
+        If, For, Branch,
+
+        // Event
+        Start, Tick, Collision,
+
+        // Decomposer/Setter
+        Blackhole, Star, Camera, Object
     };
     struct Pin {
         ed::PinId Id;
@@ -38,6 +76,7 @@ public:
         ed::NodeId Id;
         std::string Name;
         NodeType Type;
+        NodeSubType SubType;
         std::vector<Pin> Inputs;
         std::vector<Pin> Outputs;
     };
