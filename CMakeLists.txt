@@ -18,7 +18,8 @@ file(GLOB SOURCES
         src/*.cpp
         src/Application/*.cpp
         src/Simulation/*.cpp
-        src/Renderer/*.cpp)
+        src/Renderer/*.cpp
+        dependencies/nodes/examples/blueprints-example/utilities/*.cpp)
 
 add_executable(MoleHole ${SOURCES})
 
