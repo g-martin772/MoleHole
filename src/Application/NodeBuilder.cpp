@@ -20,6 +20,14 @@ NodeBuilder::NodeBuilder(const AnimationGraph::Node &node) : m_Node(node) {
 void NodeBuilder::DrawNode() {
     ImVec4 headerColor = GetNodeColor(m_Node.Type, m_Node.Name);
 
+    ed::PushStyleVar(ed::StyleVar_NodePadding, ImVec4(0, 0, 0, 0));
+    ed::PushStyleVar(ed::StyleVar_NodeRounding, 4.0f);
+    ed::PushStyleVar(ed::StyleVar_NodeBorderWidth, 0.0f);
+    ed::PushStyleVar(ed::StyleVar_HoveredNodeBorderWidth, 0.0f);
+    ed::PushStyleVar(ed::StyleVar_SelectedNodeBorderWidth, 0.0f);
+    ed::PushStyleVar(ed::StyleVar_HoveredNodeBorderOffset, 0.0f);
+    ed::PushStyleVar(ed::StyleVar_SelectedNodeBorderOffset, 0.0f);
+
     ed::BeginNode(m_Node.Id);
 
     float nodeWidth = CalculateNodeWidth();
@@ -28,6 +36,7 @@ void NodeBuilder::DrawNode() {
     DrawPinsAndContent(nodeWidth);
 
     ed::EndNode();
+    ed::PopStyleVar(7);
 }
 
 // Calculate node width based on content
@@ -158,8 +167,9 @@ void NodeBuilder::DrawPinsAndContent(float nodeWidth) {
         }
     }
 
-    // Move cursor to end of content
-    ImGui::SetCursorScreenPos(contentEnd);
+    // Move cursor to bottom-left of content and create a zero-height spacer with the desired width
+    // to finalize layout height without inflating node width.
+    ImGui::SetCursorScreenPos(ImVec2(contentStart.x, contentEnd.y));
     ImGui::Dummy(ImVec2(nodeWidth, 0));
 }
 

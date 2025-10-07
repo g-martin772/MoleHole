@@ -700,7 +700,6 @@ void UI::RenderBlackHolesSection(Scene* scene) {
 
 void UI::RenderAnimationGraphWindow(Scene *scene) {
     ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowFocus();
     ImGui::Begin("Animation Graph");
 
     ImGuiStyle& style = ImGui::GetStyle();
