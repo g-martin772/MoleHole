@@ -7,6 +7,8 @@
 #include <yaml-cpp/yaml.h>
 #include <random>
 
+#include "Simulation/Scene.h"
+
 namespace ed = ax::NodeEditor;
 using ax::NodeEditor::PinId;
 using ax::NodeEditor::NodeId;
@@ -147,7 +149,8 @@ void DrawPinIcon(AnimationGraph::PinType type, const ImVec4 &color) {
         case AnimationGraph::PinType::BlackHole:
             // Draw a filled circle with a smaller black circle inside
             drawList->AddCircleFilled(ImVec2(pos.x + radius, pos.y + radius), radius, ImColor(color));
-            drawList->AddCircleFilled(ImVec2(pos.x + radius, pos.y + radius), radius * 0.5f, ImColor(0.0f, 0.0f, 0.0f, 1.0f));
+            drawList->AddCircleFilled(ImVec2(pos.x + radius, pos.y + radius), radius * 0.5f,
+                                      ImColor(0.0f, 0.0f, 0.0f, 1.0f));
             ImGui::Dummy(ImVec2(radius * 2, radius * 2));
             break;
         case AnimationGraph::PinType::Star:
@@ -191,19 +194,19 @@ void AnimationGraph::Render() {
         if (ed::QueryNewLink(&startPinId, &endPinId)) {
             if (startPinId && endPinId && startPinId != endPinId) {
                 bool inputPinUsed = false;
-                for (const auto& link : m_Links) {
+                for (const auto &link: m_Links) {
                     if (link.EndPinId == endPinId) {
                         inputPinUsed = true;
                         break;
                     }
                 }
-                const AnimationGraph::Pin* startPin = nullptr;
-                const AnimationGraph::Pin* endPin = nullptr;
-                for (const auto& node : m_Nodes) {
-                    for (const auto& pin : node.Outputs) {
+                const AnimationGraph::Pin *startPin = nullptr;
+                const AnimationGraph::Pin *endPin = nullptr;
+                for (const auto &node: m_Nodes) {
+                    for (const auto &pin: node.Outputs) {
                         if (pin.Id == startPinId) startPin = &pin;
                     }
-                    for (const auto& pin : node.Inputs) {
+                    for (const auto &pin: node.Inputs) {
                         if (pin.Id == endPinId) endPin = &pin;
                     }
                 }
@@ -240,10 +243,10 @@ void AnimationGraph::Render() {
                     m_Links.erase(
                         std::remove_if(m_Links.begin(), m_Links.end(),
                                        [&](const Link &l) {
-                                           for (const auto& pin : it->Inputs) {
+                                           for (const auto &pin: it->Inputs) {
                                                if (l.EndPinId == pin.Id) return true;
                                            }
-                                           for (const auto& pin : it->Outputs) {
+                                           for (const auto &pin: it->Outputs) {
                                                if (l.StartPinId == pin.Id) return true;
                                            }
                                            return false;
@@ -273,7 +276,7 @@ void AnimationGraph::Render() {
         std::string search = searchBuffer;
         std::transform(search.begin(), search.end(), search.begin(), ::tolower);
 
-        auto matchesSearch = [&](const std::string& name) {
+        auto matchesSearch = [&](const std::string &name) {
             if (search.empty()) return true;
             std::string lowerName = name;
             std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
@@ -333,11 +336,11 @@ void AnimationGraph::Render() {
             }
 
             // Math nodes
-            const std::vector<std::pair<const char*, PinType>> types = {
+            const std::vector<std::pair<const char *, PinType> > types = {
                 {"Float", PinType::F1}, {"Vec2", PinType::F2}, {"Vec3", PinType::F3}, {"Vec4", PinType::F4}
             };
 
-            for (const auto& [name, type] : types) {
+            for (const auto &[name, type]: types) {
                 std::string addName = std::string("Add ") + name;
                 std::string subName = std::string("Subtract ") + name;
                 std::string mulName = std::string("Multiply ") + name;
@@ -461,13 +464,13 @@ void AnimationGraph::Render() {
             }
 
             // Variables
-            const std::vector<std::pair<const char*, PinType>> varTypes = {
+            const std::vector<std::pair<const char *, PinType> > varTypes = {
                 {"Float", PinType::F1}, {"Vec2", PinType::F2}, {"Vec3", PinType::F3}, {"Vec4", PinType::F4},
                 {"Int", PinType::I1}, {"Bool", PinType::Bool}, {"String", PinType::String},
                 {"BlackHole", PinType::BlackHole}, {"Camera", PinType::Camera}
             };
 
-            for (const auto& [name, type] : varTypes) {
+            for (const auto &[name, type]: varTypes) {
                 std::string getName = std::string("Get ") + name + " Variable";
                 std::string setName = std::string("Set ") + name + " Variable";
                 if (matchesSearch(getName) && ImGui::MenuItem(getName.c_str())) {
@@ -549,12 +552,12 @@ void AnimationGraph::Render() {
 
             // Math Functions
             if (ImGui::BeginMenu("Math")) {
-                const std::vector<std::pair<const char*, PinType>> types = {
+                const std::vector<std::pair<const char *, PinType> > types = {
                     {"Float", PinType::F1}, {"Vec2", PinType::F2}, {"Vec3", PinType::F3}, {"Vec4", PinType::F4}
                 };
 
                 if (ImGui::BeginMenu("Add")) {
-                    for (const auto& [name, type] : types) {
+                    for (const auto &[name, type]: types) {
                         std::string itemName = std::string("Add ") + name;
                         if (ImGui::MenuItem(itemName.c_str())) {
                             m_Nodes.push_back(CreateMathNode(GenerateRandomId(), NodeSubType::Add, type));
@@ -565,7 +568,7 @@ void AnimationGraph::Render() {
                 }
 
                 if (ImGui::BeginMenu("Subtract")) {
-                    for (const auto& [name, type] : types) {
+                    for (const auto &[name, type]: types) {
                         std::string itemName = std::string("Subtract ") + name;
                         if (ImGui::MenuItem(itemName.c_str())) {
                             m_Nodes.push_back(CreateMathNode(GenerateRandomId(), NodeSubType::Sub, type));
@@ -576,7 +579,7 @@ void AnimationGraph::Render() {
                 }
 
                 if (ImGui::BeginMenu("Multiply")) {
-                    for (const auto& [name, type] : types) {
+                    for (const auto &[name, type]: types) {
                         std::string itemName = std::string("Multiply ") + name;
                         if (ImGui::MenuItem(itemName.c_str())) {
                             m_Nodes.push_back(CreateMathNode(GenerateRandomId(), NodeSubType::Mul, type));
@@ -587,7 +590,7 @@ void AnimationGraph::Render() {
                 }
 
                 if (ImGui::BeginMenu("Divide")) {
-                    for (const auto& [name, type] : types) {
+                    for (const auto &[name, type]: types) {
                         std::string itemName = std::string("Divide ") + name;
                         if (ImGui::MenuItem(itemName.c_str())) {
                             m_Nodes.push_back(CreateMathNode(GenerateRandomId(), NodeSubType::Div, type));
@@ -598,7 +601,7 @@ void AnimationGraph::Render() {
                 }
 
                 if (ImGui::BeginMenu("Min/Max")) {
-                    for (const auto& [name, type] : types) {
+                    for (const auto &[name, type]: types) {
                         std::string minName = std::string("Min ") + name;
                         std::string maxName = std::string("Max ") + name;
                         if (ImGui::MenuItem(minName.c_str())) {
@@ -630,7 +633,7 @@ void AnimationGraph::Render() {
                 }
 
                 if (ImGui::BeginMenu("Vector")) {
-                    for (const auto& [name, type] : types) {
+                    for (const auto &[name, type]: types) {
                         if (type == PinType::F1) continue;
                         std::string lengthName = std::string("Length ") + name;
                         std::string distName = std::string("Distance ") + name;
@@ -647,7 +650,7 @@ void AnimationGraph::Render() {
                 }
 
                 if (ImGui::BeginMenu("Interpolation")) {
-                    for (const auto& [name, type] : types) {
+                    for (const auto &[name, type]: types) {
                         std::string lerpName = std::string("Lerp ") + name;
                         std::string clampName = std::string("Clamp ") + name;
                         if (ImGui::MenuItem(lerpName.c_str())) {
@@ -663,7 +666,7 @@ void AnimationGraph::Render() {
                 }
 
                 if (ImGui::BeginMenu("Other")) {
-                    for (const auto& [name, type] : types) {
+                    for (const auto &[name, type]: types) {
                         std::string sqrtName = std::string("Sqrt ") + name;
                         std::string negateName = std::string("Negate ") + name;
                         if (ImGui::MenuItem(sqrtName.c_str())) {
@@ -749,14 +752,14 @@ void AnimationGraph::Render() {
 
             // Variables
             if (ImGui::BeginMenu("Variables")) {
-                const std::vector<std::pair<const char*, PinType>> varTypes = {
+                const std::vector<std::pair<const char *, PinType> > varTypes = {
                     {"Float", PinType::F1}, {"Vec2", PinType::F2}, {"Vec3", PinType::F3}, {"Vec4", PinType::F4},
                     {"Int", PinType::I1}, {"Bool", PinType::Bool}, {"String", PinType::String},
                     {"BlackHole", PinType::BlackHole}, {"Camera", PinType::Camera}
                 };
 
                 if (ImGui::BeginMenu("Get Variable")) {
-                    for (const auto& [name, type] : varTypes) {
+                    for (const auto &[name, type]: varTypes) {
                         std::string itemName = std::string("Get ") + name + " Variable";
                         if (ImGui::MenuItem(itemName.c_str())) {
                             m_Nodes.push_back(CreateVariableGetNode(GenerateRandomId(), type));
@@ -767,7 +770,7 @@ void AnimationGraph::Render() {
                 }
 
                 if (ImGui::BeginMenu("Set Variable")) {
-                    for (const auto& [name, type] : varTypes) {
+                    for (const auto &[name, type]: varTypes) {
                         std::string itemName = std::string("Set ") + name + " Variable";
                         if (ImGui::MenuItem(itemName.c_str())) {
                             m_Nodes.push_back(CreateVariableSetNode(GenerateRandomId(), type));
@@ -835,7 +838,7 @@ AnimationGraph::Node AnimationGraph::CreatePrintNode(int id) {
     return node;
 }
 
-AnimationGraph::Node AnimationGraph::CreateConstantNode(int id, const std::string& value) {
+AnimationGraph::Node AnimationGraph::CreateConstantNode(int id, const std::string &value) {
     Node node;
     node.Id = ed::NodeId(id);
     node.Name = "String Constant";
@@ -857,13 +860,20 @@ AnimationGraph::Node AnimationGraph::CreateMathNode(int id, NodeSubType subType,
 
     std::string typeName;
     switch (valueType) {
-        case PinType::F1: typeName = "Float"; break;
-        case PinType::F2: typeName = "Vec2"; break;
-        case PinType::F3: typeName = "Vec3"; break;
-        case PinType::F4: typeName = "Vec4"; break;
-        case PinType::I1: typeName = "Int"; break;
-        case PinType::Bool: typeName = "Bool"; break;
-        default: typeName = ""; break;
+        case PinType::F1: typeName = "Float";
+            break;
+        case PinType::F2: typeName = "Vec2";
+            break;
+        case PinType::F3: typeName = "Vec3";
+            break;
+        case PinType::F4: typeName = "Vec4";
+            break;
+        case PinType::I1: typeName = "Int";
+            break;
+        case PinType::Bool: typeName = "Bool";
+            break;
+        default: typeName = "";
+            break;
     }
 
     switch (subType) {
@@ -1067,7 +1077,7 @@ AnimationGraph::Node AnimationGraph::CreateConstantBoolNode(int id, bool value) 
     return node;
 }
 
-AnimationGraph::Node AnimationGraph::CreateConstantStringNode(int id, const std::string& value) {
+AnimationGraph::Node AnimationGraph::CreateConstantStringNode(int id, const std::string &value) {
     Node node;
     node.Id = ed::NodeId(id);
     node.Name = "String";
@@ -1248,7 +1258,7 @@ AnimationGraph::Node AnimationGraph::CreateCameraSetterNode(int id) {
     return node;
 }
 
-AnimationGraph::Node AnimationGraph::CreateVariableGetNode(int id, PinType varType, const std::string& varName) {
+AnimationGraph::Node AnimationGraph::CreateVariableGetNode(int id, PinType varType, const std::string &varName) {
     Node node;
     node.Id = ed::NodeId(id);
     node.Type = NodeType::Variable;
@@ -1257,16 +1267,26 @@ AnimationGraph::Node AnimationGraph::CreateVariableGetNode(int id, PinType varTy
 
     std::string typeName;
     switch (varType) {
-        case PinType::F1: typeName = "Float"; break;
-        case PinType::F2: typeName = "Vec2"; break;
-        case PinType::F3: typeName = "Vec3"; break;
-        case PinType::F4: typeName = "Vec4"; break;
-        case PinType::I1: typeName = "Int"; break;
-        case PinType::Bool: typeName = "Bool"; break;
-        case PinType::String: typeName = "String"; break;
-        case PinType::BlackHole: typeName = "BlackHole"; break;
-        case PinType::Camera: typeName = "Camera"; break;
-        default: typeName = "Any"; break;
+        case PinType::F1: typeName = "Float";
+            break;
+        case PinType::F2: typeName = "Vec2";
+            break;
+        case PinType::F3: typeName = "Vec3";
+            break;
+        case PinType::F4: typeName = "Vec4";
+            break;
+        case PinType::I1: typeName = "Int";
+            break;
+        case PinType::Bool: typeName = "Bool";
+            break;
+        case PinType::String: typeName = "String";
+            break;
+        case PinType::BlackHole: typeName = "BlackHole";
+            break;
+        case PinType::Camera: typeName = "Camera";
+            break;
+        default: typeName = "Any";
+            break;
     }
 
     node.Name = "Get " + typeName + " Variable";
@@ -1275,7 +1295,7 @@ AnimationGraph::Node AnimationGraph::CreateVariableGetNode(int id, PinType varTy
     return node;
 }
 
-AnimationGraph::Node AnimationGraph::CreateVariableSetNode(int id, PinType varType, const std::string& varName) {
+AnimationGraph::Node AnimationGraph::CreateVariableSetNode(int id, PinType varType, const std::string &varName) {
     Node node;
     node.Id = ed::NodeId(id);
     node.Type = NodeType::Variable;
@@ -1284,16 +1304,26 @@ AnimationGraph::Node AnimationGraph::CreateVariableSetNode(int id, PinType varTy
 
     std::string typeName;
     switch (varType) {
-        case PinType::F1: typeName = "Float"; break;
-        case PinType::F2: typeName = "Vec2"; break;
-        case PinType::F3: typeName = "Vec3"; break;
-        case PinType::F4: typeName = "Vec4"; break;
-        case PinType::I1: typeName = "Int"; break;
-        case PinType::Bool: typeName = "Bool"; break;
-        case PinType::String: typeName = "String"; break;
-        case PinType::BlackHole: typeName = "BlackHole"; break;
-        case PinType::Camera: typeName = "Camera"; break;
-        default: typeName = "Any"; break;
+        case PinType::F1: typeName = "Float";
+            break;
+        case PinType::F2: typeName = "Vec2";
+            break;
+        case PinType::F3: typeName = "Vec3";
+            break;
+        case PinType::F4: typeName = "Vec4";
+            break;
+        case PinType::I1: typeName = "Int";
+            break;
+        case PinType::Bool: typeName = "Bool";
+            break;
+        case PinType::String: typeName = "String";
+            break;
+        case PinType::BlackHole: typeName = "BlackHole";
+            break;
+        case PinType::Camera: typeName = "Camera";
+            break;
+        default: typeName = "Any";
+            break;
     }
 
     node.Name = "Set " + typeName + " Variable";
@@ -1305,28 +1335,36 @@ AnimationGraph::Node AnimationGraph::CreateVariableSetNode(int id, PinType varTy
     return node;
 }
 
-void AnimationGraph::Serialize(YAML::Emitter& out) const {
+void AnimationGraph::Serialize(YAML::Emitter &out) const {
     out << YAML::Key << "animation_graph" << YAML::Value << YAML::BeginMap;
+
+    out << YAML::Key << "variables" << YAML::Value << YAML::BeginSeq;
+    for (const auto &var: m_Variables) {
+        out << YAML::BeginMap;
+        out << YAML::Key << "name" << YAML::Value << var.Name;
+        out << YAML::Key << "type" << YAML::Value << static_cast<int>(var.Type);
+        out << YAML::EndMap;
+    }
+    out << YAML::EndSeq;
+
     out << YAML::Key << "nodes" << YAML::Value << YAML::BeginSeq;
-    for (const auto& node : m_Nodes) {
+    for (const auto &node: m_Nodes) {
         out << YAML::BeginMap;
         out << YAML::Key << "id" << YAML::Value << node.Id.Get();
         out << YAML::Key << "name" << YAML::Value << node.Name;
         out << YAML::Key << "type" << YAML::Value << static_cast<int>(node.Type);
         out << YAML::Key << "subtype" << YAML::Value << static_cast<int>(node.SubType);
 
-        // Serialize variable name if present
         if (!node.VariableName.empty()) {
             out << YAML::Key << "variable_name" << YAML::Value << node.VariableName;
         }
 
-        // Serialize scene object index if set
         if (node.SceneObjectIndex >= 0) {
             out << YAML::Key << "scene_object_index" << YAML::Value << node.SceneObjectIndex;
         }
 
         out << YAML::Key << "inputs" << YAML::Value << YAML::BeginSeq;
-        for (const auto& pin : node.Inputs) {
+        for (const auto &pin: node.Inputs) {
             out << YAML::BeginMap;
             out << YAML::Key << "id" << YAML::Value << pin.Id.Get();
             out << YAML::Key << "name" << YAML::Value << pin.Name;
@@ -1336,7 +1374,7 @@ void AnimationGraph::Serialize(YAML::Emitter& out) const {
         }
         out << YAML::EndSeq;
         out << YAML::Key << "outputs" << YAML::Value << YAML::BeginSeq;
-        for (const auto& pin : node.Outputs) {
+        for (const auto &pin: node.Outputs) {
             out << YAML::BeginMap;
             out << YAML::Key << "id" << YAML::Value << pin.Id.Get();
             out << YAML::Key << "name" << YAML::Value << pin.Name;
@@ -1346,7 +1384,6 @@ void AnimationGraph::Serialize(YAML::Emitter& out) const {
         }
         out << YAML::EndSeq;
 
-        // Serialize value
         if (std::holds_alternative<std::string>(node.Value)) {
             out << YAML::Key << "value_string" << YAML::Value << std::get<std::string>(node.Value);
         } else if (std::holds_alternative<float>(node.Value)) {
@@ -1355,19 +1392,22 @@ void AnimationGraph::Serialize(YAML::Emitter& out) const {
             out << YAML::Key << "value_int" << YAML::Value << std::get<int>(node.Value);
         } else if (std::holds_alternative<glm::vec2>(node.Value)) {
             auto v = std::get<glm::vec2>(node.Value);
-            out << YAML::Key << "value_vec2" << YAML::Value << YAML::Flow << YAML::BeginSeq << v.x << v.y << YAML::EndSeq;
+            out << YAML::Key << "value_vec2" << YAML::Value << YAML::Flow << YAML::BeginSeq << v.x << v.y <<
+                    YAML::EndSeq;
         } else if (std::holds_alternative<glm::vec3>(node.Value)) {
             auto v = std::get<glm::vec3>(node.Value);
-            out << YAML::Key << "value_vec3" << YAML::Value << YAML::Flow << YAML::BeginSeq << v.x << v.y << v.z << YAML::EndSeq;
+            out << YAML::Key << "value_vec3" << YAML::Value << YAML::Flow << YAML::BeginSeq << v.x << v.y << v.z <<
+                    YAML::EndSeq;
         } else if (std::holds_alternative<glm::vec4>(node.Value)) {
             auto v = std::get<glm::vec4>(node.Value);
-            out << YAML::Key << "value_vec4" << YAML::Value << YAML::Flow << YAML::BeginSeq << v.x << v.y << v.z << v.w << YAML::EndSeq;
+            out << YAML::Key << "value_vec4" << YAML::Value << YAML::Flow << YAML::BeginSeq << v.x << v.y << v.z << v.w
+                    << YAML::EndSeq;
         }
         out << YAML::EndMap;
     }
     out << YAML::EndSeq;
     out << YAML::Key << "links" << YAML::Value << YAML::BeginSeq;
-    for (const auto& link : m_Links) {
+    for (const auto &link: m_Links) {
         out << YAML::BeginMap;
         out << YAML::Key << "id" << YAML::Value << link.Id.Get();
         out << YAML::Key << "start_pin_id" << YAML::Value << link.StartPinId.Get();
@@ -1378,48 +1418,56 @@ void AnimationGraph::Serialize(YAML::Emitter& out) const {
     out << YAML::EndMap;
 }
 
-void AnimationGraph::Deserialize(const YAML::Node& node) {
+void AnimationGraph::Deserialize(const YAML::Node &node) {
     m_Nodes.clear();
     m_Links.clear();
+    m_Variables.clear();
+
     if (!node["animation_graph"]) return;
     auto graph = node["animation_graph"];
+
+    if (graph["variables"]) {
+        for (const auto &v: graph["variables"]) {
+            Variable var;
+            var.Name = v["name"].as<std::string>();
+            var.Type = static_cast<PinType>(v["type"].as<int>());
+            m_Variables.push_back(var);
+        }
+    }
+
     if (graph["nodes"]) {
-        for (const auto& n : graph["nodes"]) {
+        for (const auto &n: graph["nodes"]) {
             Node nodeObj;
             nodeObj.Id = ed::NodeId(n["id"].as<int>());
             nodeObj.Name = n["name"].as<std::string>();
             nodeObj.Type = static_cast<NodeType>(n["type"].as<int>());
             nodeObj.SubType = static_cast<NodeSubType>(n["subtype"].as<int>());
 
-            // Deserialize variable name
             if (n["variable_name"]) {
                 nodeObj.VariableName = n["variable_name"].as<std::string>();
             }
 
-            // Deserialize scene object index
             if (n["scene_object_index"]) {
                 nodeObj.SceneObjectIndex = n["scene_object_index"].as<int>();
             }
 
-            // Deserialize value
             if (n["value_string"]) nodeObj.Value = n["value_string"].as<std::string>();
             else if (n["value_float"]) nodeObj.Value = n["value_float"].as<float>();
             else if (n["value_int"]) nodeObj.Value = n["value_int"].as<int>();
             else if (n["value_vec2"]) {
                 auto vec = n["value_vec2"];
                 nodeObj.Value = glm::vec2(vec[0].as<float>(), vec[1].as<float>());
-            }
-            else if (n["value_vec3"]) {
+            } else if (n["value_vec3"]) {
                 auto vec = n["value_vec3"];
                 nodeObj.Value = glm::vec3(vec[0].as<float>(), vec[1].as<float>(), vec[2].as<float>());
-            }
-            else if (n["value_vec4"]) {
+            } else if (n["value_vec4"]) {
                 auto vec = n["value_vec4"];
-                nodeObj.Value = glm::vec4(vec[0].as<float>(), vec[1].as<float>(), vec[2].as<float>(), vec[3].as<float>());
+                nodeObj.Value = glm::vec4(vec[0].as<float>(), vec[1].as<float>(), vec[2].as<float>(),
+                                          vec[3].as<float>());
             }
 
             if (n["inputs"]) {
-                for (const auto& p : n["inputs"]) {
+                for (const auto &p: n["inputs"]) {
                     Pin pin;
                     pin.Id = ed::PinId(p["id"].as<int>());
                     pin.Name = p["name"].as<std::string>();
@@ -1429,7 +1477,7 @@ void AnimationGraph::Deserialize(const YAML::Node& node) {
                 }
             }
             if (n["outputs"]) {
-                for (const auto& p : n["outputs"]) {
+                for (const auto &p: n["outputs"]) {
                     Pin pin;
                     pin.Id = ed::PinId(p["id"].as<int>());
                     pin.Name = p["name"].as<std::string>();
@@ -1442,12 +1490,241 @@ void AnimationGraph::Deserialize(const YAML::Node& node) {
         }
     }
     if (graph["links"]) {
-        for (const auto& l : graph["links"]) {
+        for (const auto &l: graph["links"]) {
             Link linkObj;
             linkObj.Id = ed::LinkId(l["id"].as<int>());
             linkObj.StartPinId = ed::PinId(l["start_pin_id"].as<int>());
             linkObj.EndPinId = ed::PinId(l["end_pin_id"].as<int>());
             m_Links.push_back(linkObj);
+        }
+    }
+}
+
+AnimationGraph::Node *AnimationGraph::FindNode(ed::NodeId nodeId) {
+    for (auto &node: m_Nodes) {
+        if (node.Id == nodeId) {
+            return &node;
+        }
+    }
+    return nullptr;
+}
+
+void AnimationGraph::RenderNodeInspector(ed::NodeId selectedNodeId) {
+    if (!selectedNodeId) {
+        ImGui::Text("No node selected");
+        return;
+    }
+
+    Node *node = FindNode(selectedNodeId);
+    if (!node) {
+        ImGui::Text("Node not found");
+        return;
+    }
+
+    ImGui::Text("Node: %s", node->Name.c_str());
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (node->Type == NodeType::Variable) {
+        ImGui::Text("Variable Name:");
+        ImGui::SetNextItemWidth(-1);
+
+        PinType nodeVarType = PinType::F1;
+        if (!node->Outputs.empty()) {
+            nodeVarType = node->Outputs[0].Type;
+        } else if (!node->Inputs.empty() && node->Inputs.size() > 1) {
+            nodeVarType = node->Inputs[1].Type;
+        }
+
+        int currentIdx = -1;
+        for (size_t i = 0; i < m_Variables.size(); ++i) {
+            if (m_Variables[i].Name == node->VariableName && m_Variables[i].Type == nodeVarType) {
+                currentIdx = static_cast<int>(i);
+                break;
+            }
+        }
+
+        std::string preview = node->VariableName.empty() ? "(Select Variable)" : node->VariableName;
+
+        static bool showNewVarDialog = false;
+        static char newVarBuffer[128] = "";
+
+        if (ImGui::BeginCombo("##variable", preview.c_str())) {
+            if (ImGui::Selectable("+ New Variable...", false)) {
+                showNewVarDialog = true;
+                newVarBuffer[0] = '\0';
+                ImGui::CloseCurrentPopup();
+            }
+
+            bool hasMatchingVars = false;
+            for (size_t i = 0; i < m_Variables.size(); ++i) {
+                if (m_Variables[i].Type == nodeVarType) {
+                    hasMatchingVars = true;
+                    break;
+                }
+            }
+
+            if (hasMatchingVars) {
+                ImGui::Separator();
+            }
+
+            for (size_t i = 0; i < m_Variables.size(); ++i) {
+                if (m_Variables[i].Type != nodeVarType) {
+                    continue;
+                }
+
+                bool isSelected = (currentIdx == static_cast<int>(i));
+                if (ImGui::Selectable(m_Variables[i].Name.c_str(), isSelected)) {
+                    node->VariableName = m_Variables[i].Name;
+                }
+                if (isSelected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+        if (showNewVarDialog) {
+            ImGui::OpenPopup("NewVariableDialog");
+            showNewVarDialog = false;
+        }
+    }
+
+    static char newVarBuffer[128] = "";
+    if (ImGui::BeginPopupModal("NewVariableDialog", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        PinType newVarType = PinType::F1;
+        if (node && node->Type == NodeType::Variable) {
+            if (!node->Outputs.empty()) {
+                newVarType = node->Outputs[0].Type;
+            } else if (!node->Inputs.empty() && node->Inputs.size() > 1) {
+                newVarType = node->Inputs[1].Type;
+            }
+        }
+
+        std::string typeName;
+        switch (newVarType) {
+            case PinType::F1: typeName = "Float";
+                break;
+            case PinType::F2: typeName = "Vec2";
+                break;
+            case PinType::F3: typeName = "Vec3";
+                break;
+            case PinType::F4: typeName = "Vec4";
+                break;
+            case PinType::I1: typeName = "Int";
+                break;
+            case PinType::Bool: typeName = "Bool";
+                break;
+            case PinType::String: typeName = "String";
+                break;
+            case PinType::BlackHole: typeName = "BlackHole";
+                break;
+            case PinType::Camera: typeName = "Camera";
+                break;
+            default: typeName = "Unknown";
+                break;
+        }
+
+        ImGui::Text("New %s Variable:", typeName.c_str());
+        if (ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere();
+        }
+        bool enterPressed = ImGui::InputText("##newvarname", newVarBuffer, sizeof(newVarBuffer),
+                                             ImGuiInputTextFlags_EnterReturnsTrue);
+
+        ImGui::Spacing();
+        bool shouldClose = false;
+        if ((ImGui::Button("Create") || enterPressed) && strlen(newVarBuffer) > 0) {
+            std::string newVarName = newVarBuffer;
+            bool exists = false;
+            for (const auto &v: m_Variables) {
+                if (v.Name == newVarName && v.Type == newVarType) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                m_Variables.push_back({newVarName, newVarType});
+                if (node && node->Type == NodeType::Variable) {
+                    node->VariableName = newVarName;
+                }
+            }
+            newVarBuffer[0] = '\0';
+            shouldClose = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            newVarBuffer[0] = '\0';
+            shouldClose = true;
+        }
+
+        if (shouldClose) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    if (node->Type == NodeType::Other &&
+        (node->SubType == NodeSubType::Blackhole || node->SubType == NodeSubType::Camera)) {
+        ImGui::Text("Scene Object:");
+        ImGui::SetNextItemWidth(-1);
+
+        std::string preview = (node->SceneObjectIndex >= 0 &&
+                               node->SceneObjectIndex < static_cast<int>(m_SceneObjects.size()))
+                                  ? m_SceneObjects[node->SceneObjectIndex]
+                                  : "(Select Object)";
+
+        if (ImGui::BeginCombo("##sceneobject", preview.c_str())) {
+            bool isCameraNode = (node->SubType == NodeSubType::Camera);
+
+            for (size_t i = 0; i < m_SceneObjects.size(); ++i) {
+                const std::string &objName = m_SceneObjects[i];
+
+                bool isCamera = (i == 0);
+
+                if (isCameraNode && !isCamera) continue;
+                if (!isCameraNode && isCamera) continue;
+
+                bool isSelected = (node->SceneObjectIndex == static_cast<int>(i));
+                if (ImGui::Selectable(objName.c_str(), isSelected)) {
+                    node->SceneObjectIndex = static_cast<int>(i);
+                }
+                if (isSelected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+        if (m_SceneObjects.empty()) {
+            ImGui::TextDisabled("(No scene objects available)");
+        }
+    }
+
+    if (node->Type == NodeType::Constant) {
+        ImGui::TextDisabled("(Edit value directly in node)");
+    }
+}
+
+void AnimationGraph::UpdateSceneObjects(Scene *scene) {
+    m_SceneObjects.clear();
+
+    if (!scene) {
+        return;
+    }
+
+    m_SceneObjects.push_back("Primary Camera");
+
+    for (size_t i = 0; i < scene->blackHoles.size(); ++i) {
+        m_SceneObjects.push_back("Black Hole #" + std::to_string(i + 1));
+    }
+
+    for (auto &node: m_Nodes) {
+        if (node.Type == NodeType::Other && node.SubType == NodeSubType::Camera) {
+            if (node.SceneObjectIndex < 0 && !m_SceneObjects.empty()) {
+                node.SceneObjectIndex = 0;
+            }
         }
     }
 }

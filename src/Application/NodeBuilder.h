@@ -9,12 +9,12 @@ namespace ed = ax::NodeEditor;
 
 class NodeBuilder {
 public:
-    explicit NodeBuilder(const AnimationGraph::Node &node, std::vector<std::string>& variables, std::vector<std::string>& sceneObjects);
+    explicit NodeBuilder(const AnimationGraph::Node &node, std::vector<AnimationGraph::Variable>& variables, std::vector<std::string>& sceneObjects);
     void DrawNode();
 
 private:
     const AnimationGraph::Node &m_Node;
-    std::vector<std::string>& m_Variables;
+    std::vector<AnimationGraph::Variable>& m_Variables;
     std::vector<std::string>& m_SceneObjects;
 
     float CalculateNodeWidth();
