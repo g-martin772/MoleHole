@@ -5,6 +5,7 @@
 #include <imgui_node_editor.h>
 #include <algorithm>
 #include <yaml-cpp/yaml.h>
+#include <random>
 
 namespace ed = ax::NodeEditor;
 using ax::NodeEditor::PinId;
@@ -162,20 +163,16 @@ void DrawPinIcon(AnimationGraph::PinType type, const ImVec4 &color) {
 }
 
 AnimationGraph::AnimationGraph()
-    : m_Context(nullptr, ed::DestroyEditor), m_NextId(1) {
+    : m_Context(nullptr, ed::DestroyEditor), m_RandomGenerator(std::random_device{}()) {
     m_Context.reset(ed::CreateEditor());
-    m_Nodes.clear();
-    m_Links.clear();
-
-    m_Nodes.push_back(CreateEventNode(m_NextId++));
-    m_Nodes.push_back(CreatePrintNode(m_NextId++));
-    m_Nodes.push_back(CreateConstantNode(m_NextId++, "Hello World"));
-    m_Nodes.push_back(CreateConstantNode(m_NextId++, "Sample String"));
-
-    m_Links.clear();
 }
 
 AnimationGraph::~AnimationGraph() = default;
+
+int AnimationGraph::GenerateRandomId() {
+    std::uniform_int_distribution<int> dist(1000, 999999);
+    return dist(m_RandomGenerator);
+}
 
 void AnimationGraph::Render() {
     ed::SetCurrentEditor(m_Context.get());
@@ -212,7 +209,7 @@ void AnimationGraph::Render() {
                 }
                 if (!inputPinUsed && startPin && endPin && ArePinsCompatible(startPin->Type, endPin->Type)) {
                     if (ed::AcceptNewItem()) {
-                        m_Links.push_back({m_NextId++, startPinId, endPinId});
+                        m_Links.push_back({GenerateRandomId(), startPinId, endPinId});
                     }
                 } else {
                     ed::RejectNewItem(ImColor(255, 0, 0, 255), 2.0f);
@@ -233,6 +230,29 @@ void AnimationGraph::Render() {
                 }
             }
         }
+
+        ed::NodeId deletedNodeId;
+        while (ed::QueryDeletedNode(&deletedNodeId)) {
+            auto it = std::find_if(m_Nodes.begin(), m_Nodes.end(),
+                                   [&](const Node &n) { return n.Id == deletedNodeId; });
+            if (it != m_Nodes.end()) {
+                if (ed::AcceptDeletedItem()) {
+                    m_Links.erase(
+                        std::remove_if(m_Links.begin(), m_Links.end(),
+                                       [&](const Link &l) {
+                                           for (const auto& pin : it->Inputs) {
+                                               if (l.EndPinId == pin.Id) return true;
+                                           }
+                                           for (const auto& pin : it->Outputs) {
+                                               if (l.StartPinId == pin.Id) return true;
+                                           }
+                                           return false;
+                                       }),
+                        m_Links.end());
+                    m_Nodes.erase(it);
+                }
+            }
+        }
     }
     ed::EndDelete();
 
@@ -246,15 +266,15 @@ void AnimationGraph::Render() {
         ImVec2 mousePos = ed::ScreenToCanvas(openPopupPosition);
 
         if (ImGui::MenuItem("Add Event Node")) {
-            m_Nodes.push_back(CreateEventNode(m_NextId++));
+            m_Nodes.push_back(CreateEventNode(GenerateRandomId()));
             ed::SetNodePosition(m_Nodes.back().Id, mousePos);
         }
         if (ImGui::MenuItem("Add Print Node")) {
-            m_Nodes.push_back(CreatePrintNode(m_NextId++));
+            m_Nodes.push_back(CreatePrintNode(GenerateRandomId()));
             ed::SetNodePosition(m_Nodes.back().Id, mousePos);
         }
         if (ImGui::MenuItem("Add Constant Node")) {
-            m_Nodes.push_back(CreateConstantNode(m_NextId++, ""));
+            m_Nodes.push_back(CreateConstantNode(GenerateRandomId(), ""));
             ed::SetNodePosition(m_Nodes.back().Id, mousePos);
         }
         ImGui::EndPopup();

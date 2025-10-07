@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <variant>
+#include <random>
 
 #include "glm/glm.hpp"
 #include "yaml-cpp/emitter.h"
@@ -103,5 +104,7 @@ private:
     std::unique_ptr<ed::EditorContext, void(*)(ed::EditorContext*)> m_Context;
     std::vector<Node> m_Nodes;
     std::vector<Link> m_Links;
-    int m_NextId;
+    std::mt19937 m_RandomGenerator;
+
+    int GenerateRandomId();
 };
