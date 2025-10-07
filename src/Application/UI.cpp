@@ -826,9 +826,7 @@ void UI::LoadScene(Scene* scene, const std::string& path) {
 
         spdlog::info("Loading scene: {}", path);
 
-        Scene tempScene = *scene;
-        tempScene.Deserialize(fsPath);
-        *scene = tempScene;
+        scene->Deserialize(fsPath);
 
         Application::Instance().GetState().SetLastOpenScene(path);
         AddToRecentScenes(path);

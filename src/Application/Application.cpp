@@ -18,7 +18,6 @@ bool Application::Initialize() {
     spdlog::info("Initializing MoleHole Application");
 
     TryInitializeGtk();
-
     m_state.LoadFromFile("config.yaml");
 
     try {

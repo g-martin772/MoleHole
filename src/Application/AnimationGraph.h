@@ -6,6 +6,8 @@
 #include <variant>
 
 #include "glm/glm.hpp"
+#include "yaml-cpp/emitter.h"
+#include "yaml-cpp/node/node.h"
 
 namespace ed = ax::NodeEditor;
 
@@ -95,7 +97,8 @@ public:
     static Node CreatePrintNode(int id);
     static Node CreateConstantNode(int id, const std::string& value);
 
-
+    void Serialize(YAML::Emitter& out) const;
+    void Deserialize(const YAML::Node& node);
 private:
     std::unique_ptr<ed::EditorContext, void(*)(ed::EditorContext*)> m_Context;
     std::vector<Node> m_Nodes;
