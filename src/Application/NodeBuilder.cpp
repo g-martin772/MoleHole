@@ -12,7 +12,8 @@ constexpr float NODE_MIN_WIDTH = 150.0f;
 constexpr float NODE_PADDING = 8.0f;
 constexpr auto NODE_BG_COLOR = ImVec4(0.13f, 0.14f, 0.15f, 1.0f);
 
-NodeBuilder::NodeBuilder(const AnimationGraph::Node &node) : m_Node(node) {
+NodeBuilder::NodeBuilder(const AnimationGraph::Node &node, std::vector<std::string>& variables, std::vector<std::string>& sceneObjects)
+    : m_Node(node), m_Variables(variables), m_SceneObjects(sceneObjects) {
 }
 
 void NodeBuilder::DrawNode() {
@@ -157,7 +158,11 @@ void NodeBuilder::DrawPinsAndContent(float nodeWidth) {
         }
     }
 
+    ImGui::SetCursorScreenPos(ImVec2(contentStart.x + NODE_PADDING, contentStart.y + contentHeight));
+
     DrawConstantValueInput();
+    DrawVariableSelector();
+    DrawSceneObjectSelector();
 
     ImGui::SetCursorScreenPos(ImVec2(contentStart.x, contentEnd.y));
     ImGui::Dummy(ImVec2(nodeWidth, 0));
@@ -180,14 +185,146 @@ void NodeBuilder::DrawOutputPin(const AnimationGraph::Pin &pin) {
 }
 
 void NodeBuilder::DrawConstantValueInput() {
-    if (m_Node.Type == AnimationGraph::NodeType::Constant && std::holds_alternative<std::string>(m_Node.Value)) {
+    if (m_Node.Type != AnimationGraph::NodeType::Constant) return;
+
+    float nodeWidth = CalculateNodeWidth() - NODE_PADDING * 2;
+    ImGui::SetNextItemWidth(nodeWidth);
+    std::string id = "##const_" + std::to_string(m_Node.Id.Get());
+
+    if (std::holds_alternative<std::string>(m_Node.Value)) {
         std::string &val = const_cast<std::string&>(std::get<std::string>(m_Node.Value));
         char buffer[256];
         strncpy(buffer, val.c_str(), sizeof(buffer));
         buffer[sizeof(buffer)-1] = '\0';
-        ImGui::SetNextItemWidth(CalculateNodeWidth());
-        if (ImGui::InputText(("##const_" + std::to_string(m_Node.Id.Get())).c_str(), buffer, sizeof(buffer))) {
+        if (ImGui::InputText(id.c_str(), buffer, sizeof(buffer))) {
             val = buffer;
         }
+    } else if (std::holds_alternative<float>(m_Node.Value)) {
+        float &val = const_cast<float&>(std::get<float>(m_Node.Value));
+        ImGui::DragFloat(id.c_str(), &val, 0.1f);
+    } else if (std::holds_alternative<int>(m_Node.Value)) {
+        int &val = const_cast<int&>(std::get<int>(m_Node.Value));
+        if (m_Node.Name == "Bool") {
+            bool boolVal = val != 0;
+            if (ImGui::Checkbox(id.c_str(), &boolVal)) {
+                val = boolVal ? 1 : 0;
+            }
+        } else {
+            ImGui::DragInt(id.c_str(), &val);
+        }
+    } else if (std::holds_alternative<glm::vec2>(m_Node.Value)) {
+        glm::vec2 &val = const_cast<glm::vec2&>(std::get<glm::vec2>(m_Node.Value));
+        ImGui::DragFloat2(id.c_str(), &val.x, 0.1f);
+    } else if (std::holds_alternative<glm::vec3>(m_Node.Value)) {
+        glm::vec3 &val = const_cast<glm::vec3&>(std::get<glm::vec3>(m_Node.Value));
+        ImGui::DragFloat3(id.c_str(), &val.x, 0.1f);
+    } else if (std::holds_alternative<glm::vec4>(m_Node.Value)) {
+        glm::vec4 &val = const_cast<glm::vec4&>(std::get<glm::vec4>(m_Node.Value));
+        ImGui::DragFloat4(id.c_str(), &val.x, 0.1f);
+    }
+}
+
+void NodeBuilder::DrawVariableSelector() {
+    if (m_Node.Type != AnimationGraph::NodeType::Variable) return;
+
+    float nodeWidth = CalculateNodeWidth() - NODE_PADDING * 2;
+    std::string &varName = const_cast<std::string&>(m_Node.VariableName);
+    std::string id = "##var_" + std::to_string(m_Node.Id.Get());
+
+    ImGui::SetNextItemWidth(nodeWidth);
+
+    // Find current selection
+    int currentIdx = -1;
+    for (size_t i = 0; i < m_Variables.size(); ++i) {
+        if (m_Variables[i] == varName) {
+            currentIdx = static_cast<int>(i);
+            break;
+        }
+    }
+
+    std::string preview = varName.empty() ? "(Select Variable)" : varName;
+
+    if (ImGui::BeginCombo(id.c_str(), preview.c_str())) {
+        // Option to create new variable
+        if (ImGui::Selectable("+ New Variable", false)) {
+            ImGui::OpenPopup(("new_var_popup" + id).c_str());
+        }
+
+        ImGui::Separator();
+
+        // List existing variables
+        for (size_t i = 0; i < m_Variables.size(); ++i) {
+            bool isSelected = (currentIdx == static_cast<int>(i));
+            if (ImGui::Selectable(m_Variables[i].c_str(), isSelected)) {
+                varName = m_Variables[i];
+            }
+            if (isSelected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    if (ImGui::BeginPopup(("new_var_popup" + id).c_str())) {
+        static char newVarBuffer[128] = "";
+        ImGui::Text("New Variable Name:");
+        ImGui::InputText("##newvar", newVarBuffer, sizeof(newVarBuffer));
+
+        if (ImGui::Button("Create")) {
+            if (strlen(newVarBuffer) > 0) {
+                std::string newVar = newVarBuffer;
+                // Check if variable doesn't already exist
+                bool exists = false;
+                for (const auto& v : m_Variables) {
+                    if (v == newVar) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    m_Variables.push_back(newVar);
+                    varName = newVar;
+                }
+                newVarBuffer[0] = '\0';
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            newVarBuffer[0] = '\0';
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+void NodeBuilder::DrawSceneObjectSelector() {
+    if ((m_Node.Type != AnimationGraph::NodeType::Other) ||
+        (m_Node.SubType != AnimationGraph::NodeSubType::Blackhole &&
+         m_Node.SubType != AnimationGraph::NodeSubType::Camera)) {
+        return;
+    }
+
+    float nodeWidth = CalculateNodeWidth() - NODE_PADDING * 2;
+    int &objIndex = const_cast<int&>(m_Node.SceneObjectIndex);
+    std::string id = "##scene_" + std::to_string(m_Node.Id.Get());
+
+    ImGui::SetNextItemWidth(nodeWidth);
+
+    std::string preview = (objIndex >= 0 && objIndex < static_cast<int>(m_SceneObjects.size()))
+                          ? m_SceneObjects[objIndex]
+                          : "(Select Object)";
+
+    if (ImGui::BeginCombo(id.c_str(), preview.c_str())) {
+        for (size_t i = 0; i < m_SceneObjects.size(); ++i) {
+            bool isSelected = (objIndex == static_cast<int>(i));
+            if (ImGui::Selectable(m_SceneObjects[i].c_str(), isSelected)) {
+                objIndex = static_cast<int>(i);
+            }
+            if (isSelected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
     }
 }
