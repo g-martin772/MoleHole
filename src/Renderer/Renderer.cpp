@@ -72,6 +72,8 @@ void Renderer::Init() {
 
     blackHoleRenderer = std::make_unique<BlackHoleRenderer>();
     blackHoleRenderer->Init(last_img_width, last_img_height);
+    visualRenderer = std::make_unique<VisualRenderer>();
+    visualRenderer->Init(last_img_width, last_img_height);
 
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
@@ -131,6 +133,9 @@ void Renderer::RenderScene(Scene *scene) {
             break;
         case ViewportMode::Simulation3D:
             title = "Viewport - 3D Simulation";
+            break;
+        case ViewportMode::SimulationVisual:
+            title = "Viewport - Visual Simulation";
             break;
         default:
             title = "Viewport";
@@ -198,6 +203,9 @@ void Renderer::RenderScene(Scene *scene) {
             break;
         case ViewportMode::Simulation3D:
             Render3DSimulation(scene);
+            break;
+        case ViewportMode::SimulationVisual:
+            RenderVisualSimulation(scene);
             break;
     }
 
@@ -395,6 +403,14 @@ void Renderer::Render3DSimulation(Scene *scene) {
         gravityGridRenderer->Render(scene->blackHoles, *camera, currentTime);
     }
     glDisable(GL_DEPTH_TEST);
+}
+
+void Renderer::RenderVisualSimulation(Scene *scene) {
+
+    if (!scene || !visualRenderer) return;
+
+    float currentTime = static_cast<float>(glfwGetTime());
+    visualRenderer->Render(*camera, currentTime);
 }
 
 void Renderer::UpdateCamera(float deltaTime) {

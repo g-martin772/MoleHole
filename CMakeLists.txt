@@ -21,7 +21,9 @@ file(GLOB SOURCES
         src/Renderer/*.cpp
         dependencies/nodes/examples/blueprints-example/utilities/*.cpp)
 
-add_executable(MoleHole ${SOURCES})
+add_executable(MoleHole ${SOURCES}
+        src/Renderer/VisualRenderer.h
+        src/Renderer/VisualRenderer.cpp)
 
 include_directories(
     src
