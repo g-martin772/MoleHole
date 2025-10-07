@@ -166,90 +166,10 @@ AnimationGraph::AnimationGraph()
     m_Nodes.clear();
     m_Links.clear();
 
-    Node eventNode;
-    eventNode.Id = m_NextId++;
-    eventNode.Name = "On Begin Play";
-    eventNode.Type = NodeType::Event;
-    eventNode.Inputs = {{m_NextId++, "Exec", PinType::Flow, true}};
-    eventNode.Outputs = {{m_NextId++, "Exec", PinType::Flow, false}};
-    m_Nodes.push_back(eventNode);
-
-    Node branchNode;
-    branchNode.Id = m_NextId++;
-    branchNode.Name = "Branch";
-    branchNode.Type = NodeType::Function;
-    branchNode.Inputs = {
-        {m_NextId++, "Exec", PinType::Flow, true},
-        {m_NextId++, "Condition", PinType::Bool, true}
-    };
-    branchNode.Outputs = {
-        {m_NextId++, "True", PinType::Flow, false},
-        {m_NextId++, "False", PinType::Flow, false}
-    };
-    m_Nodes.push_back(branchNode);
-
-    Node printNode;
-    printNode.Id = m_NextId++;
-    printNode.Name = "Print";
-    printNode.Type = NodeType::Function;
-    printNode.Inputs = {
-        {m_NextId++, "Exec", PinType::Flow, true},
-        {m_NextId++, "Value", PinType::String, true}
-    };
-    printNode.Outputs = {{m_NextId++, "Exec", PinType::Flow, false}};
-    m_Nodes.push_back(printNode);
-
-    Node sequenceNode;
-    sequenceNode.Id = m_NextId++;
-    sequenceNode.Name = "Sequence";
-    sequenceNode.Type = NodeType::Function;
-    sequenceNode.Inputs = {{m_NextId++, "Exec", PinType::Flow, true}};
-    sequenceNode.Outputs = {
-        {m_NextId++, "Then 0", PinType::Flow, false},
-        {m_NextId++, "Then 1", PinType::Flow, false}
-    };
-    m_Nodes.push_back(sequenceNode);
-
-    Node delayNode;
-    delayNode.Id = m_NextId++;
-    delayNode.Name = "Delay";
-    delayNode.Type = NodeType::Function;
-    delayNode.Inputs = {
-        {m_NextId++, "Exec", PinType::Flow, true},
-        {m_NextId++, "Duration", PinType::F1, true}
-    };
-    delayNode.Outputs = {{m_NextId++, "Completed", PinType::Flow, false}};
-    m_Nodes.push_back(delayNode);
-
-    Node setVarNode;
-    setVarNode.Id = m_NextId++;
-    setVarNode.Name = "Set Variable";
-    setVarNode.Type = NodeType::Variable;
-    setVarNode.Inputs = {
-        {m_NextId++, "Value", PinType::I1, true},
-        {m_NextId++, "Exec", PinType::Flow, true}
-    };
-    setVarNode.Outputs = {{m_NextId++, "Exec", PinType::Flow, false}};
-    m_Nodes.push_back(setVarNode);
-
-    Node getVarNode;
-    getVarNode.Id = m_NextId++;
-    getVarNode.Name = "Get Variable";
-    getVarNode.Type = NodeType::Variable;
-    getVarNode.Inputs = {};
-    getVarNode.Outputs = {{m_NextId++, "Value", PinType::I1, false}};
-    m_Nodes.push_back(getVarNode);
-
-    Node mathNode;
-    mathNode.Id = m_NextId++;
-    mathNode.Name = "Add";
-    mathNode.Type = NodeType::Function;
-    mathNode.Inputs = {
-        {m_NextId++, "A", PinType::F1, true},
-        {m_NextId++, "B", PinType::F1, true}
-    };
-    mathNode.Outputs = {{m_NextId++, "Result", PinType::F1, false}};
-    m_Nodes.push_back(mathNode);
+    m_Nodes.push_back(CreateEventNode(m_NextId++));
+    m_Nodes.push_back(CreatePrintNode(m_NextId++));
+    m_Nodes.push_back(CreateConstantNode(m_NextId++, "Hello World"));
+    m_Nodes.push_back(CreateConstantNode(m_NextId++, "Sample String"));
 
     m_Links.clear();
 }
@@ -260,7 +180,7 @@ void AnimationGraph::Render() {
     ed::SetCurrentEditor(m_Context.get());
     ed::Begin("Node Editor");
 
-    for (const auto &node: m_Nodes) {
+    for (auto &node: m_Nodes) {
         NodeBuilder(node).DrawNode();
     }
 
@@ -272,8 +192,29 @@ void AnimationGraph::Render() {
         PinId startPinId, endPinId;
         if (ed::QueryNewLink(&startPinId, &endPinId)) {
             if (startPinId && endPinId && startPinId != endPinId) {
-                if (ed::AcceptNewItem()) {
-                    m_Links.push_back({m_NextId++, startPinId, endPinId});
+                bool inputPinUsed = false;
+                for (const auto& link : m_Links) {
+                    if (link.EndPinId == endPinId) {
+                        inputPinUsed = true;
+                        break;
+                    }
+                }
+                const AnimationGraph::Pin* startPin = nullptr;
+                const AnimationGraph::Pin* endPin = nullptr;
+                for (const auto& node : m_Nodes) {
+                    for (const auto& pin : node.Outputs) {
+                        if (pin.Id == startPinId) startPin = &pin;
+                    }
+                    for (const auto& pin : node.Inputs) {
+                        if (pin.Id == endPinId) endPin = &pin;
+                    }
+                }
+                if (!inputPinUsed && startPin && endPin && ArePinsCompatible(startPin->Type, endPin->Type)) {
+                    if (ed::AcceptNewItem()) {
+                        m_Links.push_back({m_NextId++, startPinId, endPinId});
+                    }
+                } else {
+                    ed::RejectNewItem(ImColor(255, 0, 0, 255), 2.0f);
                 }
             }
         }
@@ -346,4 +287,51 @@ void AnimationGraph::Render() {
 
     ed::End();
     ed::SetCurrentEditor(nullptr);
+}
+
+bool AnimationGraph::ArePinsCompatible(PinType a, PinType b) {
+    return a == b;
+}
+
+AnimationGraph::Node AnimationGraph::CreateEventNode(int id) {
+    Node node;
+    node.Id = ed::NodeId(id);
+    node.Name = "Event";
+    node.Type = NodeType::Event;
+    node.SubType = NodeSubType::Start;
+    node.Inputs = {};
+    node.Outputs = {
+        {ed::PinId(id * 10 + 0), "Flow", PinType::Flow, false}
+    };
+    return node;
+}
+
+AnimationGraph::Node AnimationGraph::CreatePrintNode(int id) {
+    Node node;
+    node.Id = ed::NodeId(id);
+    node.Name = "Print";
+    node.Type = NodeType::Print;
+    node.SubType = NodeSubType::None;
+    node.Inputs = {
+        {ed::PinId(id * 10 + 0), "Flow", PinType::Flow, true},
+        {ed::PinId(id * 10 + 1), "Value", PinType::String, true}
+    };
+    node.Outputs = {
+        {ed::PinId(id * 10 + 2), "Flow", PinType::Flow, false}
+    };
+    return node;
+}
+
+AnimationGraph::Node AnimationGraph::CreateConstantNode(int id, const std::string& value) {
+    Node node;
+    node.Id = ed::NodeId(id);
+    node.Name = "String Constant";
+    node.Type = NodeType::Constant;
+    node.SubType = NodeSubType::None;
+    node.Inputs = {};
+    node.Outputs = {
+        {ed::PinId(id * 10 + 0), "Value", PinType::String, false}
+    };
+    node.Value = value;
+    return node;
 }

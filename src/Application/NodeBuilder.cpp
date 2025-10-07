@@ -1,12 +1,10 @@
 #include "NodeBuilder.h"
 #include <algorithm>
 
-// External functions from AnimationGraph.cpp
 extern ImVec4 GetNodeColor(AnimationGraph::NodeType type, const std::string &name);
 extern ImVec4 GetPinColor(AnimationGraph::PinType type);
 extern void DrawPinIcon(AnimationGraph::PinType type, const ImVec4 &color);
 
-// UI Constants
 constexpr float HEADER_HEIGHT = 28.0f;
 constexpr float PIN_SIZE = 12.0f;
 constexpr float PIN_MARGIN = 8.0f;
@@ -66,20 +64,16 @@ void NodeBuilder::DrawHeader(const ImVec4 &headerColor, float nodeWidth) {
     ImVec2 headerStart = ImGui::GetCursorScreenPos();
     ImVec2 headerEnd = ImVec2(headerStart.x + nodeWidth, headerStart.y + HEADER_HEIGHT);
 
-    // Draw header background
     drawList->AddRectFilled(headerStart, headerEnd, ImColor(headerColor), 4.0f, ImDrawFlags_RoundCornersTop);
 
-    // Position cursor for icon and text
     ImGui::SetCursorScreenPos(ImVec2(headerStart.x + NODE_PADDING, headerStart.y + (HEADER_HEIGHT - 16.0f) * 0.5f));
 
     DrawNodeIcon();
     ImGui::SameLine(0, 4.0f); // Small gap between icon and text
 
-    // Center text vertically
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (16.0f - ImGui::GetTextLineHeight()) * 0.5f);
     ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", m_Node.Name.c_str());
 
-    // Move cursor to end of header
     ImGui::SetCursorScreenPos(ImVec2(headerStart.x, headerEnd.y));
     ImGui::Dummy(ImVec2(nodeWidth, 0));
 }
@@ -143,21 +137,17 @@ void NodeBuilder::DrawPinsAndContent(float nodeWidth) {
     size_t maxPins = std::max(m_Node.Inputs.size(), m_Node.Outputs.size());
     float contentHeight = maxPins > 0 ? maxPins * (PIN_SIZE + 4.0f) + NODE_PADDING : NODE_PADDING;
 
-    // Draw content background
     ImVec2 contentEnd = ImVec2(contentStart.x + nodeWidth, contentStart.y + contentHeight);
     drawList->AddRectFilled(contentStart, contentEnd, ImColor(NODE_BG_COLOR), 4.0f, ImDrawFlags_RoundCornersBottom);
 
-    // Draw pins
     for (size_t i = 0; i < maxPins; ++i) {
         ImVec2 rowStart = ImVec2(contentStart.x, contentStart.y + NODE_PADDING/2 + i * (PIN_SIZE + 4.0f));
 
-        // Draw input pin
         if (i < m_Node.Inputs.size()) {
             ImGui::SetCursorScreenPos(ImVec2(rowStart.x + NODE_PADDING, rowStart.y));
             DrawInputPin(m_Node.Inputs[i]);
         }
 
-        // Draw output pin
         if (i < m_Node.Outputs.size()) {
             const auto& pin = m_Node.Outputs[i];
             float textWidth = ImGui::CalcTextSize(pin.Name.c_str()).x;
@@ -167,8 +157,8 @@ void NodeBuilder::DrawPinsAndContent(float nodeWidth) {
         }
     }
 
-    // Move cursor to bottom-left of content and create a zero-height spacer with the desired width
-    // to finalize layout height without inflating node width.
+    DrawConstantValueInput();
+
     ImGui::SetCursorScreenPos(ImVec2(contentStart.x, contentEnd.y));
     ImGui::Dummy(ImVec2(nodeWidth, 0));
 }
@@ -187,4 +177,17 @@ void NodeBuilder::DrawOutputPin(const AnimationGraph::Pin &pin) {
     ImGui::SameLine(0, 4.0f);
     DrawPinIcon(pin.Type, GetPinColor(pin.Type));
     ed::EndPin();
+}
+
+void NodeBuilder::DrawConstantValueInput() {
+    if (m_Node.Type == AnimationGraph::NodeType::Constant && std::holds_alternative<std::string>(m_Node.Value)) {
+        std::string &val = const_cast<std::string&>(std::get<std::string>(m_Node.Value));
+        char buffer[256];
+        strncpy(buffer, val.c_str(), sizeof(buffer));
+        buffer[sizeof(buffer)-1] = '\0';
+        ImGui::SetNextItemWidth(CalculateNodeWidth());
+        if (ImGui::InputText(("##const_" + std::to_string(m_Node.Id.Get())).c_str(), buffer, sizeof(buffer))) {
+            val = buffer;
+        }
+    }
 }
