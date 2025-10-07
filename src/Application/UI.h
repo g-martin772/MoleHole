@@ -18,6 +18,7 @@ public:
 
     void Update(float deltaTime);
 
+    AnimationGraph* GetAnimationGraph() { return m_AnimationGraph.get(); }
 private:
     void RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen);
     void RenderSystemWindow(float fps);

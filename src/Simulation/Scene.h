@@ -5,6 +5,7 @@
 #include <glm/mat4x4.hpp>
 #include <string>
 #include <optional>
+#include "Application/AnimationGraph.h"
 
 struct BlackHole {
     float mass;
@@ -73,3 +74,4 @@ struct Scene {
 
     std::optional<SelectedObject> PickObject(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) const;
 };
+

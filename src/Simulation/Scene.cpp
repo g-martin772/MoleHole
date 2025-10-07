@@ -8,6 +8,8 @@
 #include <limits>
 #include <cmath>
 
+#include "Application/Application.h"
+
 void Scene::Serialize(const std::filesystem::path& path) {
     currentPath = path;
     YAML::Emitter out;
@@ -27,6 +29,9 @@ void Scene::Serialize(const std::filesystem::path& path) {
         out << YAML::EndMap;
     }
     out << YAML::EndSeq;
+
+    Application::Instance().GetUI().GetAnimationGraph()->Serialize(out);
+
     out << YAML::EndMap;
     std::ofstream fout(path);
     fout << out.c_str();
@@ -70,6 +75,8 @@ void Scene::Deserialize(const std::filesystem::path& path, bool setCurrentPath) 
 
         blackHoles.push_back(bh);
     }
+
+    Application::Instance().GetUI().GetAnimationGraph()->Deserialize(root);
 }
 
 std::filesystem::path Scene::ShowFileDialog(bool save) {

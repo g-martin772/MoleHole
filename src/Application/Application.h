@@ -51,6 +51,8 @@ public:
 
     float GetFPS() const { return m_fpsCounter.GetFps(); }
 
+    UI& GetUI() { return m_ui; };
+
 private:
     Application() = default;
     ~Application() = default;

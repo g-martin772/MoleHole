@@ -4,6 +4,7 @@
 #include <imgui.h>
 #include <imgui_node_editor.h>
 #include <algorithm>
+#include <yaml-cpp/yaml.h>
 
 namespace ed = ax::NodeEditor;
 using ax::NodeEditor::PinId;
@@ -236,53 +237,26 @@ void AnimationGraph::Render() {
     ed::EndDelete();
 
     if (ed::ShowBackgroundContextMenu()) {
-        if (ImGui::BeginPopup("node_create_popup")) {
-            if (ImGui::MenuItem("Add Print Node")) {
-                Node printNode;
-                printNode.Id = m_NextId++;
-                printNode.Name = "Print";
-                printNode.Type = NodeType::Function;
-                printNode.Inputs = {
-                    {m_NextId++, "Exec", PinType::Flow, true},
-                    {m_NextId++, "Value", PinType::String, true}
-                };
-                printNode.Outputs = {{m_NextId++, "Exec", PinType::Flow, false}};
-                m_Nodes.push_back(printNode);
-                ed::SetNodePosition(printNode.Id, ed::ScreenToCanvas(ImGui::GetMousePos()));
-            }
-            if (ImGui::MenuItem("Add Math Node")) {
-                Node mathNode;
-                mathNode.Id = m_NextId++;
-                mathNode.Name = "Add";
-                mathNode.Type = NodeType::Function;
-                mathNode.Inputs = {
-                    {m_NextId++, "A", PinType::F1, true},
-                    {m_NextId++, "B", PinType::F1, true}
-                };
-                mathNode.Outputs = {{m_NextId++, "Result", PinType::F1, false}};
-                m_Nodes.push_back(mathNode);
-                ed::SetNodePosition(mathNode.Id, ed::ScreenToCanvas(ImGui::GetMousePos()));
-            }
-            if (ImGui::MenuItem("Add Branch Node")) {
-                Node branchNode;
-                branchNode.Id = m_NextId++;
-                branchNode.Name = "Branch";
-                branchNode.Type = NodeType::Function;
-                branchNode.Inputs = {
-                    {m_NextId++, "Exec", PinType::Flow, true},
-                    {m_NextId++, "Condition", PinType::Bool, true}
-                };
-                branchNode.Outputs = {
-                    {m_NextId++, "True", PinType::Flow, false},
-                    {m_NextId++, "False", PinType::Flow, false}
-                };
-                m_Nodes.push_back(branchNode);
-                ed::SetNodePosition(branchNode.Id, ed::ScreenToCanvas(ImGui::GetMousePos()));
-            }
-            ImGui::EndPopup();
-        } else {
-            ImGui::OpenPopup("node_create_popup");
+        ImGui::OpenPopup("node_create_popup");
+    }
+    if (ImGui::BeginPopup("node_create_popup")) {
+        ImVec2 mousePos = ed::ScreenToCanvas(ImGui::GetMousePos());
+        if (ImGui::MenuItem("Add Event Node")) {
+            m_Nodes.push_back(CreateEventNode(m_NextId++));
+            ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+            ImGui::CloseCurrentPopup();
         }
+        if (ImGui::MenuItem("Add Print Node")) {
+            m_Nodes.push_back(CreatePrintNode(m_NextId++));
+            ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+            ImGui::CloseCurrentPopup();
+        }
+        if (ImGui::MenuItem("Add Constant Node")) {
+            m_Nodes.push_back(CreateConstantNode(m_NextId++, ""));
+            ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     ed::End();
@@ -334,4 +308,105 @@ AnimationGraph::Node AnimationGraph::CreateConstantNode(int id, const std::strin
     };
     node.Value = value;
     return node;
+}
+
+void AnimationGraph::Serialize(YAML::Emitter& out) const {
+    out << YAML::Key << "animation_graph" << YAML::Value << YAML::BeginMap;
+    out << YAML::Key << "nodes" << YAML::Value << YAML::BeginSeq;
+    for (const auto& node : m_Nodes) {
+        out << YAML::BeginMap;
+        out << YAML::Key << "id" << YAML::Value << node.Id.Get();
+        out << YAML::Key << "name" << YAML::Value << node.Name;
+        out << YAML::Key << "type" << YAML::Value << static_cast<int>(node.Type);
+        out << YAML::Key << "subtype" << YAML::Value << static_cast<int>(node.SubType);
+        out << YAML::Key << "inputs" << YAML::Value << YAML::BeginSeq;
+        for (const auto& pin : node.Inputs) {
+            out << YAML::BeginMap;
+            out << YAML::Key << "id" << YAML::Value << pin.Id.Get();
+            out << YAML::Key << "name" << YAML::Value << pin.Name;
+            out << YAML::Key << "type" << YAML::Value << static_cast<int>(pin.Type);
+            out << YAML::Key << "is_input" << YAML::Value << pin.IsInput;
+            out << YAML::EndMap;
+        }
+        out << YAML::EndSeq;
+        out << YAML::Key << "outputs" << YAML::Value << YAML::BeginSeq;
+        for (const auto& pin : node.Outputs) {
+            out << YAML::BeginMap;
+            out << YAML::Key << "id" << YAML::Value << pin.Id.Get();
+            out << YAML::Key << "name" << YAML::Value << pin.Name;
+            out << YAML::Key << "type" << YAML::Value << static_cast<int>(pin.Type);
+            out << YAML::Key << "is_input" << YAML::Value << pin.IsInput;
+            out << YAML::EndMap;
+        }
+        out << YAML::EndSeq;
+        // Serialize value
+        if (std::holds_alternative<std::string>(node.Value)) {
+            out << YAML::Key << "value_string" << YAML::Value << std::get<std::string>(node.Value);
+        } else if (std::holds_alternative<float>(node.Value)) {
+            out << YAML::Key << "value_float" << YAML::Value << std::get<float>(node.Value);
+        } else if (std::holds_alternative<int>(node.Value)) {
+            out << YAML::Key << "value_int" << YAML::Value << std::get<int>(node.Value);
+        }
+        out << YAML::EndMap;
+    }
+    out << YAML::EndSeq;
+    out << YAML::Key << "links" << YAML::Value << YAML::BeginSeq;
+    for (const auto& link : m_Links) {
+        out << YAML::BeginMap;
+        out << YAML::Key << "id" << YAML::Value << link.Id.Get();
+        out << YAML::Key << "start_pin_id" << YAML::Value << link.StartPinId.Get();
+        out << YAML::Key << "end_pin_id" << YAML::Value << link.EndPinId.Get();
+        out << YAML::EndMap;
+    }
+    out << YAML::EndSeq;
+    out << YAML::EndMap;
+}
+
+void AnimationGraph::Deserialize(const YAML::Node& node) {
+    m_Nodes.clear();
+    m_Links.clear();
+    if (!node["animation_graph"]) return;
+    auto graph = node["animation_graph"];
+    if (graph["nodes"]) {
+        for (const auto& n : graph["nodes"]) {
+            Node nodeObj;
+            nodeObj.Id = ed::NodeId(n["id"].as<int>());
+            nodeObj.Name = n["name"].as<std::string>();
+            nodeObj.Type = static_cast<NodeType>(n["type"].as<int>());
+            nodeObj.SubType = static_cast<NodeSubType>(n["subtype"].as<int>());
+            if (n["value_string"]) nodeObj.Value = n["value_string"].as<std::string>();
+            else if (n["value_float"]) nodeObj.Value = n["value_float"].as<float>();
+            else if (n["value_int"]) nodeObj.Value = n["value_int"].as<int>();
+            if (n["inputs"]) {
+                for (const auto& p : n["inputs"]) {
+                    Pin pin;
+                    pin.Id = ed::PinId(p["id"].as<int>());
+                    pin.Name = p["name"].as<std::string>();
+                    pin.Type = static_cast<PinType>(p["type"].as<int>());
+                    pin.IsInput = p["is_input"].as<bool>();
+                    nodeObj.Inputs.push_back(pin);
+                }
+            }
+            if (n["outputs"]) {
+                for (const auto& p : n["outputs"]) {
+                    Pin pin;
+                    pin.Id = ed::PinId(p["id"].as<int>());
+                    pin.Name = p["name"].as<std::string>();
+                    pin.Type = static_cast<PinType>(p["type"].as<int>());
+                    pin.IsInput = p["is_input"].as<bool>();
+                    nodeObj.Outputs.push_back(pin);
+                }
+            }
+            m_Nodes.push_back(nodeObj);
+        }
+    }
+    if (graph["links"]) {
+        for (const auto& l : graph["links"]) {
+            Link linkObj;
+            linkObj.Id = ed::LinkId(l["id"].as<int>());
+            linkObj.StartPinId = ed::PinId(l["start_pin_id"].as<int>());
+            linkObj.EndPinId = ed::PinId(l["end_pin_id"].as<int>());
+            m_Links.push_back(linkObj);
+        }
+    }
 }
