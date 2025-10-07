@@ -236,28 +236,30 @@ void AnimationGraph::Render() {
     }
     ed::EndDelete();
 
+    ed::Suspend();
     if (ed::ShowBackgroundContextMenu()) {
         ImGui::OpenPopup("node_create_popup");
     }
+
     if (ImGui::BeginPopup("node_create_popup")) {
-        ImVec2 mousePos = ed::ScreenToCanvas(ImGui::GetMousePos());
+        auto openPopupPosition = ImGui::GetMousePosOnOpeningCurrentPopup();
+        ImVec2 mousePos = ed::ScreenToCanvas(openPopupPosition);
+
         if (ImGui::MenuItem("Add Event Node")) {
             m_Nodes.push_back(CreateEventNode(m_NextId++));
             ed::SetNodePosition(m_Nodes.back().Id, mousePos);
-            ImGui::CloseCurrentPopup();
         }
         if (ImGui::MenuItem("Add Print Node")) {
             m_Nodes.push_back(CreatePrintNode(m_NextId++));
             ed::SetNodePosition(m_Nodes.back().Id, mousePos);
-            ImGui::CloseCurrentPopup();
         }
         if (ImGui::MenuItem("Add Constant Node")) {
             m_Nodes.push_back(CreateConstantNode(m_NextId++, ""));
             ed::SetNodePosition(m_Nodes.back().Id, mousePos);
-            ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
     }
+    ed::Resume();
 
     ed::End();
     ed::SetCurrentEditor(nullptr);
