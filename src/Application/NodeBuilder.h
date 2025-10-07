@@ -19,4 +19,5 @@ private:
     void DrawPinsAndContent(float nodeWidth);
     static void DrawInputPin(const AnimationGraph::Pin &pin);
     static void DrawOutputPin(const AnimationGraph::Pin &pin);
+    void DrawConstantValueInput();
 };

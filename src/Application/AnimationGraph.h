@@ -3,6 +3,9 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <variant>
+
+#include "glm/glm.hpp"
 
 namespace ed = ax::NodeEditor;
 
@@ -79,12 +82,18 @@ public:
         NodeSubType SubType;
         std::vector<Pin> Inputs;
         std::vector<Pin> Outputs;
+        std::variant<std::monostate, std::string, float, int, glm::vec2, glm::vec3, glm::vec4> Value;
     };
     struct Link {
         ed::LinkId Id;
         ed::PinId StartPinId;
         ed::PinId EndPinId;
     };
+
+    static bool ArePinsCompatible(PinType a, PinType b);
+    static Node CreateEventNode(int id);
+    static Node CreatePrintNode(int id);
+    static Node CreateConstantNode(int id, const std::string& value);
 
 
 private:
