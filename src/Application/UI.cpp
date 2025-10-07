@@ -706,18 +706,41 @@ void UI::RenderAnimationGraphWindow(Scene *scene) {
     ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
     ImGui::Begin("Animation Graph");
 
-    ImGuiStyle& style = ImGui::GetStyle();
-    ImVec2 avail = ImGui::GetContentRegionAvail();
-    float closeButtonSize = ImGui::CalcTextSize("Close").x + style.FramePadding.x * 2.0f;
-    ImGui::SetCursorPosX(avail.x - closeButtonSize);
-    if (ImGui::Button("Close")) {
-        m_ShowAnimationGraph = false;
-    }
+    if (m_AnimationGraph) {
+        m_AnimationGraph->UpdateSceneObjects(scene);
 
-    ImGui::SetCursorPos({0,20});
+        ax::NodeEditor::NodeId selectedNodeId = 0;
 
-    if (m_AnimationGraph)
+        ax::NodeEditor::SetCurrentEditor(m_AnimationGraph->GetEditorContext());
+        ax::NodeEditor::NodeId selectedNodes[1];
+        int selectedCount = ax::NodeEditor::GetSelectedNodes(selectedNodes, 1);
+        if (selectedCount > 0) {
+            selectedNodeId = selectedNodes[0];
+        }
+        ax::NodeEditor::SetCurrentEditor(nullptr);
+
+        ImVec2 windowSize = ImGui::GetContentRegionAvail();
+        float inspectorWidth = 250.0f;
+
+        ImGui::BeginChild("NodeEditorPanel", ImVec2(windowSize.x - inspectorWidth - 8.0f, 0), true);
         m_AnimationGraph->Render();
+        ImGui::EndChild();
+
+        ImGui::SameLine();
+
+        ImGui::BeginChild("NodeInspectorPanel", ImVec2(inspectorWidth, 0), true);
+        ImGui::Text("Node Inspector");
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (selectedNodeId) {
+            m_AnimationGraph->RenderNodeInspector(selectedNodeId);
+        } else {
+            ImGui::TextDisabled("Select a node to edit");
+        }
+
+        ImGui::EndChild();
+    }
 
     ImGui::End();
 }
