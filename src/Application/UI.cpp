@@ -204,6 +204,7 @@ void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen) {
             bool selectedDemo1 = (currentMode == Renderer::ViewportMode::Demo1);
             bool selectedRays2D = (currentMode == Renderer::ViewportMode::Rays2D);
             bool selectedSim3D = (currentMode == Renderer::ViewportMode::Simulation3D);
+            bool selectedVisual = (currentMode == Renderer::ViewportMode::SimulationVisual);
 
             if (ImGui::MenuItem("Demo1 Viewport", nullptr, selectedDemo1)) {
                 renderer.SetSelectedViewport(Renderer::ViewportMode::Demo1);
@@ -213,6 +214,9 @@ void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen) {
             }
             if (ImGui::MenuItem("3D Simulation Viewport", nullptr, selectedSim3D)) {
                 renderer.SetSelectedViewport(Renderer::ViewportMode::Simulation3D);
+            }
+            if (ImGui::MenuItem("Visual Simulation Viewport", nullptr, selectedVisual)) {
+                renderer.SetSelectedViewport(Renderer::ViewportMode::SimulationVisual);
             }
             ImGui::EndMenu();
         }
