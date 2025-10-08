@@ -87,7 +87,7 @@ void Application::Shutdown() {
 }
 
 void Application::Update(float deltaTime) {
-    m_simulation.Update();
+    m_simulation.Update(deltaTime);
     m_ui.Update(deltaTime);
 
     for (const auto& [name, callback] : m_updateCallbacks) {
@@ -109,6 +109,7 @@ void Application::Render() {
     m_ui.RenderDockspace(scene);
     m_ui.RenderMainUI(GetFPS(), scene);
     m_renderer.RenderScene(scene);
+    m_ui.RenderSimulationControls();
 
     for (const auto& [name, callback] : m_renderCallbacks) {
         try {

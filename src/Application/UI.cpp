@@ -1125,3 +1125,65 @@ void UI::RenderHelpWindow() {
 
     ImGui::End();
 }
+
+void UI::RenderSimulationControls() {
+    auto& simulation = Application::GetSimulation();
+    auto& renderer = Application::GetRenderer();
+
+    ImVec2 viewportPos = ImVec2(renderer.m_viewportX, renderer.m_viewportY);
+    ImVec2 viewportSize = ImVec2(renderer.m_viewportWidth, renderer.m_viewportHeight);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.1f, 0.1f, 0.1f, 0.8f));
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize;
+
+    ImGui::SetNextWindowPos(ImVec2(viewportPos.x + viewportSize.x * 0.5f, viewportPos.y + 8), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+
+    if (ImGui::Begin("##SimulationControls", nullptr, flags)) {
+        constexpr float buttonSize = 36.0f;
+
+        bool isStopped = simulation.IsStopped();
+        bool isRunning = simulation.IsRunning();
+        bool isPaused = simulation.IsPaused();
+
+        if (isStopped || isPaused) {
+            if (ImGui::Button(isPaused ? "|>" : ">>", ImVec2(buttonSize, buttonSize))) {
+                simulation.Start();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip(isPaused ? "Resume" : "Start");
+            }
+        } else {
+            if (ImGui::Button("||", ImVec2(buttonSize, buttonSize))) {
+                simulation.Pause();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Pause");
+            }
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("[]", ImVec2(buttonSize, buttonSize))) {
+            simulation.Stop();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Stop");
+        }
+
+        if (!isStopped) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("|");
+            ImGui::SameLine();
+            ImGui::Text("%.2fs", simulation.GetSimulationTime());
+        }
+    }
+    ImGui::End();
+
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
