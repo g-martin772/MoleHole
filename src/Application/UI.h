@@ -15,6 +15,7 @@ public:
     void RenderDockspace(Scene* scene);
     void RenderMainUI(float fps, Scene* scene);
     void RenderImGuizmo(Scene* scene);
+    void RenderSimulationControls();
 
     void Update(float deltaTime);
 
