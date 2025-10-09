@@ -29,3 +29,6 @@
 [submodule "dependencies/nodes"]
 	path = dependencies/nodes
 	url = https://github.com/g-martin772/imgui-node-editor
+[submodule "dependencies/tinygltf"]
+	path = dependencies/tinygltf
+	url = https://github.com/syoyo/tinygltf/

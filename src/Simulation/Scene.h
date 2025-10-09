@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <glm/vec3.hpp>
 #include <glm/mat4x4.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <string>
 #include <optional>
 #include "Application/AnimationGraph.h"
@@ -48,13 +49,24 @@ struct BlackHoleHash {
     }
 };
 
+struct MeshObject {
+    std::string name;
+    std::string path;
+    glm::vec3 position;
+    glm::quat rotation;
+    glm::vec3 scale;
+
+    MeshObject() : position(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), scale(1.0f) {}
+};
+
 struct Scene {
     std::string name;
     std::vector<BlackHole> blackHoles;
+    std::vector<MeshObject> meshes;
     std::filesystem::path currentPath;
     Camera* camera = nullptr;
 
-    enum class ObjectType { BlackHole };
+    enum class ObjectType { BlackHole, Mesh };
     struct SelectedObject {
         ObjectType type;
         size_t index;
@@ -73,6 +85,8 @@ struct Scene {
     void ClearSelection();
     bool HasSelection() const { return selectedObject.has_value(); }
     glm::vec3* GetSelectedObjectPosition();
+    glm::quat* GetSelectedObjectRotation();
+    glm::vec3* GetSelectedObjectScale();
     std::string GetSelectedObjectName() const;
 
     std::optional<SelectedObject> PickObject(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) const;

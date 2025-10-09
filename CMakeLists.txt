@@ -13,13 +13,13 @@ add_subdirectory(dependencies/nativefiledialog-extended)
 add_subdirectory(dependencies/imguizmo)
 add_subdirectory(dependencies/imgui)
 add_subdirectory(dependencies/nodes)
+add_subdirectory(dependencies/tinygltf)
 
 file(GLOB SOURCES
         src/*.cpp
         src/Application/*.cpp
         src/Simulation/*.cpp
-        src/Renderer/*.cpp
-        dependencies/nodes/examples/blueprints-example/utilities/*.cpp)
+        src/Renderer/*.cpp)
 
 add_executable(MoleHole ${SOURCES})
 
@@ -35,6 +35,7 @@ include_directories(
     dependencies/nativefiledialog-extended/src/include
     dependencies/stb-image
     dependencies/nodes
+    dependencies
 )
 
 glad_add_library(glad_gl_core_46 STATIC REPRODUCIBLE LOADER API gl:core=4.6)
@@ -49,6 +50,7 @@ target_link_libraries(MoleHole
     ImGuizmo
     imgui
     nodes
+    tinygltf
 )
 
 if (UNIX)

@@ -2,7 +2,6 @@
 #include <glad/gl.h>
 #include <spdlog/spdlog.h>
 
-#define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
 Image::Image(int width, int height) : width(width), height(height), textureID(0) {

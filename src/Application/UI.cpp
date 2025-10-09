@@ -3,6 +3,7 @@
 #include "imgui.h"
 #include "ImGuizmo.h"
 #include "spdlog/spdlog.h"
+#include <nfd.h>
 #include <cstring>
 #include <filesystem>
 #include <algorithm>
@@ -16,6 +17,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 namespace ed = ax::NodeEditor;
 
@@ -261,6 +263,7 @@ void UI::RenderSimulationWindow(Scene* scene) {
 
     RenderSimulationGeneralSection();
     RenderBlackHolesSection(scene);
+    RenderMeshesSection(scene);
 
     ImGui::End();
 }
@@ -691,6 +694,140 @@ void UI::RenderBlackHolesSection(Scene* scene) {
                     scene->ClearSelection();
                 }
                 it = scene->blackHoles.erase(it);
+                if (!scene->currentPath.empty()) {
+                    scene->Serialize(scene->currentPath);
+                }
+            } else {
+                ++it;
+            }
+            idx++;
+        }
+    }
+}
+
+void UI::RenderMeshesSection(Scene* scene) {
+    if (ImGui::CollapsingHeader("Meshes", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (!scene) {
+            ImGui::TextDisabled("No scene loaded");
+            return;
+        }
+
+        if (ImGui::Button("Add Mesh")) {
+            nfdchar_t* outPath = nullptr;
+            nfdfilteritem_t filterItems[] = {
+                { "GLTF/GLB", "gltf,glb" }
+            };
+            nfdresult_t result = NFD_OpenDialog(&outPath, filterItems, 1, nullptr);
+
+            if (result == NFD_OKAY && outPath) {
+                MeshObject newMesh;
+                newMesh.path = outPath;
+                newMesh.name = std::filesystem::path(outPath).stem().string();
+                newMesh.position = glm::vec3(0.0f, 0.0f, 0.0f);
+                newMesh.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+                newMesh.scale = glm::vec3(1.0f);
+                scene->meshes.push_back(newMesh);
+                free(outPath);
+
+                if (!scene->currentPath.empty()) {
+                    scene->Serialize(scene->currentPath);
+                }
+            }
+        }
+
+        ImGui::Text("Meshes: %zu", scene->meshes.size());
+
+        int idx = 0;
+        for (auto it = scene->meshes.begin(); it != scene->meshes.end();) {
+            ImGui::PushID(idx);
+
+            bool isSelected = scene->HasSelection() &&
+                             scene->selectedObject->type == Scene::ObjectType::Mesh &&
+                             scene->selectedObject->index == static_cast<size_t>(idx);
+
+            if (isSelected) {
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.7f, 1.0f, 0.6f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.4f, 0.8f, 1.0f, 0.8f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.5f, 0.9f, 1.0f, 1.0f));
+            }
+
+            std::string label = it->name.empty() ? "Mesh #" + std::to_string(idx + 1) : it->name;
+            if (isSelected) {
+                label += " (Selected)";
+            }
+
+            bool open = ImGui::TreeNode(label.c_str());
+
+            if (isSelected) {
+                ImGui::PopStyleColor(3);
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Select")) {
+                scene->SelectObject(Scene::ObjectType::Mesh, idx);
+            }
+            ImGui::SameLine();
+            bool remove = ImGui::Button("Remove");
+
+            if (open) {
+                MeshObject& mesh = *it;
+                bool meshChanged = false;
+
+                char nameBuffer[128];
+                std::strncpy(nameBuffer, mesh.name.c_str(), sizeof(nameBuffer));
+                nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+                if (ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer))) {
+                    mesh.name = nameBuffer;
+                    meshChanged = true;
+                }
+
+                ImGui::TextWrapped("Path: %s", mesh.path.c_str());
+
+                ImGui::SameLine();
+                if (ImGui::Button("Change...")) {
+                    nfdchar_t* outPath = nullptr;
+                    nfdfilteritem_t filterItems[] = {
+                        { "GLTF/GLB", "gltf,glb" }
+                    };
+                    nfdresult_t result = NFD_OpenDialog(&outPath, filterItems, 1, nullptr);
+
+                    if (result == NFD_OKAY && outPath) {
+                        mesh.path = outPath;
+                        free(outPath);
+                        meshChanged = true;
+                    }
+                }
+
+                if (ImGui::DragFloat3("Position", &mesh.position[0], 0.1f)) {
+                    meshChanged = true;
+                }
+
+                glm::vec3 eulerAngles = glm::eulerAngles(mesh.rotation);
+                eulerAngles = glm::degrees(eulerAngles);
+                if (ImGui::DragFloat3("Rotation (deg)", &eulerAngles[0], 1.0f)) {
+                    eulerAngles = glm::radians(eulerAngles);
+                    mesh.rotation = glm::quat(eulerAngles);
+                    meshChanged = true;
+                }
+
+                if (ImGui::DragFloat3("Scale", &mesh.scale[0], 0.1f, 0.01f, 100.0f)) {
+                    meshChanged = true;
+                }
+
+                if (meshChanged && !scene->currentPath.empty()) {
+                    scene->Serialize(scene->currentPath);
+                }
+
+                ImGui::TreePop();
+            }
+
+            ImGui::PopID();
+
+            if (remove) {
+                if (isSelected) {
+                    scene->ClearSelection();
+                }
+                it = scene->meshes.erase(it);
                 if (!scene->currentPath.empty()) {
                     scene->Serialize(scene->currentPath);
                 }

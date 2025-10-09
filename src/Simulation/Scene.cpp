@@ -30,6 +30,18 @@ void Scene::Serialize(const std::filesystem::path& path) {
     }
     out << YAML::EndSeq;
 
+    out << YAML::Key << "meshes" << YAML::Value << YAML::BeginSeq;
+    for (const auto& mesh : meshes) {
+        out << YAML::BeginMap;
+        out << YAML::Key << "name" << YAML::Value << mesh.name;
+        out << YAML::Key << "path" << YAML::Value << mesh.path;
+        out << YAML::Key << "position" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.position.x << mesh.position.y << mesh.position.z << YAML::EndSeq;
+        out << YAML::Key << "rotation" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.rotation.w << mesh.rotation.x << mesh.rotation.y << mesh.rotation.z << YAML::EndSeq;
+        out << YAML::Key << "scale" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.scale.x << mesh.scale.y << mesh.scale.z << YAML::EndSeq;
+        out << YAML::EndMap;
+    }
+    out << YAML::EndSeq;
+
     Application::Instance().GetUI().GetAnimationGraph()->Serialize(out);
 
     out << YAML::EndMap;
@@ -42,38 +54,55 @@ void Scene::Deserialize(const std::filesystem::path& path, bool setCurrentPath) 
         currentPath = path;
     }
     blackHoles.clear();
+    meshes.clear();
     YAML::Node root = YAML::LoadFile(path.string());
     if (root["name"]) {
         name = root["name"].as<std::string>();
     } else {
         name = "";
     }
-    if (!root["black_holes"]) return;
-    for (const auto& node : root["black_holes"]) {
-        BlackHole bh{};
-        bh.mass = node["mass"].as<float>();
-        auto pos = node["position"];
-        bh.position = glm::vec3(pos[0].as<float>(), pos[1].as<float>(), pos[2].as<float>());
-        bh.showAccretionDisk = node["show_accretion_disk"].as<bool>();
-        bh.accretionDiskDensity = node["accretion_disk_density"].as<float>();
-        bh.accretionDiskSize = node["accretion_disk_size"].as<float>();
-        auto color = node["accretion_disk_color"];
-        bh.accretionDiskColor = glm::vec3(color[0].as<float>(), color[1].as<float>(), color[2].as<float>());
+    if (root["black_holes"]) {
+        for (const auto& node : root["black_holes"]) {
+            BlackHole bh{};
+            bh.mass = node["mass"].as<float>();
+            auto pos = node["position"];
+            bh.position = glm::vec3(pos[0].as<float>(), pos[1].as<float>(), pos[2].as<float>());
+            bh.showAccretionDisk = node["show_accretion_disk"].as<bool>();
+            bh.accretionDiskDensity = node["accretion_disk_density"].as<float>();
+            bh.accretionDiskSize = node["accretion_disk_size"].as<float>();
+            auto color = node["accretion_disk_color"];
+            bh.accretionDiskColor = glm::vec3(color[0].as<float>(), color[1].as<float>(), color[2].as<float>());
 
-        if (node["spin"]) {
-            bh.spin = node["spin"].as<float>();
-        } else {
-            bh.spin = 0.0f;
+            if (node["spin"]) {
+                bh.spin = node["spin"].as<float>();
+            } else {
+                bh.spin = 0.0f;
+            }
+
+            if (node["spin_axis"]) {
+                auto spinAxis = node["spin_axis"];
+                bh.spinAxis = glm::vec3(spinAxis[0].as<float>(), spinAxis[1].as<float>(), spinAxis[2].as<float>());
+            } else {
+                bh.spinAxis = glm::vec3(0.0f, 1.0f, 0.0f);
+            }
+
+            blackHoles.push_back(bh);
         }
+    }
 
-        if (node["spin_axis"]) {
-            auto spinAxis = node["spin_axis"];
-            bh.spinAxis = glm::vec3(spinAxis[0].as<float>(), spinAxis[1].as<float>(), spinAxis[2].as<float>());
-        } else {
-            bh.spinAxis = glm::vec3(0.0f, 1.0f, 0.0f);
+    if (root["meshes"]) {
+        for (const auto& node : root["meshes"]) {
+            MeshObject mesh;
+            mesh.name = node["name"].as<std::string>();
+            mesh.path = node["path"].as<std::string>();
+            auto pos = node["position"];
+            mesh.position = glm::vec3(pos[0].as<float>(), pos[1].as<float>(), pos[2].as<float>());
+            auto rot = node["rotation"];
+            mesh.rotation = glm::quat(rot[0].as<float>(), rot[1].as<float>(), rot[2].as<float>(), rot[3].as<float>());
+            auto scale = node["scale"];
+            mesh.scale = glm::vec3(scale[0].as<float>(), scale[1].as<float>(), scale[2].as<float>());
+            meshes.push_back(mesh);
         }
-
-        blackHoles.push_back(bh);
     }
 
     Application::Instance().GetUI().GetAnimationGraph()->Deserialize(root);
@@ -102,6 +131,8 @@ std::filesystem::path Scene::ShowFileDialog(bool save) {
 void Scene::SelectObject(ObjectType type, size_t index) {
     if (type == ObjectType::BlackHole && index < blackHoles.size()) {
         selectedObject = SelectedObject{type, index};
+    } else if (type == ObjectType::Mesh && index < meshes.size()) {
+        selectedObject = SelectedObject{type, index};
     } else {
         ClearSelection();
     }
@@ -120,6 +151,41 @@ glm::vec3* Scene::GetSelectedObjectPosition() {
                 return &blackHoles[selectedObject->index].position;
             }
             break;
+        case ObjectType::Mesh:
+            if (selectedObject->index < meshes.size()) {
+                return &meshes[selectedObject->index].position;
+            }
+            break;
+    }
+    return nullptr;
+}
+
+glm::quat* Scene::GetSelectedObjectRotation() {
+    if (!selectedObject.has_value()) return nullptr;
+
+    switch (selectedObject->type) {
+        case ObjectType::Mesh:
+            if (selectedObject->index < meshes.size()) {
+                return &meshes[selectedObject->index].rotation;
+            }
+            break;
+        default:
+            break;
+    }
+    return nullptr;
+}
+
+glm::vec3* Scene::GetSelectedObjectScale() {
+    if (!selectedObject.has_value()) return nullptr;
+
+    switch (selectedObject->type) {
+        case ObjectType::Mesh:
+            if (selectedObject->index < meshes.size()) {
+                return &meshes[selectedObject->index].scale;
+            }
+            break;
+        default:
+            break;
     }
     return nullptr;
 }
@@ -131,6 +197,11 @@ std::string Scene::GetSelectedObjectName() const {
         case ObjectType::BlackHole:
             if (selectedObject->index < blackHoles.size()) {
                 return "Black Hole #" + std::to_string(selectedObject->index + 1);
+            }
+            break;
+        case ObjectType::Mesh:
+            if (selectedObject->index < meshes.size()) {
+                return meshes[selectedObject->index].name;
             }
             break;
     }
