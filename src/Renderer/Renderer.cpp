@@ -196,6 +196,17 @@ void Renderer::RenderScene(Scene *scene) {
     glGenFramebuffers(1, &fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, image->textureID, 0);
+
+    unsigned int depthRBO;
+    glGenRenderbuffers(1, &depthRBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, depthRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, image->width, image->height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthRBO);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        spdlog::error("Framebuffer is not complete!");
+    }
+
     glViewport(0, 0, image->width, image->height);
 
     switch (selectedViewport) {
@@ -213,6 +224,7 @@ void Renderer::RenderScene(Scene *scene) {
             break;
     }
 
+    glDeleteRenderbuffers(1, &depthRBO);
     glDeleteFramebuffers(1, &fbo);
 
     ImVec2 cursor_pos = ImGui::GetCursorScreenPos();
@@ -399,20 +411,22 @@ void Renderer::Render3DSimulation(Scene *scene) {
 
     float currentTime = static_cast<float>(glfwGetTime());
 
-    for (const auto &bh: scene->blackHoles) {
-        float schwarzschildRadius = 2.0f * bh.mass;
-        DrawSphere(bh.position, schwarzschildRadius, glm::vec3(0.0f, 0.0f, 0.0f));
-    }
-
-    RenderMeshes(scene);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime);
     blackHoleRenderer->RenderToScreen();
 
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+
     if (Application::State().rendering.debugMode == DebugMode::GravityGrid && gravityGridRenderer) {
-        glDisable(GL_DEPTH_TEST);
         gravityGridRenderer->Render(scene->blackHoles, *camera, currentTime);
     }
+
+    RenderMeshes(scene);
+
     glDisable(GL_DEPTH_TEST);
 }
 
@@ -576,6 +590,10 @@ void Renderer::SetViewportBounds(float x, float y, float width, float height) {
 void Renderer::RenderMeshes(Scene* scene) {
     if (!scene || !camera) return;
 
+    if (scene->meshes.empty()) {
+        return;
+    }
+
     for (const auto& meshObj : scene->meshes) {
         auto mesh = GetOrLoadMesh(meshObj.path);
         if (mesh && mesh->IsLoaded()) {
@@ -583,6 +601,8 @@ void Renderer::RenderMeshes(Scene* scene) {
             mesh->SetRotation(meshObj.rotation);
             mesh->SetScale(meshObj.scale);
             mesh->Render(camera->GetViewMatrix(), camera->GetProjectionMatrix(), camera->GetPosition());
+        } else {
+            spdlog::warn("Failed to load or render mesh: {}", meshObj.path);
         }
     }
 }
