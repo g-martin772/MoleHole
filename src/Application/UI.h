@@ -20,6 +20,14 @@ public:
     void Update(float deltaTime);
 
     AnimationGraph* GetAnimationGraph() { return m_AnimationGraph.get(); }
+
+    enum class GizmoOperation { Translate, Rotate, Scale };
+    GizmoOperation GetCurrentGizmoOperation() const { return m_currentGizmoOperation; }
+    bool IsUsingSnap() const { return m_useSnap; }
+    const float* GetSnapTranslate() const { return m_snapTranslate; }
+    float GetSnapRotate() const { return m_snapRotate; }
+    float GetSnapScale() const { return m_snapScale; }
+
 private:
     void RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen);
     void RenderSystemWindow(float fps);
@@ -57,7 +65,6 @@ private:
     float m_saveTimer = 0.0f;
     static constexpr float SAVE_INTERVAL = 5.0f;
 
-    enum class GizmoOperation { Translate, Rotate, Scale };
     GizmoOperation m_currentGizmoOperation = GizmoOperation::Translate;
     bool m_useSnap = false;
     float m_snapTranslate[3] = {1.0f, 1.0f, 1.0f};

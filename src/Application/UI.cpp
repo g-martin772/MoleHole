@@ -632,7 +632,7 @@ void UI::RenderBlackHolesSection(Scene* scene) {
 
         int idx = 0;
         for (auto it = scene->blackHoles.begin(); it != scene->blackHoles.end();) {
-            ImGui::PushID(idx);
+            ImGui::PushID(("bh_" + std::to_string(idx)).c_str());
 
             bool isSelected = scene->HasSelection() &&
                              scene->selectedObject->type == Scene::ObjectType::BlackHole &&
@@ -739,7 +739,7 @@ void UI::RenderMeshesSection(Scene* scene) {
 
         int idx = 0;
         for (auto it = scene->meshes.begin(); it != scene->meshes.end();) {
-            ImGui::PushID(idx);
+            ImGui::PushID(("mesh_" + std::to_string(idx)).c_str());
 
             bool isSelected = scene->HasSelection() &&
                              scene->selectedObject->type == Scene::ObjectType::Mesh &&
@@ -880,80 +880,6 @@ void UI::RenderAnimationGraphWindow(Scene *scene) {
     }
 
     ImGui::End();
-}
-
-void UI::RenderImGuizmo(Scene* scene) {
-    if (!scene || !scene->HasSelection()) {
-        return;
-    }
-
-    auto& renderer = Application::GetRenderer();
-    if (!renderer.camera) {
-        return;
-    }
-
-    glm::vec3* position = scene->GetSelectedObjectPosition();
-    if (!position) {
-        return;
-    }
-
-    ImGuizmo::SetOrthographic(false);
-    ImGuizmo::SetDrawlist();
-
-    // Use the viewport bounds from the renderer
-    ImGuizmo::SetRect(renderer.m_viewportX, renderer.m_viewportY,
-                     renderer.m_viewportWidth, renderer.m_viewportHeight);
-
-    glm::mat4 view = renderer.camera->GetViewMatrix();
-    glm::mat4 projection = renderer.camera->GetProjectionMatrix();
-
-    glm::mat4 transform = glm::translate(glm::mat4(1.0f), *position);
-
-    ImGuizmo::OPERATION operation;
-    switch (m_currentGizmoOperation) {
-        case GizmoOperation::Translate:
-            operation = ImGuizmo::TRANSLATE;
-            break;
-        case GizmoOperation::Rotate:
-            operation = ImGuizmo::ROTATE;
-            break;
-        case GizmoOperation::Scale:
-            operation = ImGuizmo::SCALE;
-            break;
-    }
-
-    float* snap = nullptr;
-    if (m_useSnap) {
-        switch (m_currentGizmoOperation) {
-            case GizmoOperation::Translate:
-                snap = m_snapTranslate;
-                break;
-            case GizmoOperation::Rotate:
-                snap = &m_snapRotate;
-                break;
-            case GizmoOperation::Scale:
-                snap = &m_snapScale;
-                break;
-        }
-    }
-
-    ImGuizmo::Enable(true);
-
-    if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(projection),
-                             operation, ImGuizmo::LOCAL, glm::value_ptr(transform),
-                             nullptr, snap)) {
-
-        glm::vec3 translation, scale;
-        glm::quat rotation;
-        glm::vec3 skew;
-        glm::vec4 perspective;
-        glm::decompose(transform, scale, rotation, translation, skew, perspective);
-
-        *position = translation;
-
-        spdlog::debug("Object moved to: ({:.2f}, {:.2f}, {:.2f})",
-                     position->x, position->y, position->z);
-    }
 }
 
 void UI::HandleFileOperations(Scene* scene, bool doSave, bool doOpen) {

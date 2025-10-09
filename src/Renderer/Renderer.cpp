@@ -246,28 +246,75 @@ void Renderer::RenderScene(Scene *scene) {
         ImGuizmo::SetRect(image_min.x, image_min.y, image_max.x - image_min.x, image_max.y - image_min.y);
 
         glm::vec3 *position = scene->GetSelectedObjectPosition();
+        glm::quat *rotation = scene->GetSelectedObjectRotation();
+        glm::vec3 *scale = scene->GetSelectedObjectScale();
+
         if (position) {
             glm::mat4 view = camera->GetViewMatrix();
             glm::mat4 projection = camera->GetProjectionMatrix();
+
             glm::mat4 transform = glm::translate(glm::mat4(1.0f), *position);
+            if (rotation) {
+                transform *= glm::mat4_cast(*rotation);
+            }
+            if (scale) {
+                transform = glm::scale(transform, *scale);
+            }
 
             ImGuizmo::Enable(true);
 
-            ImGui::PushID("BlackHoleGizmo");
+            ImGui::PushID("ObjectGizmo");
 
-            ImGuizmo::OPERATION operation = ImGuizmo::TRANSLATE;
+            auto& ui = Application::Instance().GetUI();
+            ImGuizmo::OPERATION operation;
+            switch (ui.GetCurrentGizmoOperation()) {
+                case UI::GizmoOperation::Translate:
+                    operation = ImGuizmo::TRANSLATE;
+                    break;
+                case UI::GizmoOperation::Rotate:
+                    operation = ImGuizmo::ROTATE;
+                    break;
+                case UI::GizmoOperation::Scale:
+                    operation = ImGuizmo::SCALE;
+                    break;
+            }
+
+            float* snap = nullptr;
+            auto snapTranslate = ui.GetSnapTranslate();
+            auto snapScale = ui.GetSnapScale();
+            auto snapRotate = ui.GetSnapRotate();
+            if (ui.IsUsingSnap()) {
+                switch (ui.GetCurrentGizmoOperation()) {
+                    case UI::GizmoOperation::Translate:
+                        snap = const_cast<float*>(snapTranslate);
+                        break;
+                    case UI::GizmoOperation::Rotate:
+                        snap = &snapRotate;
+                        break;
+                    case UI::GizmoOperation::Scale:
+                        snap = &snapScale;
+                        break;
+                }
+            }
 
             bool wasManipulated = ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(projection),
-                                     operation, ImGuizmo::LOCAL, glm::value_ptr(transform));
+                                     operation, ImGuizmo::LOCAL, glm::value_ptr(transform),
+                                     nullptr, snap);
 
             if (wasManipulated) {
-                glm::vec3 translation, scale;
-                glm::quat rotation;
+                glm::vec3 newTranslation, newScale;
+                glm::quat newRotation;
                 glm::vec3 skew;
                 glm::vec4 perspective;
-                glm::decompose(transform, scale, rotation, translation, skew, perspective);
-                *position = translation;
-                spdlog::info("Object moved to: ({:.2f}, {:.2f}, {:.2f})", position->x, position->y, position->z);
+                glm::decompose(transform, newScale, newRotation, newTranslation, skew, perspective);
+
+                *position = newTranslation;
+                if (rotation) {
+                    *rotation = newRotation;
+                }
+                if (scale) {
+                    *scale = newScale;
+                }
             }
 
             ImGui::PopID();
