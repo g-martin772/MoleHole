@@ -123,6 +123,10 @@ void Renderer::EndFrame() {
 }
 
 void Renderer::RenderScene(Scene *scene) {
+    if (scene && camera) {
+        scene->camera = camera.get();
+    }
+
     const char *title = nullptr;
     switch (selectedViewport) {
         case ViewportMode::Demo1:

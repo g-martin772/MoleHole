@@ -6,9 +6,11 @@
 #include <vector>
 #include <glm/glm.hpp>
 
+class Camera;
+
 class GraphExecutor {
 public:
-    using Value = std::variant<std::monostate, bool, int, float, glm::vec2, glm::vec3, glm::vec4, std::string, BlackHole*>;
+    using Value = std::variant<std::monostate, bool, int, float, glm::vec2, glm::vec3, glm::vec4, std::string, BlackHole*, Camera*>;
 
     GraphExecutor(AnimationGraph* graph, Scene* scene);
 
@@ -46,4 +48,3 @@ private:
     template<typename T>
     T GetValueAs(const Value& val, T defaultValue = T{});
 };
-

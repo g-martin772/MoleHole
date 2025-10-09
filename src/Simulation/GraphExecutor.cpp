@@ -3,6 +3,7 @@
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
 #include <cmath>
+#include "Renderer/Camera.h"
 
 GraphExecutor::GraphExecutor(AnimationGraph* graph, Scene* scene)
     : m_pGraph(graph), m_pScene(scene) {
@@ -465,8 +466,22 @@ GraphExecutor::Value GraphExecutor::ExecuteDecomposer(AnimationGraph::Node* node
                 case 7: m_PinValues[node->Outputs[i].Id.Get()] = bh->spinAxis; break;
             }
         }
+    } else if (node->SubType == AnimationGraph::NodeSubType::Camera && std::holds_alternative<Camera*>(inputVal)) {
+        Camera* cam = std::get<Camera*>(inputVal);
+        spdlog::debug("[GraphExecutor] Decomposing Camera - position=({},{},{})",
+                     cam->GetPosition().x, cam->GetPosition().y, cam->GetPosition().z);
+        for (size_t i = 0; i < node->Outputs.size(); ++i) {
+            switch (i) {
+                case 0: m_PinValues[node->Outputs[i].Id.Get()] = cam->GetPosition(); break;
+                case 1: m_PinValues[node->Outputs[i].Id.Get()] = cam->GetYaw(); break;
+                case 2: m_PinValues[node->Outputs[i].Id.Get()] = cam->GetPitch(); break;
+                case 3: m_PinValues[node->Outputs[i].Id.Get()] = cam->GetFov(); break;
+                case 4: m_PinValues[node->Outputs[i].Id.Get()] = cam->GetFront(); break;
+                case 5: m_PinValues[node->Outputs[i].Id.Get()] = cam->GetUp(); break;
+            }
+        }
     } else {
-        spdlog::debug("[GraphExecutor] Decomposer input is not a valid BlackHole pointer");
+        spdlog::debug("[GraphExecutor] Decomposer input is not a valid pointer");
     }
 
     return std::monostate{};
@@ -476,6 +491,10 @@ GraphExecutor::Value GraphExecutor::ExecuteSceneGetter(AnimationGraph::Node* nod
     if (node->SubType == AnimationGraph::NodeSubType::Blackhole) {
         if (node->SceneObjectIndex >= 1 && node->SceneObjectIndex < static_cast<int>(m_pScene->blackHoles.size())) {
             return &m_pScene->blackHoles[node->SceneObjectIndex - 1];
+        }
+    } else if (node->SubType == AnimationGraph::NodeSubType::Camera) {
+        if (m_pScene->camera) {
+            return m_pScene->camera;
         }
     }
     return std::monostate{};
@@ -502,76 +521,118 @@ void GraphExecutor::ExecuteSetter(AnimationGraph::Node* node, float deltaTime) {
             }
 
             switch (i) {
-                case 2:
-                    {
-                        float newMass = GetValueAs<float>(val, bh->mass);
-                        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting mass from {} to {}", bh->mass, newMass);
-                        bh->mass = newMass;
-                    }
+                case 2: {
+                    float newMass = GetValueAs<float>(val, bh->mass);
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting mass from {} to {}", bh->mass, newMass);
+                    bh->mass = newMass;
                     break;
-                case 3:
-                    {
-                        glm::vec3 newPos = GetValueAs<glm::vec3>(val, bh->position);
-                        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting position from ({},{},{}) to ({},{},{})",
-                                     bh->position.x, bh->position.y, bh->position.z, newPos.x, newPos.y, newPos.z);
-                        bh->position = newPos;
-                    }
+                }
+                case 3: {
+                    glm::vec3 newPos = GetValueAs<glm::vec3>(val, bh->position);
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting position from ({},{},{}) to ({},{},{})",
+                                 bh->position.x, bh->position.y, bh->position.z, newPos.x, newPos.y, newPos.z);
+                    bh->position = newPos;
                     break;
-                case 4:
-                    {
-                        bool newShowDisk = GetValueAs<bool>(val, bh->showAccretionDisk);
-                        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting showAccretionDisk from {} to {}",
-                                     bh->showAccretionDisk, newShowDisk);
-                        bh->showAccretionDisk = newShowDisk;
-                    }
+                }
+                case 4: {
+                    bool newShowDisk = GetValueAs<bool>(val, bh->showAccretionDisk);
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting showAccretionDisk from {} to {}",
+                                 bh->showAccretionDisk, newShowDisk);
+                    bh->showAccretionDisk = newShowDisk;
                     break;
-                case 5:
-                    {
-                        float newDiskDensity = GetValueAs<float>(val, bh->accretionDiskDensity);
-                        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskDensity from {} to {}",
-                                     bh->accretionDiskDensity, newDiskDensity);
-                        bh->accretionDiskDensity = newDiskDensity;
-                    }
+                }
+                case 5: {
+                    float newDiskDensity = GetValueAs<float>(val, bh->accretionDiskDensity);
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskDensity from {} to {}",
+                                 bh->accretionDiskDensity, newDiskDensity);
+                    bh->accretionDiskDensity = newDiskDensity;
                     break;
-                case 6:
-                    {
-                        float newDiskSize = GetValueAs<float>(val, bh->accretionDiskSize);
-                        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskSize from {} to {}",
-                                     bh->accretionDiskSize, newDiskSize);
-                        bh->accretionDiskSize = newDiskSize;
-                    }
+                }
+                case 6: {
+                    float newDiskSize = GetValueAs<float>(val, bh->accretionDiskSize);
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskSize from {} to {}",
+                                 bh->accretionDiskSize, newDiskSize);
+                    bh->accretionDiskSize = newDiskSize;
                     break;
-                case 7:
-                    {
-                        glm::vec3 newDiskColor = GetValueAs<glm::vec3>(val, bh->accretionDiskColor);
-                        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskColor from ({},{},{}) to ({},{},{})",
-                                     bh->accretionDiskColor.r, bh->accretionDiskColor.g, bh->accretionDiskColor.b,
-                                     newDiskColor.r, newDiskColor.g, newDiskColor.b);
-                        bh->accretionDiskColor = newDiskColor;
-                    }
+                }
+                case 7: {
+                    glm::vec3 newDiskColor = GetValueAs<glm::vec3>(val, bh->accretionDiskColor);
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskColor from ({},{},{}) to ({},{},{})",
+                                 bh->accretionDiskColor.r, bh->accretionDiskColor.g, bh->accretionDiskColor.b,
+                                 newDiskColor.r, newDiskColor.g, newDiskColor.b);
+                    bh->accretionDiskColor = newDiskColor;
                     break;
-                case 8:
-                    {
-                        float newSpin = GetValueAs<float>(val, bh->spin);
-                        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting spin from {} to {}",
-                                     bh->spin, newSpin);
-                        bh->spin = newSpin;
-                    }
+                }
+                case 8: {
+                    float newSpin = GetValueAs<float>(val, bh->spin);
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting spin from {} to {}",
+                                 bh->spin, newSpin);
+                    bh->spin = newSpin;
                     break;
-                case 9:
-                    {
-                        glm::vec3 newSpinAxis = GetValueAs<glm::vec3>(val, bh->spinAxis);
-                        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting spinAxis from ({},{},{}) to ({},{},{})",
-                                     bh->spinAxis.x, bh->spinAxis.y, bh->spinAxis.z,
-                                     newSpinAxis.x, newSpinAxis.y, newSpinAxis.z);
-                        bh->spinAxis = newSpinAxis;
-                    }
+                }
+                case 9: {
+                    glm::vec3 newSpinAxis = GetValueAs<glm::vec3>(val, bh->spinAxis);
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting spinAxis from ({},{},{}) to ({},{},{})",
+                                 bh->spinAxis.x, bh->spinAxis.y, bh->spinAxis.z,
+                                 newSpinAxis.x, newSpinAxis.y, newSpinAxis.z);
+                    bh->spinAxis = newSpinAxis;
                     break;
+                }
             }
         }
 
         if (node->Outputs.size() > 1) {
             m_PinValues[node->Outputs[1].Id.Get()] = bh;
+        }
+    } else if (node->SubType == AnimationGraph::NodeSubType::Camera) {
+        auto camVal = EvaluatePinValue(node->Inputs[1].Id, deltaTime);
+        if (!std::holds_alternative<Camera*>(camVal)) {
+            spdlog::debug("[GraphExecutor] ExecuteSetter: Camera input is not valid");
+            return;
+        }
+
+        Camera* cam = std::get<Camera*>(camVal);
+        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting properties on Camera at {}", (void*)cam);
+
+        for (size_t i = 2; i < node->Inputs.size(); ++i) {
+            auto val = EvaluatePinValue(node->Inputs[i].Id, deltaTime);
+            if (std::holds_alternative<std::monostate>(val)) {
+                spdlog::debug("[GraphExecutor] ExecuteSetter: Input {} has no value (not connected)", i);
+                continue;
+            }
+
+            switch (i) {
+                case 2: {
+                    glm::vec3 newPos = GetValueAs<glm::vec3>(val, cam->GetPosition());
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting camera position from ({},{},{}) to ({},{},{})",
+                                 cam->GetPosition().x, cam->GetPosition().y, cam->GetPosition().z,
+                                 newPos.x, newPos.y, newPos.z);
+                    cam->SetPosition(newPos);
+                    break;
+                }
+                case 3: {
+                    float newYaw = GetValueAs<float>(val, cam->GetYaw());
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting camera yaw from {} to {}", cam->GetYaw(), newYaw);
+                    cam->SetYawPitch(newYaw, cam->GetPitch());
+                    break;
+                }
+                case 4: {
+                    float newPitch = GetValueAs<float>(val, cam->GetPitch());
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting camera pitch from {} to {}", cam->GetPitch(), newPitch);
+                    cam->SetYawPitch(cam->GetYaw(), newPitch);
+                    break;
+                }
+                case 5: {
+                    float newFov = GetValueAs<float>(val, cam->GetFov());
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting camera FOV from {} to {}", cam->GetFov(), newFov);
+                    cam->SetFov(newFov);
+                    break;
+                }
+            }
+        }
+
+        if (node->Outputs.size() > 1) {
+            m_PinValues[node->Outputs[1].Id.Get()] = cam;
         }
     }
 }
