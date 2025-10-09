@@ -1,9 +1,11 @@
 #pragma once
 #include "Shader.h"
 #include "BlackHoleRenderer.h"
+#include "GLTFMesh.h"
 #include <memory>
 #include <glm/glm.hpp>
 #include <vector>
+#include <unordered_map>
 
 #include "Simulation/Scene.h"
 #include "Image.h"
@@ -74,11 +76,15 @@ public:
     float m_viewportWidth = 800.0f;
     float m_viewportHeight = 600.0f;
 
+    std::unordered_map<std::string, std::shared_ptr<GLTFMesh>> m_meshCache;
+
 private:
     void RenderDemo1(Scene* scene);
     void Render2DRays(Scene* scene);
     void Render3DSimulation(Scene *scene);
     void RenderVisualSimulation(Scene *scene);
+    void RenderMeshes(Scene* scene);
+    std::shared_ptr<GLTFMesh> GetOrLoadMesh(const std::string& path);
 
     std::unique_ptr<GravityGridRenderer> gravityGridRenderer;
 };

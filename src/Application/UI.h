@@ -38,6 +38,7 @@ private:
 
     void RenderSimulationGeneralSection();
     void RenderBlackHolesSection(Scene* scene);
+    void RenderMeshesSection(Scene* scene);
 
     void RenderAnimationGraphWindow(Scene* scene);
 

@@ -399,6 +399,13 @@ void Renderer::Render3DSimulation(Scene *scene) {
 
     float currentTime = static_cast<float>(glfwGetTime());
 
+    for (const auto &bh: scene->blackHoles) {
+        float schwarzschildRadius = 2.0f * bh.mass;
+        DrawSphere(bh.position, schwarzschildRadius, glm::vec3(0.0f, 0.0f, 0.0f));
+    }
+
+    RenderMeshes(scene);
+
     blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime);
     blackHoleRenderer->RenderToScreen();
 
@@ -564,4 +571,33 @@ void Renderer::SetViewportBounds(float x, float y, float width, float height) {
     m_viewportY = y;
     m_viewportWidth = width;
     m_viewportHeight = height;
+}
+
+void Renderer::RenderMeshes(Scene* scene) {
+    if (!scene || !camera) return;
+
+    for (const auto& meshObj : scene->meshes) {
+        auto mesh = GetOrLoadMesh(meshObj.path);
+        if (mesh && mesh->IsLoaded()) {
+            mesh->SetPosition(meshObj.position);
+            mesh->SetRotation(meshObj.rotation);
+            mesh->SetScale(meshObj.scale);
+            mesh->Render(camera->GetViewMatrix(), camera->GetProjectionMatrix(), camera->GetPosition());
+        }
+    }
+}
+
+std::shared_ptr<GLTFMesh> Renderer::GetOrLoadMesh(const std::string& path) {
+    auto it = m_meshCache.find(path);
+    if (it != m_meshCache.end()) {
+        return it->second;
+    }
+
+    auto mesh = std::make_shared<GLTFMesh>();
+    if (mesh->Load(path)) {
+        m_meshCache[path] = mesh;
+        return mesh;
+    }
+
+    return nullptr;
 }
