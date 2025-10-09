@@ -173,45 +173,57 @@ void GLTFMesh::ProcessMesh(const tinygltf::Model& model, int meshIndex, const gl
         const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
         const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
 
-        const float* positions = reinterpret_cast<const float*>(
-            &posBuffer.data[posBufferView.byteOffset + posAccessor.byteOffset]);
+        size_t posStride = posBufferView.byteStride ? posBufferView.byteStride : 3 * sizeof(float);
+        const unsigned char* posData = &posBuffer.data[posBufferView.byteOffset + posAccessor.byteOffset];
 
-        const float* normals = nullptr;
+        const unsigned char* normData = nullptr;
+        size_t normStride = 0;
         if (normalAccessorIdx >= 0) {
             const tinygltf::Accessor& normAccessor = model.accessors[normalAccessorIdx];
             const tinygltf::BufferView& normBufferView = model.bufferViews[normAccessor.bufferView];
             const tinygltf::Buffer& normBuffer = model.buffers[normBufferView.buffer];
-            normals = reinterpret_cast<const float*>(
-                &normBuffer.data[normBufferView.byteOffset + normAccessor.byteOffset]);
+            normStride = normBufferView.byteStride ? normBufferView.byteStride : 3 * sizeof(float);
+            normData = &normBuffer.data[normBufferView.byteOffset + normAccessor.byteOffset];
         }
 
-        const float* texcoords = nullptr;
+        const unsigned char* texData = nullptr;
+        size_t texStride = 0;
         if (texcoordAccessorIdx >= 0) {
             const tinygltf::Accessor& texAccessor = model.accessors[texcoordAccessorIdx];
             const tinygltf::BufferView& texBufferView = model.bufferViews[texAccessor.bufferView];
             const tinygltf::Buffer& texBuffer = model.buffers[texBufferView.buffer];
-            texcoords = reinterpret_cast<const float*>(
-                &texBuffer.data[texBufferView.byteOffset + texAccessor.byteOffset]);
+            texStride = texBufferView.byteStride ? texBufferView.byteStride : 2 * sizeof(float);
+            texData = &texBuffer.data[texBufferView.byteOffset + texAccessor.byteOffset];
         }
 
         for (size_t i = 0; i < posAccessor.count; ++i) {
-            vertexData.push_back(positions[i * 3 + 0]);
-            vertexData.push_back(positions[i * 3 + 1]);
-            vertexData.push_back(positions[i * 3 + 2]);
+            const float* positions = reinterpret_cast<const float*>(posData + i * posStride);
+            glm::vec3 pos(positions[0], positions[1], positions[2]);
+            glm::vec4 transformedPos = transform * glm::vec4(pos, 1.0f);
 
-            if (normals) {
-                vertexData.push_back(normals[i * 3 + 0]);
-                vertexData.push_back(normals[i * 3 + 1]);
-                vertexData.push_back(normals[i * 3 + 2]);
+            vertexData.push_back(transformedPos.x);
+            vertexData.push_back(transformedPos.y);
+            vertexData.push_back(transformedPos.z);
+
+            if (normData) {
+                const float* normals = reinterpret_cast<const float*>(normData + i * normStride);
+                glm::vec3 normal(normals[0], normals[1], normals[2]);
+                glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(transform)));
+                glm::vec3 transformedNormal = glm::normalize(normalMatrix * normal);
+
+                vertexData.push_back(transformedNormal.x);
+                vertexData.push_back(transformedNormal.y);
+                vertexData.push_back(transformedNormal.z);
             } else {
                 vertexData.push_back(0.0f);
                 vertexData.push_back(1.0f);
                 vertexData.push_back(0.0f);
             }
 
-            if (texcoords) {
-                vertexData.push_back(texcoords[i * 2 + 0]);
-                vertexData.push_back(texcoords[i * 2 + 1]);
+            if (texData) {
+                const float* texcoords = reinterpret_cast<const float*>(texData + i * texStride);
+                vertexData.push_back(texcoords[0]);
+                vertexData.push_back(1.0f - texcoords[1]);
             } else {
                 vertexData.push_back(0.0f);
                 vertexData.push_back(0.0f);
@@ -298,12 +310,20 @@ unsigned int GLTFMesh::LoadTextureFromModel(const tinygltf::Model& model, int te
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_2D, textureID);
 
+    GLenum internalFormat = GL_RGBA;
     GLenum format = GL_RGBA;
-    if (image.component == 1) format = GL_RED;
-    else if (image.component == 3) format = GL_RGB;
-    else if (image.component == 4) format = GL_RGBA;
+    if (image.component == 1) {
+        internalFormat = GL_RED;
+        format = GL_RED;
+    } else if (image.component == 3) {
+        internalFormat = GL_RGB;
+        format = GL_RGB;
+    } else if (image.component == 4) {
+        internalFormat = GL_RGBA;
+        format = GL_RGBA;
+    }
 
-    glTexImage2D(GL_TEXTURE_2D, 0, format, image.width, image.height, 0, format, GL_UNSIGNED_BYTE, image.image.data());
+    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, image.width, image.height, 0, format, GL_UNSIGNED_BYTE, image.image.data());
     glGenerateMipmap(GL_TEXTURE_2D);
 
     if (texture.sampler >= 0 && texture.sampler < model.samplers.size()) {
@@ -324,6 +344,11 @@ unsigned int GLTFMesh::LoadTextureFromModel(const tinygltf::Model& model, int te
 
 void GLTFMesh::Render(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPos) {
     if (!m_loaded || !m_shader) return;
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
 
     glm::mat4 model = GetTransform();
 
