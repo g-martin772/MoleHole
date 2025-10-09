@@ -226,7 +226,7 @@ void Application::InitializeRenderer() {
 }
 
 void Application::InitializeSimulation() {
-    // Default empty scene
+    m_simulation.SetAnimationGraph(m_ui.GetAnimationGraph());
 }
 
 void Application::UpdateWindowState() {

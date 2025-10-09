@@ -1,10 +1,14 @@
 #include "Simulation.h"
 #include <spdlog/spdlog.h>
+#include "GraphExecutor.h"
+#include "Application/AnimationGraph.h"
 
-Simulation::Simulation() : m_state(State::Stopped), m_simulationTime(0.0f) {
+Simulation::Simulation() : m_state(State::Stopped), m_simulationTime(0.0f), m_pAnimationGraph(nullptr), m_startEventExecuted(false) {
     m_scene = std::make_unique<Scene>();
     m_savedScene = std::make_unique<Scene>();
 }
+
+Simulation::~Simulation() = default;
 
 void Simulation::Update(float deltaTime) {
     if (m_state == State::Running) {
@@ -17,6 +21,14 @@ void Simulation::Start() {
     if (m_state == State::Stopped) {
         SaveSceneState();
         m_simulationTime = 0.0f;
+        m_startEventExecuted = false;
+
+        if (m_pAnimationGraph) {
+            m_pGraphExecutor = std::make_unique<GraphExecutor>(m_pAnimationGraph, m_scene.get());
+            m_pGraphExecutor->ExecuteStartEvent();
+            m_startEventExecuted = true;
+        }
+
         spdlog::info("Simulation started");
     } else if (m_state == State::Paused) {
         spdlog::info("Simulation resumed from pause");
@@ -29,6 +41,8 @@ void Simulation::Stop() {
         RestoreSceneState();
         m_simulationTime = 0.0f;
         m_state = State::Stopped;
+        m_startEventExecuted = false;
+        m_pGraphExecutor.reset();
         spdlog::info("Simulation stopped and reset to initial state");
     }
 }
@@ -45,6 +59,8 @@ void Simulation::Reset() {
     m_simulationTime = 0.0f;
     if (m_state != State::Stopped) {
         m_state = State::Stopped;
+        m_startEventExecuted = false;
+        m_pGraphExecutor.reset();
         spdlog::info("Simulation reset to initial state");
     }
 }
@@ -63,11 +79,19 @@ void Simulation::RestoreSceneState() {
     spdlog::debug("Scene state restored");
 }
 
-void Simulation::UpdateSimulation(float deltaTime) {
-    for (auto& blackHole : m_scene->blackHoles) {
-        blackHole.spin += deltaTime * 0.1f;
-        if (blackHole.spin > 1.0f) {
-            blackHole.spin = 1.0f;
+void Simulation::SetAnimationGraph(AnimationGraph* graph) {
+    m_pAnimationGraph = graph;
+    if (m_state == State::Running && m_pAnimationGraph) {
+        m_pGraphExecutor = std::make_unique<GraphExecutor>(m_pAnimationGraph, m_scene.get());
+        if (!m_startEventExecuted) {
+            m_pGraphExecutor->ExecuteStartEvent();
+            m_startEventExecuted = true;
         }
+    }
+}
+
+void Simulation::UpdateSimulation(float deltaTime) {
+    if (m_pGraphExecutor && m_pAnimationGraph) {
+        m_pGraphExecutor->ExecuteTickEvent(deltaTime);
     }
 }

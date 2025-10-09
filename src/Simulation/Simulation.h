@@ -3,6 +3,9 @@
 
 #include "Scene.h"
 
+class AnimationGraph;
+class GraphExecutor;
+
 class Simulation {
 public:
     enum class State {
@@ -12,6 +15,8 @@ public:
     };
 
     Simulation();
+    ~Simulation();
+
     void Update(float deltaTime);
 
     void Start();
@@ -27,11 +32,16 @@ public:
     Scene* GetScene();
     float GetSimulationTime() const { return m_simulationTime; }
 
+    void SetAnimationGraph(AnimationGraph* graph);
+
 private:
     std::unique_ptr<Scene> m_scene;
     std::unique_ptr<Scene> m_savedScene;
+    std::unique_ptr<GraphExecutor> m_pGraphExecutor;
+    AnimationGraph* m_pAnimationGraph;
     State m_state;
     float m_simulationTime;
+    bool m_startEventExecuted;
 
     void SaveSceneState();
     void RestoreSceneState();

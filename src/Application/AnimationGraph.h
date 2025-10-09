@@ -146,6 +146,12 @@ public:
     ed::EditorContext* GetEditorContext() const { return m_Context.get(); }
 
     void UpdateSceneObjects(Scene* scene);
+
+    std::vector<Node>& GetNodes() { return m_Nodes; }
+    std::vector<Link>& GetLinks() { return m_Links; }
+    const std::vector<Node>& GetNodes() const { return m_Nodes; }
+    const std::vector<Link>& GetLinks() const { return m_Links; }
+
 private:
     std::unique_ptr<ed::EditorContext, void(*)(ed::EditorContext*)> m_Context;
     std::vector<Node> m_Nodes;
