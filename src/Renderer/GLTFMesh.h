@@ -22,6 +22,13 @@ struct GLTFPrimitive {
 
     GLTFPrimitive();
     ~GLTFPrimitive();
+
+    GLTFPrimitive(const GLTFPrimitive&) = delete;
+    GLTFPrimitive& operator=(const GLTFPrimitive&) = delete;
+
+    GLTFPrimitive(GLTFPrimitive&& other) noexcept;
+    GLTFPrimitive& operator=(GLTFPrimitive&& other) noexcept;
+
     void Cleanup();
 };
 
@@ -74,4 +81,3 @@ private:
     std::string m_path;
     bool m_loaded;
 };
-

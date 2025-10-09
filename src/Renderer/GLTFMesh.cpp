@@ -12,6 +12,34 @@ GLTFPrimitive::~GLTFPrimitive() {
     Cleanup();
 }
 
+GLTFPrimitive::GLTFPrimitive(GLTFPrimitive&& other) noexcept
+    : m_VAO(other.m_VAO), m_VBO(other.m_VBO), m_EBO(other.m_EBO),
+      m_indexCount(other.m_indexCount), m_materialIndex(other.m_materialIndex) {
+    other.m_VAO = 0;
+    other.m_VBO = 0;
+    other.m_EBO = 0;
+    other.m_indexCount = 0;
+    other.m_materialIndex = -1;
+}
+
+GLTFPrimitive& GLTFPrimitive::operator=(GLTFPrimitive&& other) noexcept {
+    if (this != &other) {
+        Cleanup();
+        m_VAO = other.m_VAO;
+        m_VBO = other.m_VBO;
+        m_EBO = other.m_EBO;
+        m_indexCount = other.m_indexCount;
+        m_materialIndex = other.m_materialIndex;
+
+        other.m_VAO = 0;
+        other.m_VBO = 0;
+        other.m_EBO = 0;
+        other.m_indexCount = 0;
+        other.m_materialIndex = -1;
+    }
+    return *this;
+}
+
 void GLTFPrimitive::Cleanup() {
     if (m_VAO) glDeleteVertexArrays(1, &m_VAO);
     if (m_VBO) glDeleteBuffers(1, &m_VBO);
@@ -194,6 +222,9 @@ void GLTFMesh::ProcessMesh(const tinygltf::Model& model, int meshIndex, const gl
         glGenBuffers(1, &prim.m_VBO);
         glGenBuffers(1, &prim.m_EBO);
 
+        spdlog::info("Created primitive: VAO={}, VBO={}, EBO={}, indexCount={}",
+                     prim.m_VAO, prim.m_VBO, prim.m_EBO, prim.m_indexCount);
+
         glBindVertexArray(prim.m_VAO);
 
         glBindBuffer(GL_ARRAY_BUFFER, prim.m_VBO);
@@ -306,7 +337,13 @@ void GLTFMesh::Render(const glm::mat4& view, const glm::mat4& projection, const 
     m_shader->SetVec3("uCameraPos", cameraPos);
     m_shader->SetVec3("uLightDir", glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f)));
 
+    spdlog::info("Rendering mesh with {} primitives at position ({}, {}, {})",
+                 m_primitives.size(), m_position.x, m_position.y, m_position.z);
+
     for (const auto& prim : m_primitives) {
+        spdlog::info("  Primitive: VAO={}, indexCount={}, materialIndex={}",
+                     prim.m_VAO, prim.m_indexCount, prim.m_materialIndex);
+
         if (prim.m_materialIndex >= 0 && prim.m_materialIndex < m_materials.size()) {
             const GLTFMaterial& mat = m_materials[prim.m_materialIndex];
             m_shader->SetVec4("uBaseColorFactor", mat.m_baseColorFactor);
@@ -342,4 +379,3 @@ glm::mat4 GLTFMesh::GetTransform() const {
     transform = glm::scale(transform, m_scale);
     return transform;
 }
-
