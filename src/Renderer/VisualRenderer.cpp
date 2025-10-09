@@ -37,9 +37,14 @@ void VisualRenderer::Render(const Camera &camera, float time) {
 
     m_displayShader->Bind();
 
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, galaxy);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, colorMap);
+
     m_displayShader->SetVec2("resolution", glm::vec2(m_width, m_height));
-    m_displayShader->SetInt("galaxy", galaxy);
-    m_displayShader->SetInt("colorMap", colorMap);
+    m_displayShader->SetInt("galaxy", 0);
+    m_displayShader->SetInt("colorMap", 1);
     m_displayShader->SetFloat("time", time);
     m_displayShader->SetFloat("mouseX", 0.0f);
     m_displayShader->SetFloat("mouseY", 0.0f);
