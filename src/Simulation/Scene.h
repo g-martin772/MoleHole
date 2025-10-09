@@ -7,6 +7,8 @@
 #include <optional>
 #include "Application/AnimationGraph.h"
 
+class Camera;
+
 struct BlackHole {
     float mass;
     glm::vec3 position;
@@ -50,6 +52,7 @@ struct Scene {
     std::string name;
     std::vector<BlackHole> blackHoles;
     std::filesystem::path currentPath;
+    Camera* camera = nullptr;
 
     enum class ObjectType { BlackHole };
     struct SelectedObject {
@@ -74,4 +77,3 @@ struct Scene {
 
     std::optional<SelectedObject> PickObject(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) const;
 };
-
