@@ -389,6 +389,5 @@ void main() {
     vec3 pos = cameraPos;
     dir = view * dir;
 
-    fragColor.rgb = //traceColor(pos, dir);
-    fragColor.rgb = vec3(1.0f, 0.5f, 0.0f);
+    fragColor.rgb = traceColor(pos, dir);
 }
