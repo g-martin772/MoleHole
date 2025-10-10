@@ -164,20 +164,21 @@ float worleyNoise(vec3 p) {
 }
 
 float cloudDensity(vec3 pos, float time) {
-    // Base cloud shape using FBM with softer blending
-    float baseClouds = fbm(pos * 0.3 + vec3(time * 0.08, 0.0, time * 0.04), 5); // More octaves, lower frequency
+    // Higher resolution base cloud shape using more octaves
+    float baseClouds = fbm(pos * 0.25 + vec3(time * 0.06, 0.0, time * 0.03), 6); // 6 octaves for finer detail
 
-    // Add detail with higher frequency noise but reduced impact
-    float detailNoise = fbm(pos * 1.2 + vec3(time * 0.15, 0.0, time * 0.08), 3);
+    // Multiple detail layers for enhanced resolution
+    float detailNoise1 = fbm(pos * 1.0 + vec3(time * 0.12, 0.0, time * 0.06), 4); // Medium frequency
+    float detailNoise2 = fbm(pos * 2.5 + vec3(time * 0.18, 0.0, time * 0.09), 3); // High frequency
 
-    // Worley noise for cloud cell structure - less prominent
-    float worley = worleyNoise(pos * 0.8 + vec3(time * 0.03, 0.0, time * 0.05));
+    // Worley noise for enhanced cellular structure
+    float worley = worleyNoise(pos * 0.6 + vec3(time * 0.02, 0.0, time * 0.04));
 
-    // Combine noises for volumetric cloud effect with smoother blending
-    float density = baseClouds + detailNoise * 0.2 + (1.0 - worley) * 0.2;
+    // More sophisticated noise blending for higher detail
+    float density = baseClouds * 0.6 + detailNoise1 * 0.25 + detailNoise2 * 0.1 + (1.0 - worley) * 0.15;
 
-    // Much softer cloud coverage and sharpness for continuous appearance
-    density = smoothstep(0.1, 0.6, density); // Wider, softer transition
+    // Softer transitions with multiple thresholds for better detail preservation
+    density = smoothstep(0.05, 0.5, density) * smoothstep(0.95, 0.7, density);
 
     return clamp(density, 0.0, 1.0);
 }
@@ -399,12 +400,34 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
         return;
     }
 
+    // Calculate orbital velocity for Doppler beaming FIRST (using original position)
+    // This keeps the beaming pattern fixed relative to the camera
+    vec3 toCenter = normalize(-pos); // Use original position, not rotated
+    vec3 orbitalVelocity = normalize(cross(vec3(0.0, 1.0, 0.0), toCenter)); // Perpendicular to radial direction
+
+    // Keplerian velocity decreases with distance: v ∝ 1/√r
+    float velocityMagnitude = sqrt(eventHorizonRadius / distanceFromCenter) * 0.3; // Scale factor for realistic velocities
+    vec3 velocity = orbitalVelocity * velocityMagnitude;
+
+    // Calculate Doppler factor: approaching material appears brighter, receding dimmer
+    vec3 viewDirection = normalize(cameraPos - pos); // Use original position
+    float velocityDotView = dot(velocity, viewDirection);
+
+    // Relativistic Doppler beaming factor
+    float beta = velocityMagnitude; // v/c (assuming c=1 in our units)
+    float gamma = 1.0 / sqrt(1.0 - beta * beta);
+    float dopplerFactor = gamma * (1.0 - beta * velocityDotView);
+
+    // Apply Doppler beaming to intensity (δ^3 for synchrotron radiation)
+    float beamingIntensity = pow(dopplerFactor, 3.0);
+
+    // NOW do the noise rotation for structural animation (separate from physics)
     // Use volumetric cloud density for the accretion disk
     vec3 diskPos = pos;
     // Scale position for more coherent cloud structure
     diskPos *= vec3(1.5, 6.0, 1.5); // Less aggressive scaling for smoother transitions
 
-    // Add rotation to the disk based on distance from center
+    // Add rotation to the disk based on distance from center (for noise animation only)
     float rotationSpeed = 1.0 / sqrt(distanceFromCenter) * adiskSpeed;
     float angle = time * rotationSpeed;
     float cosA = cos(angle);
@@ -412,14 +435,14 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
     diskPos.xz = mat2(cosA, -sinA, sinA, cosA) * diskPos.xz;
 
     // Sample volumetric cloud density for disk structure with smoother sampling
-    float diskDensity = cloudDensity(diskPos * 0.8, time) * 50; // Reduced multiplier for smoother appearance
+    float diskDensity = cloudDensity(diskPos * 0.8, time) * 15; // Reduced from 50 to 15
 
     // Apply additional disk-specific density modifications with smoother transitions
     float radialFalloff = smoothstep(outerRadius, iscoRadius, distanceFromCenter); // Inverted smoothstep for better falloff
     float heightFalloff = smoothstep(adiskHeight, 0.0, abs(pos.y)); // Smoother height falloff
 
     // Combine all density factors with smoother blending
-    diskDensity *= radialFalloff * heightFalloff * iscoFactor * adiskDensityH * 8;
+    diskDensity *= radialFalloff * heightFalloff * iscoFactor * adiskDensityH * 2; // Reduced from 8 to 2
 
     if (diskDensity < 0.001) {
         return;
@@ -433,9 +456,9 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
         float temperature = 1.2 / pow(distanceFromCenter / eventHorizonRadius, 0.6); // Softer temperature curve
 
         // Create softer orange color gradient with more gradual transitions
-        vec3 hotColor = vec3(0.8, 0.5, 0.15);   // Softer bright orange
-        vec3 warmColor = vec3(0.7, 0.35, 0.08); // Softer deep orange
-        vec3 coolColor = vec3(0.5, 0.2, 0.05);  // Softer dark orange-red
+        vec3 hotColor = vec3(0.6, 0.35, 0.1);   // Reduced from (0.8, 0.5, 0.15)
+        vec3 warmColor = vec3(0.5, 0.25, 0.05); // Reduced from (0.7, 0.35, 0.08)
+        vec3 coolColor = vec3(0.3, 0.12, 0.03); // Reduced from (0.5, 0.2, 0.05)
 
         vec3 temperatureColor;
         // Smoother temperature blending with wider transition zones
@@ -460,28 +483,30 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
         // Softer saturation enhancement
         finalDiskColor *= vec3(1.0, 0.95, 0.85); // Less aggressive color boost
 
-        // Apply softer lighting with reduced intensity
-        color += finalDiskColor * diskDensity * adiskLit * alpha * 0.4; // Reduced from 0.8 to 0.4
+        // Apply Doppler beaming to the final color intensity with clamping
+        float clampedBeaming = clamp(beamingIntensity, 0.3, 2.5); // Prevent extreme values
+        finalDiskColor *= clampedBeaming;
+
+        // Apply softer lighting with much reduced intensity
+        color += finalDiskColor * diskDensity * adiskLit * alpha * 0.15; // Reduced from 0.4 to 0.15
     } else {
-        // Softer simple colored disk
-        color += vec3(0.6, 0.3, 0.0) * diskDensity * 0.03; // Softer orange for simple mode
+        // Softer simple colored disk with Doppler beaming
+        vec3 simpleColor = vec3(0.4, 0.2, 0.0) * diskDensity * 0.01; // Reduced intensity
+        float clampedBeaming = clamp(beamingIntensity, 0.3, 2.5);
+        color += simpleColor * clampedBeaming; // Apply clamped beaming to simple mode too
     }
 }
 
 vec3 traceColor(vec3 pos, vec3 dir) {
     vec3 color = vec3(0.0);
-    float alpha = 1.0;
+    float alpha = 0.5;
     bool hitEventHorizon = false;
 
     // Black hole center - use the uniform event horizon radius
     vec3 blackHoleCenter = vec3(0.0, 0.0, 0.0);
-    float photonSphereRadius = 1.5 * eventHorizonRadius;
 
-    // Calculate initial distance to black hole
-    float initialDist = length(pos - blackHoleCenter);
-
-    // More conservative base step size
-    float BASE_STEP_SIZE = eventHorizonRadius * 0.05;
+    // Smaller step size for higher resolution volumetric rendering
+    float BASE_STEP_SIZE = eventHorizonRadius * 0.02; // Reduced from 0.05 to 0.02
     dir = normalize(dir);
 
     // Initial values for angular momentum conservation
@@ -495,12 +520,20 @@ vec3 traceColor(vec3 pos, vec3 dir) {
     // Light direction for cloud illumination (can be adjusted)
     vec3 lightDir = normalize(vec3(1.0, 0.5, 0.3));
 
-    for (int i = 0; i < 2000; i++) {
+    for (int i = 0; i < 3000; i++) { // Increased from 2000 to 3000 for higher resolution
         if (renderBlackHole > 0.5) {
             float distToBlackHole = length(pos - blackHoleCenter);
             
-            // Adaptive step size - scale properly with event horizon radius
-            float stepScale = min(1.0, distToBlackHole / eventHorizonRadius * 0.5);
+            // More refined adaptive step size for better volumetric detail
+            float stepScale = 1.0;
+            if (distToBlackHole < eventHorizonRadius * 5.0) {
+                // Extra fine steps near the black hole for disk detail
+                stepScale = 0.3 + 0.7 * (distToBlackHole / (eventHorizonRadius * 5.0));
+            } else if (distToBlackHole < eventHorizonRadius * 15.0) {
+                // Medium resolution for disk regions
+                stepScale = 0.7 + 0.3 * ((distToBlackHole - eventHorizonRadius * 5.0) / (eventHorizonRadius * 10.0));
+            }
+
             float currentStepSize = BASE_STEP_SIZE * stepScale;
 
             // If gravitational lensing is applied
@@ -508,7 +541,7 @@ vec3 traceColor(vec3 pos, vec3 dir) {
                 vec3 relativePos = pos - blackHoleCenter;
                 vec3 acc = accel(h2, relativePos);
                 dir += acc * currentStepSize;
-                dir = normalize(dir); // Normalize but don't scale here
+                dir = normalize(dir);
             }
 
             // Render accretion disk BEFORE checking event horizon
@@ -517,7 +550,6 @@ vec3 traceColor(vec3 pos, vec3 dir) {
             }
 
             // Check if we've hit the event horizon AFTER rendering disk
-            // Now uses the uniform eventHorizonRadius
             if (distToBlackHole < eventHorizonRadius) {
                 hitEventHorizon = true;
                 break;
@@ -529,8 +561,8 @@ vec3 traceColor(vec3 pos, vec3 dir) {
             pos += dir * BASE_STEP_SIZE;
         }
 
-        // Break if we've traveled too far from the black hole - scale with event horizon
-        if (length(pos - blackHoleCenter) > max(10.0, eventHorizonRadius * 25.0)) {
+        // Break if we've traveled too far from the black hole
+        if (length(pos - blackHoleCenter) > max(50.0, eventHorizonRadius * 100.0)) {
             break;
         }
     }
