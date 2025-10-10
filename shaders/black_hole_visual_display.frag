@@ -33,7 +33,7 @@ uniform float mouseControl = 0.0;
 uniform float fovScale = 1.0;
 
 // Black hole physics uniforms
-uniform float eventHorizonRadius = 2.0;  // Controllable event horizon radius
+uniform float eventHorizonRadius = 4.0;  // Controllable event horizon radius
 
 uniform float adiskEnabled = 1.0;
 uniform float adiskParticle = 1.0;
@@ -128,6 +128,78 @@ float snoise(vec3 v) {
     return 42.0 *
     dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
+
+// Volumetric cloud noise functions
+float fbm(vec3 p, int octaves) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    float frequency = 1.0;
+
+    for (int i = 0; i < octaves; i++) {
+        value += amplitude * snoise(p * frequency);
+        amplitude *= 0.5;
+        frequency *= 2.0;
+    }
+    return value;
+}
+
+float worleyNoise(vec3 p) {
+    vec3 id = floor(p);
+    vec3 f = fract(p);
+
+    float minDist = 1.0;
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            for (int z = -1; z <= 1; z++) {
+                vec3 neighbor = vec3(float(x), float(y), float(z));
+                vec3 point = vec3(snoise(id + neighbor));
+                point = 0.5 + 0.5 * sin(time * 0.5 + 6.2831 * point);
+                vec3 diff = neighbor + point - f;
+                float dist = length(diff);
+                minDist = min(minDist, dist);
+            }
+        }
+    }
+    return minDist;
+}
+
+float cloudDensity(vec3 pos, float time) {
+    // Base cloud shape using FBM with softer blending
+    float baseClouds = fbm(pos * 0.3 + vec3(time * 0.08, 0.0, time * 0.04), 5); // More octaves, lower frequency
+
+    // Add detail with higher frequency noise but reduced impact
+    float detailNoise = fbm(pos * 1.2 + vec3(time * 0.15, 0.0, time * 0.08), 3);
+
+    // Worley noise for cloud cell structure - less prominent
+    float worley = worleyNoise(pos * 0.8 + vec3(time * 0.03, 0.0, time * 0.05));
+
+    // Combine noises for volumetric cloud effect with smoother blending
+    float density = baseClouds + detailNoise * 0.2 + (1.0 - worley) * 0.2;
+
+    // Much softer cloud coverage and sharpness for continuous appearance
+    density = smoothstep(0.1, 0.6, density); // Wider, softer transition
+
+    return clamp(density, 0.0, 1.0);
+}
+
+vec3 cloudColor(vec3 pos, vec3 lightDir, float density) {
+    // Base cloud color
+    vec3 baseColor = vec3(0.9, 0.95, 1.0);
+
+    // Add some variation based on density
+    vec3 darkColor = vec3(0.3, 0.4, 0.6);
+    vec3 lightColor = vec3(1.0, 0.98, 0.95);
+
+    // Simple lighting approximation
+    float lightPenetration = exp(-density * 4.0);
+    vec3 finalColor = mix(darkColor, lightColor, lightPenetration);
+
+    // Add some atmospheric scattering effect
+    float scattering = pow(max(0.0, dot(normalize(pos), lightDir)), 2.0);
+    finalColor += vec3(0.2, 0.3, 0.5) * scattering * density;
+
+    return finalColor;
+}
 ///----
 
 float ringDistance(vec3 rayOrigin, vec3 rayDir, Ring ring) {
@@ -158,30 +230,34 @@ vec3 panoramaColor(sampler2D tex, vec3 dir) {
 }
 
 vec3 accel(float h2, vec3 pos) {
-
     float r2 = dot(pos, pos);
-    float r5 = pow(r2, 2.5);
-    vec3 acc = -1.5 * h2 * pos / r5 * 1.0;
-
-    /*
     float r = sqrt(r2);
 
     // Prevent division by zero and numerical instability
-    if (r < 0.01) {
+    if (r < eventHorizonRadius * 0.1) {
         return vec3(0.0);
     }
 
     float r3 = r2 * r;
     float r5 = r2 * r3;
 
-    // Improved gravitational acceleration with angular momentum term
-    // Uses proper relativistic corrections for better visual accuracy
+    // Improved gravitational acceleration with proper photon sphere physics
+    // The photon sphere is at r = 1.5 * eventHorizonRadius for Schwarzschild metric
+    float photonSphereRadius = 1.5 * eventHorizonRadius;
+
+    // Base Newtonian-like term with relativistic corrections
     vec3 acc = -1.5 * h2 * pos / r5;
 
-    // Add additional relativistic term for more accurate lensing
-    acc += -pos / r3 * (1.0 + 1.5 * h2 / r2);
-    */
-    
+    // Add proper relativistic correction term that creates the photon sphere
+    // This term becomes critical near r = 1.5 * Rs
+    float relativisticFactor = 1.0 + 1.5 * (eventHorizonRadius * eventHorizonRadius) / r2;
+    acc += -pos / r3 * relativisticFactor;
+
+    // Additional photon sphere enhancement for visual accuracy
+    // Creates the characteristic ring of enhanced lensing
+    float photonSphereFactor = exp(-pow((r - photonSphereRadius) / (eventHorizonRadius * 0.1), 2.0));
+    acc *= (1.0 + photonSphereFactor * 0.5);
+
     return acc;
 }
 
@@ -302,9 +378,9 @@ float sqrLength(vec3 a) { return dot(a, a); }
 void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
     // Calculate Innermost Stable Circular Orbit (ISCO)
     // For a Schwarzschild black hole: R_isco = 6 * R_schwarzschild = 3 * R_event_horizon
-    float iscoRadius = 3.0 * eventHorizonRadius; // Now uses the uniform
-    
-    float outerRadius = 12.0;
+    float iscoRadius = 3.0 * eventHorizonRadius;
+
+    float outerRadius = 12.0 * eventHorizonRadius;
 
     // Get distance from black hole center
     float distanceFromCenter = length(pos);
@@ -318,51 +394,78 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
     float iscoTransitionZone = iscoRadius * 1.2; // 20% transition zone
     float iscoFactor = smoothstep(iscoRadius, iscoTransitionZone, distanceFromCenter);
     
-    // Density linearly decreases as the distance to the blackhole center
-    // increases.
-    float density = max(
-    0.0, 1.0 - length(pos.xyz / vec3(outerRadius, adiskHeight, outerRadius)));
-    if (density < 0.001) {
+    // Check if we're within the disk height using volumetric approach
+    if (abs(pos.y) > adiskHeight) {
         return;
     }
 
-    density *= pow(1.0 - abs(pos.y) / adiskHeight, adiskDensityV);
+    // Use volumetric cloud density for the accretion disk
+    vec3 diskPos = pos;
+    // Scale position for more coherent cloud structure
+    diskPos *= vec3(1.5, 6.0, 1.5); // Less aggressive scaling for smoother transitions
 
-    // Apply ISCO factor to create smooth transition
-    density *= iscoFactor;
+    // Add rotation to the disk based on distance from center
+    float rotationSpeed = 1.0 / sqrt(distanceFromCenter) * adiskSpeed;
+    float angle = time * rotationSpeed;
+    float cosA = cos(angle);
+    float sinA = sin(angle);
+    diskPos.xz = mat2(cosA, -sinA, sinA, cosA) * diskPos.xz;
 
-    // Avoid the shader computation when density is very small
-    if (density < 0.001) {
+    // Sample volumetric cloud density for disk structure with smoother sampling
+    float diskDensity = cloudDensity(diskPos * 0.8, time) * 50; // Reduced multiplier for smoother appearance
+
+    // Apply additional disk-specific density modifications with smoother transitions
+    float radialFalloff = smoothstep(outerRadius, iscoRadius, distanceFromCenter); // Inverted smoothstep for better falloff
+    float heightFalloff = smoothstep(adiskHeight, 0.0, abs(pos.y)); // Smoother height falloff
+
+    // Combine all density factors with smoother blending
+    diskDensity *= radialFalloff * heightFalloff * iscoFactor * adiskDensityH * 8;
+
+    if (diskDensity < 0.001) {
         return;
     }
 
-    vec3 sphericalCoord = toSpherical(pos);
+    // Enhanced disk coloring using cloud-based approach
+    vec3 lightDir = normalize(vec3(1.0, 0.2, 0.3)); // Light source direction
 
-    // Scale the rho and phi so that the particles appear to be at the correct scale visually
-    sphericalCoord.y *= 2.0;
-    sphericalCoord.z *= 4.0;
+    if (adiskParticle > 0.5) {
+        // Create softer temperature-based orange coloring
+        float temperature = 1.2 / pow(distanceFromCenter / eventHorizonRadius, 0.6); // Softer temperature curve
 
-    density *= 1.0 / pow(sphericalCoord.x, adiskDensityH);
-    density *= 16000.0;
+        // Create softer orange color gradient with more gradual transitions
+        vec3 hotColor = vec3(0.8, 0.5, 0.15);   // Softer bright orange
+        vec3 warmColor = vec3(0.7, 0.35, 0.08); // Softer deep orange
+        vec3 coolColor = vec3(0.5, 0.2, 0.05);  // Softer dark orange-red
 
-    if (adiskParticle < 0.5) {
-        color += vec3(0.0, 1.0, 0.0) * density * 0.02;
-        return;
-    }
-
-    float noise = 1.0;
-    for (int i = 0; i < int(adiskNoiseLOD); i++) {
-        noise *= 0.5 * snoise(sphericalCoord * pow(i, 2) * adiskNoiseScale) + 0.5;
-        if (i % 2 == 0) {
-            sphericalCoord.y += time * adiskSpeed;
+        vec3 temperatureColor;
+        // Smoother temperature blending with wider transition zones
+        if (temperature > 1.2) {
+            float blend = smoothstep(1.2, 2.0, temperature);
+            temperatureColor = mix(warmColor, hotColor, blend);
         } else {
-            sphericalCoord.y -= time * adiskSpeed;
+            float blend = smoothstep(0.3, 1.2, temperature);
+            temperatureColor = mix(coolColor, warmColor, blend);
         }
+
+        // Get cloud structure for volume details with softer lighting
+        vec3 diskCloudColor = cloudColor(diskPos, lightDir, diskDensity);
+
+        // More balanced blending - less harsh contrast
+        vec3 finalDiskColor = mix(temperatureColor, diskCloudColor * temperatureColor, 0.5);
+
+        // Softer additional volumetric detail
+        float additionalDetail = fbm(diskPos * 4.0 + vec3(time * 0.3), 2) * 0.3 + 0.7; // Reduced contrast
+        finalDiskColor *= additionalDetail;
+
+        // Softer saturation enhancement
+        finalDiskColor *= vec3(1.0, 0.95, 0.85); // Less aggressive color boost
+
+        // Apply softer lighting with reduced intensity
+        color += finalDiskColor * diskDensity * adiskLit * alpha * 0.4; // Reduced from 0.8 to 0.4
+    } else {
+        // Softer simple colored disk
+        color += vec3(0.6, 0.3, 0.0) * diskDensity * 0.03; // Softer orange for simple mode
     }
-
-    vec3 dustColor = texture(colorMap, vec2(sphericalCoord.x / outerRadius, 0.5)).rgb;
-
-    color += density * adiskLit * dustColor * alpha * abs(noise);
 }
 
 vec3 traceColor(vec3 pos, vec3 dir) {
@@ -372,19 +475,27 @@ vec3 traceColor(vec3 pos, vec3 dir) {
 
     // Black hole center - use the uniform event horizon radius
     vec3 blackHoleCenter = vec3(0.0, 0.0, 0.0);
+    float photonSphereRadius = 1.5 * eventHorizonRadius;
 
     // Calculate initial distance to black hole
     float initialDist = length(pos - blackHoleCenter);
 
-    // Fixed step size to prevent artifacts - scale with event horizon size
-    float BASE_STEP_SIZE = min(0.1, eventHorizonRadius * 0.05);
+    // More conservative base step size
+    float BASE_STEP_SIZE = eventHorizonRadius * 0.05;
     dir = normalize(dir);
 
     // Initial values for angular momentum conservation
     vec3 h = cross(pos - blackHoleCenter, dir);
     float h2 = dot(h, h);
 
-    for (int i = 0; i < 500; i++) {
+    // Volumetric cloud accumulation
+    vec3 cloudAccumulation = vec3(0.0);
+    float cloudTransmittance = 1.0;
+
+    // Light direction for cloud illumination (can be adjusted)
+    vec3 lightDir = normalize(vec3(1.0, 0.5, 0.3));
+
+    for (int i = 0; i < 2000; i++) {
         if (renderBlackHole > 0.5) {
             float distToBlackHole = length(pos - blackHoleCenter);
             
@@ -401,7 +512,6 @@ vec3 traceColor(vec3 pos, vec3 dir) {
             }
 
             // Render accretion disk BEFORE checking event horizon
-            // This ensures disk material appears in front of the black hole
             if (adiskEnabled > 0.5) {
                 adiskColor(pos, color, alpha);
             }
@@ -410,7 +520,6 @@ vec3 traceColor(vec3 pos, vec3 dir) {
             // Now uses the uniform eventHorizonRadius
             if (distToBlackHole < eventHorizonRadius) {
                 hitEventHorizon = true;
-                // Don't return immediately - let any accumulated disk color show
                 break;
             }
             
@@ -421,17 +530,15 @@ vec3 traceColor(vec3 pos, vec3 dir) {
         }
 
         // Break if we've traveled too far from the black hole - scale with event horizon
-        if (length(pos - blackHoleCenter) > max(100.0, eventHorizonRadius * 50.0)) {
+        if (length(pos - blackHoleCenter) > max(10.0, eventHorizonRadius * 25.0)) {
             break;
         }
     }
 
     // Only sample skybox color if we didn't hit the event horizon
-    // and there's no significant disk contribution
     if (!hitEventHorizon) {
         color += texture(galaxy, dir).rgb;
     } else if (length(color) < 0.01) {
-        // If we hit event horizon but have no disk color, return black
         return vec3(0.0);
     }
 
@@ -440,8 +547,7 @@ vec3 traceColor(vec3 pos, vec3 dir) {
 
 void main() {
     // Use camera uniforms for dynamic camera control
-    vec2 uv = gl_FragCoord.xy / resolution.xy - vec2(0.5);
-    uv.x *= cameraAspect;
+    vec2 uv = (gl_FragCoord.xy - resolution.xy * 0.5) / min(resolution.x, resolution.y);
 
     // Calculate ray direction using proper camera vectors and FOV
     float tanHalfFov = tan(radians(cameraFov) * 0.5);
