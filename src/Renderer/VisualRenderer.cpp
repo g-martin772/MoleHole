@@ -42,10 +42,43 @@ void VisualRenderer::Render(const Camera &camera, float time) {
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, colorMap);
 
+    // Basic uniforms
     m_displayShader->SetVec2("resolution", glm::vec2(m_width, m_height));
     m_displayShader->SetInt("galaxy", 0);
     m_displayShader->SetInt("colorMap", 1);
     m_displayShader->SetFloat("time", time);
+    
+    // Camera uniforms - replacing hardcoded camera logic
+    glm::vec3 cameraPos = camera.GetPosition();
+    glm::vec3 cameraFront = camera.GetFront();
+    glm::vec3 cameraUp = camera.GetUp();
+    glm::vec3 cameraRight = glm::normalize(glm::cross(cameraFront, cameraUp));
+    
+    m_displayShader->SetVec3("cameraPos", cameraPos);
+    m_displayShader->SetVec3("cameraFront", cameraFront);
+    m_displayShader->SetVec3("cameraUp", cameraUp);
+    m_displayShader->SetVec3("cameraRight", cameraRight);
+    m_displayShader->SetFloat("cameraFov", camera.GetFov());
+    m_displayShader->SetFloat("cameraAspect", (float)m_width / (float)m_height);
+    
+    // Black hole rendering control uniforms
+    m_displayShader->SetFloat("gravatationalLensing", 1.0f);
+    m_displayShader->SetFloat("renderBlackHole", 1.0f);
+    m_displayShader->SetFloat("mouseControl", 0.0f);
+    m_displayShader->SetFloat("fovScale", 1.0f);
+    
+    // Accretion disk uniforms
+    m_displayShader->SetFloat("adiskEnabled", 1.0f);
+    m_displayShader->SetFloat("adiskParticle", 1.0f);
+    m_displayShader->SetFloat("adiskHeight", 0.2f);
+    m_displayShader->SetFloat("adiskLit", 0.5f);
+    m_displayShader->SetFloat("adiskDensityV", 1.0f);
+    m_displayShader->SetFloat("adiskDensityH", 1.0f);
+    m_displayShader->SetFloat("adiskNoiseScale", 1.0f);
+    m_displayShader->SetFloat("adiskNoiseLOD", 5.0f);
+    m_displayShader->SetFloat("adiskSpeed", 0.5f);
+    
+    // Legacy mouse controls (can be removed if not needed)
     m_displayShader->SetFloat("mouseX", 0.0f);
     m_displayShader->SetFloat("mouseY", 0.0f);
 
