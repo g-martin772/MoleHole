@@ -38,6 +38,7 @@ struct GLTFMaterial {
     float m_roughnessFactor;
     unsigned int m_baseColorTexture;
     bool m_hasBaseColorTexture;
+    bool m_hasTransparency;
 
     GLTFMaterial();
 };

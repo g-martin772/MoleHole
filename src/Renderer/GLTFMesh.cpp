@@ -49,7 +49,7 @@ void GLTFPrimitive::Cleanup() {
 
 GLTFMaterial::GLTFMaterial()
     : m_baseColorFactor(1.0f), m_metallicFactor(1.0f), m_roughnessFactor(1.0f),
-      m_baseColorTexture(0), m_hasBaseColorTexture(false) {}
+      m_baseColorTexture(0), m_hasBaseColorTexture(false), m_hasTransparency(false) {}
 
 GLTFMesh::GLTFMesh()
     : m_position(0.0f), m_rotation(glm::quat(1.0f, 0.0f, 0.0f, 0.0f)),
@@ -291,8 +291,21 @@ void GLTFMesh::LoadMaterials(const tinygltf::Model& model) {
         material.m_metallicFactor = mat.pbrMetallicRoughness.metallicFactor;
         material.m_roughnessFactor = mat.pbrMetallicRoughness.roughnessFactor;
 
+        material.m_hasTransparency = false;
+
+        if (mat.alphaMode == "BLEND") {
+            material.m_hasTransparency = true;
+        } else if (mat.alphaMode == "MASK") {
+            material.m_hasTransparency = false;
+        }
+
+        if (material.m_baseColorFactor.a < 0.99f) {
+            material.m_hasTransparency = true;
+        }
+
         if (mat.pbrMetallicRoughness.baseColorTexture.index >= 0) {
-            material.m_baseColorTexture = LoadTextureFromModel(model, mat.pbrMetallicRoughness.baseColorTexture.index);
+            int texIndex = mat.pbrMetallicRoughness.baseColorTexture.index;
+            material.m_baseColorTexture = LoadTextureFromModel(model, texIndex);
             material.m_hasBaseColorTexture = true;
         }
 
@@ -310,20 +323,43 @@ unsigned int GLTFMesh::LoadTextureFromModel(const tinygltf::Model& model, int te
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_2D, textureID);
 
-    GLenum internalFormat = GL_RGBA;
-    GLenum format = GL_RGBA;
-    if (image.component == 1) {
-        internalFormat = GL_RED;
-        format = GL_RED;
-    } else if (image.component == 3) {
-        internalFormat = GL_RGB;
-        format = GL_RGB;
-    } else if (image.component == 4) {
-        internalFormat = GL_RGBA;
-        format = GL_RGBA;
+    GLenum internalFormat;
+    GLenum format;
+    GLenum dataType;
+
+    if (image.bits == 16) {
+        dataType = GL_UNSIGNED_SHORT;
+        if (image.component == 1) {
+            format = GL_RED;
+            internalFormat = GL_R16;
+        } else if (image.component == 3) {
+            format = GL_RGB;
+            internalFormat = GL_RGB16;
+        } else if (image.component == 4) {
+            format = GL_RGBA;
+            internalFormat = GL_RGBA16;
+        } else {
+            format = GL_RGBA;
+            internalFormat = GL_RGBA16;
+        }
+    } else {
+        dataType = GL_UNSIGNED_BYTE;
+        if (image.component == 1) {
+            format = GL_RED;
+            internalFormat = GL_R8;
+        } else if (image.component == 3) {
+            format = GL_RGB;
+            internalFormat = GL_SRGB8;
+        } else if (image.component == 4) {
+            format = GL_RGBA;
+            internalFormat = GL_SRGB8_ALPHA8;
+        } else {
+            format = GL_RGBA;
+            internalFormat = GL_SRGB8_ALPHA8;
+        }
     }
 
-    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, image.width, image.height, 0, format, GL_UNSIGNED_BYTE, image.image.data());
+    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, image.width, image.height, 0, format, dataType, image.image.data());
     glGenerateMipmap(GL_TEXTURE_2D);
 
     if (texture.sampler >= 0 && texture.sampler < model.samplers.size()) {
@@ -347,8 +383,6 @@ void GLTFMesh::Render(const glm::mat4& view, const glm::mat4& projection, const 
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
 
     glm::mat4 model = GetTransform();
 
@@ -360,8 +394,12 @@ void GLTFMesh::Render(const glm::mat4& view, const glm::mat4& projection, const 
     m_shader->SetVec3("uLightDir", glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f)));
 
     for (const auto& prim : m_primitives) {
+        bool hasTransparency = false;
+
         if (prim.m_materialIndex >= 0 && prim.m_materialIndex < m_materials.size()) {
             const GLTFMaterial& mat = m_materials[prim.m_materialIndex];
+            hasTransparency = mat.m_hasTransparency;
+
             m_shader->SetVec4("uBaseColorFactor", mat.m_baseColorFactor);
             m_shader->SetFloat("uMetallicFactor", mat.m_metallicFactor);
             m_shader->SetFloat("uRoughnessFactor", mat.m_roughnessFactor);
@@ -381,11 +419,22 @@ void GLTFMesh::Render(const glm::mat4& view, const glm::mat4& projection, const 
             m_shader->SetInt("uHasBaseColorTexture", 0);
         }
 
+        if (hasTransparency) {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDepthMask(GL_FALSE);
+        } else {
+            glDisable(GL_BLEND);
+            glDepthMask(GL_TRUE);
+        }
+
         glBindVertexArray(prim.m_VAO);
         glDrawElements(GL_TRIANGLES, prim.m_indexCount, GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
     }
 
+    glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
     m_shader->Unbind();
 }
 
