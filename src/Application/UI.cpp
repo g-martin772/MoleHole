@@ -11,6 +11,7 @@
 #include <imgui_node_editor.h>
 #include <vector>
 #include <memory>
+#include "../Renderer/Screenshot.h" // Screenshot-Funktionalität hinzufügen
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
@@ -71,15 +72,19 @@ void UI::Update(float deltaTime) {
 void UI::RenderDockspace(Scene* scene) {
     ImGuiIO& io = ImGui::GetIO();
     bool ctrl = io.KeyCtrl;
-    static bool prevCtrlS = false, prevCtrlO = false;
+    static bool prevCtrlS = false, prevCtrlO = false, prevF12 = false;
     bool ctrlS = ctrl && ImGui::IsKeyPressed(ImGuiKey_S);
     bool ctrlO = ctrl && ImGui::IsKeyPressed(ImGuiKey_O);
+    bool f12 = ImGui::IsKeyPressed(ImGuiKey_F12);
     bool doSave = false, doOpen = false;
 
     if (ctrlS && !prevCtrlS) doSave = true;
     if (ctrlO && !prevCtrlO) doOpen = true;
+    if (f12 && !prevF12) TakeViewportScreenshotWithDialog(); // F12 für Screenshot
+
     prevCtrlS = ctrlS;
     prevCtrlO = ctrlO;
+    prevF12 = f12;
 
     RenderMainMenuBar(scene, doSave, doOpen);
     HandleFileOperations(scene, doSave, doOpen);
@@ -244,6 +249,7 @@ void UI::RenderSystemWindow(float fps) {
     RenderDisplaySettingsSection();
     RenderCameraControlsSection();
     RenderRenderingFlagsSection();
+    RenderScreenshotSection(); // Neue Screenshot-Sektion hinzufügen
     RenderDebugSection();
 
     ImGui::End();
@@ -1249,4 +1255,121 @@ void UI::RenderSimulationControls() {
 
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
+}
+
+void UI::RenderScreenshotSection() {
+    if (ImGui::CollapsingHeader("Screenshot", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Capture the current viewport as an image file");
+
+        // Quick screenshot buttons (automatic naming)
+        ImGui::Text("Quick Screenshots (automatic naming):");
+        if (ImGui::Button("Take Full Screenshot", ImVec2(-1, 30))) {
+            TakeScreenshot();
+        }
+
+        if (ImGui::Button("Take Viewport Screenshot", ImVec2(-1, 30))) {
+            TakeViewportScreenshot();
+        }
+
+        ImGui::Separator();
+
+        // Screenshot with file dialog (user chooses location)
+        ImGui::Text("Choose Save Location:");
+        if (ImGui::Button("Save Full Screenshot As...", ImVec2(-1, 30))) {
+            TakeScreenshotWithDialog();
+        }
+
+        if (ImGui::Button("Save Viewport Screenshot As...", ImVec2(-1, 30))) {
+            TakeViewportScreenshotWithDialog();
+        }
+
+        ImGui::Separator();
+
+        // Screenshot info
+        ImGui::TextDisabled("Quick screenshots: saved to application directory");
+        ImGui::TextDisabled("'Save As' screenshots: choose your own location");
+        ImGui::TextDisabled("Format: PNG");
+
+        ImGui::Separator();
+        ImGui::Text("Keyboard Shortcut:");
+        ImGui::BulletText("F12 - Quick full screenshot");
+    }
+}
+
+void UI::TakeScreenshot() {
+    std::string filename = Screenshot::GenerateTimestampedFilename("molehole_screenshot");
+
+    if (Screenshot::CaptureWindow(filename)) {
+        spdlog::info("Screenshot saved: {}", filename);
+    } else {
+        spdlog::error("Failed to take screenshot");
+    }
+}
+
+void UI::TakeViewportScreenshot() {
+    auto& renderer = Application::GetRenderer();
+
+    // Get current viewport dimensions
+    int x = static_cast<int>(renderer.m_viewportX);
+    int y = static_cast<int>(renderer.m_viewportY);
+    int width = static_cast<int>(renderer.m_viewportWidth);
+    int height = static_cast<int>(renderer.m_viewportHeight);
+
+    std::string filename = Screenshot::GenerateTimestampedFilename("molehole_viewport");
+
+    if (Screenshot::CaptureViewport(x, y, width, height, filename)) {
+        spdlog::info("Viewport screenshot saved: {}", filename);
+    } else {
+        spdlog::error("Failed to take viewport screenshot");
+    }
+}
+
+void UI::TakeScreenshotWithDialog() {
+    nfdchar_t* outPath = nullptr;
+    nfdfilteritem_t filterItems[] = {
+        { "PNG Image", "png" }
+    };
+
+    // Generate a default filename with timestamp
+    std::string defaultName = Screenshot::GenerateTimestampedFilename("molehole_screenshot", ".png");
+
+    nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, nullptr, defaultName.c_str());
+
+    if (result == NFD_OKAY && outPath) {
+        if (Screenshot::CaptureWindow(outPath)) {
+            spdlog::info("Screenshot saved: {}", outPath);
+        } else {
+            spdlog::error("Failed to take screenshot");
+        }
+        free(outPath);
+    }
+}
+
+void UI::TakeViewportScreenshotWithDialog() {
+    auto& renderer = Application::GetRenderer();
+
+    // Get current viewport dimensions
+    int x = static_cast<int>(renderer.m_viewportX);
+    int y = static_cast<int>(renderer.m_viewportY);
+    int width = static_cast<int>(renderer.m_viewportWidth);
+    int height = static_cast<int>(renderer.m_viewportHeight);
+
+    nfdchar_t* outPath = nullptr;
+    nfdfilteritem_t filterItems[] = {
+        { "PNG Image", "png" }
+    };
+
+    // Generate a default filename with timestamp
+    std::string defaultName = Screenshot::GenerateTimestampedFilename("molehole_viewport", ".png");
+
+    nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, nullptr, defaultName.c_str());
+
+    if (result == NFD_OKAY && outPath) {
+        if (Screenshot::CaptureViewport(x, y, width, height, outPath)) {
+            spdlog::info("Viewport screenshot saved: {}", outPath);
+        } else {
+            spdlog::error("Failed to take viewport screenshot");
+        }
+        free(outPath);
+    }
 }

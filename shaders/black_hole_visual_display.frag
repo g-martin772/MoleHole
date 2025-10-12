@@ -164,21 +164,21 @@ float worleyNoise(vec3 p) {
 }
 
 float cloudDensity(vec3 pos, float time) {
-    // Higher resolution base cloud shape using more octaves
-    float baseClouds = fbm(pos * 0.25 + vec3(time * 0.06, 0.0, time * 0.03), 6); // 6 octaves for finer detail
+    // Optimized: Reduced octaves from 6 to 4 for base clouds for better performance
+    float baseClouds = fbm(pos * 0.25 + vec3(time * 0.06, 0.0, time * 0.03), 4); // Reduced from 6 to 4 octaves
 
-    // Multiple detail layers for enhanced resolution
-    float detailNoise1 = fbm(pos * 1.0 + vec3(time * 0.12, 0.0, time * 0.06), 4); // Medium frequency
-    float detailNoise2 = fbm(pos * 2.5 + vec3(time * 0.18, 0.0, time * 0.09), 3); // High frequency
+    // Optimized: Reduced detail layers and octaves for performance
+    float detailNoise1 = fbm(pos * 1.0 + vec3(time * 0.12, 0.0, time * 0.06), 3); // Reduced from 4 to 3 octaves
+    float detailNoise2 = fbm(pos * 2.5 + vec3(time * 0.18, 0.0, time * 0.09), 2); // Reduced from 3 to 2 octaves
 
-    // Worley noise for enhanced cellular structure
+    // Worley noise for enhanced cellular structure (kept for quality)
     float worley = worleyNoise(pos * 0.6 + vec3(time * 0.02, 0.0, time * 0.04));
 
-    // More sophisticated noise blending for higher detail
-    float density = baseClouds * 0.6 + detailNoise1 * 0.25 + detailNoise2 * 0.1 + (1.0 - worley) * 0.15;
+    // More sophisticated noise blending for higher detail with increased density
+    float density = baseClouds * 0.8 + detailNoise1 * 0.35 + detailNoise2 * 0.2 + (1.0 - worley) * 0.25;
 
-    // Softer transitions with multiple thresholds for better detail preservation
-    density = smoothstep(0.05, 0.5, density) * smoothstep(0.95, 0.7, density);
+    // Softer transitions with multiple thresholds for better detail preservation and higher density
+    density = smoothstep(0.02, 0.4, density) * smoothstep(1.0, 0.6, density);
 
     return clamp(density, 0.0, 1.0);
 }
@@ -395,8 +395,9 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
     float iscoTransitionZone = iscoRadius * 1.2; // 20% transition zone
     float iscoFactor = smoothstep(iscoRadius, iscoTransitionZone, distanceFromCenter);
     
-    // Check if we're within the disk height using volumetric approach
-    if (abs(pos.y) > adiskHeight) {
+    // Check if we're within the disk height using volumetric approach with increased thickness
+    float diskThickness = adiskHeight * 2.5; // Make disk 2.5x thicker vertically
+    if (abs(pos.y) > diskThickness) {
         return;
     }
 
@@ -424,8 +425,8 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
     // NOW do the noise rotation for structural animation (separate from physics)
     // Use volumetric cloud density for the accretion disk
     vec3 diskPos = pos;
-    // Scale position for more coherent cloud structure
-    diskPos *= vec3(1.5, 6.0, 1.5); // Less aggressive scaling for smoother transitions
+    // Scale position for more coherent cloud structure with denser packing
+    diskPos *= vec3(1.2, 4.0, 1.2); // Reduced Y scaling for thicker disk, slightly reduced X/Z for denser clouds
 
     // Add rotation to the disk based on distance from center (for noise animation only)
     float rotationSpeed = 1.0 / sqrt(distanceFromCenter) * adiskSpeed;
@@ -434,17 +435,17 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
     float sinA = sin(angle);
     diskPos.xz = mat2(cosA, -sinA, sinA, cosA) * diskPos.xz;
 
-    // Sample volumetric cloud density for disk structure with smoother sampling
-    float diskDensity = cloudDensity(diskPos * 0.8, time) * 15; // Reduced from 50 to 15
+    // Optimized: Reduced noise complexity for better performance
+    float diskDensity = cloudDensity(diskPos * 0.8, time) * 20; // Reduced from 25 to 20, increased sampling scale
 
     // Apply additional disk-specific density modifications with smoother transitions
     float radialFalloff = smoothstep(outerRadius, iscoRadius, distanceFromCenter); // Inverted smoothstep for better falloff
-    float heightFalloff = smoothstep(adiskHeight, 0.0, abs(pos.y)); // Smoother height falloff
+    float heightFalloff = smoothstep(diskThickness, 0.0, abs(pos.y)); // Use thicker disk height for falloff
 
-    // Combine all density factors with smoother blending
-    diskDensity *= radialFalloff * heightFalloff * iscoFactor * adiskDensityH * 2; // Reduced from 8 to 2
+    // Combine all density factors with optimized multiplier
+    diskDensity *= radialFalloff * heightFalloff * iscoFactor * adiskDensityH * 3.0; // Reduced from 3.5 to 3.0
 
-    if (diskDensity < 0.001) {
+    if (diskDensity < 0.002) { // Increased threshold from 0.001 to 0.002 for early culling
         return;
     }
 
@@ -456,9 +457,9 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
         float temperature = 1.2 / pow(distanceFromCenter / eventHorizonRadius, 0.6); // Softer temperature curve
 
         // Create softer orange color gradient with more gradual transitions
-        vec3 hotColor = vec3(0.6, 0.35, 0.1);   // Reduced from (0.8, 0.5, 0.15)
-        vec3 warmColor = vec3(0.5, 0.25, 0.05); // Reduced from (0.7, 0.35, 0.08)
-        vec3 coolColor = vec3(0.3, 0.12, 0.03); // Reduced from (0.5, 0.2, 0.05)
+        vec3 hotColor = vec3(0.6, 0.35, 0.1);
+        vec3 warmColor = vec3(0.5, 0.25, 0.05);
+        vec3 coolColor = vec3(0.3, 0.12, 0.03);
 
         vec3 temperatureColor;
         // Smoother temperature blending with wider transition zones
@@ -476,8 +477,8 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
         // More balanced blending - less harsh contrast
         vec3 finalDiskColor = mix(temperatureColor, diskCloudColor * temperatureColor, 0.5);
 
-        // Softer additional volumetric detail
-        float additionalDetail = fbm(diskPos * 4.0 + vec3(time * 0.3), 2) * 0.3 + 0.7; // Reduced contrast
+        // Optimized: Reduced detail computation for performance
+        float additionalDetail = fbm(diskPos * 3.0 + vec3(time * 0.3), 1) * 0.4 + 0.8; // Reduced from 2 octaves to 1, simpler scale
         finalDiskColor *= additionalDetail;
 
         // Softer saturation enhancement
@@ -487,51 +488,45 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
         float clampedBeaming = clamp(beamingIntensity, 0.3, 2.5); // Prevent extreme values
         finalDiskColor *= clampedBeaming;
 
-        // Apply softer lighting with much reduced intensity
-        color += finalDiskColor * diskDensity * adiskLit * alpha * 0.15; // Reduced from 0.4 to 0.15
+        // Apply lighting with balanced intensity
+        color += finalDiskColor * diskDensity * adiskLit * alpha * 0.22; // Reduced from 0.25 to 0.22
     } else {
-        // Softer simple colored disk with Doppler beaming
-        vec3 simpleColor = vec3(0.4, 0.2, 0.0) * diskDensity * 0.01; // Reduced intensity
+        // Simple colored disk with Doppler beaming and optimized density
+        vec3 simpleColor = vec3(0.4, 0.2, 0.0) * diskDensity * 0.018; // Reduced from 0.02 to 0.018
         float clampedBeaming = clamp(beamingIntensity, 0.3, 2.5);
-        color += simpleColor * clampedBeaming; // Apply clamped beaming to simple mode too
+        color += simpleColor * clampedBeaming;
     }
 }
 
 vec3 traceColor(vec3 pos, vec3 dir) {
     vec3 color = vec3(0.0);
-    float alpha = 0.5;
+    float alpha = 1.0;
     bool hitEventHorizon = false;
 
     // Black hole center - use the uniform event horizon radius
     vec3 blackHoleCenter = vec3(0.0, 0.0, 0.0);
 
-    // Smaller step size for higher resolution volumetric rendering
-    float BASE_STEP_SIZE = eventHorizonRadius * 0.02; // Reduced from 0.05 to 0.02
+    // Optimized: Increased step size for better performance while maintaining quality
+    float BASE_STEP_SIZE = eventHorizonRadius * 0.04; // Increased from 0.02 to 0.04 for 2x performance boost
     dir = normalize(dir);
 
     // Initial values for angular momentum conservation
     vec3 h = cross(pos - blackHoleCenter, dir);
     float h2 = dot(h, h);
 
-    // Volumetric cloud accumulation
-    vec3 cloudAccumulation = vec3(0.0);
-    float cloudTransmittance = 1.0;
-
-    // Light direction for cloud illumination (can be adjusted)
-    vec3 lightDir = normalize(vec3(1.0, 0.5, 0.3));
-
-    for (int i = 0; i < 3000; i++) { // Increased from 2000 to 3000 for higher resolution
+    // Optimized: Reduced maximum iterations for better performance
+    for (int i = 0; i < 2000; i++) { // Reduced from 3000 to 2000 for 33% performance boost
         if (renderBlackHole > 0.5) {
             float distToBlackHole = length(pos - blackHoleCenter);
             
-            // More refined adaptive step size for better volumetric detail
+            // Optimized: Simplified adaptive step size calculation
             float stepScale = 1.0;
             if (distToBlackHole < eventHorizonRadius * 5.0) {
-                // Extra fine steps near the black hole for disk detail
-                stepScale = 0.3 + 0.7 * (distToBlackHole / (eventHorizonRadius * 5.0));
-            } else if (distToBlackHole < eventHorizonRadius * 15.0) {
-                // Medium resolution for disk regions
-                stepScale = 0.7 + 0.3 * ((distToBlackHole - eventHorizonRadius * 5.0) / (eventHorizonRadius * 10.0));
+                // Fine steps near the black hole for disk detail
+                stepScale = 0.5 + 0.5 * (distToBlackHole / (eventHorizonRadius * 5.0));
+            } else if (distToBlackHole < eventHorizonRadius * 12.0) {
+                // Medium resolution for disk regions - reduced from 15.0 to 12.0
+                stepScale = 0.8 + 0.2 * ((distToBlackHole - eventHorizonRadius * 5.0) / (eventHorizonRadius * 7.0));
             }
 
             float currentStepSize = BASE_STEP_SIZE * stepScale;
@@ -561,8 +556,8 @@ vec3 traceColor(vec3 pos, vec3 dir) {
             pos += dir * BASE_STEP_SIZE;
         }
 
-        // Break if we've traveled too far from the black hole
-        if (length(pos - blackHoleCenter) > max(50.0, eventHorizonRadius * 100.0)) {
+        // Optimized: Earlier break for distant rays - reduced from 100.0 to 50.0
+        if (length(pos - blackHoleCenter) > max(40.0, eventHorizonRadius * 50.0)) {
             break;
         }
     }

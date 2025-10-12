@@ -28,6 +28,12 @@ public:
     float GetSnapRotate() const { return m_snapRotate; }
     float GetSnapScale() const { return m_snapScale; }
 
+    // Screenshot-Funktionalität
+    void TakeScreenshot();
+    void TakeViewportScreenshot();
+    void TakeScreenshotWithDialog();
+    void TakeViewportScreenshotWithDialog();
+
 private:
     void RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen);
     void RenderSystemWindow(float fps);
@@ -40,6 +46,7 @@ private:
     void RenderCameraControlsSection();
     void RenderRenderingFlagsSection();
     void RenderDebugSection();
+    void RenderScreenshotSection(); // Neue Screenshot-Sektion
 
     void RenderScenePropertiesSection(Scene* scene);
     void RenderRecentScenesSection(Scene* scene);
