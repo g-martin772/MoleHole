@@ -270,6 +270,7 @@ void UI::RenderSimulationWindow(Scene* scene) {
     RenderSimulationGeneralSection();
     RenderBlackHolesSection(scene);
     RenderMeshesSection(scene);
+    RenderSpheresSection(scene);
 
     ImGui::End();
 }
@@ -834,6 +835,103 @@ void UI::RenderMeshesSection(Scene* scene) {
                     scene->ClearSelection();
                 }
                 it = scene->meshes.erase(it);
+                if (!scene->currentPath.empty()) {
+                    scene->Serialize(scene->currentPath);
+                }
+            } else {
+                ++it;
+            }
+            idx++;
+        }
+    }
+}
+
+void UI::RenderSpheresSection(Scene* scene) {
+    if (ImGui::CollapsingHeader("Spheres", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (!scene) {
+            ImGui::TextDisabled("No scene loaded");
+            return;
+        }
+
+        if (ImGui::Button("Add Sphere")) {
+            Sphere newSphere;
+            newSphere.name = "New Sphere";
+            newSphere.position = glm::vec3(0.0f, 0.0f, -5.0f);
+            newSphere.radius = 1.0f;
+            newSphere.color = glm::vec4(0.0f, 0.5f, 1.0f, 1.0f);
+            scene->spheres.push_back(newSphere);
+        }
+
+        ImGui::Text("Spheres: %zu", scene->spheres.size());
+
+        int idx = 0;
+        for (auto it = scene->spheres.begin(); it != scene->spheres.end();) {
+            ImGui::PushID(("sphere_" + std::to_string(idx)).c_str());
+
+            bool isSelected = scene->HasSelection() &&
+                             scene->selectedObject->type == Scene::ObjectType::Sphere &&
+                             scene->selectedObject->index == static_cast<size_t>(idx);
+
+            if (isSelected) {
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.7f, 1.0f, 0.6f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.4f, 0.8f, 1.0f, 0.8f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.5f, 0.9f, 1.0f, 1.0f));
+            }
+
+            std::string label = it->name.empty() ? "Sphere #" + std::to_string(idx + 1) : it->name;
+            if (isSelected) {
+                label += " (Selected)";
+            }
+
+            bool open = ImGui::TreeNode(label.c_str());
+
+            if (isSelected) {
+                ImGui::PopStyleColor(3);
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Select")) {
+                scene->SelectObject(Scene::ObjectType::Sphere, idx);
+            }
+            ImGui::SameLine();
+            bool remove = ImGui::Button("Remove");
+
+            if (open) {
+                Sphere& sphere = *it;
+                bool sphereChanged = false;
+
+                char nameBuffer[128];
+                std::strncpy(nameBuffer, sphere.name.c_str(), sizeof(nameBuffer));
+                nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+                if (ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer))) {
+                    sphere.name = nameBuffer;
+                    sphereChanged = true;
+                }
+
+                if (ImGui::DragFloat3("Position", &sphere.position[0], 0.1f)) {
+                    sphereChanged = true;
+                }
+                if (ImGui::DragFloat("Radius", &sphere.radius, 0.05f, 0.01f, 1e6f)) {
+                    sphereChanged = true;
+                }
+                if (ImGui::ColorEdit3("Color", &sphere.color[0])) {
+                    sphereChanged = true;
+                }
+
+                if (sphereChanged && !scene->currentPath.empty()) {
+                    scene->Serialize(scene->currentPath);
+                }
+
+                ImGui::TreePop();
+            }
+
+            ImGui::PopID();
+
+            if (remove) {
+                if (isSelected) {
+                    scene->ClearSelection();
+                }
+                it = scene->spheres.erase(it);
                 if (!scene->currentPath.empty()) {
                     scene->Serialize(scene->currentPath);
                 }
