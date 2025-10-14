@@ -1,9 +1,10 @@
 #include "GravityGridRenderer.h"
 #include "Buffer.h"
 #include <glad/gl.h>
-#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
+
+#include "Camera.h"
 
 void GravityGridRenderer::Init() {
     m_shader = std::make_unique<Shader>("../shaders/plane_grid.vert", "../shaders/plane_grid.frag");

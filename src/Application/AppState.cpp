@@ -14,8 +14,7 @@ void AppState::LoadFromFile(const std::filesystem::path& configPath) {
         try {
             std::ifstream file(configPath);
             if (file.is_open() && file.peek() != std::ifstream::traits_type::eof()) {
-                YAML::Node config = YAML::LoadFile(configPath.string());
-                if (config && !config.IsNull()) {
+                if (YAML::Node config = YAML::LoadFile(configPath.string()); config && !config.IsNull()) {
                     DeserializeFromYaml(config);
                     spdlog::info("Loaded application state from {}", configPath.string());
                     return;
@@ -31,8 +30,7 @@ void AppState::LoadFromFile(const std::filesystem::path& configPath) {
         try {
             std::ifstream file(backupPath);
             if (file.is_open() && file.peek() != std::ifstream::traits_type::eof()) {
-                YAML::Node config = YAML::LoadFile(backupPath.string());
-                if (config && !config.IsNull()) {
+                if (YAML::Node config = YAML::LoadFile(backupPath.string()); config && !config.IsNull()) {
                     DeserializeFromYaml(config);
                     std::filesystem::copy_file(backupPath, configPath, std::filesystem::copy_options::overwrite_existing);
                     loadedFromBackup = true;
@@ -112,7 +110,7 @@ void AppState::SaveToFile(const std::filesystem::path& configPath) {
 }
 
 bool AppState::HasProperty(const std::string& key) const {
-    return customProperties.find(key) != customProperties.end();
+    return customProperties.contains(key);
 }
 
 void AppState::RemoveProperty(const std::string& key) {
@@ -164,10 +162,7 @@ YAML::Node AppState::SerializeToYaml() const {
     config["rendering"]["fov"] = rendering.fov;
     config["rendering"]["maxRaySteps"] = rendering.maxRaySteps;
     config["rendering"]["rayStepSize"] = rendering.rayStepSize;
-    config["rendering"]["enableDistortion"] = rendering.enableDistortion;
     config["rendering"]["debugMode"] = static_cast<int>(rendering.debugMode);
-    config["rendering"]["kerrLutResolution"] = rendering.kerrLutResolution;
-    config["rendering"]["kerrMaxDistance"] = rendering.kerrMaxDistance;
 
     config["camera"]["position"] = camera.position;
     config["camera"]["front"] = camera.front;
@@ -210,10 +205,7 @@ void AppState::DeserializeFromYaml(const YAML::Node& config) {
         if (renderingNode["fov"]) rendering.fov = renderingNode["fov"].as<float>();
         if (renderingNode["maxRaySteps"]) rendering.maxRaySteps = renderingNode["maxRaySteps"].as<int>();
         if (renderingNode["rayStepSize"]) rendering.rayStepSize = renderingNode["rayStepSize"].as<float>();
-        if (renderingNode["enableDistortion"]) rendering.enableDistortion = renderingNode["enableDistortion"].as<bool>();
         if (renderingNode["debugMode"]) rendering.debugMode = static_cast<DebugMode>(renderingNode["debugMode"].as<int>());
-        if (renderingNode["kerrLutResolution"]) rendering.kerrLutResolution = renderingNode["kerrLutResolution"].as<int>();
-        if (renderingNode["kerrMaxDistance"]) rendering.kerrMaxDistance = renderingNode["kerrMaxDistance"].as<float>();
     }
 
     if (config["camera"]) {
@@ -235,7 +227,7 @@ void AppState::DeserializeFromYaml(const YAML::Node& config) {
     }
 }
 
-AppState::StateValue AppState::YamlNodeToStateValue(const YAML::Node& node) const {
+AppState::StateValue AppState::YamlNodeToStateValue(const YAML::Node& node) {
     try {
         if (node.IsSequence()) {
             if (node.size() == 2) {
@@ -254,7 +246,7 @@ AppState::StateValue AppState::YamlNodeToStateValue(const YAML::Node& node) cons
     }
 }
 
-YAML::Node AppState::StateValueToYamlNode(const StateValue& value) const {
+YAML::Node AppState::StateValueToYamlNode(const StateValue& value) {
     return std::visit([](const auto& v) -> YAML::Node {
         YAML::Node node;
         node = v;

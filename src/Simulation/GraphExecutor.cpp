@@ -44,8 +44,7 @@ void GraphExecutor::ExecuteTickEvent(float deltaTime) {
 void GraphExecutor::ExecuteFlowFromPin(ax::NodeEditor::PinId pinId, float deltaTime) {
     for (const auto& link : m_pGraph->GetLinks()) {
         if (link.StartPinId == pinId) {
-            auto* targetNode = FindNodeByInputPin(link.EndPinId);
-            if (targetNode) {
+            if (auto* targetNode = FindNodeByInputPin(link.EndPinId)) {
                 ExecuteNode(targetNode, link.EndPinId, deltaTime);
             }
         }
@@ -56,7 +55,7 @@ void GraphExecutor::ExecuteNode(AnimationGraph::Node* node, ax::NodeEditor::PinI
     switch (node->Type) {
         case AnimationGraph::NodeType::Print:
             ExecutePrint(node, deltaTime);
-            if (node->Outputs.size() > 0) {
+            if (!node->Outputs.empty()) {
                 ExecuteFlowFromPin(node->Outputs[0].Id, deltaTime);
             }
             break;
@@ -65,14 +64,14 @@ void GraphExecutor::ExecuteNode(AnimationGraph::Node* node, ax::NodeEditor::PinI
             break;
         case AnimationGraph::NodeType::Setter:
             ExecuteSetter(node, deltaTime);
-            if (node->Outputs.size() > 0) {
+            if (!node->Outputs.empty()) {
                 ExecuteFlowFromPin(node->Outputs[0].Id, deltaTime);
             }
             break;
         case AnimationGraph::NodeType::Variable:
             if (node->SubType == AnimationGraph::NodeSubType::VariableSet) {
                 ExecuteVariableSet(node, deltaTime);
-                if (node->Outputs.size() > 0) {
+                if (!node->Outputs.empty()) {
                     ExecuteFlowFromPin(node->Outputs[0].Id, deltaTime);
                 }
             }
@@ -85,7 +84,7 @@ void GraphExecutor::ExecuteNode(AnimationGraph::Node* node, ax::NodeEditor::PinI
 GraphExecutor::Value GraphExecutor::EvaluatePinValue(ax::NodeEditor::PinId pinId, float deltaTime) {
     spdlog::debug("[GraphExecutor] EvaluatePinValue for pin {}", pinId.Get());
 
-    if (m_PinValues.find(pinId.Get()) != m_PinValues.end()) {
+    if (m_PinValues.contains(pinId.Get())) {
         auto& val = m_PinValues[pinId.Get()];
         spdlog::debug("[GraphExecutor] Pin {} found in cache: {}", pinId.Get(), ValueToString(val));
         return val;
@@ -99,7 +98,7 @@ GraphExecutor::Value GraphExecutor::EvaluatePinValue(ax::NodeEditor::PinId pinId
 
     spdlog::debug("[GraphExecutor] Pin {} connected to output pin {}", pinId.Get(), outputPin.Get());
 
-    if (m_PinValues.find(outputPin.Get()) != m_PinValues.end()) {
+    if (m_PinValues.contains(outputPin.Get())) {
         auto& val = m_PinValues[outputPin.Get()];
         spdlog::debug("[GraphExecutor] Output pin {} found in cache: {}", outputPin.Get(), ValueToString(val));
         return val;
@@ -116,7 +115,7 @@ GraphExecutor::Value GraphExecutor::EvaluatePinValue(ax::NodeEditor::PinId pinId
     if (sourceNode->Type == AnimationGraph::NodeType::Decomposer) {
         spdlog::debug("[GraphExecutor] Executing decomposer node");
         ExecuteDecomposer(sourceNode, deltaTime);
-        if (m_PinValues.find(outputPin.Get()) != m_PinValues.end()) {
+        if (m_PinValues.contains(outputPin.Get())) {
             auto& val = m_PinValues[outputPin.Get()];
             spdlog::debug("[GraphExecutor] Decomposer result for pin {}: {}", outputPin.Get(), ValueToString(val));
             return val;
@@ -152,7 +151,7 @@ GraphExecutor::Value GraphExecutor::EvaluateNode(AnimationGraph::Node* node, flo
     return std::monostate{};
 }
 
-AnimationGraph::Node* GraphExecutor::FindNodeByOutputPin(ax::NodeEditor::PinId pinId) {
+AnimationGraph::Node* GraphExecutor::FindNodeByOutputPin(ax::NodeEditor::PinId pinId) const {
     for (auto& node : m_pGraph->GetNodes()) {
         for (const auto& pin : node.Outputs) {
             if (pin.Id == pinId) {
@@ -163,7 +162,7 @@ AnimationGraph::Node* GraphExecutor::FindNodeByOutputPin(ax::NodeEditor::PinId p
     return nullptr;
 }
 
-AnimationGraph::Node* GraphExecutor::FindNodeByInputPin(ax::NodeEditor::PinId pinId) {
+AnimationGraph::Node* GraphExecutor::FindNodeByInputPin(ax::NodeEditor::PinId pinId) const {
     for (auto& node : m_pGraph->GetNodes()) {
         for (const auto& pin : node.Inputs) {
             if (pin.Id == pinId) {
@@ -174,7 +173,7 @@ AnimationGraph::Node* GraphExecutor::FindNodeByInputPin(ax::NodeEditor::PinId pi
     return nullptr;
 }
 
-ax::NodeEditor::PinId GraphExecutor::GetConnectedOutputPin(ax::NodeEditor::PinId inputPinId) {
+ax::NodeEditor::PinId GraphExecutor::GetConnectedOutputPin(ax::NodeEditor::PinId inputPinId) const {
     for (const auto& link : m_pGraph->GetLinks()) {
         if (link.EndPinId == inputPinId) {
             return link.StartPinId;
@@ -642,7 +641,7 @@ void GraphExecutor::ExecuteControlFlow(AnimationGraph::Node* node, ax::NodeEdito
         auto condition = EvaluatePinValue(node->Inputs[1].Id, deltaTime);
         bool condResult = GetValueAs<bool>(condition, false);
 
-        if (condResult && node->Outputs.size() > 0) {
+        if (condResult && !node->Outputs.empty()) {
             ExecuteFlowFromPin(node->Outputs[0].Id, deltaTime);
         } else if (!condResult && node->Outputs.size() > 1) {
             ExecuteFlowFromPin(node->Outputs[1].Id, deltaTime);
@@ -658,7 +657,7 @@ void GraphExecutor::ExecuteControlFlow(AnimationGraph::Node* node, ax::NodeEdito
             if (node->Outputs.size() > 1) {
                 m_PinValues[node->Outputs[1].Id.Get()] = i;
             }
-            if (node->Outputs.size() > 0) {
+            if (!node->Outputs.empty()) {
                 ExecuteFlowFromPin(node->Outputs[0].Id, deltaTime);
             }
         }
