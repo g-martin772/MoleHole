@@ -29,7 +29,7 @@ public:
     bool IsPaused() const { return m_state == State::Paused; }
     bool IsStopped() const { return m_state == State::Stopped; }
 
-    Scene* GetScene();
+    Scene* GetScene() const;
     float GetSimulationTime() const { return m_simulationTime; }
 
     void SetAnimationGraph(AnimationGraph* graph);
@@ -43,7 +43,7 @@ private:
     float m_simulationTime;
     bool m_startEventExecuted;
 
-    void SaveSceneState();
-    void RestoreSceneState();
-    void UpdateSimulation(float deltaTime);
+    void SaveSceneState() const;
+    void RestoreSceneState() const;
+    void UpdateSimulation(float deltaTime) const;
 };

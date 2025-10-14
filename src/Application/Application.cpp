@@ -130,13 +130,13 @@ GLFWwindow* Application::GetWindow() const {
     return m_renderer.GetWindow();
 }
 
-void Application::SetWindowTitle(const std::string& title) {
+void Application::SetWindowTitle(const std::string& title) const {
     if (auto window = GetWindow()) {
         glfwSetWindowTitle(window, title.c_str());
     }
 }
 
-void Application::RequestClose() {
+void Application::RequestClose() const {
     if (auto window = GetWindow()) {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
     }
@@ -144,8 +144,7 @@ void Application::RequestClose() {
 
 void Application::LoadScene(const std::filesystem::path& scenePath) {
     try {
-        auto scene = m_simulation.GetScene();
-        if (scene && std::filesystem::exists(scenePath)) {
+        if (auto scene = m_simulation.GetScene(); scene && std::filesystem::exists(scenePath)) {
             scene->Deserialize(scenePath);
             m_state.SetLastOpenScene(scenePath.string());
             spdlog::info("Loaded scene: {}", scenePath.string());
@@ -157,8 +156,7 @@ void Application::LoadScene(const std::filesystem::path& scenePath) {
 
 void Application::SaveScene(const std::filesystem::path& scenePath) {
     try {
-        auto scene = m_simulation.GetScene();
-        if (scene) {
+        if (auto scene = m_simulation.GetScene()) {
             scene->Serialize(scenePath);
             m_state.SetLastOpenScene(scenePath.string());
             spdlog::info("Saved scene: {}", scenePath.string());
@@ -169,8 +167,7 @@ void Application::SaveScene(const std::filesystem::path& scenePath) {
 }
 
 void Application::NewScene() {
-    auto scene = m_simulation.GetScene();
-    if (scene) {
+    if (auto scene = m_simulation.GetScene()) {
         scene->blackHoles.clear();
         scene->name = "New Scene";
         scene->currentPath.clear();
@@ -203,8 +200,7 @@ void Application::UnregisterRenderCallback(const std::string& name) {
 void Application::InitializeRenderer() {
     m_renderer.Init();
 
-    auto window = m_renderer.GetWindow();
-    if (window) {
+    if (auto window = m_renderer.GetWindow()) {
         glfwSetWindowUserPointer(window, this);
         glfwSetWindowSizeCallback(window, WindowSizeCallback);
         glfwSetWindowPosCallback(window, WindowPosCallback);
@@ -257,16 +253,14 @@ void Application::WindowSizeCallback(GLFWwindow* window, int width, int height) 
 }
 
 void Application::WindowPosCallback(GLFWwindow* window, int xpos, int ypos) {
-    auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-    if (app) {
+    if (auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window))) {
         app->m_state.window.posX = xpos;
         app->m_state.window.posY = ypos;
     }
 }
 
 void Application::WindowMaximizeCallback(GLFWwindow* window, int maximized) {
-    auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-    if (app) {
+    if (auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window))) {
         app->m_state.window.maximized = (maximized == GLFW_TRUE);
     }
 }

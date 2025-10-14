@@ -255,6 +255,11 @@ std::string Scene::GetSelectedObjectName() const {
                 return meshes[selectedObject->index].name;
             }
             break;
+        case ObjectType::Sphere:
+            if (selectedObject->index < spheres.size()) {
+                return spheres[selectedObject->index].name;
+            }
+            break;
     }
     return "";
 }

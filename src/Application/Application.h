@@ -11,6 +11,9 @@ struct GLFWwindow;
 
 class Application {
 public:
+    Application(const Application&) = delete;
+    Application& operator=(const Application&) = delete;
+
     using UpdateCallback = std::function<void(float deltaTime)>;
     using RenderCallback = std::function<void()>;
     using EventCallback = std::function<void()>;
@@ -32,8 +35,8 @@ public:
     const AppState& GetState() const { return m_state; }
 
     GLFWwindow* GetWindow() const;
-    void SetWindowTitle(const std::string& title);
-    void RequestClose();
+    void SetWindowTitle(const std::string& title) const;
+    void RequestClose() const;
 
     void LoadScene(const std::filesystem::path& scenePath);
     void SaveScene(const std::filesystem::path& scenePath);
@@ -56,8 +59,6 @@ public:
 private:
     Application() = default;
     ~Application() = default;
-    Application(const Application&) = delete;
-    Application& operator=(const Application&) = delete;
 
     AppState m_state;
     UI m_ui;
@@ -77,7 +78,8 @@ private:
     void InitializeRenderer();
     void InitializeSimulation();
     void UpdateWindowState();
-    void HandleWindowEvents();
+
+    static void HandleWindowEvents();
 
     static void WindowSizeCallback(GLFWwindow* window, int width, int height);
     static void WindowPosCallback(GLFWwindow* window, int xpos, int ypos);

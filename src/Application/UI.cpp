@@ -370,44 +370,7 @@ void UI::RenderCameraControlsSection() {
 
 void UI::RenderRenderingFlagsSection() {
     if (ImGui::CollapsingHeader("Rendering Flags", ImGuiTreeNodeFlags_DefaultOpen)) {
-        bool kerrDistortionEnabled = Application::State().rendering.enableDistortion;
-        if (ImGui::Checkbox("Enable Kerr Distortion", &kerrDistortionEnabled)) {
-            Application::State().rendering.enableDistortion = kerrDistortionEnabled;
-            m_configDirty = true;
-        }
-
-        if (Application::State().rendering.enableDistortion) {
-            int kerrLutResolution = Application::State().rendering.kerrLutResolution;
-            if (ImGui::SliderInt("LUT Resolution", &kerrLutResolution, 32, 256)) {
-                Application::State().rendering.kerrLutResolution = kerrLutResolution;
-                m_configDirty = true;
-            }
-
-            float kerrMaxDistance = Application::State().rendering.kerrMaxDistance;
-            if (ImGui::DragFloat("Max Distance", &kerrMaxDistance, 1.0f, 10.0f, 1000.0f)) {
-                Application::State().rendering.kerrMaxDistance = kerrMaxDistance;
-                m_configDirty = true;
-            }
-
-            bool kerrDebugLut = Application::State().GetProperty<bool>("kerrDebugLut", false);
-            if (ImGui::Checkbox("Debug Kerr LUT", &kerrDebugLut)) {
-                Application::State().SetProperty("kerrDebugLut", kerrDebugLut);
-                m_configDirty = true;
-            }
-
-            ImGui::SameLine();
-            ImGui::TextDisabled("(?)");
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip(
-                    "Kerr LUT overlay: a 2D slice of the 3D table.\n"
-                    "Horizontal = polar angle θ (0..π), Vertical = azimuth φ (0..2π).\n"
-                    "Slice: fixed distance (X axis of the LUT) at mid-range.\n"
-                    "Color: two hues mix encode deflection (R=θ defl, G=φ defl).\n"
-                    "Brightness (value) = distance factor (B channel).\n"
-                    "Magenta tint = invalid/overflow entries (A == 0).\n"
-                    "Faint grid helps gauge indices.");
-            }
-        }
+        ImGui::TextDisabled("Rendering flags TODO...");
     }
 }
 

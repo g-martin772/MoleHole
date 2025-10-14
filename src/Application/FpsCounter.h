@@ -8,9 +8,8 @@ public:
     void Frame() {
         ++m_FrameCount;
         auto now = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<float> elapsed = now - m_LastTime;
-        if (elapsed.count() >= 1.0f) {
-            m_Fps = m_FrameCount / elapsed.count();
+        if (std::chrono::duration<float> elapsed = now - m_LastTime; elapsed.count() >= 1.0f) {
+            m_Fps = static_cast<float>(m_FrameCount) / elapsed.count();
             m_FrameCount = 0;
             m_LastTime = now;
         }

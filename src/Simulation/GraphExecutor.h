@@ -29,9 +29,9 @@ private:
     Value EvaluatePinValue(ax::NodeEditor::PinId pinId, float deltaTime);
     Value EvaluateNode(AnimationGraph::Node* node, float deltaTime);
 
-    AnimationGraph::Node* FindNodeByOutputPin(ax::NodeEditor::PinId pinId);
-    AnimationGraph::Node* FindNodeByInputPin(ax::NodeEditor::PinId pinId);
-    ax::NodeEditor::PinId GetConnectedOutputPin(ax::NodeEditor::PinId inputPinId);
+    AnimationGraph::Node* FindNodeByOutputPin(ax::NodeEditor::PinId pinId) const;
+    AnimationGraph::Node* FindNodeByInputPin(ax::NodeEditor::PinId pinId) const;
+    ax::NodeEditor::PinId GetConnectedOutputPin(ax::NodeEditor::PinId inputPinId) const;
 
     Value ExecuteMathOperation(AnimationGraph::Node* node, float deltaTime);
     Value ExecuteConstant(AnimationGraph::Node* node);
@@ -43,7 +43,7 @@ private:
     Value ExecuteVariableGet(AnimationGraph::Node* node);
     void ExecuteVariableSet(AnimationGraph::Node* node, float deltaTime);
 
-    std::string ValueToString(const Value& val);
+    static std::string ValueToString(const Value& val);
 
     template<typename T>
     T GetValueAs(const Value& val, T defaultValue = T{});
