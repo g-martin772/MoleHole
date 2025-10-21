@@ -15,6 +15,7 @@ public:
 
     void Init(int width, int height);
     void Render(const Camera& camera, float time);
+    void Resize(int width, int height);
 
     void CreateFullscreenQuad();
     uint32_t loadTexture2D(const std::string &file, bool repeat = true);

@@ -1516,9 +1516,7 @@ void UI::RenderImageExportSettings() {
             config.width = m_imageConfig.width;
             config.height = m_imageConfig.height;
 
-            std::thread([&exportRenderer, config, path = std::string(outPath), scene = app.GetSimulation().GetScene()]() {
-                exportRenderer.ExportImage(config, path, scene);
-            }).detach();
+            exportRenderer.StartImageExport(config, std::string(outPath), app.GetSimulation().GetScene());
 
             free(outPath);
         }
@@ -1590,9 +1588,7 @@ void UI::RenderVideoExportSettings() {
             config.framerate = m_videoConfig.framerate;
             config.tickrate = m_videoConfig.tickrate;
 
-            std::thread([&exportRenderer, config, path = std::string(outPath), scene = app.GetSimulation().GetScene()]() {
-                exportRenderer.ExportVideo(config, path, scene);
-            }).detach();
+            exportRenderer.StartVideoExport(config, std::string(outPath), app.GetSimulation().GetScene());
 
             free(outPath);
         }
