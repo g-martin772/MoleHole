@@ -300,6 +300,14 @@ void AnimationGraph::Render() {
                 m_Nodes.push_back(CreateGetBlackHoleFromSceneNode(GenerateRandomId()));
                 ed::SetNodePosition(m_Nodes.back().Id, mousePos);
             }
+            if (matchesSearch("Get Sphere From Scene") && ImGui::MenuItem("Get Sphere From Scene")) {
+                m_Nodes.push_back(CreateGetSphereFromSceneNode(GenerateRandomId()));
+                ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+            }
+            if (matchesSearch("Get Mesh From Scene") && ImGui::MenuItem("Get Mesh From Scene")) {
+                m_Nodes.push_back(CreateGetMeshFromSceneNode(GenerateRandomId()));
+                ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+            }
             if (matchesSearch("Get Camera From Scene") && ImGui::MenuItem("Get Camera From Scene")) {
                 m_Nodes.push_back(CreateGetCameraFromSceneNode(GenerateRandomId()));
                 ed::SetNodePosition(m_Nodes.back().Id, mousePos);
@@ -460,6 +468,22 @@ void AnimationGraph::Render() {
             }
             if (matchesSearch("Set Camera") && ImGui::MenuItem("Set Camera Properties")) {
                 m_Nodes.push_back(CreateCameraSetterNode(GenerateRandomId()));
+                ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+            }
+            if (matchesSearch("Get Sphere") && ImGui::MenuItem("Get Sphere Properties")) {
+                m_Nodes.push_back(CreateSphereDecomposerNode(GenerateRandomId()));
+                ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+            }
+            if (matchesSearch("Set Sphere") && ImGui::MenuItem("Set Sphere Properties")) {
+                m_Nodes.push_back(CreateSphereSetterNode(GenerateRandomId()));
+                ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+            }
+            if (matchesSearch("Get Mesh") && ImGui::MenuItem("Get Mesh Properties")) {
+                m_Nodes.push_back(CreateMeshDecomposerNode(GenerateRandomId()));
+                ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+            }
+            if (matchesSearch("Set Mesh") && ImGui::MenuItem("Set Mesh Properties")) {
+                m_Nodes.push_back(CreateMeshSetterNode(GenerateRandomId()));
                 ed::SetNodePosition(m_Nodes.back().Id, mousePos);
             }
 
@@ -734,6 +758,28 @@ void AnimationGraph::Render() {
                     }
                     if (ImGui::MenuItem("Set Camera")) {
                         m_Nodes.push_back(CreateCameraSetterNode(GenerateRandomId()));
+                        ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+                    }
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Mesh")) {
+                    if (ImGui::MenuItem("Get Mesh")) {
+                        m_Nodes.push_back(CreateMeshDecomposerNode(GenerateRandomId()));
+                        ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+                    }
+                    if (ImGui::MenuItem("Set Mesh")) {
+                        m_Nodes.push_back(CreateMeshSetterNode(GenerateRandomId()));
+                        ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+                    }
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Sphere")) {
+                    if (ImGui::MenuItem("Get Sphere")) {
+                        m_Nodes.push_back(CreateSphereDecomposerNode(GenerateRandomId()));
+                        ed::SetNodePosition(m_Nodes.back().Id, mousePos);
+                    }
+                    if (ImGui::MenuItem("Set Sphere")) {
+                        m_Nodes.push_back(CreateSphereSetterNode(GenerateRandomId()));
                         ed::SetNodePosition(m_Nodes.back().Id, mousePos);
                     }
                     ImGui::EndMenu();
@@ -1212,6 +1258,75 @@ AnimationGraph::Node AnimationGraph::CreateGetCameraFromSceneNode(int id) {
     return node;
 }
 
+AnimationGraph::Node AnimationGraph::CreateMeshDecomposerNode(int id) {
+    Node node;
+    node.Id = ed::NodeId(id);
+    node.Name = "Get Mesh";
+    node.Type = NodeType::Decomposer;
+    node.SubType = NodeSubType::Mesh;
+    node.Inputs = {
+        {ed::PinId(id * 10 + 0), "Mesh", PinType::Mesh, true}
+    };
+    node.Outputs = {
+        {ed::PinId(id * 10 + 1), "Name", PinType::String, false},
+        {ed::PinId(id * 10 + 2), "Position", PinType::F3, false},
+        {ed::PinId(id * 10 + 3), "Rotation", PinType::F4, false},
+        {ed::PinId(id * 10 + 4), "Scale", PinType::F3, false},
+        {ed::PinId(id * 10 + 5), "Path", PinType::String, false}
+    };
+    return node;
+}
+
+AnimationGraph::Node AnimationGraph::CreateSphereDecomposerNode(int id) {
+    Node node;
+    node.Id = ed::NodeId(id);
+    node.Name = "Get Sphere";
+    node.Type = NodeType::Decomposer;
+    node.SubType = NodeSubType::Sphere;
+    node.Inputs = {
+        {ed::PinId(id * 10 + 0), "Sphere", PinType::Sphere, true}
+    };
+    node.Outputs = {
+        {ed::PinId(id * 10 + 1), "Name", PinType::String, false},
+        {ed::PinId(id * 10 + 2), "Position", PinType::F3, false},
+        {ed::PinId(id * 10 + 3), "Radius", PinType::F1, false},
+        {ed::PinId(id * 10 + 4), "Color", PinType::F3, false}
+    };
+    return node;
+}
+
+AnimationGraph::Node AnimationGraph::CreateGetMeshFromSceneNode(int id, int index) {
+    Node node;
+    node.Id = ed::NodeId(id);
+    node.Name = "Get Mesh From Scene";
+    node.Type = NodeType::Function;
+    node.SubType = NodeSubType::Mesh;
+    node.Inputs = {
+        {ed::PinId(id * 10 + 0), "Index", PinType::I1, true}
+    };
+    node.Outputs = {
+        {ed::PinId(id * 10 + 1), "Mesh", PinType::Mesh, false}
+    };
+    node.SceneObjectIndex = index;
+    return node;
+}
+
+AnimationGraph::Node AnimationGraph::CreateGetSphereFromSceneNode(int id, int index) {
+    Node node;
+    node.Id = ed::NodeId(id);
+    node.Name = "Get Sphere From Scene";
+    node.Type = NodeType::Function;
+    node.SubType = NodeSubType::Sphere;
+    node.Inputs = {
+        {ed::PinId(id * 10 + 0), "Index", PinType::I1, true}
+    };
+    node.Outputs = {
+        {ed::PinId(id * 10 + 1), "Sphere", PinType::Sphere, false}
+    };
+    node.SceneObjectIndex = index;
+    return node;
+}
+
 AnimationGraph::Node AnimationGraph::CreateBlackHoleSetterNode(int id) {
     Node node;
     node.Id = ed::NodeId(id);
@@ -1254,6 +1369,42 @@ AnimationGraph::Node AnimationGraph::CreateCameraSetterNode(int id) {
     node.Outputs = {
         {ed::PinId(id * 10 + 6), "Flow", PinType::Flow, false},
         {ed::PinId(id * 10 + 7), "Camera", PinType::Camera, false}
+    };
+    return node;
+}
+
+AnimationGraph::Node AnimationGraph::CreateMeshSetterNode(int id) {
+    Node node;
+    node.Id = ed::NodeId(id);
+    node.Name = "Set Mesh";
+    node.Type = NodeType::Setter;
+    node.SubType = NodeSubType::Mesh;
+    node.Inputs = {
+        {ed::PinId(id * 10 + 0), "Mesh", PinType::Mesh, true},
+        {ed::PinId(id * 10 + 1), "Position", PinType::F3, true},
+        {ed::PinId(id * 10 + 2), "Rotation", PinType::F4, true},
+        {ed::PinId(id * 10 + 3), "Scale", PinType::F3, true}
+    };
+    node.Outputs = {
+        {ed::PinId(id * 10 + 4), "Mesh", PinType::Mesh, false}
+    };
+    return node;
+}
+
+AnimationGraph::Node AnimationGraph::CreateSphereSetterNode(int id) {
+    Node node;
+    node.Id = ed::NodeId(id);
+    node.Name = "Set Sphere";
+    node.Type = NodeType::Setter;
+    node.SubType = NodeSubType::Sphere;
+    node.Inputs = {
+        {ed::PinId(id * 10 + 0), "Sphere", PinType::Sphere, true},
+        {ed::PinId(id * 10 + 1), "Position", PinType::F3, true},
+        {ed::PinId(id * 10 + 2), "Radius", PinType::F1, true},
+        {ed::PinId(id * 10 + 3), "Color", PinType::F3, true}
+    };
+    node.Outputs = {
+        {ed::PinId(id * 10 + 4), "Sphere", PinType::Sphere, false}
     };
     return node;
 }
@@ -1728,3 +1879,4 @@ void AnimationGraph::UpdateSceneObjects(Scene *scene) {
         }
     }
 }
+

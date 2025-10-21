@@ -33,7 +33,7 @@ public:
     } window;
 
     struct ApplicationState {
-        std::string lastOpenScene = "";
+        std::string lastOpenScene;
         std::vector<std::string> recentScenes;
         bool showDemoWindow = false;
         int debugMode = 0;
@@ -46,10 +46,7 @@ public:
         float fov = 45.0f;
         int maxRaySteps = 1000;
         float rayStepSize = 0.01f;
-        bool enableDistortion = true;
         DebugMode debugMode = DebugMode::Normal;
-        int kerrLutResolution = 64;
-        float kerrMaxDistance = 100.0f;
     } rendering;
 
     struct CameraState {
@@ -85,16 +82,15 @@ public:
     void UpdateCameraState(const glm::vec3 &position, const glm::vec3 &front, const glm::vec3 &up, float pitch,
                            float yaw);
 
-
     std::filesystem::path m_configPath;
 
     YAML::Node SerializeToYaml() const;
 
     void DeserializeFromYaml(const YAML::Node &node);
 
-    StateValue YamlNodeToStateValue(const YAML::Node &node) const;
+    static StateValue YamlNodeToStateValue(const YAML::Node &node);
 
-    YAML::Node StateValueToYamlNode(const StateValue &value) const;
+    static YAML::Node StateValueToYamlNode(const StateValue &value);
 };
 
 template<typename T>
@@ -104,8 +100,7 @@ void AppState::SetProperty(const std::string &key, const T &value) {
 
 template<typename T>
 T AppState::GetProperty(const std::string &key, const T &defaultValue) const {
-    auto it = customProperties.find(key);
-    if (it != customProperties.end()) {
+    if (auto it = customProperties.find(key); it != customProperties.end()) {
         try {
             return std::get<T>(it->second);
         } catch (const std::bad_variant_access &) {

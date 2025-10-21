@@ -10,34 +10,57 @@
 
 #include "Application/Application.h"
 
-void Scene::Serialize(const std::filesystem::path& path) {
+void Scene::Serialize(const std::filesystem::path &path) {
     currentPath = path;
     YAML::Emitter out;
     out << YAML::BeginMap;
     out << YAML::Key << "name" << YAML::Value << name;
     out << YAML::Key << "black_holes" << YAML::Value << YAML::BeginSeq;
-    for (const auto& bh : blackHoles) {
+    for (const auto &bh: blackHoles) {
         out << YAML::BeginMap;
         out << YAML::Key << "mass" << YAML::Value << bh.mass;
-        out << YAML::Key << "position" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.position.x << bh.position.y << bh.position.z << YAML::EndSeq;
+        out << YAML::Key << "position" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.position.x << bh.position.y
+                << bh.position.z << YAML::EndSeq;
         out << YAML::Key << "show_accretion_disk" << YAML::Value << bh.showAccretionDisk;
         out << YAML::Key << "accretion_disk_density" << YAML::Value << bh.accretionDiskDensity;
         out << YAML::Key << "accretion_disk_size" << YAML::Value << bh.accretionDiskSize;
-        out << YAML::Key << "accretion_disk_color" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.accretionDiskColor.r << bh.accretionDiskColor.g << bh.accretionDiskColor.b << YAML::EndSeq;
+        out << YAML::Key << "accretion_disk_color" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.
+                accretionDiskColor.r << bh.accretionDiskColor.g << bh.accretionDiskColor.b << YAML::EndSeq;
         out << YAML::Key << "spin" << YAML::Value << bh.spin;
-        out << YAML::Key << "spin_axis" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.spinAxis.x << bh.spinAxis.y << bh.spinAxis.z << YAML::EndSeq;
+        out << YAML::Key << "spin_axis" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.spinAxis.x << bh.spinAxis.y
+                << bh.spinAxis.z << YAML::EndSeq;
         out << YAML::EndMap;
     }
     out << YAML::EndSeq;
 
     out << YAML::Key << "meshes" << YAML::Value << YAML::BeginSeq;
-    for (const auto& mesh : meshes) {
+    for (const auto &mesh: meshes) {
         out << YAML::BeginMap;
         out << YAML::Key << "name" << YAML::Value << mesh.name;
         out << YAML::Key << "path" << YAML::Value << mesh.path;
-        out << YAML::Key << "position" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.position.x << mesh.position.y << mesh.position.z << YAML::EndSeq;
-        out << YAML::Key << "rotation" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.rotation.w << mesh.rotation.x << mesh.rotation.y << mesh.rotation.z << YAML::EndSeq;
-        out << YAML::Key << "scale" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.scale.x << mesh.scale.y << mesh.scale.z << YAML::EndSeq;
+        out << YAML::Key << "position" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.position.x << mesh.
+                position.y << mesh.position.z << YAML::EndSeq;
+        out << YAML::Key << "rotation" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.rotation.w << mesh.
+                rotation.x << mesh.rotation.y << mesh.rotation.z << YAML::EndSeq;
+        out << YAML::Key << "scale" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.scale.x << mesh.scale.y <<
+                mesh.scale.z << YAML::EndSeq;
+        out << YAML::EndMap;
+    }
+    out << YAML::EndSeq;
+
+    out << YAML::Key << "spheres" << YAML::Value << YAML::BeginSeq;
+    for (const auto &sphere: spheres) {
+        out << YAML::BeginMap;
+        out << YAML::Key << "name" << YAML::Value << sphere.name;
+        out << YAML::Key << "texture_path" << YAML::Value << sphere.texturePath;
+        out << YAML::Key << "position" << YAML::Value << YAML::Flow << YAML::BeginSeq << sphere.position.x << sphere.
+                position.y << sphere.position.z << YAML::EndSeq;
+        out << YAML::Key << "rotation" << YAML::Value << YAML::Flow << YAML::BeginSeq << sphere.rotation.w << sphere.
+                rotation.x << sphere.rotation.y << sphere.rotation.z << YAML::EndSeq;
+        out << YAML::Key << "color" << YAML::Value << YAML::Flow << YAML::BeginSeq << sphere.color.r << sphere.color.g
+                << sphere.color.b << sphere.color.a << YAML::EndSeq;
+        out << YAML::Key << "spin" << YAML::Value << sphere.spin;
+        out << YAML::Key << "radius" << YAML::Value << sphere.radius;
         out << YAML::EndMap;
     }
     out << YAML::EndSeq;
@@ -49,7 +72,7 @@ void Scene::Serialize(const std::filesystem::path& path) {
     fout << out.c_str();
 }
 
-void Scene::Deserialize(const std::filesystem::path& path, bool setCurrentPath) {
+void Scene::Deserialize(const std::filesystem::path &path, bool setCurrentPath) {
     if (setCurrentPath) {
         currentPath = path;
     }
@@ -62,7 +85,7 @@ void Scene::Deserialize(const std::filesystem::path& path, bool setCurrentPath) 
         name = "";
     }
     if (root["black_holes"]) {
-        for (const auto& node : root["black_holes"]) {
+        for (const auto &node: root["black_holes"]) {
             BlackHole bh{};
             bh.mass = node["mass"].as<float>();
             auto pos = node["position"];
@@ -91,7 +114,7 @@ void Scene::Deserialize(const std::filesystem::path& path, bool setCurrentPath) 
     }
 
     if (root["meshes"]) {
-        for (const auto& node : root["meshes"]) {
+        for (const auto &node: root["meshes"]) {
             MeshObject mesh;
             mesh.name = node["name"].as<std::string>();
             mesh.path = node["path"].as<std::string>();
@@ -105,12 +128,30 @@ void Scene::Deserialize(const std::filesystem::path& path, bool setCurrentPath) 
         }
     }
 
+    if (root["spheres"]) {
+        for (const auto &node: root["spheres"]) {
+            Sphere sphere;
+            sphere.name = node["name"].as<std::string>();
+            sphere.texturePath = node["texture_path"].as<std::string>();
+            auto pos = node["position"];
+            sphere.position = glm::vec3(pos[0].as<float>(), pos[1].as<float>(), pos[2].as<float>());
+            auto rot = node["rotation"];
+            sphere.rotation = glm::quat(rot[0].as<float>(), rot[1].as<float>(), rot[2].as<float>(), rot[3].as<float>());
+            auto color = node["color"];
+            sphere.color = glm::vec4(color[0].as<float>(), color[1].as<float>(), color[2].as<float>(),
+                                     color[3].as<float>());
+            sphere.spin = node["spin"].as<float>();
+            sphere.radius = node["radius"].as<float>();
+            spheres.push_back(sphere);
+        }
+    }
+
     Application::Instance().GetUI().GetAnimationGraph()->Deserialize(root);
 }
 
 std::filesystem::path Scene::ShowFileDialog(bool save) {
-    nfdchar_t* outPath = nullptr;
-    nfdfilteritem_t filterItem = { "YAML", "yaml" };
+    nfdchar_t *outPath = nullptr;
+    nfdfilteritem_t filterItem = {"YAML", "yaml"};
     nfdresult_t result;
 
     if (save) {
@@ -133,6 +174,8 @@ void Scene::SelectObject(ObjectType type, size_t index) {
         selectedObject = SelectedObject{type, index};
     } else if (type == ObjectType::Mesh && index < meshes.size()) {
         selectedObject = SelectedObject{type, index};
+    } else if (type == ObjectType::Sphere && index < spheres.size()) {
+        selectedObject = SelectedObject{type, index};
     } else {
         ClearSelection();
     }
@@ -142,7 +185,7 @@ void Scene::ClearSelection() {
     selectedObject.reset();
 }
 
-glm::vec3* Scene::GetSelectedObjectPosition() {
+glm::vec3 *Scene::GetSelectedObjectPosition() {
     if (!selectedObject.has_value()) return nullptr;
 
     switch (selectedObject->type) {
@@ -156,11 +199,15 @@ glm::vec3* Scene::GetSelectedObjectPosition() {
                 return &meshes[selectedObject->index].position;
             }
             break;
+        case ObjectType::Sphere:
+            if (selectedObject->index < spheres.size()) {
+                return &spheres[selectedObject->index].position;
+            }
     }
     return nullptr;
 }
 
-glm::quat* Scene::GetSelectedObjectRotation() {
+glm::quat *Scene::GetSelectedObjectRotation() {
     if (!selectedObject.has_value()) return nullptr;
 
     switch (selectedObject->type) {
@@ -169,13 +216,17 @@ glm::quat* Scene::GetSelectedObjectRotation() {
                 return &meshes[selectedObject->index].rotation;
             }
             break;
+        case ObjectType::Sphere:
+            if (selectedObject->index < spheres.size()) {
+                return &spheres[selectedObject->index].rotation;
+            }
         default:
             break;
     }
     return nullptr;
 }
 
-glm::vec3* Scene::GetSelectedObjectScale() {
+glm::vec3 *Scene::GetSelectedObjectScale() {
     if (!selectedObject.has_value()) return nullptr;
 
     switch (selectedObject->type) {
@@ -204,16 +255,22 @@ std::string Scene::GetSelectedObjectName() const {
                 return meshes[selectedObject->index].name;
             }
             break;
+        case ObjectType::Sphere:
+            if (selectedObject->index < spheres.size()) {
+                return spheres[selectedObject->index].name;
+            }
+            break;
     }
     return "";
 }
 
-std::optional<Scene::SelectedObject> Scene::PickObject(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) const {
+std::optional<Scene::SelectedObject>
+Scene::PickObject(const glm::vec3 &rayOrigin, const glm::vec3 &rayDirection) const {
     float closestDistance = std::numeric_limits<float>::max();
     std::optional<SelectedObject> closestObject;
 
     for (size_t i = 0; i < blackHoles.size(); ++i) {
-        const auto& bh = blackHoles[i];
+        const auto &bh = blackHoles[i];
 
         float schwarzschildRadius = 2.0f * bh.mass;
         float pickingRadius = std::max(schwarzschildRadius, 1.0f);
@@ -232,6 +289,28 @@ std::optional<Scene::SelectedObject> Scene::PickObject(const glm::vec3& rayOrigi
             if (t > 0 && t < closestDistance) {
                 closestDistance = t;
                 closestObject = SelectedObject{ObjectType::BlackHole, i};
+            }
+        }
+    }
+
+    for (size_t i = 0; i < meshes.size(); ++i) {
+    }
+
+    for (size_t i = 0; i < spheres.size(); ++i) {
+        const auto &sphere = spheres[i];
+        float pickingRadius = sphere.radius;
+        glm::vec3 oc = rayOrigin - sphere.position;
+        float a = glm::dot(rayDirection, rayDirection);
+        float b = 2.0f * glm::dot(oc, rayDirection);
+        float c = glm::dot(oc, oc) - pickingRadius * pickingRadius;
+        float discriminant = b * b - 4 * a * c;
+        if (discriminant >= 0) {
+            float t1 = (-b - sqrt(discriminant)) / (2.0f * a);
+            float t2 = (-b + sqrt(discriminant)) / (2.0f * a);
+            float t = (t1 > 0) ? t1 : t2;
+            if (t > 0 && t < closestDistance) {
+                closestDistance = t;
+                closestObject = SelectedObject{ObjectType::Sphere, i};
             }
         }
     }

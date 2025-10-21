@@ -87,6 +87,7 @@ void Renderer::Init() {
 
     gravityGridRenderer = std::make_unique<GravityGridRenderer>();
     gravityGridRenderer->Init();
+    InitSphereGeometry();
 }
 
 void Renderer::Shutdown() {
@@ -385,59 +386,52 @@ void Renderer::DrawCircle(const glm::vec2 &pos, float radius, const glm::vec3 &c
     glDisable(GL_BLEND);
 }
 
-void Renderer::DrawSphere(const glm::vec3 &pos, float radius, const glm::vec3 &color) {
-    static unsigned int sphereVAO = 0, sphereVBO = 0, sphereEBO = 0;
-    static int indexCount = 0;
-    if (sphereVAO == 0) {
-        const int X_SEGMENTS = 16;
-        const int Y_SEGMENTS = 16;
-        std::vector<float> vertices;
-        std::vector<unsigned int> indices;
-        for (int y = 0; y <= Y_SEGMENTS; ++y) {
-            for (int x = 0; x <= X_SEGMENTS; ++x) {
-                float xSegment = (float) x / (float) X_SEGMENTS;
-                float ySegment = (float) y / (float) Y_SEGMENTS;
-                float xPos = std::cos(xSegment * 2.0f * M_PI) * std::sin(ySegment * M_PI);
-                float yPos = std::cos(ySegment * M_PI);
-                float zPos = std::sin(xSegment * 2.0f * M_PI) * std::sin(ySegment * M_PI);
-                vertices.push_back(xPos);
-                vertices.push_back(yPos);
-                vertices.push_back(zPos);
-            }
+void Renderer::InitSphereGeometry() {
+    if (m_SphereVAO != 0) return;
+    constexpr int X_SEGMENTS = 32;
+    constexpr int Y_SEGMENTS = 32;
+    std::vector<float> vertices;
+    std::vector<unsigned int> indices;
+    for (int y = 0; y <= Y_SEGMENTS; ++y) {
+        for (int x = 0; x <= X_SEGMENTS; ++x) {
+            float xSegment = (float)x / (float)X_SEGMENTS;
+            float ySegment = (float)y / (float)Y_SEGMENTS;
+            float xPos = std::cos(xSegment * 2.0f * M_PI) * std::sin(ySegment * M_PI);
+            float yPos = std::cos(ySegment * M_PI);
+            float zPos = std::sin(xSegment * 2.0f * M_PI) * std::sin(ySegment * M_PI);
+            vertices.push_back(xPos);
+            vertices.push_back(yPos);
+            vertices.push_back(zPos);
         }
-        for (int y = 0; y < Y_SEGMENTS; ++y) {
-            for (int x = 0; x <= X_SEGMENTS; ++x) {
-                indices.push_back(y * (X_SEGMENTS + 1) + x);
-                indices.push_back((y + 1) * (X_SEGMENTS + 1) + x);
-            }
+    }
+    for (int y = 0; y < Y_SEGMENTS; ++y) {
+        for (int x = 0; x < X_SEGMENTS; ++x) {
+            int i0 = y * (X_SEGMENTS + 1) + x;
+            int i1 = i0 + 1;
+            int i2 = i0 + (X_SEGMENTS + 1);
+            int i3 = i2 + 1;
+            // First triangle
+            indices.push_back(i0);
+            indices.push_back(i2);
+            indices.push_back(i1);
+            // Second triangle
+            indices.push_back(i1);
+            indices.push_back(i2);
+            indices.push_back(i3);
         }
-        indexCount = indices.size();
-        glGenVertexArrays(1, &sphereVAO);
-        glGenBuffers(1, &sphereVBO);
-        glGenBuffers(1, &sphereEBO);
-        glBindVertexArray(sphereVAO);
-        glBindBuffer(GL_ARRAY_BUFFER, sphereVBO);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereEBO);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *) 0);
-        glBindVertexArray(0);
     }
-    sphereShader->Bind();
-    glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(model, pos);
-    model = glm::scale(model, glm::vec3(radius));
-    sphereShader->SetMat4("uModel", model);
-    sphereShader->SetMat4("uVP", camera->GetViewProjectionMatrix());
-    sphereShader->SetVec3("uColor", color);
-    glBindVertexArray(sphereVAO);
-    for (int y = 0; y < 16; ++y) {
-        glDrawElements(GL_TRIANGLE_STRIP, (16 + 1) * 2, GL_UNSIGNED_INT,
-                       (void *) (sizeof(unsigned int) * (y * (16 + 1) * 2)));
-    }
+    m_SphereIndexCount = indices.size();
+    glGenVertexArrays(1, &m_SphereVAO);
+    glGenBuffers(1, &m_SphereVBO);
+    glGenBuffers(1, &m_SphereEBO);
+    glBindVertexArray(m_SphereVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_SphereVBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_SphereEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glBindVertexArray(0);
-    sphereShader->Unbind();
 }
 
 void Renderer::Render2DRays(Scene *scene) {
@@ -476,6 +470,7 @@ void Renderer::Render3DSimulation(Scene *scene) {
     }
 
     RenderMeshes(scene);
+    RenderSpheres(scene);
 
     glDisable(GL_DEPTH_TEST);
 }
@@ -654,6 +649,23 @@ void Renderer::RenderMeshes(Scene* scene) {
         } else {
             spdlog::warn("Failed to load or render mesh: {}", meshObj.path);
         }
+    }
+}
+
+void Renderer::RenderSpheres(Scene* scene) {
+    if (!scene || !camera) return;
+    if (scene->spheres.empty()) return;
+    for (const auto& sphereObj : scene->spheres) {
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), sphereObj.position);
+        model = glm::scale(model, glm::vec3(sphereObj.radius));
+        sphereShader->Bind();
+        sphereShader->SetMat4("uModel", model);
+        sphereShader->SetMat4("uVP", camera->GetViewProjectionMatrix());
+        sphereShader->SetVec3("uColor", sphereObj.color);
+        glBindVertexArray(m_SphereVAO);
+        glDrawElements(GL_TRIANGLES, m_SphereIndexCount, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+        sphereShader->Unbind();
     }
 }
 

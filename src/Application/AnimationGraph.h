@@ -25,11 +25,13 @@ public:
         I1, I2, I3, I4,
         RGB, RGBA, HSL, HSLA,
         String,
-        BlackHole,
         Star,
         Object,
         Camera,
-        Function
+        Function,
+        BlackHole,
+        Mesh,
+        Sphere
     };
     enum class NodeType {
         Event,
@@ -70,7 +72,7 @@ public:
         Start, Tick, Collision,
 
         // Decomposer/Setter
-        Blackhole, Star, Camera, Object,
+        Blackhole, Star, Mesh, Sphere, Camera, Object,
 
         // Variable
         VariableGet, VariableSet
@@ -124,12 +126,18 @@ public:
 
     static Node CreateBlackHoleDecomposerNode(int id);
     static Node CreateCameraDecomposerNode(int id);
+    static Node CreateMeshDecomposerNode(int id);
+    static Node CreateSphereDecomposerNode(int id);
 
     static Node CreateGetBlackHoleFromSceneNode(int id, int index = -1);
     static Node CreateGetCameraFromSceneNode(int id);
+    static Node CreateGetMeshFromSceneNode(int id, int index = -1);
+    static Node CreateGetSphereFromSceneNode(int id, int index = -1);
 
     static Node CreateBlackHoleSetterNode(int id);
     static Node CreateCameraSetterNode(int id);
+    static Node CreateMeshSetterNode(int id);
+    static Node CreateSphereSetterNode(int id);
 
     static Node CreateVariableGetNode(int id, PinType varType, const std::string& varName = "");
     static Node CreateVariableSetNode(int id, PinType varType, const std::string& varName = "");
@@ -161,5 +169,4 @@ private:
     std::vector<std::string> m_SceneObjects;
 
     int GenerateRandomId();
-    void ShowNodeCreationPopup();
 };

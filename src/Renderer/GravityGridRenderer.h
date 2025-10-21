@@ -4,7 +4,6 @@
 #include <glm/glm.hpp>
 #include "Shader.h"
 #include "Simulation/Scene.h"
-#include "Camera.h"
 #include "Buffer.h"
 
 class GravityGridRenderer {

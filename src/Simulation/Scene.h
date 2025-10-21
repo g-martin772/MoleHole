@@ -59,14 +59,26 @@ struct MeshObject {
     MeshObject() : position(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), scale(1.0f) {}
 };
 
+struct Sphere {
+    std::string name;
+    std::string texturePath;
+    glm::vec3 position;
+    glm::quat rotation;
+    glm::vec4 color;
+    float spin, radius;
+
+    Sphere() : position(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), color(0.5f, 0.5f, 0.5f, 1.0f), spin(0.0f), radius(1.0f) {}
+};
+
 struct Scene {
     std::string name;
     std::vector<BlackHole> blackHoles;
     std::vector<MeshObject> meshes;
+    std::vector<Sphere> spheres;
     std::filesystem::path currentPath;
     Camera* camera = nullptr;
 
-    enum class ObjectType { BlackHole, Mesh };
+    enum class ObjectType { BlackHole, Mesh, Sphere };
     struct SelectedObject {
         ObjectType type;
         size_t index;

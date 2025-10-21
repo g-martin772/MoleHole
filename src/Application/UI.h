@@ -14,12 +14,11 @@ public:
 
     void RenderDockspace(Scene* scene);
     void RenderMainUI(float fps, Scene* scene);
-    void RenderImGuizmo(Scene* scene);
     void RenderSimulationControls();
 
     void Update(float deltaTime);
 
-    AnimationGraph* GetAnimationGraph() { return m_AnimationGraph.get(); }
+    AnimationGraph* GetAnimationGraph() const { return m_AnimationGraph.get(); }
 
     enum class GizmoOperation { Translate, Rotate, Scale };
     GizmoOperation GetCurrentGizmoOperation() const { return m_currentGizmoOperation; }
@@ -27,6 +26,11 @@ public:
     const float* GetSnapTranslate() const { return m_snapTranslate; }
     float GetSnapRotate() const { return m_snapRotate; }
     float GetSnapScale() const { return m_snapScale; }
+
+    void TakeScreenshot();
+    void TakeViewportScreenshot();
+    void TakeScreenshotWithDialog();
+    void TakeViewportScreenshotWithDialog();
 
 private:
     void RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen);
@@ -40,6 +44,7 @@ private:
     void RenderCameraControlsSection();
     void RenderRenderingFlagsSection();
     void RenderDebugSection();
+    void RenderScreenshotSection();
 
     void RenderScenePropertiesSection(Scene* scene);
     void RenderRecentScenesSection(Scene* scene);
@@ -47,6 +52,7 @@ private:
     void RenderSimulationGeneralSection();
     void RenderBlackHolesSection(Scene* scene);
     void RenderMeshesSection(Scene* scene);
+    void RenderSpheresSection(Scene *scene);
 
     void RenderAnimationGraphWindow(Scene* scene);
 
