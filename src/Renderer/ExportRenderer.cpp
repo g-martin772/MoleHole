@@ -65,48 +65,7 @@ void ExportRenderer::CleanupOffscreenBuffers() {
 
 void ExportRenderer::RenderFrame(Scene* scene, int width, int height) {
     auto& renderer = Application::GetRenderer();
-    auto& simulation = Application::GetSimulation();
-    
-    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-    glViewport(0, 0, width, height);
-
-    float currentTime = simulation.GetSimulationTime();
-    
-    switch (renderer.GetSelectedViewport()) {
-        case Renderer::ViewportMode::Demo1:
-            glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-            break;
-        case Renderer::ViewportMode::Rays2D:
-            glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-            if (scene && renderer.blackHoleRenderer) {
-                renderer.blackHoleRenderer->Render(scene->blackHoles, *m_camera, currentTime);
-            }
-            break;
-        case Renderer::ViewportMode::Simulation3D:
-            glEnable(GL_DEPTH_TEST);
-            glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            if (scene && renderer.blackHoleRenderer) {
-                glDisable(GL_DEPTH_TEST);
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                renderer.blackHoleRenderer->Render(scene->blackHoles, *m_camera, currentTime);
-                renderer.blackHoleRenderer->RenderToScreen();
-                glDisable(GL_BLEND);
-                glEnable(GL_DEPTH_TEST);
-            }
-            glDisable(GL_DEPTH_TEST);
-            break;
-        case Renderer::ViewportMode::SimulationVisual:
-            if (scene && renderer.visualRenderer) {
-                renderer.visualRenderer->Render(*m_camera, currentTime);
-            }
-            break;
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    renderer.RenderToFramebuffer(m_fbo, width, height, scene, m_camera.get());
 }
 
 void ExportRenderer::CaptureFramePixels(std::vector<unsigned char>& pixels, int width, int height) {

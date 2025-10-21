@@ -41,6 +41,8 @@ public:
     glm::vec3 ScreenToWorldRay(float mouseX, float mouseY, glm::vec3& rayOrigin, glm::vec3& rayDirection);
     void SetViewportBounds(float x, float y, float width, float height);
 
+    void RenderToFramebuffer(unsigned int fbo, int width, int height, Scene* scene, Camera* cam);
+
     GLFWwindow* GetWindow() const { return window; }
 
     ViewportMode GetSelectedViewport() const { return selectedViewport; }
