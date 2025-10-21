@@ -2,8 +2,6 @@
 #include <glad/gl.h>
 #include "Simulation/Scene.h"
 #include "Camera.h"
-#include "BlackHoleRenderer.h"
-#include "VisualRenderer.h"
 #include "Application/Application.h"
 #include <spdlog/spdlog.h>
 #include <stb_image_write.h>
@@ -66,22 +64,46 @@ void ExportRenderer::CleanupOffscreenBuffers() {
 }
 
 void ExportRenderer::RenderFrame(Scene* scene, int width, int height) {
-    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-    glViewport(0, 0, width, height);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
     auto& renderer = Application::GetRenderer();
     auto& simulation = Application::GetSimulation();
     
-    if (renderer.GetSelectedViewport() == Renderer::ViewportMode::SimulationVisual) {
-        if (m_visualRenderer) {
-            m_visualRenderer->Render(*m_camera, simulation.GetSimulationTime());
-        }
-    } else {
-        if (m_blackHoleRenderer && scene) {
-            m_blackHoleRenderer->Render(scene->blackHoles, *m_camera, simulation.GetSimulationTime());
-        }
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+    glViewport(0, 0, width, height);
+
+    float currentTime = simulation.GetSimulationTime();
+    
+    switch (renderer.GetSelectedViewport()) {
+        case Renderer::ViewportMode::Demo1:
+            glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            break;
+        case Renderer::ViewportMode::Rays2D:
+            glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            if (scene && renderer.blackHoleRenderer) {
+                renderer.blackHoleRenderer->Render(scene->blackHoles, *m_camera, currentTime);
+            }
+            break;
+        case Renderer::ViewportMode::Simulation3D:
+            glEnable(GL_DEPTH_TEST);
+            glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            if (scene && renderer.blackHoleRenderer) {
+                glDisable(GL_DEPTH_TEST);
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                renderer.blackHoleRenderer->Render(scene->blackHoles, *m_camera, currentTime);
+                renderer.blackHoleRenderer->RenderToScreen();
+                glDisable(GL_BLEND);
+                glEnable(GL_DEPTH_TEST);
+            }
+            glDisable(GL_DEPTH_TEST);
+            break;
+        case Renderer::ViewportMode::SimulationVisual:
+            if (scene && renderer.visualRenderer) {
+                renderer.visualRenderer->Render(*m_camera, currentTime);
+            }
+            break;
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -130,12 +152,6 @@ void ExportRenderer::ExportImage(const ImageConfig& config, const std::string& o
         m_camera->SetPosition(renderer.camera->GetPosition());
         m_camera->SetYawPitch(renderer.camera->GetYaw(), renderer.camera->GetPitch());
 
-        m_blackHoleRenderer = std::make_unique<BlackHoleRenderer>();
-        m_blackHoleRenderer->Init(config.width, config.height);
-
-        m_visualRenderer = std::make_unique<VisualRenderer>();
-        m_visualRenderer->Init(config.width, config.height);
-
         m_currentTask = "Setting up framebuffer...";
         m_progress = 0.2f;
         if (progressCallback) progressCallback(0.2f);
@@ -174,8 +190,6 @@ void ExportRenderer::ExportImage(const ImageConfig& config, const std::string& o
         m_currentTask = "Failed";
     }
 
-    m_blackHoleRenderer.reset();
-    m_visualRenderer.reset();
     m_camera.reset();
     CleanupOffscreenBuffers();
     
@@ -200,12 +214,6 @@ void ExportRenderer::ExportVideo(const VideoConfig& config, const std::string& o
         );
         m_camera->SetPosition(renderer.camera->GetPosition());
         m_camera->SetYawPitch(renderer.camera->GetYaw(), renderer.camera->GetPitch());
-
-        m_blackHoleRenderer = std::make_unique<BlackHoleRenderer>();
-        m_blackHoleRenderer->Init(config.width, config.height);
-
-        m_visualRenderer = std::make_unique<VisualRenderer>();
-        m_visualRenderer->Init(config.width, config.height);
 
         InitializeOffscreenBuffers(config.width, config.height);
 
@@ -369,8 +377,6 @@ void ExportRenderer::ExportVideo(const VideoConfig& config, const std::string& o
         m_currentTask = "Failed";
     }
 
-    m_blackHoleRenderer.reset();
-    m_visualRenderer.reset();
     m_camera.reset();
     CleanupOffscreenBuffers();
     

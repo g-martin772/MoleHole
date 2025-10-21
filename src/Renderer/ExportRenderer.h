@@ -7,8 +7,6 @@
 
 class Scene;
 class Camera;
-class BlackHoleRenderer;
-class VisualRenderer;
 
 class ExportRenderer {
 public:
@@ -53,6 +51,4 @@ private:
     unsigned int m_depthRenderbuffer = 0;
 
     std::unique_ptr<Camera> m_camera;
-    std::unique_ptr<BlackHoleRenderer> m_blackHoleRenderer;
-    std::unique_ptr<VisualRenderer> m_visualRenderer;
 };
