@@ -65,16 +65,16 @@ void Simulation::Reset() {
     }
 }
 
-Scene* Simulation::GetScene() {
+Scene* Simulation::GetScene() const {
     return m_scene.get();
 }
 
-void Simulation::SaveSceneState() {
+void Simulation::SaveSceneState() const {
     *m_savedScene = *m_scene;
     spdlog::debug("Scene state saved");
 }
 
-void Simulation::RestoreSceneState() {
+void Simulation::RestoreSceneState() const {
     *m_scene = *m_savedScene;
     spdlog::debug("Scene state restored");
 }
@@ -90,7 +90,7 @@ void Simulation::SetAnimationGraph(AnimationGraph* graph) {
     }
 }
 
-void Simulation::UpdateSimulation(float deltaTime) {
+void Simulation::UpdateSimulation(float deltaTime) const {
     if (m_pGraphExecutor && m_pAnimationGraph) {
         m_pGraphExecutor->ExecuteTickEvent(deltaTime);
     }

@@ -84,7 +84,14 @@ private:
     void Render3DSimulation(Scene *scene);
     void RenderVisualSimulation(Scene *scene);
     void RenderMeshes(Scene* scene);
+    void RenderSpheres(Scene * scene);
     std::shared_ptr<GLTFMesh> GetOrLoadMesh(const std::string& path);
+
+    void InitSphereGeometry();
+    unsigned int m_SphereVAO = 0;
+    unsigned int m_SphereVBO = 0;
+    unsigned int m_SphereEBO = 0;
+    int m_SphereIndexCount = 0;
 
     std::unique_ptr<GravityGridRenderer> gravityGridRenderer;
 };

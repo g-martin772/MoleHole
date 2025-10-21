@@ -11,6 +11,7 @@
 #include <imgui_node_editor.h>
 #include <vector>
 #include <memory>
+#include "../Renderer/Screenshot.h" // Screenshot-Funktionalität hinzufügen
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
@@ -71,15 +72,19 @@ void UI::Update(float deltaTime) {
 void UI::RenderDockspace(Scene* scene) {
     ImGuiIO& io = ImGui::GetIO();
     bool ctrl = io.KeyCtrl;
-    static bool prevCtrlS = false, prevCtrlO = false;
+    static bool prevCtrlS = false, prevCtrlO = false, prevF12 = false;
     bool ctrlS = ctrl && ImGui::IsKeyPressed(ImGuiKey_S);
     bool ctrlO = ctrl && ImGui::IsKeyPressed(ImGuiKey_O);
+    bool f12 = ImGui::IsKeyPressed(ImGuiKey_F12);
     bool doSave = false, doOpen = false;
 
     if (ctrlS && !prevCtrlS) doSave = true;
     if (ctrlO && !prevCtrlO) doOpen = true;
+    if (f12 && !prevF12) TakeViewportScreenshotWithDialog(); // F12 für Screenshot
+
     prevCtrlS = ctrlS;
     prevCtrlO = ctrlO;
+    prevF12 = f12;
 
     RenderMainMenuBar(scene, doSave, doOpen);
     HandleFileOperations(scene, doSave, doOpen);
@@ -244,6 +249,7 @@ void UI::RenderSystemWindow(float fps) {
     RenderDisplaySettingsSection();
     RenderCameraControlsSection();
     RenderRenderingFlagsSection();
+    RenderScreenshotSection(); // Neue Screenshot-Sektion hinzufügen
     RenderDebugSection();
 
     ImGui::End();
@@ -264,6 +270,7 @@ void UI::RenderSimulationWindow(Scene* scene) {
     RenderSimulationGeneralSection();
     RenderBlackHolesSection(scene);
     RenderMeshesSection(scene);
+    RenderSpheresSection(scene);
 
     ImGui::End();
 }
@@ -363,44 +370,7 @@ void UI::RenderCameraControlsSection() {
 
 void UI::RenderRenderingFlagsSection() {
     if (ImGui::CollapsingHeader("Rendering Flags", ImGuiTreeNodeFlags_DefaultOpen)) {
-        bool kerrDistortionEnabled = Application::State().rendering.enableDistortion;
-        if (ImGui::Checkbox("Enable Kerr Distortion", &kerrDistortionEnabled)) {
-            Application::State().rendering.enableDistortion = kerrDistortionEnabled;
-            m_configDirty = true;
-        }
-
-        if (Application::State().rendering.enableDistortion) {
-            int kerrLutResolution = Application::State().rendering.kerrLutResolution;
-            if (ImGui::SliderInt("LUT Resolution", &kerrLutResolution, 32, 256)) {
-                Application::State().rendering.kerrLutResolution = kerrLutResolution;
-                m_configDirty = true;
-            }
-
-            float kerrMaxDistance = Application::State().rendering.kerrMaxDistance;
-            if (ImGui::DragFloat("Max Distance", &kerrMaxDistance, 1.0f, 10.0f, 1000.0f)) {
-                Application::State().rendering.kerrMaxDistance = kerrMaxDistance;
-                m_configDirty = true;
-            }
-
-            bool kerrDebugLut = Application::State().GetProperty<bool>("kerrDebugLut", false);
-            if (ImGui::Checkbox("Debug Kerr LUT", &kerrDebugLut)) {
-                Application::State().SetProperty("kerrDebugLut", kerrDebugLut);
-                m_configDirty = true;
-            }
-
-            ImGui::SameLine();
-            ImGui::TextDisabled("(?)");
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip(
-                    "Kerr LUT overlay: a 2D slice of the 3D table.\n"
-                    "Horizontal = polar angle θ (0..π), Vertical = azimuth φ (0..2π).\n"
-                    "Slice: fixed distance (X axis of the LUT) at mid-range.\n"
-                    "Color: two hues mix encode deflection (R=θ defl, G=φ defl).\n"
-                    "Brightness (value) = distance factor (B channel).\n"
-                    "Magenta tint = invalid/overflow entries (A == 0).\n"
-                    "Faint grid helps gauge indices.");
-            }
-        }
+        ImGui::TextDisabled("Rendering flags TODO...");
     }
 }
 
@@ -839,6 +809,103 @@ void UI::RenderMeshesSection(Scene* scene) {
     }
 }
 
+void UI::RenderSpheresSection(Scene* scene) {
+    if (ImGui::CollapsingHeader("Spheres", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (!scene) {
+            ImGui::TextDisabled("No scene loaded");
+            return;
+        }
+
+        if (ImGui::Button("Add Sphere")) {
+            Sphere newSphere;
+            newSphere.name = "New Sphere";
+            newSphere.position = glm::vec3(0.0f, 0.0f, -5.0f);
+            newSphere.radius = 1.0f;
+            newSphere.color = glm::vec4(0.0f, 0.5f, 1.0f, 1.0f);
+            scene->spheres.push_back(newSphere);
+        }
+
+        ImGui::Text("Spheres: %zu", scene->spheres.size());
+
+        int idx = 0;
+        for (auto it = scene->spheres.begin(); it != scene->spheres.end();) {
+            ImGui::PushID(("sphere_" + std::to_string(idx)).c_str());
+
+            bool isSelected = scene->HasSelection() &&
+                             scene->selectedObject->type == Scene::ObjectType::Sphere &&
+                             scene->selectedObject->index == static_cast<size_t>(idx);
+
+            if (isSelected) {
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.7f, 1.0f, 0.6f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.4f, 0.8f, 1.0f, 0.8f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.5f, 0.9f, 1.0f, 1.0f));
+            }
+
+            std::string label = it->name.empty() ? "Sphere #" + std::to_string(idx + 1) : it->name;
+            if (isSelected) {
+                label += " (Selected)";
+            }
+
+            bool open = ImGui::TreeNode(label.c_str());
+
+            if (isSelected) {
+                ImGui::PopStyleColor(3);
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Select")) {
+                scene->SelectObject(Scene::ObjectType::Sphere, idx);
+            }
+            ImGui::SameLine();
+            bool remove = ImGui::Button("Remove");
+
+            if (open) {
+                Sphere& sphere = *it;
+                bool sphereChanged = false;
+
+                char nameBuffer[128];
+                std::strncpy(nameBuffer, sphere.name.c_str(), sizeof(nameBuffer));
+                nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+                if (ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer))) {
+                    sphere.name = nameBuffer;
+                    sphereChanged = true;
+                }
+
+                if (ImGui::DragFloat3("Position", &sphere.position[0], 0.1f)) {
+                    sphereChanged = true;
+                }
+                if (ImGui::DragFloat("Radius", &sphere.radius, 0.05f, 0.01f, 1e6f)) {
+                    sphereChanged = true;
+                }
+                if (ImGui::ColorEdit3("Color", &sphere.color[0])) {
+                    sphereChanged = true;
+                }
+
+                if (sphereChanged && !scene->currentPath.empty()) {
+                    scene->Serialize(scene->currentPath);
+                }
+
+                ImGui::TreePop();
+            }
+
+            ImGui::PopID();
+
+            if (remove) {
+                if (isSelected) {
+                    scene->ClearSelection();
+                }
+                it = scene->spheres.erase(it);
+                if (!scene->currentPath.empty()) {
+                    scene->Serialize(scene->currentPath);
+                }
+            } else {
+                ++it;
+            }
+            idx++;
+        }
+    }
+}
+
 void UI::RenderAnimationGraphWindow(Scene *scene) {
     ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
     ImGui::Begin("Animation Graph");
@@ -1249,4 +1316,121 @@ void UI::RenderSimulationControls() {
 
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
+}
+
+void UI::RenderScreenshotSection() {
+    if (ImGui::CollapsingHeader("Screenshot", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Capture the current viewport as an image file");
+
+        // Quick screenshot buttons (automatic naming)
+        ImGui::Text("Quick Screenshots (automatic naming):");
+        if (ImGui::Button("Take Full Screenshot", ImVec2(-1, 30))) {
+            TakeScreenshot();
+        }
+
+        if (ImGui::Button("Take Viewport Screenshot", ImVec2(-1, 30))) {
+            TakeViewportScreenshot();
+        }
+
+        ImGui::Separator();
+
+        // Screenshot with file dialog (user chooses location)
+        ImGui::Text("Choose Save Location:");
+        if (ImGui::Button("Save Full Screenshot As...", ImVec2(-1, 30))) {
+            TakeScreenshotWithDialog();
+        }
+
+        if (ImGui::Button("Save Viewport Screenshot As...", ImVec2(-1, 30))) {
+            TakeViewportScreenshotWithDialog();
+        }
+
+        ImGui::Separator();
+
+        // Screenshot info
+        ImGui::TextDisabled("Quick screenshots: saved to application directory");
+        ImGui::TextDisabled("'Save As' screenshots: choose your own location");
+        ImGui::TextDisabled("Format: PNG");
+
+        ImGui::Separator();
+        ImGui::Text("Keyboard Shortcut:");
+        ImGui::BulletText("F12 - Quick full screenshot");
+    }
+}
+
+void UI::TakeScreenshot() {
+    std::string filename = Screenshot::GenerateTimestampedFilename("molehole_screenshot");
+
+    if (Screenshot::CaptureWindow(filename)) {
+        spdlog::info("Screenshot saved: {}", filename);
+    } else {
+        spdlog::error("Failed to take screenshot");
+    }
+}
+
+void UI::TakeViewportScreenshot() {
+    auto& renderer = Application::GetRenderer();
+
+    // Get current viewport dimensions
+    int x = static_cast<int>(renderer.m_viewportX);
+    int y = static_cast<int>(renderer.m_viewportY);
+    int width = static_cast<int>(renderer.m_viewportWidth);
+    int height = static_cast<int>(renderer.m_viewportHeight);
+
+    std::string filename = Screenshot::GenerateTimestampedFilename("molehole_viewport");
+
+    if (Screenshot::CaptureViewport(x, y, width, height, filename)) {
+        spdlog::info("Viewport screenshot saved: {}", filename);
+    } else {
+        spdlog::error("Failed to take viewport screenshot");
+    }
+}
+
+void UI::TakeScreenshotWithDialog() {
+    nfdchar_t* outPath = nullptr;
+    nfdfilteritem_t filterItems[] = {
+        { "PNG Image", "png" }
+    };
+
+    // Generate a default filename with timestamp
+    std::string defaultName = Screenshot::GenerateTimestampedFilename("molehole_screenshot", ".png");
+
+    nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, nullptr, defaultName.c_str());
+
+    if (result == NFD_OKAY && outPath) {
+        if (Screenshot::CaptureWindow(outPath)) {
+            spdlog::info("Screenshot saved: {}", outPath);
+        } else {
+            spdlog::error("Failed to take screenshot");
+        }
+        free(outPath);
+    }
+}
+
+void UI::TakeViewportScreenshotWithDialog() {
+    auto& renderer = Application::GetRenderer();
+
+    // Get current viewport dimensions
+    int x = static_cast<int>(renderer.m_viewportX);
+    int y = static_cast<int>(renderer.m_viewportY);
+    int width = static_cast<int>(renderer.m_viewportWidth);
+    int height = static_cast<int>(renderer.m_viewportHeight);
+
+    nfdchar_t* outPath = nullptr;
+    nfdfilteritem_t filterItems[] = {
+        { "PNG Image", "png" }
+    };
+
+    // Generate a default filename with timestamp
+    std::string defaultName = Screenshot::GenerateTimestampedFilename("molehole_viewport", ".png");
+
+    nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, nullptr, defaultName.c_str());
+
+    if (result == NFD_OKAY && outPath) {
+        if (Screenshot::CaptureViewport(x, y, width, height, outPath)) {
+            spdlog::info("Viewport screenshot saved: {}", outPath);
+        } else {
+            spdlog::error("Failed to take viewport screenshot");
+        }
+        free(outPath);
+    }
 }
