@@ -43,6 +43,7 @@ void VisualRenderer::Init(int width, int height) {
 void VisualRenderer::Resize(int width, int height) {
     m_width = width;
     m_height = height;
+    CreateComputeTexture();
 }
 
 void VisualRenderer::Render(std::vector<BlackHole> &black_holes, const Camera &camera, float time) {
@@ -149,12 +150,6 @@ void VisualRenderer::CreateComputeTexture() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     glBindImageTexture(0, m_texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-}
-
-void VisualRenderer::Resize(int width, int height) {
-    m_width = width;
-    m_height = height;
-    CreateComputeTexture();
 }
 
 void VisualRenderer::CreateFullscreenQuad() {
