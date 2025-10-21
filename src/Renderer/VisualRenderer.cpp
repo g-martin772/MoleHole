@@ -50,13 +50,13 @@ void VisualRenderer::Render(std::vector<BlackHole> &black_holes, const Camera &c
 
     if (galaxy) {
       glActiveTexture(GL_TEXTURE1);
-      glBindTexture(GL_TEXTURE_3D, galaxy);
+      glBindTexture(GL_TEXTURE_CUBE_MAP, galaxy);
       m_computeShader->SetInt("u_skyboxTexture", 1);
     }
 
     if (colorMap) {
       glActiveTexture(GL_TEXTURE2); 
-      glBindTexture(GL_TEXTURE_3D, colorMap);
+      glBindTexture(GL_TEXTURE_2D, colorMap);
       m_computeShader->SetInt("u_colorMap", 2);
     }
 
@@ -268,6 +268,7 @@ void VisualRenderer::SetUniforms(std::vector<BlackHole>& blackHoles, const Camer
     m_computeShader->SetVec3("u_cameraUp", camera.GetUp());
     m_computeShader->SetVec3("u_cameraRight", glm::normalize(glm::cross(camera.GetFront(), camera.GetUp())));
     m_computeShader->SetFloat("u_fov", camera.GetFov());
+    m_computeShader->SetFloat("u_aspect", static_cast<float>(m_width) / static_cast<float>(m_height));
   
     m_computeShader->Unbind();
 }
