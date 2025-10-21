@@ -32,6 +32,8 @@ public:
     void TakeScreenshotWithDialog();
     void TakeViewportScreenshotWithDialog();
 
+    void ShowExportWindow(Scene* scene);
+
 private:
     void RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen);
     void RenderSystemWindow(float fps);
@@ -45,6 +47,11 @@ private:
     void RenderRenderingFlagsSection();
     void RenderDebugSection();
     void RenderScreenshotSection();
+
+    void RenderExportSection();
+    void RenderImageExportSettings();
+    void RenderVideoExportSettings();
+    void RenderExportProgress();
 
     void RenderScenePropertiesSection(Scene* scene);
     void RenderRecentScenesSection(Scene* scene);
@@ -78,4 +85,18 @@ private:
     float m_snapScale = 0.1f;
 
     std::unique_ptr<AnimationGraph> m_AnimationGraph;
+
+    bool m_showExportWindow = false;
+    struct {
+        int width = 1920;
+        int height = 1080;
+    } m_imageConfig;
+
+    struct {
+        int width = 1920;
+        int height = 1080;
+        float length = 10.0f;
+        int framerate = 60;
+        float tickrate = 60.0f;
+    } m_videoConfig;
 };

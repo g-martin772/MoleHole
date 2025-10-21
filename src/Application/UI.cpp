@@ -8,10 +8,12 @@
 #include <filesystem>
 #include <algorithm>
 #include <set>
+#include <thread>
 #include <imgui_node_editor.h>
 #include <vector>
 #include <memory>
-#include "../Renderer/Screenshot.h" // Screenshot-Funktionalität hinzufügen
+#include "../Renderer/Screenshot.h"
+#include "../Renderer/ExportRenderer.h" // Screenshot-Funktionalität hinzufügen
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
@@ -123,6 +125,10 @@ void UI::RenderMainUI(float fps, Scene* scene) {
     if (m_ShowAnimationGraph) {
         RenderAnimationGraphWindow(scene);
     }
+
+    if (m_showExportWindow) {
+        ShowExportWindow(scene);
+    }
 }
 
 void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen) {
@@ -203,6 +209,7 @@ void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen) {
         if (ImGui::BeginMenu("View")) {
             ImGui::MenuItem("Show Demo Window", nullptr, &m_showDemoWindow);
             ImGui::MenuItem("Show Animation Graph", nullptr, &m_ShowAnimationGraph);
+            ImGui::MenuItem("Show Export Window", nullptr, &m_showExportWindow);
 
             ImGui::Separator();
             auto& renderer = Application::GetRenderer();
@@ -1434,3 +1441,176 @@ void UI::TakeViewportScreenshotWithDialog() {
         free(outPath);
     }
 }
+
+void UI::ShowExportWindow(Scene* scene) {
+    ImGui::SetNextWindowSize(ImVec2(600, 700), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Export", &m_showExportWindow)) {
+        ImGui::End();
+        return;
+    }
+
+    if (ImGui::BeginTabBar("ExportTabs")) {
+        if (ImGui::BeginTabItem("Image Export")) {
+            RenderImageExportSettings();
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Video Export")) {
+            RenderVideoExportSettings();
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
+
+    ImGui::Separator();
+    RenderExportProgress();
+
+    ImGui::End();
+}
+
+void UI::RenderImageExportSettings() {
+    ImGui::TextWrapped("Export a high-resolution image of the current scene.");
+    ImGui::Spacing();
+
+    ImGui::Text("Resolution Settings:");
+    ImGui::DragInt("Width", &m_imageConfig.width, 1.0f, 256, 7680);
+    ImGui::DragInt("Height", &m_imageConfig.height, 1.0f, 256, 4320);
+
+    if (ImGui::Button("Set 1080p (1920x1080)")) {
+        m_imageConfig.width = 1920;
+        m_imageConfig.height = 1080;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Set 4K (3840x2160)")) {
+        m_imageConfig.width = 3840;
+        m_imageConfig.height = 2160;
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::Text("Preview:");
+    ImGui::Text("Resolution: %dx%d", m_imageConfig.width, m_imageConfig.height);
+    float aspectRatio = (float)m_imageConfig.width / (float)m_imageConfig.height;
+    ImGui::Text("Aspect Ratio: %.2f:1", aspectRatio);
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (ImGui::Button("Export Image (PNG)...", ImVec2(-1, 40))) {
+        nfdchar_t* outPath = nullptr;
+        nfdfilteritem_t filterItems[] = {
+            { "PNG Image", "png" }
+        };
+
+        nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, nullptr, "export.png");
+
+        if (result == NFD_OKAY && outPath) {
+            auto& app = Application::Instance();
+            auto& exportRenderer = app.GetExportRenderer();
+            
+            ExportRenderer::ImageConfig config;
+            config.width = m_imageConfig.width;
+            config.height = m_imageConfig.height;
+
+            std::thread([&exportRenderer, config, path = std::string(outPath), scene = app.GetSimulation().GetScene()]() {
+                exportRenderer.ExportImage(config, path, scene);
+            }).detach();
+
+            free(outPath);
+        }
+    }
+
+    ImGui::TextDisabled("Click to choose output location and start export");
+}
+
+void UI::RenderVideoExportSettings() {
+    ImGui::TextWrapped("Export a video of the simulation with configurable parameters.");
+    ImGui::Spacing();
+
+    ImGui::Text("Resolution Settings:");
+    ImGui::DragInt("Width", &m_videoConfig.width, 1.0f, 256, 7680);
+    ImGui::DragInt("Height", &m_videoConfig.height, 1.0f, 256, 4320);
+
+    if (ImGui::Button("Set 1080p (1920x1080)")) {
+        m_videoConfig.width = 1920;
+        m_videoConfig.height = 1080;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Set 4K (3840x2160)")) {
+        m_videoConfig.width = 3840;
+        m_videoConfig.height = 2160;
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::Text("Video Settings:");
+    ImGui::DragFloat("Length (seconds)", &m_videoConfig.length, 0.1f, 0.1f, 300.0f);
+    ImGui::DragInt("Framerate (fps)", &m_videoConfig.framerate, 1.0f, 1, 240);
+    ImGui::DragFloat("Tickrate (tps)", &m_videoConfig.tickrate, 1.0f, 1.0f, 240.0f);
+
+    ImGui::TextDisabled("Tickrate controls simulation speed");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::Text("Preview:");
+    ImGui::Text("Resolution: %dx%d", m_videoConfig.width, m_videoConfig.height);
+    ImGui::Text("Duration: %.1f seconds", m_videoConfig.length);
+    ImGui::Text("Total Frames: %d", static_cast<int>(m_videoConfig.length * m_videoConfig.framerate));
+    float aspectRatio = (float)m_videoConfig.width / (float)m_videoConfig.height;
+    ImGui::Text("Aspect Ratio: %.2f:1", aspectRatio);
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (ImGui::Button("Export Video (MP4)...", ImVec2(-1, 40))) {
+        nfdchar_t* outPath = nullptr;
+        nfdfilteritem_t filterItems[] = {
+            { "MP4 Video", "mp4" }
+        };
+
+        nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, nullptr, "export.mp4");
+
+        if (result == NFD_OKAY && outPath) {
+            auto& app = Application::Instance();
+            auto& exportRenderer = app.GetExportRenderer();
+            
+            ExportRenderer::VideoConfig config;
+            config.width = m_videoConfig.width;
+            config.height = m_videoConfig.height;
+            config.length = m_videoConfig.length;
+            config.framerate = m_videoConfig.framerate;
+            config.tickrate = m_videoConfig.tickrate;
+
+            std::thread([&exportRenderer, config, path = std::string(outPath), scene = app.GetSimulation().GetScene()]() {
+                exportRenderer.ExportVideo(config, path, scene);
+            }).detach();
+
+            free(outPath);
+        }
+    }
+
+    ImGui::TextDisabled("Click to choose output location and start export");
+}
+
+void UI::RenderExportProgress() {
+    auto& exportRenderer = Application::Instance().GetExportRenderer();
+    
+    if (exportRenderer.IsExporting()) {
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Export in Progress");
+        ImGui::ProgressBar(exportRenderer.GetProgress());
+        ImGui::Text("Status: %s", exportRenderer.GetCurrentTask().c_str());
+        ImGui::TextDisabled("Do not close the application while exporting");
+    } else {
+        ImGui::TextDisabled("No export in progress");
+    }
+}
+
