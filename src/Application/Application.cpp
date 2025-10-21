@@ -89,6 +89,7 @@ void Application::Shutdown() {
 void Application::Update(float deltaTime) {
     m_simulation.Update(deltaTime);
     m_ui.Update(deltaTime);
+    m_exportRenderer.Update();
 
     for (const auto& [name, callback] : m_updateCallbacks) {
         try {

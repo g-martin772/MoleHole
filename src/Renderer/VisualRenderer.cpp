@@ -9,7 +9,7 @@
 #include <iostream>
 
 
-    
+
 VisualRenderer::VisualRenderer()
     : m_texture(0), m_quadVAO(0), m_quadVBO(0), m_width(800), m_height(600) { }
 
@@ -40,8 +40,13 @@ void VisualRenderer::Init(int width, int height) {
     CreateFullscreenQuad();
 }
 
-void VisualRenderer::Render(std::vector<BlackHole> &black_holes, const Camera &camera, float time) {
+void VisualRenderer::Resize(int width, int height) {
+    m_width = width;
+    m_height = height;
+}
 
+void VisualRenderer::Render(std::vector<BlackHole> &black_holes, const Camera &camera, float time) {
+    
     SetUniforms(black_holes, camera, time);
   
     m_computeShader->Bind();
