@@ -170,6 +170,9 @@ void Renderer::RenderScene(Scene *scene) {
         if (blackHoleRenderer) {
             blackHoleRenderer->Resize(img_width, img_height);
         }
+        if (visualRenderer) {
+            visualRenderer->Resize(img_width, img_height);
+        }
     }
 
     bool viewport_focused = ImGui::IsWindowFocused();
@@ -476,8 +479,8 @@ void Renderer::RenderVisualSimulation(Scene *scene) {
 
     if (!scene || !visualRenderer) return;
 
-    float currentTime = static_cast<float>(glfwGetTime());
-    visualRenderer->Render(*camera, currentTime);
+    auto currentTime = static_cast<float>(glfwGetTime());
+    visualRenderer->Render(scene->blackHoles, *camera, currentTime);
 }
 
 void Renderer::UpdateCamera(float deltaTime) {
