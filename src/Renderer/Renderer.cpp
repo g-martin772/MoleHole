@@ -629,6 +629,59 @@ void Renderer::SetViewportBounds(float x, float y, float width, float height) {
     m_viewportHeight = height;
 }
 
+void Renderer::RenderToFramebuffer(unsigned int fbo, int width, int height, Scene* scene, Camera* cam) {
+    if (!cam) return;
+    
+    Camera* savedCamera = camera.get();
+    camera.release();
+    camera.reset(cam);
+    
+    GLint oldFBO;
+    GLint oldViewport[4];
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &oldFBO);
+    glGetIntegerv(GL_VIEWPORT, oldViewport);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glViewport(0, 0, width, height);
+    
+    if (blackHoleRenderer) {
+        blackHoleRenderer->Resize(width, height);
+    }
+    if (visualRenderer) {
+        visualRenderer->Resize(width, height);
+    }
+
+    switch (selectedViewport) {
+        case ViewportMode::Demo1:
+            RenderDemo1(scene);
+            break;
+        case ViewportMode::Rays2D:
+            Render2DRays(scene);
+            break;
+        case ViewportMode::Simulation3D:
+            Render3DSimulation(scene);
+            break;
+        case ViewportMode::SimulationVisual:
+            RenderVisualSimulation(scene);
+            break;
+    }
+    
+    glFlush();
+
+    if (blackHoleRenderer) {
+        blackHoleRenderer->Resize(oldViewport[2], oldViewport[3]);
+    }
+    if (visualRenderer) {
+        visualRenderer->Resize(oldViewport[2], oldViewport[3]);
+    }
+
+    camera.release();
+    camera.reset(savedCamera);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, oldFBO);
+    glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
+}
+
 void Renderer::RenderMeshes(Scene* scene) {
     if (!scene || !camera) return;
 

@@ -33,6 +33,11 @@ void VisualRenderer::Init(int width, int height) {
     CreateFullscreenQuad();
 }
 
+void VisualRenderer::Resize(int width, int height) {
+    m_width = width;
+    m_height = height;
+}
+
 void VisualRenderer::Render(const Camera &camera, float time) {
 
     m_displayShader->Bind();
