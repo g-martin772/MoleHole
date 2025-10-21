@@ -1,0 +1,289 @@
+#version 460 core
+
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(rgba32f, binding = 0) uniform image2D l_outputImage;
+
+// textures
+uniform sampler2D u_skyboxTexture;
+uniform sampler2D u_colorMap;
+
+// black holes
+uniform int u_numBlackHoles;
+uniform vec3 u_blackHolePositions[8];
+uniform float u_blackHoleMasses[8];
+
+// debug
+uniform int u_debugMode = 0;
+
+// time
+uniform float u_time;
+
+// camera
+uniform vec3 u_cameraPosition;
+uniform vec3 u_cameraFront;
+uniform vec3 u_cameraUp;
+uniform vec3 u_cameraRight;
+uniform float u_fov;
+uniform float u_aspect;
+
+// settings
+uniform int u_gravitationalLensingEnabled = 1;
+uniform int u_accretionDiskEnabled = 1;
+uniform int u_renderBlackHoles = 1;
+uniform float u_accDiskParticle = 1.0;
+uniform float u_accDiskHeight = 0.2;
+uniform float u_accDiskLit = 0.5;
+uniform float u_accDiskDensityV = 1.0;
+uniform float u_accDiskDensityH = 1.0;
+uniform float u_accDiskNoiseScale = 1.0;
+uniform float u_accDiskNoiseLOD = 5.0;
+uniform float u_accDiskSpeed = 0.5;
+
+// constants
+const float EPSILON = 0.01;
+const float STEP_SIZE = 0.1;
+const float PI = 3.1415926535;
+
+// Ring
+struct Ring {
+    vec3 center;
+    vec3 normal;
+    float innerRadius;
+    float outerRadius;
+    float rotateSpeed;
+};
+
+
+// calculation methods
+float calculateEventHorizonRadius(float mass) {
+    return 2.0f * mass;
+}
+vec3 calculateAcceleration(float angMomentumSqrd, vec3 relPos) {
+    float r5 = pow(dot(relPos, relPos), 2.5);
+    
+    // avoid division by zero
+    if (r5 < EPSILON)
+        return (-1.5f * angMomentumSqrd * relPos) / (1.0f * EPSILON);
+    
+    return (-1.5f * angMomentumSqrd * relPos) / (1.0f * r5);
+}
+vec3 toSpherical(vec3 pos) {
+    float rho = sqrt(pow(pos.x, 2) + pow(pos.y, 2) + pow(pos.z, 2));
+    float theta = atan(pos.z, pos.x);
+    float phi = asin(pos.y / rho);
+    return vec3(rho, theta, phi);
+}
+vec2 toUv(vec3 direction) {
+    vec3 d = toSpherical(direction);
+    float u = (d.y + PI) / (2.0 * PI);
+    float v = (d.z + PI * 0.5) / PI;
+    return vec2(u, v);
+}
+
+
+// noise functions
+vec4 permute(vec4 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
+vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+float snoise(vec3 v) {
+    const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+
+    vec3 i = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+    
+    vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+    vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+    vec3 x3 = x0 - 1. + 3.0 * C.xxx;
+    
+    i = mod(i, 289.0);
+    vec4 p = permute(permute(permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+
+    float n_ = 1.0 / 7.0;
+    vec3 ns = n_ * D.wyz - D.xzx;
+
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+
+    vec4 s0 = floor(b0) * 2.0 + 1.0;
+    vec4 s1 = floor(b1) * 2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+
+    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+
+    vec3 p0 = vec3(a0.xy, h.x);
+    vec3 p1 = vec3(a0.zw, h.y);
+    vec3 p2 = vec3(a1.xy, h.z);
+    vec3 p3 = vec3(a1.zw, h.w);
+
+    vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+    p0 *= norm.x;
+    p1 *= norm.y;
+    p2 *= norm.z;
+    p3 *= norm.w;
+
+    vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+    m = m * m;
+    return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+}
+float ringDistance(vec3 rayOrigin, vec3 rayDir, Ring ring) {
+    float denominator = dot(rayDir, ring.normal);
+    float constant = -dot(ring.center, ring.normal);
+    if (abs(denominator) < EPSILON) {
+        return -1.0;
+    } else {
+        float t = -(dot(rayOrigin, ring.normal) + constant) / denominator;
+        if (t < 0.0) {
+            return -1.0;
+        }
+
+        vec3 intersection = rayOrigin + t * rayDir;
+
+        // Compute distance to ring center
+        float d = length(intersection - ring.center);
+        if (d >= ring.innerRadius && d <= ring.outerRadius) {
+            return t;
+        }
+        return -1.0;
+    }
+}
+void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
+
+    float iscoRadius = 3.0 * calculateEventHorizonRadius(u_blackHoleMasses[0]);
+    float outerRadius = 12.0;
+    float distanceFromCenter = length(pos);
+
+    if (distanceFromCenter < iscoRadius) {
+        return;
+    }
+
+    float iscoTransitionZone = iscoRadius * 1.2;
+    float iscoFactor = smoothstep(iscoRadius, iscoTransitionZone, distanceFromCenter);
+    float density = max(
+        0.0, 1.0 - length(pos.xyz / vec3(outerRadius, u_accDiskHeight, outerRadius)));
+    if (density < 0.001) {
+        return;
+    }
+
+    density *= pow(1.0 - abs(pos.y) / u_accDiskHeight, u_accDiskDensityV);
+
+    // Apply ISCO factor to create smooth transition
+    density *= iscoFactor;
+    if (density < EPSILON) return;
+
+    vec3 sphericalCoord = toSpherical(pos);
+
+    // Scale the rho and phi so that the particles appear to be at the correct scale visually
+    //sphericalCoord.y *= 2.0;
+    //sphericalCoord.z *= 4.0;
+
+    density *= 1.0 / pow(sphericalCoord.x, u_accDiskDensityH);
+    density *= 5000.0;
+
+    if (u_accDiskParticle < 0.5) {
+        color += vec3(0.0, 1.0, 0.0) * density * 0.02;
+        return;
+    }
+
+    float noise = 1.0;
+    for (int i = 0; i < int(u_accDiskNoiseLOD); i++) {
+        noise *= 0.5 * snoise(sphericalCoord * pow(i, 2) * u_accDiskNoiseScale) + 0.5;
+        if (i % 2 == 0) {
+            sphericalCoord.y += u_time * u_accDiskSpeed;
+        } else {
+            sphericalCoord.y -= u_time * u_accDiskSpeed;
+        }
+    }
+
+    vec3 dustColor = texture(u_colorMap, vec2(sphericalCoord.x / outerRadius, 0.5)).rgb;
+
+    color += density * u_accDiskLit * dustColor * alpha * abs(noise);
+}
+
+
+vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
+ 
+    bool hitEventHorizon = false;
+    vec3 color = vec3(0.0f);
+    float alpha = 1.0f;
+    
+    float stepSize = STEP_SIZE;
+    
+    for (int i = 0; i < 1000; i++) {
+        if (u_renderBlackHoles == 1) {
+            
+            for (int i = 0; i < u_numBlackHoles; i++) {
+                vec3 relativePos = rayOrigin - u_blackHolePositions[i];
+                float distanceToBH = length(relativePos);
+                vec3 angMomentum = cross(relativePos, rayDirection);
+                float r_s = calculateEventHorizonRadius(u_blackHoleMasses[i]);
+                
+                stepSize *= min(1.0, distanceToBH / r_s );
+                
+                if (u_gravitationalLensingEnabled == 1) {
+                    rayDirection += calculateAcceleration(dot(angMomentum, angMomentum), relativePos) * stepSize;
+                    rayDirection = normalize(rayDirection);
+                }
+        
+                if (u_accretionDiskEnabled == 1) {
+                    adiskColor(u_blackHolePositions[i], color, alpha);
+                }
+                
+                if (distanceToBH < r_s) {
+                    hitEventHorizon = true;
+                    break;
+                }
+            }
+                    
+            rayOrigin += rayDirection * stepSize;
+        }
+    }
+    
+    // return bent light rays
+    if (!hitEventHorizon) 
+        return color += texture(u_skyboxTexture, toUv(rayDirection)).rgb;
+    else if(length(color) < EPSILON)
+        return color;
+    
+    return vec3(0.0f);
+}
+
+
+void main() {
+    // Get the pixel coordinates and imageSize
+    ivec2 texCoords = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imageSize = imageSize(l_outputImage);
+    
+    // if image is smaller than the viewport, return
+    if (texCoords.x >= imageSize.x || texCoords.y >= imageSize.y) {
+        return;
+    }
+    
+    vec2 uv = (vec2(texCoords) + 0.5f) / vec2(imageSize);
+    uv = uv * 2.0f - 1.0f;
+    uv.x *= u_aspect;
+    
+    // Compute ray direction in world space.
+    vec3 rayDir = normalize(uv.x * u_cameraRight + uv.y * u_cameraUp + u_cameraFront);
+    vec3 rayOrigin = u_cameraPosition;
+    
+    // Perform ray marching to get the color.
+    vec3 color = rayMarching(rayOrigin, rayDir);
+    
+    // Generate Output Image
+    imageStore(l_outputImage, texCoords, vec4(color, 1.0f));   
+}

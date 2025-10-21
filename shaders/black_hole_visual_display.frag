@@ -45,14 +45,6 @@ uniform float adiskNoiseScale = 1.0;
 uniform float adiskNoiseLOD = 5.0;
 uniform float adiskSpeed = 0.5;
 
-struct Ring {
-    vec3 center;
-    vec3 normal;
-    float innerRadius;
-    float outerRadius;
-    float rotateSpeed;
-};
-
 ///----
 /// Simplex 3D Noise
 /// by Ian McEwan, Ashima Arts
@@ -128,200 +120,37 @@ float snoise(vec3 v) {
     return 42.0 *
     dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
-///----
-
-float ringDistance(vec3 rayOrigin, vec3 rayDir, Ring ring) {
-    float denominator = dot(rayDir, ring.normal);
-    float constant = -dot(ring.center, ring.normal);
-    if (abs(denominator) < EPSILON) {
-        return -1.0;
-    } else {
-        float t = -(dot(rayOrigin, ring.normal) + constant) / denominator;
-        if (t < 0.0) {
-            return -1.0;
-        }
-
-        vec3 intersection = rayOrigin + t * rayDir;
-
-        // Compute distance to ring center
-        float d = length(intersection - ring.center);
-        if (d >= ring.innerRadius && d <= ring.outerRadius) {
-            return t;
-        }
-        return -1.0;
-    }
-}
-
-vec3 panoramaColor(sampler2D tex, vec3 dir) {
-    vec2 uv = vec2(0.5 - atan(dir.z, dir.x) / PI * 0.5, 0.5 - asin(dir.y) / PI);
-    return texture2D(tex, uv).rgb;
-}
 
 vec3 accel(float h2, vec3 pos) {
-
     float r2 = dot(pos, pos);
     float r5 = pow(r2, 2.5);
-    vec3 acc = -1.5 * h2 * pos / r5 * 1.0;
-
-    /*
-    float r = sqrt(r2);
-
-    // Prevent division by zero and numerical instability
-    if (r < 0.01) {
-        return vec3(0.0);
-    }
-
-    float r3 = r2 * r;
-    float r5 = r2 * r3;
-
-    // Improved gravitational acceleration with angular momentum term
-    // Uses proper relativistic corrections for better visual accuracy
-    vec3 acc = -1.5 * h2 * pos / r5;
-
-    // Add additional relativistic term for more accurate lensing
-    acc += -pos / r3 * (1.0 + 1.5 * h2 / r2);
-    */
-    
-    return acc;
+    return -1.5 * h2 * pos / r5 * 1.0;
 }
 
-vec4 quadFromAxisAngle(vec3 axis, float angle) {
-    vec4 qr;
-    float half_angle = (angle * 0.5) * 3.14159 / 180.0;
-    qr.x = axis.x * sin(half_angle);
-    qr.y = axis.y * sin(half_angle);
-    qr.z = axis.z * sin(half_angle);
-    qr.w = cos(half_angle);
-    return qr;
-}
-
-vec4 quadConj(vec4 q) { return vec4(-q.x, -q.y, -q.z, q.w); }
-
-vec4 quat_mult(vec4 q1, vec4 q2) {
-    vec4 qr;
-    qr.x = (q1.w * q2.x) + (q1.x * q2.w) + (q1.y * q2.z) - (q1.z * q2.y);
-    qr.y = (q1.w * q2.y) - (q1.x * q2.z) + (q1.y * q2.w) + (q1.z * q2.x);
-    qr.z = (q1.w * q2.z) + (q1.x * q2.y) - (q1.y * q2.x) + (q1.z * q2.w);
-    qr.w = (q1.w * q2.w) - (q1.x * q2.x) - (q1.y * q2.y) - (q1.z * q2.z);
-    return qr;
-}
-
-vec3 rotateVector(vec3 position, vec3 axis, float angle) {
-    vec4 qr = quadFromAxisAngle(axis, angle);
-    vec4 qr_conj = quadConj(qr);
-    vec4 q_pos = vec4(position.x, position.y, position.z, 0);
-
-    vec4 q_tmp = quat_mult(qr, q_pos);
-    qr = quat_mult(q_tmp, qr_conj);
-
-    return vec3(qr.x, qr.y, qr.z);
-}
-
-#define IN_RANGE(x, a, b) (((x) > (a)) && ((x) < (b)))
-
-void cartesianToSpherical(in vec3 xyz, out float rho, out float phi,
-out float theta) {
-    rho = sqrt((xyz.x * xyz.x) + (xyz.y * xyz.y) + (xyz.z * xyz.z));
-    phi = asin(xyz.y / rho);
-    theta = atan(xyz.z, xyz.x);
-}
-
-// Convert from Cartesian to spherical coord (rho, phi, theta)
-// https://en.wikipedia.org/wiki/Spherical_coordinate_system
 vec3 toSpherical(vec3 p) {
     float rho = sqrt((p.x * p.x) + (p.y * p.y) + (p.z * p.z));
-    
-    // Prevent division by zero for points at origin
     if (rho < EPSILON) {
         return vec3(0.0, 0.0, 0.0);
     }
-    
     float theta = atan(p.z, p.x);
-    
-    // Clamp y/rho to prevent asin domain errors
     float phi = asin(clamp(p.y / rho, -1.0, 1.0));
-    
     return vec3(rho, theta, phi);
 }
 
-vec3 toSpherical2(vec3 pos) {
-    vec3 radialCoords;
-    radialCoords.x = length(pos) * 1.5 + 0.55;
-    radialCoords.y = atan(-pos.x, -pos.z) * 1.5;
-    radialCoords.z = abs(pos.y);
-    return radialCoords;
-}
-
-void ringColor(vec3 rayOrigin, vec3 rayDir, Ring ring, inout float minDistance,
-inout vec3 color) {
-    float distance = ringDistance(rayOrigin, normalize(rayDir), ring);
-    if (distance >= EPSILON && distance < minDistance &&
-    distance <= length(rayDir) + EPSILON) {
-        minDistance = distance;
-
-        vec3 intersection = rayOrigin + normalize(rayDir) * minDistance;
-        vec3 ringColor;
-
-        {
-            float dist = length(intersection);
-
-            float v = clamp((dist - ring.innerRadius) /
-            (ring.outerRadius - ring.innerRadius),
-            0.0, 1.0);
-
-            vec3 base = cross(ring.normal, vec3(0.0, 0.0, 1.0));
-            float angle = acos(dot(normalize(base), normalize(intersection)));
-            if (dot(cross(base, intersection), ring.normal) < 0.0)
-            angle = -angle;
-
-            float u = 0.5 - 0.5 * angle / PI;
-            // HACK
-            u += time * ring.rotateSpeed;
-
-            vec3 color = vec3(0.0, 0.5, 0.0);
-            // HACK
-            float alpha = 0.5;
-            ringColor = vec3(color);
-        }
-
-        color += ringColor;
-    }
-}
-
-mat3 lookAt(vec3 origin, vec3 target, float roll) {
-    vec3 rr = vec3(sin(roll), cos(roll), 0.0);
-    vec3 ww = normalize(target - origin);
-    vec3 uu = normalize(cross(ww, rr));
-    vec3 vv = normalize(cross(uu, ww));
-
-    return mat3(uu, vv, ww);
-}
-
-float sqrLength(vec3 a) { return dot(a, a); }
-
 void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
-    // Calculate Innermost Stable Circular Orbit (ISCO)
-    // For a Schwarzschild black hole: R_isco = 6 * R_schwarzschild = 3 * R_event_horizon
-    float iscoRadius = 3.0 * eventHorizonRadius; // Now uses the uniform
     
+    float iscoRadius = 3.0 * eventHorizonRadius;
     float outerRadius = 12.0;
-
-    // Get distance from black hole center
     float distanceFromCenter = length(pos);
     
-    // Completely exclude any rendering inside ISCO with a smooth transition
     if (distanceFromCenter < iscoRadius) {
-        return; // No accretion disk material inside ISCO
+        return;
     }
     
-    // Add a smooth transition zone just outside ISCO to avoid hard edges
-    float iscoTransitionZone = iscoRadius * 1.2; // 20% transition zone
+    float iscoTransitionZone = iscoRadius * 1.2;
     float iscoFactor = smoothstep(iscoRadius, iscoTransitionZone, distanceFromCenter);
-    
-    // Density linearly decreases as the distance to the blackhole center
-    // increases.
     float density = max(
-    0.0, 1.0 - length(pos.xyz / vec3(outerRadius, adiskHeight, outerRadius)));
+        0.0, 1.0 - length(pos.xyz / vec3(outerRadius, adiskHeight, outerRadius)));
     if (density < 0.001) {
         return;
     }
@@ -339,11 +168,11 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
     vec3 sphericalCoord = toSpherical(pos);
 
     // Scale the rho and phi so that the particles appear to be at the correct scale visually
-    sphericalCoord.y *= 2.0;
-    sphericalCoord.z *= 4.0;
+    //sphericalCoord.y *= 2.0;
+    //sphericalCoord.z *= 4.0;
 
     density *= 1.0 / pow(sphericalCoord.x, adiskDensityH);
-    density *= 16000.0;
+    density *= 5000.0;
 
     if (adiskParticle < 0.5) {
         color += vec3(0.0, 1.0, 0.0) * density * 0.02;
@@ -373,9 +202,6 @@ vec3 traceColor(vec3 pos, vec3 dir) {
     // Black hole center - use the uniform event horizon radius
     vec3 blackHoleCenter = vec3(0.0, 0.0, 0.0);
 
-    // Calculate initial distance to black hole
-    float initialDist = length(pos - blackHoleCenter);
-
     // Fixed step size to prevent artifacts - scale with event horizon size
     float BASE_STEP_SIZE = min(0.1, eventHorizonRadius * 0.05);
     dir = normalize(dir);
@@ -388,11 +214,9 @@ vec3 traceColor(vec3 pos, vec3 dir) {
         if (renderBlackHole > 0.5) {
             float distToBlackHole = length(pos - blackHoleCenter);
             
-            // Adaptive step size - scale properly with event horizon radius
             float stepScale = min(1.0, distToBlackHole / eventHorizonRadius * 0.5);
             float currentStepSize = BASE_STEP_SIZE * stepScale;
 
-            // If gravitational lensing is applied
             if (gravatationalLensing > 0.5) {
                 vec3 relativePos = pos - blackHoleCenter;
                 vec3 acc = accel(h2, relativePos);
@@ -400,38 +224,28 @@ vec3 traceColor(vec3 pos, vec3 dir) {
                 dir = normalize(dir); // Normalize but don't scale here
             }
 
-            // Render accretion disk BEFORE checking event horizon
-            // This ensures disk material appears in front of the black hole
             if (adiskEnabled > 0.5) {
                 adiskColor(pos, color, alpha);
             }
 
-            // Check if we've hit the event horizon AFTER rendering disk
-            // Now uses the uniform eventHorizonRadius
             if (distToBlackHole < eventHorizonRadius) {
                 hitEventHorizon = true;
-                // Don't return immediately - let any accumulated disk color show
                 break;
             }
             
-            // Apply step with consistent direction
             pos += dir * currentStepSize;
         } else {
             pos += dir * BASE_STEP_SIZE;
         }
 
-        // Break if we've traveled too far from the black hole - scale with event horizon
         if (length(pos - blackHoleCenter) > max(100.0, eventHorizonRadius * 50.0)) {
             break;
         }
     }
-
-    // Only sample skybox color if we didn't hit the event horizon
-    // and there's no significant disk contribution
+    
     if (!hitEventHorizon) {
         color += texture(galaxy, dir).rgb;
     } else if (length(color) < 0.01) {
-        // If we hit event horizon but have no disk color, return black
         return vec3(0.0);
     }
 
