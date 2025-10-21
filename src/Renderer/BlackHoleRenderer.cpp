@@ -19,7 +19,7 @@ void BlackHoleRenderer::Init(int width, int height) {
     m_width = width;
     m_height = height;
 
-    m_computeShader = std::make_unique<Shader>("../shaders/blackhole_raytrace.comp", true);
+    m_computeShader = std::make_unique<Shader>("../shaders/black_hole_rendering.comp", true);
     m_displayShader = std::make_unique<Shader>("../shaders/blackhole_display.vert", "../shaders/blackhole_display.frag");
 
     CreateComputeTexture();
@@ -134,19 +134,9 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
 
         std::string posUniform = "u_blackHolePositions[" + std::to_string(i) + "]";
         std::string massUniform = "u_blackHoleMasses[" + std::to_string(i) + "]";
-        std::string spinUniform = "u_blackHoleSpins[" + std::to_string(i) + "]";
-        std::string spinAxisUniform = "u_blackHoleSpinAxes[" + std::to_string(i) + "]";
-        std::string diskShowUniform = "u_showAccretionDisks[" + std::to_string(i) + "]";
-        std::string diskSizeUniform = "u_accretionDiskSizes[" + std::to_string(i) + "]";
-        std::string diskColorUniform = "u_accretionDiskColors[" + std::to_string(i) + "]";
 
         m_computeShader->SetVec3(posUniform, bh.position);
         m_computeShader->SetFloat(massUniform, normalizedMass);
-        m_computeShader->SetFloat(spinUniform, bh.spin);
-        m_computeShader->SetVec3(spinAxisUniform, bh.spinAxis);
-        m_computeShader->SetInt(diskShowUniform, bh.showAccretionDisk ? 1 : 0);
-        m_computeShader->SetFloat(diskSizeUniform, bh.accretionDiskSize);
-        m_computeShader->SetVec3(diskColorUniform, bh.accretionDiskColor);
     }
 
     m_computeShader->Unbind();
