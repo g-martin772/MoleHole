@@ -55,7 +55,7 @@ struct Ring {
 
 // calculation methods
 float calculateEventHorizonRadius(float mass) {
-    return 0.5f * mass;
+    return 0.2f * mass;
 }
 vec3 calculateAcceleration(float angMomentumSqrd, vec3 relPos) {
     float r5 = pow(dot(relPos, relPos), 2.5);
