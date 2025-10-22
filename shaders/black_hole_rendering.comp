@@ -4,7 +4,12 @@ layout(local_size_x = 16, local_size_y = 16) in;
 layout(rgba32f, binding = 0) uniform image2D l_outputImage;
 
 // textures
-uniform samplerCube u_skyboxTexture;
+uniform sampler2D u_skyboxTexture;
+
+// constants
+const float EPSILON = 0.01;
+const float STEP_SIZE = 0.1;
+const float PI = 3.1415926535;
 
 // black holes
 uniform int u_numBlackHoles;
@@ -18,7 +23,7 @@ uniform int u_debugMode = 0;
 uniform float u_time;
 
 // camera
-uniform vec3 u_cameraPosition;
+uniform vec3 u_cameraPos;
 uniform vec3 u_cameraFront;
 uniform vec3 u_cameraUp;
 uniform vec3 u_cameraRight;
@@ -37,11 +42,6 @@ uniform float u_accDiskDensityH = 1.0;
 uniform float u_accDiskNoiseScale = 1.0;
 uniform float u_accDiskNoiseLOD = 5.0;
 uniform float u_accDiskSpeed = 0.5;
-
-// constants
-const float EPSILON = 0.01;
-const float STEP_SIZE = 0.1;
-const float PI = 3.1415926535;
 
 // Ring
 struct Ring {
@@ -71,6 +71,16 @@ vec3 toSpherical(vec3 pos) {
     float theta = atan(pos.z, pos.x);
     float phi = asin(pos.y / rho);
     return vec3(rho, theta, phi);
+}
+vec2 directionToSpherical(vec3 direction) {
+    vec3 d = normalize(direction);
+    float theta = atan(d.z, d.x);
+    float phi = asin(d.y);
+
+    float u = (theta + PI) / (2.0 * PI);
+    float v = (phi + PI * 0.5) / PI;
+
+    return vec2(u, v);
 }
 
 
@@ -258,10 +268,10 @@ vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
     
     // return bent light rays
     if (!hitEventHorizon)
-        color += texture(u_skyboxTexture, rayDirection).rgb * alpha;
+        color += texture(u_skyboxTexture, directionToSpherical(rayDirection)).rgb * alpha;
     else if(length(color) < EPSILON)
         return vec3(0.0f);
-    
+
     return color;
 }
 
@@ -282,7 +292,7 @@ void main() {
     
     // Compute ray direction in world space.
     vec3 rayDir = normalize(uv.x * u_cameraRight + uv.y * u_cameraUp + u_cameraFront);
-    vec3 rayOrigin = u_cameraPosition;
+    vec3 rayOrigin = u_cameraPos;
     
     // Perform ray marching to get the color.
     vec3 color = rayMarching(rayOrigin, rayDir);

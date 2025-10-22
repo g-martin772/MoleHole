@@ -263,7 +263,7 @@ void VisualRenderer::SetUniforms(std::vector<BlackHole>& blackHoles, const Camer
     }
 
     m_computeShader->SetFloat("u_time", time);
-    m_computeShader->SetVec3("u_cameraPosition", camera.GetPosition());
+    m_computeShader->SetVec3("u_cameraPos", camera.GetPosition());
     m_computeShader->SetVec3("u_cameraFront", camera.GetFront());
     m_computeShader->SetVec3("u_cameraUp", camera.GetUp());
     m_computeShader->SetVec3("u_cameraRight", glm::normalize(glm::cross(camera.GetFront(), camera.GetUp())));
