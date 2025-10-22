@@ -30,9 +30,18 @@ void BlackHoleRenderer::Init(int width, int height) {
 }
 
 void BlackHoleRenderer::LoadSkybox() {
-    m_skyboxTexture = std::unique_ptr<Image>(Image::LoadHDR("../assets/space.hdr"));
+    const std::string carinaPath = "../assets/space.hdr";
+    const std::string defaultPath = "../assets/space.hdr";
+
+    // Try to load Carina nebula HDR first, fall back to default if missing
+    m_skyboxTexture = std::unique_ptr<Image>(Image::LoadHDR(carinaPath));
     if (!m_skyboxTexture) {
-        spdlog::error("Failed to load skybox texture");
+        spdlog::warn("Failed to load '{}', falling back to '{}'", carinaPath, defaultPath);
+        m_skyboxTexture = std::unique_ptr<Image>(Image::LoadHDR(defaultPath));
+    }
+
+    if (!m_skyboxTexture) {
+        spdlog::error("Failed to load skybox texture (tried '{}' and '{}')", carinaPath, defaultPath);
     }
 }
 
@@ -71,10 +80,10 @@ void BlackHoleRenderer::CreateFullscreenQuad() {
     glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
 
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
 
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
 }
 
 void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time) {
@@ -100,7 +109,8 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const C
     unsigned int groupsY = (m_height + 15) / 16;
     m_computeShader->Dispatch(groupsX, groupsY, 1);
 
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    // Ensure writes to the image are visible to subsequent texture fetches in the fragment shader
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
 
     m_computeShader->Unbind();
 }
@@ -109,8 +119,6 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     m_computeShader->Bind();
 
     glm::vec3 cameraPos = camera.GetPosition();
-    glm::mat4 viewMatrix = camera.GetViewMatrix();
-
     glm::vec3 cameraFront = camera.GetFront();
     glm::vec3 cameraUp = camera.GetUp();
     glm::vec3 cameraRight = glm::normalize(glm::cross(cameraFront, cameraUp));
@@ -120,10 +128,10 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     m_computeShader->SetVec3("u_cameraUp", cameraUp);
     m_computeShader->SetVec3("u_cameraRight", cameraRight);
     m_computeShader->SetFloat("u_fov", camera.GetFov());
-    m_computeShader->SetFloat("u_aspect", (float)m_width / (float)m_height);
+    m_computeShader->SetFloat("u_aspect", static_cast<float>(m_width) / static_cast<float>(m_height));
     m_computeShader->SetFloat("u_time", time);
 
-    int numBlackHoles = std::min((int)blackHoles.size(), 8);
+    int numBlackHoles = std::min(static_cast<int>(blackHoles.size()), 8);
     m_computeShader->SetInt("u_numBlackHoles", numBlackHoles);
 
     for (int i = 0; i < numBlackHoles; i++) {
@@ -154,8 +162,6 @@ void BlackHoleRenderer::RenderToScreen() {
     glBindVertexArray(0);
 
     m_displayShader->Unbind();
-
-    auto& config = Application::State();
 }
 
 void BlackHoleRenderer::Resize(int width, int height) {
