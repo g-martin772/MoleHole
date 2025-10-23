@@ -12,8 +12,10 @@ uniform float u_blackHoleMasses[8];
 out vec3 vWorldPos;
 out float vDispplacement;
 
-const float visual_effect_scalar1 = 0.9; // base=1
-const float visual_effect_scalar2 = 1; // base=1
+float calculateGravity(vec3 position, float mass) {
+    // disregard y component for grid plane
+    return (-1.0f * mass) / (pow(position.x, 2) + pow(position.z, 2));
+}
 
 void main() {
     // Start from the input vertex on the XZ plane
@@ -24,14 +26,14 @@ void main() {
     for (int i = 0; i < u_numBlackHoles; ++i) {
         vec3 bh = u_blackHolePositions[i];
         float mass = u_blackHoleMasses[i];
-        float rs = 2.0 * mass; // Schwarzschild radius
+        float rs = 2.0 * mass;
         float r = length(p.xz - bh.xz);
         if (r > rs) {
-            float lens = rs / max((r*visual_effect_scalar1) - rs, 0.01);
+            float lens = rs / max(r - rs, 0.01);
             displacement += lens;
         }
     }
-    p.y -= displacement * visual_effect_scalar2;
+    p.y -= displacement;
 
     vWorldPos = p;
     vDispplacement = displacement;

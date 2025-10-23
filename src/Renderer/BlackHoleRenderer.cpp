@@ -30,7 +30,7 @@ void BlackHoleRenderer::Init(int width, int height) {
 }
 
 void BlackHoleRenderer::LoadSkybox() {
-    const std::string carinaPath = "../assets/space.hdr";
+    const std::string carinaPath = "../assets/carina.hdr";
     const std::string defaultPath = "../assets/space.hdr";
 
     // Try to load Carina nebula HDR first, fall back to default if missing

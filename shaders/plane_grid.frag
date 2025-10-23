@@ -13,16 +13,6 @@ uniform vec3 u_blackHolePositions[8];
 uniform float u_blackHoleMasses[8];
 
 void main() {
-    // Hide grid inside Schwarzschild radius of any black hole
-    for (int i = 0; i < u_numBlackHoles; ++i) {
-        float mass = u_blackHoleMasses[i];
-        float rs = 2.0 * mass;
-        float r = length(vWorldPos.xz - u_blackHolePositions[i].xz);
-        if (r < rs) {
-            discard;
-        }
-    }
-
     float cell = max(0.0001, u_cellSize);
 
     // World position projected onto the XZ plane in cell units

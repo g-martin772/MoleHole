@@ -90,7 +90,7 @@ void GravityGridRenderer::Render(const std::vector<BlackHole>& blackHoles, const
     m_shader->SetMat4("uVP", vp);
     m_shader->SetFloat("u_planeY", m_planeY);
 
-    int num = (int)std::min<size_t>(blackHoles.size(), 8);
+    int num = static_cast<int>(std::min<size_t>(blackHoles.size(), 8));
     m_shader->SetInt("u_numBlackHoles", num);
     for (int i = 0; i < num; ++i) {
         const BlackHole& bh = blackHoles[i];
