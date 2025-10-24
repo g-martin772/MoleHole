@@ -164,10 +164,10 @@ float ringDistance(vec3 rayOrigin, vec3 rayDir, Ring ring) {
         return -1.0;
     }
 }
-void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizonRadius) {    
+void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin) {    
     
-    float iscoRadius = 3.0 * eventHorizonRadius;
-    float outerRadius = 10.0 * eventHorizonRadius;
+    float iscoRadius = 2.0 * eventHorizonRadius;
+    float outerRadius = 8.0 * eventHorizonRadius;
     float distanceFromCenter = length(pos);
 
     if (distanceFromCenter < iscoRadius) {
@@ -188,30 +188,32 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
     vec3 sphericalCoord = toSpherical(pos);
 
     // Scale the rho and phi so that the particles appear to be at the correct scale visually
-    sphericalCoord.y *= 2.0;
-    sphericalCoord.z *= 4.0;
+    sphericalCoord.y *= 10.0;
+    sphericalCoord.z *= 20.0;
 
     density *= 1.0 / pow(sphericalCoord.x, u_accDiskDensityH);
-    density *= 3000.0;
+    density *= 1000.0;
 
     if (u_accDiskParticle < 0.5) {
         color += vec3(0.0, 1.0, 0.0) * density * 0.02;
         return;
     }
 
+    vec3 dustColor = vec3(0.8f, 0.3f, 0.3f);
+    
+    float freq = 1 / 600;
+
     float noise = 1.0;
     for (int i = 0; i < int(u_accDiskNoiseLOD); i++) {
         noise *= 0.5 * snoise(sphericalCoord * pow(i, 2) * u_accDiskNoiseScale) + 0.5;
         if (i % 2 == 0) {
             sphericalCoord.y += u_time * u_accDiskSpeed;
+            dustColor += freq * (1 / (-1.0f * u_accDiskSpeed));
         } else {
             sphericalCoord.y -= u_time * u_accDiskSpeed;
         }
     }
     
-    
-    vec3 dustColor = vec3(0.8f, 0.3f, 0.3f);
-
     color += density * u_accDiskLit * dustColor * alpha * abs(noise);
 }
 
@@ -224,7 +226,7 @@ vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
     
     float stepSize = STEP_SIZE;
     
-    for (int i = 0; i < 2000; i++) {
+    for (int i = 0; i < 2500; i++) {
         if (u_renderBlackHoles == 1) {
             
             // Reset step size to base value each iteration
@@ -240,20 +242,20 @@ vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
                 currentStepSize *= min(1.0, distanceToBH / r_s);
                 
                 if (u_gravitationalLensingEnabled == 1) {
-                    rayDirection += calculateAcceleration(dot(angMomentum, angMomentum), relativePos) * u_blackHoleMasses[j] * currentStepSize;
+                    rayDirection += calculateAcceleration(dot(angMomentum, angMomentum), relativePos) * u_blackHoleMasses[j] * 2.0f * currentStepSize;
                     rayDirection = normalize(rayDirection);
                 }
-        
+
+                // Add accretion disk color for current position (relative to this black hole)
+                if (u_accretionDiskEnabled == 1) {
+                    adiskColor(relativePos, color, alpha, r_s, rayOrigin);
+                }
+                
                 // Check for event horizon collision
                 if (distanceToBH < r_s) {
                     hitEventHorizon = true;
                     break;
-                }
-                
-                // Add accretion disk color for current position (relative to this black hole)
-                if (u_accretionDiskEnabled == 1) {
-                    adiskColor(relativePos, color, alpha, r_s);
-                }
+                }                
             }
             
             if (hitEventHorizon) {
@@ -267,9 +269,8 @@ vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
     // return bent light rays
     if (!hitEventHorizon)
         color += texture(u_skyboxTexture, directionToSpherical(rayDirection)).rgb * alpha;
-    else if(length(color) < EPSILON)
+    if (length(color) < EPSILON)
         return vec3(0.0f);
-
     return color;
 }
 
