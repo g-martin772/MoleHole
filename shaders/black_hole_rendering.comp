@@ -42,15 +42,8 @@ uniform float u_accDiskDensityH = 1.0;
 uniform float u_accDiskNoiseScale = 1.0;
 uniform float u_accDiskNoiseLOD = 5.0;
 uniform float u_accDiskSpeed = 0.5;
-
-// Ring
-struct Ring {
-    vec3 center;
-    vec3 normal;
-    float innerRadius;
-    float outerRadius;
-    float rotateSpeed;
-};
+uniform float u_dopplerBeamingEnabled = 1.0;
+uniform float u_dopplerBeamingIntensity = 2.0;
 
 
 // calculation methods
@@ -143,27 +136,6 @@ float snoise(vec3 v) {
     m = m * m;
     return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
-float ringDistance(vec3 rayOrigin, vec3 rayDir, Ring ring) {
-    float denominator = dot(rayDir, ring.normal);
-    float constant = -dot(ring.center, ring.normal);
-    if (abs(denominator) < EPSILON) {
-        return -1.0;
-    } else {
-        float t = -(dot(rayOrigin, ring.normal) + constant) / denominator;
-        if (t < 0.0) {
-            return -1.0;
-        }
-
-        vec3 intersection = rayOrigin + t * rayDir;
-
-        // Compute distance to ring center
-        float d = length(intersection - ring.center);
-        if (d >= ring.innerRadius && d <= ring.outerRadius) {
-            return t;
-        }
-        return -1.0;
-    }
-}
 void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin) {    
     
     float iscoRadius = 2.0 * eventHorizonRadius;
@@ -192,7 +164,7 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
     sphericalCoord.z *= 20.0;
 
     density *= 1.0 / pow(sphericalCoord.x, u_accDiskDensityH);
-    density *= 1000.0;
+    density *= 5000.0;
 
     if (u_accDiskParticle < 0.5) {
         color += vec3(0.0, 1.0, 0.0) * density * 0.02;
@@ -200,21 +172,64 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
     }
 
     vec3 dustColor = vec3(0.8f, 0.3f, 0.3f);
-    
-    float freq = 1 / 600;
 
     float noise = 1.0;
     for (int i = 0; i < int(u_accDiskNoiseLOD); i++) {
         noise *= 0.5 * snoise(sphericalCoord * pow(i, 2) * u_accDiskNoiseScale) + 0.5;
         if (i % 2 == 0) {
             sphericalCoord.y += u_time * u_accDiskSpeed;
-            dustColor += freq * (1 / (-1.0f * u_accDiskSpeed));
         } else {
             sphericalCoord.y -= u_time * u_accDiskSpeed;
         }
     }
     
-    color += density * u_accDiskLit * dustColor * alpha * abs(noise);
+    // Doppler beaming effect
+    float dopplerBrightness = 1.0;
+    vec3 dopplerColor = dustColor;
+    
+    if (u_dopplerBeamingEnabled > 0.5) {
+        // Calculate disk velocity (Keplerian orbit)
+        // Velocity is perpendicular to radial direction in the disk plane
+        vec3 diskNormal = vec3(0.0, 1.0, 0.0); // assuming disk in XZ plane
+        vec3 radialDir = normalize(vec3(pos.x, 0.0, pos.z));
+        vec3 velocityDir = cross(diskNormal, radialDir);
+        
+        // Keplerian velocity: v ~ 1/sqrt(r)
+        float orbitalSpeed = 1 / sqrt(distanceFromCenter / eventHorizonRadius);
+        orbitalSpeed = clamp(orbitalSpeed, 0.0, 0.9); // Cap at 0.9c for stability
+        
+        vec3 velocity = velocityDir * orbitalSpeed;
+        
+        // Calculate direction to observer
+        vec3 toObserver = normalize(rayOrigin - pos);
+        
+        // Doppler factor: cosine of angle between velocity and observer
+        float beta = dot(velocity, toObserver);
+        
+        // Relativistic doppler factor
+        float gamma = 1.0 / sqrt(1.0 - orbitalSpeed * orbitalSpeed);
+        float dopplerFactor = 1.0 / (gamma * (1.0 - beta));
+        
+        // Beaming effect: intensity ~ (doppler factor)^(3+alpha)
+        // Using alpha=0 for simplicity (gives ^3)
+        dopplerBrightness = pow(dopplerFactor, u_dopplerBeamingIntensity);
+        
+        // Color shift due to doppler effect
+        // Approaching side -> blue shift (beta > 0)
+        // Receding side -> red shift (beta < 0)
+        float colorShift = beta * orbitalSpeed;
+        
+        if (colorShift > 0.0) {
+            // Blue shift for approaching material
+            dopplerColor = mix(dustColor, vec3(0.3, 0.5, 1.0), colorShift);
+            alpha = 0.4;
+        } else {
+            // Red shift for receding material
+            dopplerColor = mix(dustColor, vec3(1.0, 0.2, 0.1), abs(colorShift));
+        }
+    }
+    
+    color += density * dopplerColor * alpha * abs(noise);
 }
 
 
