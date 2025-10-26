@@ -4,13 +4,15 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "Application/Application.h"
+#include "BlackbodyLUTGenerator.h"
 
 BlackHoleRenderer::BlackHoleRenderer()
-    : m_computeTexture(0), m_quadVAO(0), m_quadVBO(0), m_width(800), m_height(600) {
+    : m_computeTexture(0), m_blackbodyLUT(0), m_quadVAO(0), m_quadVBO(0), m_width(800), m_height(600) {
 }
 
 BlackHoleRenderer::~BlackHoleRenderer() {
     if (m_computeTexture) glDeleteTextures(1, &m_computeTexture);
+    if (m_blackbodyLUT) glDeleteTextures(1, &m_blackbodyLUT);
     if (m_quadVAO) glDeleteVertexArrays(1, &m_quadVAO);
     if (m_quadVBO) glDeleteBuffers(1, &m_quadVBO);
 }
@@ -22,9 +24,12 @@ void BlackHoleRenderer::Init(int width, int height) {
     m_computeShader = std::make_unique<Shader>("../shaders/black_hole_rendering.comp", true);
     m_displayShader = std::make_unique<Shader>("../shaders/blackhole_display.vert", "../shaders/blackhole_display.frag");
 
+    m_blackbodyLUTGenerator = std::make_unique<MoleHole::BlackbodyLUTGenerator>();
+    
     CreateComputeTexture();
     CreateFullscreenQuad();
     LoadSkybox();
+    GenerateBlackbodyLUT();
 
     spdlog::info("BlackHoleRenderer initialized with {}x{} resolution", width, height);
 }
@@ -43,6 +48,35 @@ void BlackHoleRenderer::LoadSkybox() {
     if (!m_skyboxTexture) {
         spdlog::error("Failed to load skybox texture (tried '{}' and '{}')", carinaPath, defaultPath);
     }
+}
+
+void BlackHoleRenderer::GenerateBlackbodyLUT() {
+    using namespace MoleHole;
+    
+    spdlog::info("Generating blackbody LUT ({}x{})...", 
+                 m_blackbodyLUTGenerator->LUT_WIDTH, 
+                 m_blackbodyLUTGenerator->LUT_HEIGHT);
+    
+    // Generate the LUT data
+    auto lutData = m_blackbodyLUTGenerator->generateLUT();
+    
+    // Create and upload the OpenGL texture
+    if (m_blackbodyLUT) {
+        glDeleteTextures(1, &m_blackbodyLUT);
+    }
+    
+    glGenTextures(1, &m_blackbodyLUT);
+    glBindTexture(GL_TEXTURE_2D, m_blackbodyLUT);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, 
+                 BlackbodyLUTGenerator::LUT_WIDTH, 
+                 BlackbodyLUTGenerator::LUT_HEIGHT, 
+                 0, GL_RGB, GL_FLOAT, lutData.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    spdlog::info("Blackbody LUT generated successfully");
 }
 
 void BlackHoleRenderer::CreateComputeTexture() {
@@ -93,10 +127,25 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const C
 
     glBindImageTexture(0, m_computeTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
+    // Bind skybox texture to unit 1
     if (m_skyboxTexture) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m_skyboxTexture->textureID);
         m_computeShader->SetInt("u_skyboxTexture", 1);
+    }
+    
+    // Bind blackbody LUT to unit 2
+    if (m_blackbodyLUT) {
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, m_blackbodyLUT);
+        m_computeShader->SetInt("u_blackbodyLUT", 2);
+        
+        // Set LUT parameters (must match the generator constants)
+        m_computeShader->SetFloat("u_lutTempMin", 1000.0f);
+        m_computeShader->SetFloat("u_lutTempMax", 40000.0f);
+        m_computeShader->SetFloat("u_lutRedshiftMin", 0.1f);
+        m_computeShader->SetFloat("u_lutRedshiftMax", 3.0f);
+        m_computeShader->SetInt("u_useBlackbodyLUT", 1);
     }
 
     auto& config = Application::State();

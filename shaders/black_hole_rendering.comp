@@ -5,6 +5,7 @@ layout(rgba32f, binding = 0) uniform image2D l_outputImage;
 
 // textures
 uniform sampler2D u_skyboxTexture;
+uniform sampler2D u_blackbodyLUT; // 2D LUT: x=temperature, y=redshift factor
 
 // constants
 const float EPSILON = 0.01;
@@ -46,6 +47,189 @@ uniform float u_dopplerBeamingEnabled = 1.0;
 uniform float u_dopplerBeamingIntensity = 2.0;
 
 
+// Add matching functions, color conversion and physical constants for doppler/redshift/blackbody
+const int integrationNum = 80;
+const vec3 matchingFunctions[81] = vec3[](
+vec3(0.0014, 0.0000, 0.0065), vec3(0.0022, 0.0001, 0.0105), vec3(0.0042, 0.0001, 0.0201),
+vec3(0.0076, 0.0002, 0.0362), vec3(0.0143, 0.0004, 0.0679), vec3(0.0232, 0.0006, 0.1102),
+vec3(0.0435, 0.0012, 0.2074), vec3(0.0776, 0.0022, 0.3713), vec3(0.1344, 0.0040, 0.6456),
+vec3(0.2148, 0.0073, 1.0391), vec3(0.2839, 0.0116, 1.3856), vec3(0.3285, 0.0168, 1.6230),
+vec3(0.3483, 0.0230, 1.7471), vec3(0.3481, 0.0298, 1.7826), vec3(0.3362, 0.0380, 1.7721),
+vec3(0.3187, 0.0480, 1.7441), vec3(0.2908, 0.0600, 1.6692), vec3(0.2511, 0.0739, 1.5281),
+vec3(0.1954, 0.0910, 1.2876), vec3(0.1421, 0.1126, 1.0419), vec3(0.0956, 0.1390, 0.8130),
+vec3(0.0580, 0.1693, 0.6162), vec3(0.0320, 0.2080, 0.4652), vec3(0.0147, 0.2586, 0.3533),
+vec3(0.0049, 0.3230, 0.2720), vec3(0.0024, 0.4073, 0.2123), vec3(0.0093, 0.5030, 0.1582),
+vec3(0.0291, 0.6082, 0.1117), vec3(0.0633, 0.7100, 0.0782), vec3(0.1096, 0.7932, 0.0573),
+vec3(0.1655, 0.8620, 0.0422), vec3(0.2257, 0.9149, 0.0298), vec3(0.2904, 0.9540, 0.0203),
+vec3(0.3597, 0.9803, 0.0134), vec3(0.4334, 0.9950, 0.0087), vec3(0.5121, 1.0000, 0.0057),
+vec3(0.5945, 0.9950, 0.0039), vec3(0.6784, 0.9786, 0.0027), vec3(0.7621, 0.9520, 0.0021),
+vec3(0.8425, 0.9154, 0.0018), vec3(0.9163, 0.8700, 0.0017), vec3(0.9786, 0.8163, 0.0014),
+vec3(1.0263, 0.7570, 0.0011), vec3(1.0567, 0.6949, 0.0010), vec3(1.0622, 0.6310, 0.0008),
+vec3(1.0456, 0.5668, 0.0006), vec3(1.0026, 0.5030, 0.0003), vec3(0.9384, 0.4412, 0.0002),
+vec3(0.8544, 0.3810, 0.0002), vec3(0.7514, 0.3210, 0.0001), vec3(0.6424, 0.2650, 0.0000),
+vec3(0.5419, 0.2170, 0.0000), vec3(0.4479, 0.1750, 0.0000), vec3(0.3608, 0.1382, 0.0000),
+vec3(0.2835, 0.1070, 0.0000), vec3(0.2187, 0.0816, 0.0000), vec3(0.1649, 0.0610, 0.0000),
+vec3(0.1212, 0.0446, 0.0000), vec3(0.0874, 0.0320, 0.0000), vec3(0.0636, 0.0232, 0.0000),
+vec3(0.0468, 0.0170, 0.0000), vec3(0.0329, 0.0119, 0.0000), vec3(0.0227, 0.0082, 0.0000),
+vec3(0.0158, 0.0057, 0.0000), vec3(0.0114, 0.0041, 0.0000), vec3(0.0081, 0.0029, 0.0000),
+vec3(0.0058, 0.0021, 0.0000), vec3(0.0041, 0.0015, 0.0000), vec3(0.0029, 0.0010, 0.0000),
+vec3(0.0020, 0.0007, 0.0000), vec3(0.0014, 0.0005, 0.0000), vec3(0.0010, 0.0004, 0.0000),
+vec3(0.0007, 0.0002, 0.0000), vec3(0.0005, 0.0002, 0.0000), vec3(0.0003, 0.0001, 0.0000),
+vec3(0.0002, 0.0001, 0.0000), vec3(0.0002, 0.0001, 0.0000), vec3(0.0001, 0.0000, 0.0000),
+vec3(0.0001, 0.0000, 0.0000), vec3(0.0001, 0.0000, 0.0000), vec3(0.0000, 0.0000, 0.0000)
+);
+
+const mat3 rec2020Transform = mat3(
+1.7167, -0.6667, 0.0176,
+-0.3557, 1.6165, -0.0428,
+-0.2534, 0.0158, 0.9421
+);
+
+const float LightSpeed = 2.99792458e8;
+const float BoltzmannConstant = 1.3806504e-23;
+const float PlanckConstant = 6.62607015e-34;
+const float Min_cY = 3931191.541677483; // ~1000K reference
+const float Max_cY = 9.15738182436502e+16; // ~20000K reference
+const float LogMin_cY = log(Min_cY);
+const float LogMax_cY = log(Max_cY);
+
+// new uniforms for disk temperature and GR redshift toggle
+uniform float u_accDiskTemp = 13000.0;
+uniform int u_gravitationalRedshiftEnabled = 1;
+uniform int u_useBlackbodyLUT = 1; // Toggle between LUT and full calculation
+
+// LUT parameters (must match the LUT texture generation)
+// Using uniforms instead of const to avoid GLSL type inference issues
+uniform float u_lutTempMin = 1000.0;
+uniform float u_lutTempMax = 40000.0;
+uniform float u_lutRedshiftMin = 0.1;
+uniform float u_lutRedshiftMax = 3.0;
+
+// color conversion / blackbody sampling helpers
+vec3 convertToRGB(float cX, float cY, float cZ, float normalized_cY) {
+    float denom = cX + cY + cZ;
+    float x = denom > 0.0 ? cX / denom : 0.0;
+    float y = denom > 0.0 ? cY / denom : 0.0;
+    float z = 1.0 - x - y;
+
+    float X = x / max(y, 1e-6);
+    float Y = 1.0;
+    float Z = z / max(y, 1e-6);
+
+    vec3 inputColor = vec3(X, Y, Z);
+    vec3 outputColor = rec2020Transform * inputColor;
+
+    float R = max(outputColor.r, 0.0);
+    float G = max(outputColor.g, 0.0);
+    float B = max(outputColor.b, 0.0);
+
+    float maxVal = max(max(R, G), B);
+    if (maxVal > 1.0) {
+        float invMaxVal = 1.0 / maxVal;
+        R *= invMaxVal;
+        G *= invMaxVal;
+        B *= invMaxVal;
+    }
+
+    return vec3(R, G, B) * normalized_cY;
+}
+
+// Fast blackbody lookup using precomputed LUT
+vec3 getBlackbodyColorLUT(float temperature, float redshiftFactor) {
+    // Map temperature to [0,1] range for LUT lookup
+    float tempRange = u_lutTempMax - u_lutTempMin;
+    float tempNorm = (temperature - u_lutTempMin) / tempRange;
+    tempNorm = max(0.0f, min(1.0f, tempNorm));
+    
+    // Map redshift factor to [0,1] range for LUT lookup
+    float redshiftRange = u_lutRedshiftMax - u_lutRedshiftMin;
+    float redshiftNorm = (redshiftFactor - u_lutRedshiftMin) / redshiftRange;
+    redshiftNorm = max(0.0f, min(1.0f, redshiftNorm));
+    
+    // Sample the LUT (bilinear interpolation happens automatically)
+    vec3 color = texture(u_blackbodyLUT, vec2(tempNorm, redshiftNorm)).rgb;
+    
+    return color;
+}
+
+// Original full calculation version (kept for LUT generation reference)
+// Use this to generate the LUT texture offline or for comparison
+vec3 getBlackbodyColorFull(float temperature, float redshiftFactor)
+{
+    float cX = 0.0;
+    float cY = 0.0;
+    float cZ = 0.0;
+    float wavelength = 380.0;
+    float adjustedTemperature = max(1.0, temperature) / max(1e-6, redshiftFactor);
+
+    for (int i = 0; i < integrationNum; i++) {
+        wavelength += 5.0;
+        float lambda = wavelength * 1e-9;
+        float intensity = ((2.0 * PlanckConstant * pow(LightSpeed, 2.0)) / pow(lambda, 5.0)) /
+        (exp((PlanckConstant * LightSpeed) / (lambda * BoltzmannConstant * adjustedTemperature)) - 1.0);
+        vec3 matchingFunc = matchingFunctions[i];
+        cX += intensity * matchingFunc.x * 5.0;
+        cY += intensity * matchingFunc.y * 5.0;
+        cZ += intensity * matchingFunc.z * 5.0;
+    }
+
+    // guard cY
+    cY = max(cY, 1e-12);
+    float log_cY = log(cY);
+    float normalized_cY = clamp((log_cY - LogMin_cY) / (LogMax_cY - LogMin_cY), 0.0, 1.0);
+
+    return convertToRGB(cX, cY, cZ, normalized_cY);
+}
+
+// Wrapper that chooses between LUT and full calculation
+vec3 getBlackbodyColor(float temperature, float redshiftFactor) {
+    if (u_useBlackbodyLUT == 1) {
+        return getBlackbodyColorLUT(temperature, redshiftFactor);
+    } else {
+        return getBlackbodyColorFull(temperature, redshiftFactor);
+    }
+}
+
+float calculateRedShift(vec3 pos)
+{
+    float dist = sqrt(dot(pos, pos));
+    float valid = step(1.0, dist);
+
+    float redshift = sqrt(max(0.0, 1.0 - 1.0 / max(dist, 1.0))) - 1.0;
+    redshift = 1.0 / (1.0 + redshift);
+
+    redshift *= valid;
+    return redshift;
+}
+
+float calculateDopplerEffect(vec3 pos, vec3 viewDir)
+{
+    vec3 vel;
+    float r = sqrt(dot(pos, pos));
+    float safeR = max(r, 1.0 + 1e-6);
+
+    if (r < 1.0)
+    {
+        return 1.0;
+    }
+
+    float velMag0 = -sqrt((1.0 * 1.0 / (2.0 * (safeR - 1.0))));
+    float velMag1 = -sqrt((1.0 * 1.0 / r) * (1.0 - 3.0 * 1.0 / (safeR)));
+
+    float velMag = velMag0; // choose the simpler Keplerian fallback
+
+    vec3 velDir = normalize(cross(vec3(0.0, 1.0, 0.0), pos));
+    vel = velDir * velMag;
+
+    vec3 beta_s = vel; // c normalized to 1 in this shader context
+
+    float gamma = inversesqrt(max(1e-12, 1.0 - dot(beta_s, beta_s)));
+    float dopplerShift = gamma * (1.0 + dot(vel, normalize(viewDir)));
+
+    return max(0.0001, dopplerShift);
+}
+
+
 // calculation methods
 float calculateEventHorizonRadius(float mass) {
     return 2.0f * mass;
@@ -75,6 +259,7 @@ vec2 directionToSpherical(vec3 direction) {
 
     return vec2(u, v);
 }
+
 
 
 // noise functions
@@ -164,18 +349,17 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
     sphericalCoord.z *= 20.0;
 
     density *= 1.0 / pow(sphericalCoord.x, u_accDiskDensityH);
-    density *= 5000.0;
+    density *= 1000.0;
 
     if (u_accDiskParticle < 0.5) {
         color += vec3(0.0, 1.0, 0.0) * density * 0.02;
         return;
     }
 
-    vec3 dustColor = vec3(0.8f, 0.3f, 0.3f);
-
+    // compute noise-driven pattern
     float noise = 1.0;
     for (int i = 0; i < int(u_accDiskNoiseLOD); i++) {
-        noise *= 0.5 * snoise(sphericalCoord * pow(i, 2) * u_accDiskNoiseScale) + 0.5;
+        noise *= 0.5 * snoise(sphericalCoord * pow(max(1, i), 2) * u_accDiskNoiseScale) + 0.5;
         if (i % 2 == 0) {
             sphericalCoord.y += u_time * u_accDiskSpeed;
         } else {
@@ -183,53 +367,27 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
         }
     }
     
-    // Doppler beaming effect
-    float dopplerBrightness = 1.0;
-    vec3 dopplerColor = dustColor;
-    
-    if (u_dopplerBeamingEnabled > 0.5) {
-        // Calculate disk velocity (Keplerian orbit)
-        // Velocity is perpendicular to radial direction in the disk plane
-        vec3 diskNormal = vec3(0.0, 1.0, 0.0); // assuming disk in XZ plane
-        vec3 radialDir = normalize(vec3(pos.x, 0.0, pos.z));
-        vec3 velocityDir = cross(diskNormal, radialDir);
-        
-        // Keplerian velocity: v ~ 1/sqrt(r)
-        float orbitalSpeed = 1 / sqrt(distanceFromCenter / eventHorizonRadius);
-        orbitalSpeed = clamp(orbitalSpeed, 0.0, 0.9); // Cap at 0.9c for stability
-        
-        vec3 velocity = velocityDir * orbitalSpeed;
-        
-        // Calculate direction to observer
-        vec3 toObserver = normalize(rayOrigin - pos);
-        
-        // Doppler factor: cosine of angle between velocity and observer
-        float beta = dot(velocity, toObserver);
-        
-        // Relativistic doppler factor
-        float gamma = 1.0 / sqrt(1.0 - orbitalSpeed * orbitalSpeed);
-        float dopplerFactor = 1.0 / (gamma * (1.0 - beta));
-        
-        // Beaming effect: intensity ~ (doppler factor)^(3+alpha)
-        // Using alpha=0 for simplicity (gives ^3)
-        dopplerBrightness = pow(dopplerFactor, u_dopplerBeamingIntensity);
-        
-        // Color shift due to doppler effect
-        // Approaching side -> blue shift (beta > 0)
-        // Receding side -> red shift (beta < 0)
-        float colorShift = beta * orbitalSpeed;
-        
-        if (colorShift > 0.0) {
-            // Blue shift for approaching material
-            dopplerColor = mix(dustColor, vec3(0.3, 0.5, 1.0), colorShift);
-            alpha = 0.4;
-        } else {
-            // Red shift for receding material
-            dopplerColor = mix(dustColor, vec3(1.0, 0.2, 0.1), abs(colorShift));
-        }
+    // Temperature-based blackbody with doppler + gravitational redshift
+    float grFactor = 1.0;
+    if (u_gravitationalRedshiftEnabled == 1) {
+        // scale the position by the event horizon radius so calculateRedShift expects r~1 at horizon
+        grFactor = calculateRedShift(pos / max(1e-6, eventHorizonRadius));
+        grFactor = max(grFactor, 1e-6);
     }
+
+    float doppler = 1.0;
+    if (u_dopplerBeamingEnabled > 0.5) {
+        vec3 viewDir = normalize(rayOrigin - (pos + u_cameraPos));
+        // pos is relative to BH center; calculateDopplerEffect expects pos in same units as calculateRedShift
+        doppler = calculateDopplerEffect(pos / max(1e-6, eventHorizonRadius), viewDir);
+    }
+
+    float dopplerRedshift = 1.0 / mix(1.0, doppler * grFactor, float(u_dopplerBeamingEnabled > 0.5));
+
+    float temp = max(100.0, u_accDiskTemp);
+    vec3 bbColor = getBlackbodyColor(temp, dopplerRedshift);
     
-    color += density * dopplerColor * alpha * abs(noise);
+    color += bbColor * alpha * abs(noise);
 }
 
 
