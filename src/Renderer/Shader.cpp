@@ -132,13 +132,12 @@ void Shader::SaveCachedProgram(unsigned int program, const std::string& cacheKey
     
     GLsizei binaryLength;
     glGetProgramiv(program, GL_PROGRAM_BINARY_LENGTH, &binaryLength);
-    
     std::vector<char> binary(binaryLength);
     GLenum binaryFormat;
     glGetProgramBinary(program, binaryLength, nullptr, &binaryFormat, binary.data());
     
     std::ofstream file(GetCachePath(cacheKey), std::ios::binary);
-    if (file.good()) {
+    if (file.is_open()) {
         file.write(reinterpret_cast<const char*>(&binaryFormat), sizeof(GLenum));
         file.write(reinterpret_cast<const char*>(&binaryLength), sizeof(GLsizei));
         file.write(binary.data(), binaryLength);
@@ -162,7 +161,7 @@ unsigned int Shader::CompileWithCache(const char* vertexPath, const char* fragme
     SaveCachedProgram(program, cacheKey);
     
     std::ofstream metaFile(GetCachePath(cacheKey) + ".meta");
-    if (metaFile.good()) {
+    if (metaFile.is_open()) {
         metaFile << GetFileModTime(vertexPath) << "\n" << GetFileModTime(fragmentPath) << "\n";
     }
     
@@ -186,7 +185,7 @@ unsigned int Shader::CompileComputeWithCache(const char* computePath) {
     SaveCachedProgram(program, cacheKey);
     
     std::ofstream metaFile(GetCachePath(cacheKey) + ".meta");
-    if (metaFile.good()) {
+    if (metaFile.is_open()) {
         metaFile << GetFileModTime(computePath) << "\n";
     }
     
