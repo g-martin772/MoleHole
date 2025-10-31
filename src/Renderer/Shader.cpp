@@ -9,6 +9,7 @@
 #include <cstring>
 #include <filesystem>
 #include <string_view>
+#include <chrono>
 
 std::string Shader::ReadFile(const char* path) {
     std::ifstream file(path);
@@ -148,15 +149,22 @@ unsigned int Shader::CompileWithCache(const char* vertexPath, const char* fragme
     const std::string cacheKey = ComputeHash(std::string(vertexPath) + "|" + fragmentPath);
     
     if (IsCacheValid(cacheKey, vertexPath, fragmentPath)) {
+        const auto tStart = std::chrono::steady_clock::now();
         unsigned int program;
         if (LoadCachedProgram(program, cacheKey)) {
-            spdlog::debug("Loaded shader from cache: {} + {}", vertexPath, fragmentPath);
+            const auto tEnd = std::chrono::steady_clock::now();
+            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(tEnd - tStart).count();
+            spdlog::info("Loaded shader from cache in {} ms: {} + {}", ms, vertexPath, fragmentPath);
             return program;
         }
     }
     
     spdlog::debug("Compiling shader from source: {} + {}", vertexPath, fragmentPath);
+    const auto tStart = std::chrono::steady_clock::now();
     const unsigned int program = Compile(ReadFile(vertexPath), ReadFile(fragmentPath));
+    const auto tEnd = std::chrono::steady_clock::now();
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(tEnd - tStart).count();
+    spdlog::info("Compiled shader in {} ms: {} + {}", ms, vertexPath, fragmentPath);
     
     SaveCachedProgram(program, cacheKey);
     
@@ -172,15 +180,22 @@ unsigned int Shader::CompileComputeWithCache(const char* computePath) {
     const std::string cacheKey = ComputeHash(computePath);
     
     if (IsCacheValid(cacheKey, computePath)) {
+        const auto tStart = std::chrono::steady_clock::now();
         unsigned int program;
         if (LoadCachedProgram(program, cacheKey)) {
-            spdlog::debug("Loaded compute shader from cache: {}", computePath);
+            const auto tEnd = std::chrono::steady_clock::now();
+            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(tEnd - tStart).count();
+            spdlog::info("Loaded compute shader from cache in {} ms: {}", ms, computePath);
             return program;
         }
     }
     
     spdlog::debug("Compiling compute shader from source: {}", computePath);
+    const auto tStart = std::chrono::steady_clock::now();
     const unsigned int program = CompileCompute(ReadFile(computePath));
+    const auto tEnd = std::chrono::steady_clock::now();
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(tEnd - tStart).count();
+    spdlog::info("Compiled compute shader in {} ms: {}", ms, computePath);
     
     SaveCachedProgram(program, cacheKey);
     
