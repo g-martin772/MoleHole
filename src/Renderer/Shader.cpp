@@ -4,6 +4,7 @@
 #include <glad/gl.h>
 #include <spdlog/spdlog.h>
 #include <glm/gtc/type_ptr.hpp>
+#include "Application/Profiler.h"
 
 std::string Shader::ReadFile(const char* path) {
     std::ifstream file(path);
@@ -13,6 +14,7 @@ std::string Shader::ReadFile(const char* path) {
 }
 
 unsigned int Shader::Compile(const std::string& vertexSrc, const std::string& fragmentSrc) {
+    PROFILE_FUNCTION();
     unsigned int vertex = glCreateShader(GL_VERTEX_SHADER);
     const char* vsrc = vertexSrc.c_str();
     glShaderSource(vertex, 1, &vsrc, nullptr);
@@ -50,6 +52,7 @@ unsigned int Shader::Compile(const std::string& vertexSrc, const std::string& fr
 }
 
 unsigned int Shader::CompileCompute(const std::string& computeSrc) {
+    PROFILE_FUNCTION();
     unsigned int compute = glCreateShader(GL_COMPUTE_SHADER);
     const char* csrc = computeSrc.c_str();
     glShaderSource(compute, 1, &csrc, nullptr);
