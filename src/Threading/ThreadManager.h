@@ -8,6 +8,7 @@
 #include "TripleBuffer.h"
 #include "CommandTypes.h"
 #include "ResourceLoader.h"
+#include "ViewportRenderThread.h"
 
 // Forward declarations
 struct GLFWwindow;
@@ -38,6 +39,7 @@ public:
     
     // Lifecycle
     void initialize();
+    void initialize(GLFWwindow* mainContext); // Phase 3: With main context
     void shutdown();
     bool isRunning() const { return m_running.load(std::memory_order_acquire); }
     
@@ -61,6 +63,10 @@ public:
     ResourceLoader& getResourceLoader() { return m_resourceLoader; }
     const ResourceLoader& getResourceLoader() const { return m_resourceLoader; }
     
+    // Viewport render thread access (Phase 3)
+    ViewportRenderThread& getViewportRenderThread() { return m_viewportRenderThread; }
+    const ViewportRenderThread& getViewportRenderThread() const { return m_viewportRenderThread; }
+    
     // Prevent copying
     ThreadManager(const ThreadManager&) = delete;
     ThreadManager& operator=(const ThreadManager&) = delete;
@@ -70,8 +76,7 @@ private:
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_initialized{false};
     
-    // Threads (to be implemented in Phase 2-4)
-    std::unique_ptr<std::thread> m_viewportRenderThread;
+    // Threads (Phase 3 - using ViewportRenderThread class now)
     std::unique_ptr<std::thread> m_simulationThread;
     std::unique_ptr<std::thread> m_resourceLoaderThread;
     
@@ -86,12 +91,15 @@ private:
     // OpenGL contexts (to be implemented in Phase 3)
     GLFWwindow* m_viewportContext = nullptr;
     GLFWwindow* m_resourceContext = nullptr;
+    GLFWwindow* m_mainContext = nullptr; // Reference to main window context
     
     // Resource loader (Phase 2)
     ResourceLoader m_resourceLoader;
     
+    // Viewport render thread (Phase 3)
+    ViewportRenderThread m_viewportRenderThread;
+    
     // Thread functions (to be implemented in Phase 2-4)
-    void viewportRenderThreadFunc();
     void simulationThreadFunc();
     void resourceLoaderThreadFunc();
 };

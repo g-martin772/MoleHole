@@ -21,10 +21,12 @@ bool Application::Initialize() {
     m_state.LoadFromFile("config.yaml");
 
     try {
-        // Initialize threading infrastructure (Phase 1-2)
-        m_threadManager.initialize();
-        
         InitializeRenderer();
+        
+        // Initialize threading infrastructure (Phase 1-3)
+        // Pass renderer window context for shared context creation
+        m_threadManager.initialize(m_renderer.GetWindow());
+        
         InitializeSimulation();
 
         m_ui.Initialize();

@@ -13,12 +13,18 @@ ThreadManager::~ThreadManager() {
 }
 
 void ThreadManager::initialize() {
+    initialize(nullptr);
+}
+
+void ThreadManager::initialize(GLFWwindow* mainContext) {
     if (m_initialized.load(std::memory_order_acquire)) {
         spdlog::warn("ThreadManager already initialized");
         return;
     }
     
-    spdlog::info("Initializing ThreadManager (Phase 2 - with ResourceLoader)");
+    spdlog::info("Initializing ThreadManager (Phase 3 - with ViewportRenderThread)");
+    
+    m_mainContext = mainContext;
     
     // Phase 1: Create the data structures
     m_sceneBuffer = std::make_unique<TripleBuffer<Scene>>();
@@ -28,6 +34,15 @@ void ThreadManager::initialize() {
     
     // Phase 2: Initialize resource loader
     m_resourceLoader.initialize(nullptr);  // For now, no shared context
+    
+    // Phase 3: Initialize viewport render thread
+    if (mainContext) {
+        m_viewportRenderThread.initialize(mainContext);
+        m_viewportRenderThread.start();
+        spdlog::info("Viewport render thread started");
+    } else {
+        spdlog::warn("No main context provided - viewport render thread not started");
+    }
     
     m_initialized.store(true, std::memory_order_release);
     m_running.store(true, std::memory_order_release);
@@ -44,6 +59,9 @@ void ThreadManager::shutdown() {
     
     m_running.store(false, std::memory_order_release);
     
+    // Phase 3: Stop viewport render thread
+    m_viewportRenderThread.stop();
+    
     // Phase 2: Shutdown resource loader
     m_resourceLoader.shutdown();
     
@@ -58,10 +76,7 @@ void ThreadManager::shutdown() {
         m_loadQueue->shutdown();
     }
     
-    // Join threads if they exist (Phase 2-4 will implement this)
-    if (m_viewportRenderThread && m_viewportRenderThread->joinable()) {
-        m_viewportRenderThread->join();
-    }
+    // Join threads if they exist (Phase 4 will implement simulation thread)
     if (m_simulationThread && m_simulationThread->joinable()) {
         m_simulationThread->join();
     }
@@ -94,9 +109,7 @@ void ThreadManager::pauseSimulation() {
 
 void ThreadManager::dispatchRenderCommand(RenderCommand cmd) {
     // Phase 3: Dispatch render command to viewport thread
-    if (m_renderQueue) {
-        m_renderQueue->push(std::move(cmd));
-    }
+    m_viewportRenderThread.dispatchCommand(std::move(cmd));
 }
 
 void ThreadManager::dispatchSimulationCommand(SimulationCommand cmd) {
@@ -128,24 +141,7 @@ ThreadMetrics ThreadManager::getThreadMetrics(const std::string& name) const {
     return metrics;
 }
 
-// Thread functions - to be implemented in Phase 2-4
-
-void ThreadManager::viewportRenderThreadFunc() {
-    // Phase 3: Viewport render thread implementation
-    spdlog::info("Viewport render thread started");
-    
-    while (m_running.load(std::memory_order_acquire)) {
-        // Wait for render commands
-        auto cmd = m_renderQueue->pop();
-        if (!cmd.has_value()) {
-            break; // Shutdown signal
-        }
-        
-        // TODO: Render implementation
-    }
-    
-    spdlog::info("Viewport render thread stopped");
-}
+// Thread functions - to be implemented in Phase 4
 
 void ThreadManager::simulationThreadFunc() {
     // Phase 4: Simulation thread implementation

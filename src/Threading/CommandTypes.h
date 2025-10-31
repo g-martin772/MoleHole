@@ -2,14 +2,23 @@
 #include <string>
 #include <functional>
 #include <glm/glm.hpp>
-#include "Renderer/Camera.h"
-#include "Renderer/Renderer.h"
+
+// Forward declarations
+class Camera;
 
 namespace Threading {
 
+// Viewport modes (copied from Renderer to avoid header dependency)
+enum class ViewportMode {
+    Demo1 = 0,
+    Rays2D = 1,
+    Simulation3D = 2,
+    SimulationVisual = 3,
+};
+
 // Command from Main → Viewport Render Thread
 struct RenderCommand {
-    Renderer::ViewportMode mode;
+    ViewportMode mode;
     float deltaTime;
     glm::vec3 cameraPosition;
     glm::vec3 cameraForward;
@@ -20,16 +29,16 @@ struct RenderCommand {
     bool debugMode;
     
     RenderCommand() = default;
-    RenderCommand(Renderer::ViewportMode m, float dt, const Camera& camera, bool debug = false)
+    RenderCommand(ViewportMode m, float dt, const glm::vec3& pos, const glm::vec3& fwd, const glm::vec3& up, float fov)
         : mode(m)
         , deltaTime(dt)
-        , cameraPosition(camera.GetPosition())
-        , cameraForward(camera.GetFront())
-        , cameraUp(camera.GetUp())
-        , cameraFov(camera.GetFov())
-        , cameraNear(0.1f)  // Default near plane
-        , cameraFar(1000.0f)  // Default far plane
-        , debugMode(debug)
+        , cameraPosition(pos)
+        , cameraForward(fwd)
+        , cameraUp(up)
+        , cameraFov(fov)
+        , cameraNear(0.1f)
+        , cameraFar(1000.0f)
+        , debugMode(false)
     {}
 };
 
