@@ -7,6 +7,7 @@
 #include "ThreadSafeQueue.h"
 #include "TripleBuffer.h"
 #include "CommandTypes.h"
+#include "ResourceLoader.h"
 
 // Forward declarations
 struct GLFWwindow;
@@ -56,6 +57,10 @@ public:
     // Metrics (to be implemented in Phase 5)
     ThreadMetrics getThreadMetrics(const std::string& name) const;
     
+    // Resource loader access (Phase 2)
+    ResourceLoader& getResourceLoader() { return m_resourceLoader; }
+    const ResourceLoader& getResourceLoader() const { return m_resourceLoader; }
+    
     // Prevent copying
     ThreadManager(const ThreadManager&) = delete;
     ThreadManager& operator=(const ThreadManager&) = delete;
@@ -81,6 +86,9 @@ private:
     // OpenGL contexts (to be implemented in Phase 3)
     GLFWwindow* m_viewportContext = nullptr;
     GLFWwindow* m_resourceContext = nullptr;
+    
+    // Resource loader (Phase 2)
+    ResourceLoader m_resourceLoader;
     
     // Thread functions (to be implemented in Phase 2-4)
     void viewportRenderThreadFunc();

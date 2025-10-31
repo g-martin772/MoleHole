@@ -18,13 +18,16 @@ void ThreadManager::initialize() {
         return;
     }
     
-    spdlog::info("Initializing ThreadManager (Phase 1 - Infrastructure only)");
+    spdlog::info("Initializing ThreadManager (Phase 2 - with ResourceLoader)");
     
-    // Phase 1: Just create the data structures, no threads yet
+    // Phase 1: Create the data structures
     m_sceneBuffer = std::make_unique<TripleBuffer<Scene>>();
     m_renderQueue = std::make_unique<ThreadSafeQueue<RenderCommand>>();
     m_simulationQueue = std::make_unique<ThreadSafeQueue<SimulationCommand>>();
     m_loadQueue = std::make_unique<ThreadSafeQueue<LoadRequest>>();
+    
+    // Phase 2: Initialize resource loader
+    m_resourceLoader.initialize(nullptr);  // For now, no shared context
     
     m_initialized.store(true, std::memory_order_release);
     m_running.store(true, std::memory_order_release);
@@ -40,6 +43,9 @@ void ThreadManager::shutdown() {
     spdlog::info("Shutting down ThreadManager");
     
     m_running.store(false, std::memory_order_release);
+    
+    // Phase 2: Shutdown resource loader
+    m_resourceLoader.shutdown();
     
     // Shutdown queues to wake any waiting threads
     if (m_renderQueue) {
