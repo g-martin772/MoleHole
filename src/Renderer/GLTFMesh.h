@@ -18,6 +18,9 @@ struct GLTFPrimitive {
     unsigned int m_VBO;
     unsigned int m_EBO;
     unsigned int m_indexCount;
+    unsigned int m_indexType; // GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT, or GL_UNSIGNED_INT
+    unsigned int m_indexOffsetBytes;
+    int m_baseVertex;
     int m_materialIndex;
 
     GLTFPrimitive();
@@ -81,4 +84,18 @@ private:
 
     std::string m_path;
     bool m_loaded;
+
+    struct TempCachePrim {
+        int materialIndex;
+        unsigned int indexType;
+        unsigned int indexCount;
+        std::vector<float> vertex;
+        std::vector<unsigned char> indices;
+    };
+    std::vector<TempCachePrim> m_tempCache;
+
+    unsigned int m_sharedVAO = 0;
+    unsigned int m_sharedVBO = 0;
+    unsigned int m_sharedEBO = 0;
+    bool m_useSharedBuffers = false;
 };
