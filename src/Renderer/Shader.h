@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <glm/glm.hpp>
+#include <cstdint>
 
 class Shader {
 public:
@@ -25,4 +26,17 @@ private:
     static std::string ReadFile(const char* path);
     unsigned int Compile(const std::string& vertexSrc, const std::string& fragmentSrc);
     unsigned int CompileCompute(const std::string& computeSrc);
+    
+    // Shader caching functions
+    static std::string GetCacheDir();
+    static void EnsureCacheDirExists();
+    static std::string ComputeHash(const std::string& data);
+    static int64_t GetFileModTime(const char* path);
+    static std::string GetCachePath(const std::string& key);
+    static bool LoadCachedProgram(unsigned int& program, const std::string& cacheKey);
+    static void SaveCachedProgram(unsigned int program, const std::string& cacheKey);
+    static bool IsCacheValid(const std::string& cacheKey, const char* path1, const char* path2 = nullptr);
+    
+    unsigned int CompileWithCache(const char* vertexPath, const char* fragmentPath);
+    unsigned int CompileComputeWithCache(const char* computePath);
 };
