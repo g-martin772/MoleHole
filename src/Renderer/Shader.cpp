@@ -4,21 +4,17 @@
 #include <glad/gl.h>
 #include <spdlog/spdlog.h>
 #include <glm/gtc/type_ptr.hpp>
-#include <sys/stat.h>
 #include <vector>
 #include <iomanip>
 #include <cstring>
-
-#ifdef _WIN32
-#include <direct.h>
-#define MKDIR(path) _mkdir(path)
-#else
-#include <sys/stat.h>
-#define MKDIR(path) mkdir(path, 0755)
-#endif
+#include <filesystem>
 
 std::string Shader::ReadFile(const char* path) {
     std::ifstream file(path);
+    if (!file.is_open()) {
+        spdlog::error("Failed to open shader file: {}", path);
+        return "";
+    }
     std::stringstream buffer;
     buffer << file.rdbuf();
     return buffer.str();
@@ -29,18 +25,24 @@ std::string Shader::GetCacheDir() {
 }
 
 void Shader::EnsureCacheDirExists() {
-    struct stat info;
-    std::string cacheDir = GetCacheDir();
-    if (stat(cacheDir.c_str(), &info) != 0) {
-        MKDIR(cacheDir.c_str());
+    namespace fs = std::filesystem;
+    fs::path cacheDir = GetCacheDir();
+    
+    if (!fs::exists(cacheDir)) {
+        std::error_code ec;
+        if (!fs::create_directories(cacheDir, ec)) {
+            spdlog::warn("Failed to create shader cache directory: {}, error: {}", cacheDir.string(), ec.message());
+        }
+    } else if (!fs::is_directory(cacheDir)) {
+        spdlog::error("Shader cache path exists but is not a directory: {}", cacheDir.string());
     }
 }
 
 std::string Shader::ComputeHash(const std::string& data) {
-    // Simple hash function (djb2)
-    unsigned long hash = 5381;
+    // Simple hash function (djb2) using fixed-size type
+    uint64_t hash = 5381;
     for (char c : data) {
-        hash = ((hash << 5) + hash) + c;
+        hash = ((hash << 5) + hash) + static_cast<uint64_t>(c);
     }
     
     std::stringstream ss;
@@ -49,11 +51,18 @@ std::string Shader::ComputeHash(const std::string& data) {
 }
 
 int64_t Shader::GetFileModTime(const char* path) {
-    struct stat fileInfo;
-    if (stat(path, &fileInfo) == 0) {
-        return static_cast<int64_t>(fileInfo.st_mtime);
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    auto ftime = fs::last_write_time(path, ec);
+    if (ec) {
+        spdlog::warn("Failed to get modification time for {}: {}", path, ec.message());
+        return 0;
     }
-    return 0;
+    // Convert to time_t for consistent timestamp
+    auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+        ftime - fs::file_time_type::clock::now() + std::chrono::system_clock::now()
+    );
+    return std::chrono::system_clock::to_time_t(sctp);
 }
 
 std::string Shader::GetCachePath(const std::string& key) {
