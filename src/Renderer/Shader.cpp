@@ -4,12 +4,216 @@
 #include <glad/gl.h>
 #include <spdlog/spdlog.h>
 #include <glm/gtc/type_ptr.hpp>
+#include <sys/stat.h>
+#include <vector>
+#include <iomanip>
+#include <cstring>
+
+#ifdef _WIN32
+#include <direct.h>
+#define MKDIR(path) _mkdir(path)
+#else
+#include <sys/stat.h>
+#define MKDIR(path) mkdir(path, 0755)
+#endif
 
 std::string Shader::ReadFile(const char* path) {
     std::ifstream file(path);
     std::stringstream buffer;
     buffer << file.rdbuf();
     return buffer.str();
+}
+
+std::string Shader::GetCacheDir() {
+    return "build/.shader_cache";
+}
+
+void Shader::EnsureCacheDirExists() {
+    struct stat info;
+    std::string cacheDir = GetCacheDir();
+    if (stat(cacheDir.c_str(), &info) != 0) {
+        MKDIR(cacheDir.c_str());
+    }
+}
+
+std::string Shader::ComputeHash(const std::string& data) {
+    // Simple hash function (djb2)
+    unsigned long hash = 5381;
+    for (char c : data) {
+        hash = ((hash << 5) + hash) + c;
+    }
+    
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0') << std::setw(16) << hash;
+    return ss.str();
+}
+
+int64_t Shader::GetFileModTime(const char* path) {
+    struct stat fileInfo;
+    if (stat(path, &fileInfo) == 0) {
+        return static_cast<int64_t>(fileInfo.st_mtime);
+    }
+    return 0;
+}
+
+std::string Shader::GetCachePath(const std::string& key) {
+    return GetCacheDir() + "/" + key + ".bin";
+}
+
+bool Shader::IsCacheValid(const std::string& cacheKey, const char* path1, const char* path2) {
+    std::string cachePath = GetCachePath(cacheKey);
+    std::string metaPath = cachePath + ".meta";
+    
+    // Check if cache files exist
+    std::ifstream cacheFile(cachePath, std::ios::binary);
+    std::ifstream metaFile(metaPath);
+    if (!cacheFile.good() || !metaFile.good()) {
+        return false;
+    }
+    
+    // Read stored timestamps from meta file
+    int64_t storedTime1 = 0, storedTime2 = 0;
+    metaFile >> storedTime1;
+    if (path2 != nullptr) {
+        metaFile >> storedTime2;
+    }
+    metaFile.close();
+    
+    // Get current file timestamps
+    int64_t currentTime1 = GetFileModTime(path1);
+    int64_t currentTime2 = path2 ? GetFileModTime(path2) : 0;
+    
+    // Cache is valid if timestamps match
+    bool valid = (currentTime1 == storedTime1);
+    if (path2 != nullptr) {
+        valid = valid && (currentTime2 == storedTime2);
+    }
+    
+    return valid;
+}
+
+bool Shader::LoadCachedProgram(unsigned int& program, const std::string& cacheKey) {
+    std::string cachePath = GetCachePath(cacheKey);
+    
+    std::ifstream file(cachePath, std::ios::binary);
+    if (!file.good()) {
+        return false;
+    }
+    
+    // Read binary format and size
+    GLenum binaryFormat;
+    GLsizei binaryLength;
+    file.read(reinterpret_cast<char*>(&binaryFormat), sizeof(GLenum));
+    file.read(reinterpret_cast<char*>(&binaryLength), sizeof(GLsizei));
+    
+    // Read binary data
+    std::vector<char> binary(binaryLength);
+    file.read(binary.data(), binaryLength);
+    file.close();
+    
+    // Create program and load binary
+    program = glCreateProgram();
+    glProgramBinary(program, binaryFormat, binary.data(), binaryLength);
+    
+    // Check if program loaded successfully
+    GLint success;
+    glGetProgramiv(program, GL_LINK_STATUS, &success);
+    if (!success) {
+        glDeleteProgram(program);
+        return false;
+    }
+    
+    return true;
+}
+
+void Shader::SaveCachedProgram(unsigned int program, const std::string& cacheKey) {
+    EnsureCacheDirExists();
+    
+    // Get program binary
+    GLsizei binaryLength;
+    glGetProgramiv(program, GL_PROGRAM_BINARY_LENGTH, &binaryLength);
+    
+    std::vector<char> binary(binaryLength);
+    GLenum binaryFormat;
+    glGetProgramBinary(program, binaryLength, nullptr, &binaryFormat, binary.data());
+    
+    // Save binary to file
+    std::string cachePath = GetCachePath(cacheKey);
+    std::ofstream file(cachePath, std::ios::binary);
+    if (file.good()) {
+        file.write(reinterpret_cast<const char*>(&binaryFormat), sizeof(GLenum));
+        file.write(reinterpret_cast<const char*>(&binaryLength), sizeof(GLsizei));
+        file.write(binary.data(), binaryLength);
+        file.close();
+    }
+}
+
+unsigned int Shader::CompileWithCache(const char* vertexPath, const char* fragmentPath) {
+    // Generate cache key from file paths and timestamps
+    std::string cacheKeyData = std::string(vertexPath) + "|" + std::string(fragmentPath);
+    std::string cacheKey = ComputeHash(cacheKeyData);
+    
+    // Try to load from cache
+    if (IsCacheValid(cacheKey, vertexPath, fragmentPath)) {
+        unsigned int program;
+        if (LoadCachedProgram(program, cacheKey)) {
+            spdlog::debug("Loaded shader from cache: {} + {}", vertexPath, fragmentPath);
+            return program;
+        }
+    }
+    
+    // Cache miss or invalid - compile from source
+    spdlog::debug("Compiling shader from source: {} + {}", vertexPath, fragmentPath);
+    std::string vert = ReadFile(vertexPath);
+    std::string frag = ReadFile(fragmentPath);
+    unsigned int program = Compile(vert, frag);
+    
+    // Save to cache with timestamps
+    SaveCachedProgram(program, cacheKey);
+    
+    // Save metadata (timestamps)
+    std::string metaPath = GetCachePath(cacheKey) + ".meta";
+    std::ofstream metaFile(metaPath);
+    if (metaFile.good()) {
+        metaFile << GetFileModTime(vertexPath) << "\n";
+        metaFile << GetFileModTime(fragmentPath) << "\n";
+        metaFile.close();
+    }
+    
+    return program;
+}
+
+unsigned int Shader::CompileComputeWithCache(const char* computePath) {
+    // Generate cache key from file path and timestamp
+    std::string cacheKeyData = std::string(computePath);
+    std::string cacheKey = ComputeHash(cacheKeyData);
+    
+    // Try to load from cache
+    if (IsCacheValid(cacheKey, computePath)) {
+        unsigned int program;
+        if (LoadCachedProgram(program, cacheKey)) {
+            spdlog::debug("Loaded compute shader from cache: {}", computePath);
+            return program;
+        }
+    }
+    
+    // Cache miss or invalid - compile from source
+    spdlog::debug("Compiling compute shader from source: {}", computePath);
+    std::string comp = ReadFile(computePath);
+    unsigned int program = CompileCompute(comp);
+    
+    // Save to cache with timestamp
+    SaveCachedProgram(program, cacheKey);
+    
+    // Save metadata (timestamp)
+    std::string metaPath = GetCachePath(cacheKey) + ".meta";
+    std::ofstream metaFile(metaPath);
+    if (metaFile.good()) {
+        metaFile << GetFileModTime(computePath) << "\n";
+        metaFile.close();
+    }
+    
+    return program;
 }
 
 unsigned int Shader::Compile(const std::string& vertexSrc, const std::string& fragmentSrc) {
@@ -75,16 +279,17 @@ unsigned int Shader::CompileCompute(const std::string& computeSrc) {
 }
 
 Shader::Shader(const std::string& vertexSrc, const std::string& fragmentSrc) {
+    // Direct source compilation (no caching for source strings)
     ID = Compile(vertexSrc, fragmentSrc);
 }
 
 Shader::Shader(const char* vertexPath, const char* fragmentPath) {
-    std::string vert = ReadFile(vertexPath);
-    std::string frag = ReadFile(fragmentPath);
-    ID = Compile(vert, frag);
+    // Use caching for file-based shaders
+    ID = CompileWithCache(vertexPath, fragmentPath);
 }
 
 Shader::Shader(const std::string& computeSrc, bool isCompute) {
+    // Direct source compilation (no caching for source strings)
     if (isCompute)
         ID = CompileCompute(computeSrc);
     else
@@ -92,9 +297,9 @@ Shader::Shader(const std::string& computeSrc, bool isCompute) {
 }
 
 Shader::Shader(const char* computePath, bool isCompute) {
+    // Use caching for file-based compute shaders
     if (isCompute) {
-        std::string comp = ReadFile(computePath);
-        ID = CompileCompute(comp);
+        ID = CompileComputeWithCache(computePath);
     } else {
         ID = 0;
     }
