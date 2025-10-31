@@ -21,6 +21,9 @@ bool Application::Initialize() {
     m_state.LoadFromFile("config.yaml");
 
     try {
+        // Initialize threading infrastructure (Phase 1-2)
+        m_threadManager.initialize();
+        
         InitializeRenderer();
         InitializeSimulation();
 
@@ -79,6 +82,9 @@ void Application::Shutdown() {
     m_state.SaveToFile();
 
     m_renderer.Shutdown();
+    
+    // Shutdown threading infrastructure (Phase 1-2)
+    m_threadManager.shutdown();
 
     m_initialized = false;
     m_running = false;

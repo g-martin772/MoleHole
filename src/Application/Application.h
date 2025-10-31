@@ -6,7 +6,9 @@
 #include "Renderer/ExportRenderer.h"
 #include "Simulation/Simulation.h"
 #include "FpsCounter.h"
+#include "Threading/ThreadManager.h"
 #include <functional>
+#include <memory>
 
 struct GLFWwindow;
 
@@ -57,6 +59,9 @@ public:
 
     UI& GetUI() { return m_ui; };
     ExportRenderer& GetExportRenderer() { return m_exportRenderer; }
+    
+    // Threading support (Phase 1-2)
+    static Threading::ThreadManager& GetThreadManager() { return Instance().m_threadManager; }
 
 private:
     Application() = default;
@@ -68,6 +73,7 @@ private:
     Simulation m_simulation;
     FpsCounter m_fpsCounter;
     ExportRenderer m_exportRenderer;
+    Threading::ThreadManager m_threadManager;
 
     bool m_initialized = false;
     bool m_running = false;
