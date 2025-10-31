@@ -21,7 +21,7 @@ std::string Shader::ReadFile(const char* path) {
 }
 
 std::string Shader::GetCacheDir() {
-    return "build/.shader_cache";
+    return ".shader_cache";
 }
 
 void Shader::EnsureCacheDirExists() {
@@ -115,10 +115,20 @@ bool Shader::LoadCachedProgram(unsigned int& program, const std::string& cacheKe
     file.read(reinterpret_cast<char*>(&binaryFormat), sizeof(GLenum));
     file.read(reinterpret_cast<char*>(&binaryLength), sizeof(GLsizei));
     
+    if (!file.good() || binaryLength <= 0 || binaryLength > 50 * 1024 * 1024) { // 50MB max
+        spdlog::warn("Invalid cached shader binary metadata: {}", cachePath);
+        return false;
+    }
+    
     // Read binary data
     std::vector<char> binary(binaryLength);
     file.read(binary.data(), binaryLength);
     file.close();
+    
+    if (!file.good()) {
+        spdlog::warn("Failed to read cached shader binary: {}", cachePath);
+        return false;
+    }
     
     // Create program and load binary
     program = glCreateProgram();
