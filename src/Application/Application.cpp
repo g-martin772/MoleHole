@@ -22,6 +22,11 @@ bool Application::Initialize() {
 
     try {
         InitializeRenderer();
+        
+        // Initialize threading infrastructure (Phase 1-3)
+        // Pass renderer window context for shared context creation
+        m_threadManager.initialize(m_renderer.GetWindow());
+        
         InitializeSimulation();
 
         m_ui.Initialize();
@@ -79,6 +84,9 @@ void Application::Shutdown() {
     m_state.SaveToFile();
 
     m_renderer.Shutdown();
+    
+    // Shutdown threading infrastructure (Phase 1-2)
+    m_threadManager.shutdown();
 
     m_initialized = false;
     m_running = false;
