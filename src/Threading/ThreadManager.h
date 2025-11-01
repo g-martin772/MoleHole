@@ -9,10 +9,12 @@
 #include "CommandTypes.h"
 #include "ResourceLoader.h"
 #include "ViewportRenderThread.h"
+#include "SimulationThread.h"
 
 // Forward declarations
 struct GLFWwindow;
 class Scene;
+class AnimationGraph;
 
 namespace Threading {
 
@@ -43,18 +45,23 @@ public:
     void shutdown();
     bool isRunning() const { return m_running.load(std::memory_order_acquire); }
     
-    // Thread control (to be implemented in Phase 4)
+    // Thread control (Phase 4)
     void startSimulation();
     void stopSimulation();
     void pauseSimulation();
+    void resumeSimulation();
+    
+    // Animation graph control (Phase 4)
+    void setAnimationGraph(AnimationGraph* graph);
     
     // Command dispatch (to be implemented in Phase 2-4)
     void dispatchRenderCommand(RenderCommand cmd);
     void dispatchSimulationCommand(SimulationCommand cmd);
     void dispatchLoadRequest(LoadRequest req);
     
-    // Scene access (to be implemented in Phase 4)
+    // Scene access (Phase 4)
     Scene* getUIScene() const;
+    TripleBuffer<Scene>* getSceneBuffer() const { return m_sceneBuffer.get(); }
     
     // Metrics (to be implemented in Phase 5)
     ThreadMetrics getThreadMetrics(const std::string& name) const;
@@ -67,6 +74,10 @@ public:
     ViewportRenderThread& getViewportRenderThread() { return m_viewportRenderThread; }
     const ViewportRenderThread& getViewportRenderThread() const { return m_viewportRenderThread; }
     
+    // Simulation thread access (Phase 4)
+    SimulationThread& getSimulationThread() { return m_simulationThread; }
+    const SimulationThread& getSimulationThread() const { return m_simulationThread; }
+    
     // Prevent copying
     ThreadManager(const ThreadManager&) = delete;
     ThreadManager& operator=(const ThreadManager&) = delete;
@@ -76,19 +87,18 @@ private:
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_initialized{false};
     
-    // Threads (Phase 3 - using ViewportRenderThread class now)
-    std::unique_ptr<std::thread> m_simulationThread;
+    // Threads (Phase 4 - using SimulationThread class now)
     std::unique_ptr<std::thread> m_resourceLoaderThread;
     
-    // Synchronization (to be implemented in Phase 2-4)
+    // Synchronization (Phase 4 - triple buffer for scene)
     std::unique_ptr<TripleBuffer<Scene>> m_sceneBuffer;
     
-    // Command queues (to be implemented in Phase 2-4)
+    // Command queues (legacy - may be removed in future)
     std::unique_ptr<ThreadSafeQueue<RenderCommand>> m_renderQueue;
     std::unique_ptr<ThreadSafeQueue<SimulationCommand>> m_simulationQueue;
     std::unique_ptr<ThreadSafeQueue<LoadRequest>> m_loadQueue;
     
-    // OpenGL contexts (to be implemented in Phase 3)
+    // OpenGL contexts (Phase 3)
     GLFWwindow* m_viewportContext = nullptr;
     GLFWwindow* m_resourceContext = nullptr;
     GLFWwindow* m_mainContext = nullptr; // Reference to main window context
@@ -99,8 +109,10 @@ private:
     // Viewport render thread (Phase 3)
     ViewportRenderThread m_viewportRenderThread;
     
-    // Thread functions (to be implemented in Phase 2-4)
-    void simulationThreadFunc();
+    // Simulation thread (Phase 4)
+    SimulationThread m_simulationThread;
+    
+    // Thread functions (Phase 4)
     void resourceLoaderThreadFunc();
 };
 

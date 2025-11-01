@@ -22,7 +22,7 @@ void ThreadManager::initialize(GLFWwindow* mainContext) {
         return;
     }
     
-    spdlog::info("Initializing ThreadManager (Phase 3 - with ViewportRenderThread)");
+    spdlog::info("Initializing ThreadManager (Phase 4 - with SimulationThread)");
     
     m_mainContext = mainContext;
     
@@ -44,6 +44,11 @@ void ThreadManager::initialize(GLFWwindow* mainContext) {
         spdlog::warn("No main context provided - viewport render thread not started");
     }
     
+    // Phase 4: Initialize simulation thread
+    m_simulationThread.initialize(m_sceneBuffer.get());
+    m_simulationThread.start();
+    spdlog::info("Simulation thread started");
+    
     m_initialized.store(true, std::memory_order_release);
     m_running.store(true, std::memory_order_release);
     
@@ -58,6 +63,9 @@ void ThreadManager::shutdown() {
     spdlog::info("Shutting down ThreadManager");
     
     m_running.store(false, std::memory_order_release);
+    
+    // Phase 4: Stop simulation thread
+    m_simulationThread.stop();
     
     // Phase 3: Stop viewport render thread
     m_viewportRenderThread.stop();
@@ -76,10 +84,7 @@ void ThreadManager::shutdown() {
         m_loadQueue->shutdown();
     }
     
-    // Join threads if they exist (Phase 4 will implement simulation thread)
-    if (m_simulationThread && m_simulationThread->joinable()) {
-        m_simulationThread->join();
-    }
+    // Join threads if they exist
     if (m_resourceLoaderThread && m_resourceLoaderThread->joinable()) {
         m_resourceLoaderThread->join();
     }
@@ -89,22 +94,30 @@ void ThreadManager::shutdown() {
     spdlog::info("ThreadManager shutdown complete");
 }
 
-// Placeholder implementations for Phase 1
-// These will be fully implemented in later phases
+// Thread control implementations (Phase 4)
 
 void ThreadManager::startSimulation() {
-    // Phase 4: Start simulation thread
-    spdlog::debug("ThreadManager::startSimulation() - not yet implemented");
+    SimulationCommand cmd(SimulationCommand::Action::Start, 0.0f, true, false);
+    m_simulationThread.dispatchCommand(std::move(cmd));
 }
 
 void ThreadManager::stopSimulation() {
-    // Phase 4: Stop simulation thread
-    spdlog::debug("ThreadManager::stopSimulation() - not yet implemented");
+    SimulationCommand cmd(SimulationCommand::Action::Stop);
+    m_simulationThread.dispatchCommand(std::move(cmd));
 }
 
 void ThreadManager::pauseSimulation() {
-    // Phase 4: Pause simulation thread
-    spdlog::debug("ThreadManager::pauseSimulation() - not yet implemented");
+    SimulationCommand cmd(SimulationCommand::Action::Pause);
+    m_simulationThread.dispatchCommand(std::move(cmd));
+}
+
+void ThreadManager::resumeSimulation() {
+    SimulationCommand cmd(SimulationCommand::Action::Continue);
+    m_simulationThread.dispatchCommand(std::move(cmd));
+}
+
+void ThreadManager::setAnimationGraph(AnimationGraph* graph) {
+    m_simulationThread.setAnimationGraph(graph);
 }
 
 void ThreadManager::dispatchRenderCommand(RenderCommand cmd) {
@@ -113,10 +126,8 @@ void ThreadManager::dispatchRenderCommand(RenderCommand cmd) {
 }
 
 void ThreadManager::dispatchSimulationCommand(SimulationCommand cmd) {
-    // Phase 4: Dispatch simulation command
-    if (m_simulationQueue) {
-        m_simulationQueue->push(std::move(cmd));
-    }
+    // Phase 4: Dispatch simulation command to simulation thread
+    m_simulationThread.dispatchCommand(std::move(cmd));
 }
 
 void ThreadManager::dispatchLoadRequest(LoadRequest req) {
@@ -141,24 +152,7 @@ ThreadMetrics ThreadManager::getThreadMetrics(const std::string& name) const {
     return metrics;
 }
 
-// Thread functions - to be implemented in Phase 4
-
-void ThreadManager::simulationThreadFunc() {
-    // Phase 4: Simulation thread implementation
-    spdlog::info("Simulation thread started");
-    
-    while (m_running.load(std::memory_order_acquire)) {
-        // Wait for simulation commands
-        auto cmd = m_simulationQueue->pop();
-        if (!cmd.has_value()) {
-            break; // Shutdown signal
-        }
-        
-        // TODO: Simulation implementation
-    }
-    
-    spdlog::info("Simulation thread stopped");
-}
+// Thread functions - Phase 4 uses SimulationThread class
 
 void ThreadManager::resourceLoaderThreadFunc() {
     // Phase 2: Resource loader thread implementation
