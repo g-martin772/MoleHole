@@ -32,3 +32,7 @@
 [submodule "dependencies/tinygltf"]
 	path = dependencies/tinygltf
 	url = https://github.com/syoyo/tinygltf/
+[submodule "dependencies/physx"]
+	path = dependencies/physx
+	url = https://github.com/g-martin772/PhysX
+	branch = molehole-linux-clang-fixes
