@@ -94,7 +94,7 @@ const float LogMin_cY = log(Min_cY);
 const float LogMax_cY = log(Max_cY);
 
 // new uniforms for disk temperature and GR redshift toggle
-uniform float u_accDiskTemp = 13000.0;
+uniform float u_accDiskTemp = 2000.0;
 uniform int u_gravitationalRedshiftEnabled = 1;
 uniform int u_useBlackbodyLUT = 1; // Toggle between LUT and full calculation
 
@@ -134,7 +134,6 @@ vec3 convertToRGB(float cX, float cY, float cZ, float normalized_cY) {
     return vec3(R, G, B) * normalized_cY;
 }
 
-// Fast blackbody lookup using precomputed LUT
 vec3 getBlackbodyColorLUT(float temperature, float redshiftFactor) {
     // Map temperature to [0,1] range for LUT lookup
     float tempRange = u_lutTempMax - u_lutTempMin;
@@ -152,42 +151,9 @@ vec3 getBlackbodyColorLUT(float temperature, float redshiftFactor) {
     return color;
 }
 
-// Original full calculation version (kept for LUT generation reference)
-// Use this to generate the LUT texture offline or for comparison
-vec3 getBlackbodyColorFull(float temperature, float redshiftFactor)
-{
-    float cX = 0.0;
-    float cY = 0.0;
-    float cZ = 0.0;
-    float wavelength = 380.0;
-    float adjustedTemperature = max(1.0, temperature) / max(1e-6, redshiftFactor);
-
-    for (int i = 0; i < integrationNum; i++) {
-        wavelength += 5.0;
-        float lambda = wavelength * 1e-9;
-        float intensity = ((2.0 * PlanckConstant * pow(LightSpeed, 2.0)) / pow(lambda, 5.0)) /
-        (exp((PlanckConstant * LightSpeed) / (lambda * BoltzmannConstant * adjustedTemperature)) - 1.0);
-        vec3 matchingFunc = matchingFunctions[i];
-        cX += intensity * matchingFunc.x * 5.0;
-        cY += intensity * matchingFunc.y * 5.0;
-        cZ += intensity * matchingFunc.z * 5.0;
-    }
-
-    // guard cY
-    cY = max(cY, 1e-12);
-    float log_cY = log(cY);
-    float normalized_cY = clamp((log_cY - LogMin_cY) / (LogMax_cY - LogMin_cY), 0.0, 1.0);
-
-    return convertToRGB(cX, cY, cZ, normalized_cY);
-}
-
 // Wrapper that chooses between LUT and full calculation
 vec3 getBlackbodyColor(float temperature, float redshiftFactor) {
-    if (u_useBlackbodyLUT == 1) {
-        return getBlackbodyColorLUT(temperature, redshiftFactor);
-    } else {
-        return getBlackbodyColorFull(temperature, redshiftFactor);
-    }
+    return getBlackbodyColorLUT(temperature, redshiftFactor);
 }
 
 float calculateRedShift(vec3 pos)
@@ -208,10 +174,7 @@ float calculateDopplerEffect(vec3 pos, vec3 viewDir)
     float r = sqrt(dot(pos, pos));
     float safeR = max(r, 1.0 + 1e-6);
 
-    if (r < 1.0)
-    {
-        return 1.0;
-    }
+    if (r < 1.0) return 1.0;
 
     float velMag0 = -sqrt((1.0 * 1.0 / (2.0 * (safeR - 1.0))));
     float velMag1 = -sqrt((1.0 * 1.0 / r) * (1.0 - 3.0 * 1.0 / (safeR)));
@@ -323,38 +286,17 @@ float snoise(vec3 v) {
 }
 void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin) {    
     
-    float iscoRadius = 2.0 * eventHorizonRadius;
+    float iscoRadius = 2.0f * eventHorizonRadius;
     float outerRadius = 8.0 * eventHorizonRadius;
     float distanceFromCenter = length(pos);
 
-    if (distanceFromCenter < iscoRadius) {
-        return;
-    }
-
-    float iscoTransitionZone = iscoRadius * 1.2;
-    float iscoFactor = smoothstep(iscoRadius, iscoTransitionZone, distanceFromCenter);
+    if (distanceFromCenter < iscoRadius) return;
+    
     float density = max(0.0, 1.0 - length(pos.xyz / vec3(outerRadius, u_accDiskHeight, outerRadius)));
+    
     if (density < EPSILON) return;
-
-    density *= pow(1.0 - abs(pos.y) / u_accDiskHeight, u_accDiskDensityV);
-
-    // Apply ISCO factor to create smooth transition
-    density *= iscoFactor;
-    if (density < EPSILON) return;
-
+    
     vec3 sphericalCoord = toSpherical(pos);
-
-    // Scale the rho and phi so that the particles appear to be at the correct scale visually
-    sphericalCoord.y *= 10.0;
-    sphericalCoord.z *= 20.0;
-
-    density *= 1.0 / pow(sphericalCoord.x, u_accDiskDensityH);
-    density *= 1000.0;
-
-    if (u_accDiskParticle < 0.5) {
-        color += vec3(0.0, 1.0, 0.0) * density * 0.02;
-        return;
-    }
 
     // compute noise-driven pattern
     float noise = 1.0;
@@ -399,7 +341,7 @@ vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
     
     float stepSize = STEP_SIZE;
     
-    for (int i = 0; i < 2500; i++) {
+    for (int i = 0; i < 1500; i++) {
         if (u_renderBlackHoles == 1) {
             
             // Reset step size to base value each iteration

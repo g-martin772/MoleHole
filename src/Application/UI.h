@@ -35,7 +35,7 @@ public:
     void ShowExportWindow(Scene* scene);
 
 private:
-    void RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen);
+    void RenderMainMenuBar(Scene *scene, bool& doSave, bool& doOpen, bool& doTakeScreenshotDialog, bool& doTakeScreenshotViewportDialog, bool& doTakeScreenshot, bool& doTakeScreenshotViewport);
     void RenderSystemWindow(float fps);
     void RenderSceneWindow(Scene* scene);
     void RenderSimulationWindow(Scene* scene);
@@ -62,6 +62,9 @@ private:
     void RenderSpheresSection(Scene *scene);
 
     void RenderAnimationGraphWindow(Scene* scene);
+
+    void HandleImageShortcuts(Scene *scene, bool takeViewportScreenshot, bool takeFullScreenshot,
+                              bool takeViewportScreenshotWithDialog, bool takeFullScreenshotWithDialog);
 
     void HandleFileOperations(Scene* scene, bool doSave, bool doOpen);
     void RenderDebugModeCombo();

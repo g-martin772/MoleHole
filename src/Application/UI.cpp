@@ -72,24 +72,53 @@ void UI::Update(float deltaTime) {
 }
 
 void UI::RenderDockspace(Scene* scene) {
+    // --------------------------------------------------------------------------------------------
+    //
+    // Section: Keyboard Shortcuts
+    //
+    // --------------------------------------------------------------------------------------------
+    //
+    // - Maybe add custom shortcuts?
+    // 
+
+    // setup
     ImGuiIO& io = ImGui::GetIO();
     bool ctrl = io.KeyCtrl;
-    static bool prevCtrlS = false, prevCtrlO = false, prevF12 = false;
+    static bool prevCtrlS = false, prevCtrlO = false;
+    static bool prevF12 = false, prevF11 = false, prevCtrlF11 = false, prevCtrlF12 = false;
+
+    // define keys
     bool ctrlS = ctrl && ImGui::IsKeyPressed(ImGuiKey_S);
     bool ctrlO = ctrl && ImGui::IsKeyPressed(ImGuiKey_O);
     bool f12 = ImGui::IsKeyPressed(ImGuiKey_F12);
-    bool doSave = false, doOpen = false;
+    bool f11 = ImGui::IsKeyPressed(ImGuiKey_F11);
+    bool ctrlf12 = ctrl && ImGui::IsKeyPressed(ImGuiKey_F12);
+    bool ctrlf11 = ctrl && ImGui::IsKeyPressed(ImGuiKey_F11);
+    
+    // Screenshot shortcuts
+    bool doTakeScreenshotDialog = false, doTakeScreenshotViewportDialog = false, doTakeScreenshot = false, doTakeScreenshotViewport = false;
 
+    // other shortcuts
+    bool doSave = false, doOpen = false;
+    
+    // set variables for pressed keys
     if (ctrlS && !prevCtrlS) doSave = true;
     if (ctrlO && !prevCtrlO) doOpen = true;
-    if (f12 && !prevF12) TakeViewportScreenshotWithDialog(); // F12 für Screenshot
+    if (f12 && !prevF12 && !ctrlf12) doTakeScreenshotViewportDialog = true;
+    if (ctrlf12 && !prevCtrlF12) doTakeScreenshotViewport = true;
+    if (f11 && !prevF11 && !ctrlf11) doTakeScreenshotDialog = true;
+    if (ctrlf11 && !prevCtrlF11) doTakeScreenshot = true;
 
     prevCtrlS = ctrlS;
     prevCtrlO = ctrlO;
     prevF12 = f12;
+    prevF11 = f11;
+    prevCtrlF12 = ctrlf12;
+    prevCtrlF11 = ctrlf11;
 
-    RenderMainMenuBar(scene, doSave, doOpen);
+    RenderMainMenuBar(scene, doSave, doOpen, doTakeScreenshotDialog, doTakeScreenshotViewportDialog, doTakeScreenshot, doTakeScreenshotViewport);
     HandleFileOperations(scene, doSave, doOpen);
+    HandleImageShortcuts(scene, doTakeScreenshotViewport, doTakeScreenshot, doTakeScreenshotViewportDialog, doTakeScreenshotDialog);
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + ImGui::GetFrameHeight()));
@@ -131,7 +160,19 @@ void UI::RenderMainUI(float fps, Scene* scene) {
     }
 }
 
-void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen) {
+
+// --------------------------------------------------------------------------------------------
+//
+// Section: Main Menu Top Bar
+//
+// --------------------------------------------------------------------------------------------
+//
+// 
+// 
+
+void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen,
+    bool& doTakeScreenshotDialog, bool& doTakeScreenshotViewportDialog,
+    bool& doTakeScreenshot, bool& doTakeScreenshotViewport) {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("New")) {
@@ -245,6 +286,22 @@ void UI::RenderMainMenuBar(Scene* scene, bool& doSave, bool& doOpen) {
             ImGui::EndMenu();
         }
 
+        if (ImGui::BeginMenu("Image")) {
+            if (ImGui::MenuItem("Take Screenshot (choose location)", "F12")) {
+                doTakeScreenshotViewportDialog = true;
+            }
+            if (ImGui::MenuItem("Take Screenshot from whole screen (choose location)", "F11")) {
+                doTakeScreenshotDialog = true;
+            }
+            if (ImGui::MenuItem("Take Screenshot (default path)", "F12 + S")) {
+                doTakeScreenshotViewport = true;
+            }
+            if (ImGui::MenuItem("Take Screenshot from whole screen (default path)", "F11 + S")) {
+                doTakeScreenshot = true;
+            }
+            ImGui::EndMenu();
+        }
+
         ImGui::EndMainMenuBar();
     }
 }
@@ -256,7 +313,6 @@ void UI::RenderSystemWindow(float fps) {
     RenderDisplaySettingsSection();
     RenderCameraControlsSection();
     RenderRenderingFlagsSection();
-    RenderScreenshotSection(); // Neue Screenshot-Sektion hinzufügen
     RenderDebugSection();
 
     ImGui::End();
@@ -956,6 +1012,24 @@ void UI::RenderAnimationGraphWindow(Scene *scene) {
     ImGui::End();
 }
 
+void UI::HandleImageShortcuts(Scene* scene, bool takeViewportScreenshot, bool takeFullScreenshot, bool takeViewportScreenshotWithDialog, bool takeFullScreenshotWithDialog) {
+    if (takeViewportScreenshot && scene) {
+        TakeViewportScreenshot();
+    }
+
+    if (takeFullScreenshot && scene) {
+        TakeScreenshot();
+    }
+
+    if (takeViewportScreenshotWithDialog && scene) {
+        TakeViewportScreenshotWithDialog();
+    }
+
+    if (takeFullScreenshotWithDialog && scene) {
+        TakeScreenshotWithDialog();
+    }
+}
+
 void UI::HandleFileOperations(Scene* scene, bool doSave, bool doOpen) {
     if (doOpen && scene) {
         auto path = Scene::ShowFileDialog(false);
@@ -1323,45 +1397,6 @@ void UI::RenderSimulationControls() {
 
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
-}
-
-void UI::RenderScreenshotSection() {
-    if (ImGui::CollapsingHeader("Screenshot", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Text("Capture the current viewport as an image file");
-
-        // Quick screenshot buttons (automatic naming)
-        ImGui::Text("Quick Screenshots (automatic naming):");
-        if (ImGui::Button("Take Full Screenshot", ImVec2(-1, 30))) {
-            TakeScreenshot();
-        }
-
-        if (ImGui::Button("Take Viewport Screenshot", ImVec2(-1, 30))) {
-            TakeViewportScreenshot();
-        }
-
-        ImGui::Separator();
-
-        // Screenshot with file dialog (user chooses location)
-        ImGui::Text("Choose Save Location:");
-        if (ImGui::Button("Save Full Screenshot As...", ImVec2(-1, 30))) {
-            TakeScreenshotWithDialog();
-        }
-
-        if (ImGui::Button("Save Viewport Screenshot As...", ImVec2(-1, 30))) {
-            TakeViewportScreenshotWithDialog();
-        }
-
-        ImGui::Separator();
-
-        // Screenshot info
-        ImGui::TextDisabled("Quick screenshots: saved to application directory");
-        ImGui::TextDisabled("'Save As' screenshots: choose your own location");
-        ImGui::TextDisabled("Format: PNG");
-
-        ImGui::Separator();
-        ImGui::Text("Keyboard Shortcut:");
-        ImGui::BulletText("F12 - Quick full screenshot");
-    }
 }
 
 void UI::TakeScreenshot() {
