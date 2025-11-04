@@ -4,21 +4,55 @@
 #include <tiny_gltf.h>
 #include <spdlog/spdlog.h>
 #include <glm/gtc/type_ptr.hpp>
+#include <Application/Profiler.h>
+#include <filesystem>
+#include <fstream>
+#include <numeric>
+#include <cstring>
+
+namespace {
+struct MeshCacheHeader {
+    char magic[8];      // "MHMESH\0"
+    uint32_t version;   // 1
+    uint64_t srcSize;   // bytes of source .gltf/.glb
+    uint64_t srcMTimeNs; // last write time ns
+    uint32_t primCount; // number of primitives
+};
+
+inline uint64_t FileSize(const std::filesystem::path& p) {
+    std::error_code ec;
+    auto sz = std::filesystem::file_size(p, ec);
+    return ec ? 0ULL : static_cast<uint64_t>(sz);
+}
+
+inline uint64_t FileMTimeNs(const std::filesystem::path& p) {
+    std::error_code ec;
+    auto tp = std::filesystem::last_write_time(p, ec);
+    if (ec) return 0ULL;
+    return static_cast<uint64_t>(tp.time_since_epoch().count());
+}
+}
 
 GLTFPrimitive::GLTFPrimitive()
-    : m_VAO(0), m_VBO(0), m_EBO(0), m_indexCount(0), m_materialIndex(-1) {}
+        : m_VAO(0), m_VBO(0), m_EBO(0), m_indexCount(0), m_indexType(GL_UNSIGNED_INT),
+            m_indexOffsetBytes(0), m_baseVertex(0), m_materialIndex(-1) {}
 
 GLTFPrimitive::~GLTFPrimitive() {
     Cleanup();
 }
 
 GLTFPrimitive::GLTFPrimitive(GLTFPrimitive&& other) noexcept
-    : m_VAO(other.m_VAO), m_VBO(other.m_VBO), m_EBO(other.m_EBO),
-      m_indexCount(other.m_indexCount), m_materialIndex(other.m_materialIndex) {
+        : m_VAO(other.m_VAO), m_VBO(other.m_VBO), m_EBO(other.m_EBO),
+            m_indexCount(other.m_indexCount), m_indexType(other.m_indexType),
+            m_indexOffsetBytes(other.m_indexOffsetBytes), m_baseVertex(other.m_baseVertex),
+            m_materialIndex(other.m_materialIndex) {
     other.m_VAO = 0;
     other.m_VBO = 0;
     other.m_EBO = 0;
     other.m_indexCount = 0;
+    other.m_indexType = GL_UNSIGNED_INT;
+    other.m_indexOffsetBytes = 0;
+    other.m_baseVertex = 0;
     other.m_materialIndex = -1;
 }
 
@@ -29,12 +63,18 @@ GLTFPrimitive& GLTFPrimitive::operator=(GLTFPrimitive&& other) noexcept {
         m_VBO = other.m_VBO;
         m_EBO = other.m_EBO;
         m_indexCount = other.m_indexCount;
+        m_indexType = other.m_indexType;
+    m_indexOffsetBytes = other.m_indexOffsetBytes;
+    m_baseVertex = other.m_baseVertex;
         m_materialIndex = other.m_materialIndex;
 
         other.m_VAO = 0;
         other.m_VBO = 0;
         other.m_EBO = 0;
         other.m_indexCount = 0;
+        other.m_indexType = GL_UNSIGNED_INT;
+        other.m_indexOffsetBytes = 0;
+        other.m_baseVertex = 0;
         other.m_materialIndex = -1;
     }
     return *this;
@@ -67,11 +107,114 @@ void GLTFMesh::Cleanup() {
         }
     }
     m_materials.clear();
+    if (m_sharedVAO) glDeleteVertexArrays(1, &m_sharedVAO);
+    if (m_sharedVBO) glDeleteBuffers(1, &m_sharedVBO);
+    if (m_sharedEBO) glDeleteBuffers(1, &m_sharedEBO);
+    m_sharedVAO = m_sharedVBO = m_sharedEBO = 0;
+    m_useSharedBuffers = false;
     m_loaded = false;
 }
 
 bool GLTFMesh::Load(const std::string& path) {
+    PROFILE_FUNCTION();
     Cleanup();
+
+    // Try geometry cache first
+    std::filesystem::path srcPath(path);
+    std::filesystem::path cachePath = srcPath;
+    cachePath += ".mhmesh";
+    bool loadedGeometryFromCache = false;
+    if (std::filesystem::exists(cachePath)) {
+        std::ifstream in(cachePath, std::ios::binary);
+        MeshCacheHeader hdr{};
+        if (in.read(reinterpret_cast<char*>(&hdr), sizeof(hdr))) {
+            if (std::memcmp(hdr.magic, "MHMESH\0", 8) == 0 && hdr.version == 1) {
+                if (hdr.srcSize == FileSize(srcPath) && hdr.srcMTimeNs == FileMTimeNs(srcPath)) {
+                    std::vector<TempCachePrim> cachePrims;
+                    cachePrims.reserve(hdr.primCount);
+                    for (uint32_t i = 0; i < hdr.primCount; ++i) {
+                        TempCachePrim cp;
+                        int32_t materialIndex;
+                        uint32_t indexType;
+                        uint32_t indexCount;
+                        uint32_t vertexFloatCount;
+                        if (!in.read(reinterpret_cast<char*>(&materialIndex), sizeof(materialIndex))) break;
+                        if (!in.read(reinterpret_cast<char*>(&indexType), sizeof(indexType))) break;
+                        if (!in.read(reinterpret_cast<char*>(&indexCount), sizeof(indexCount))) break;
+                        if (!in.read(reinterpret_cast<char*>(&vertexFloatCount), sizeof(vertexFloatCount))) break;
+
+                        cp.materialIndex = materialIndex;
+                        cp.indexType = indexType;
+                        cp.indexCount = indexCount;
+                        cp.vertex.resize(vertexFloatCount);
+                        if (!in.read(reinterpret_cast<char*>(cp.vertex.data()), vertexFloatCount * sizeof(float))) break;
+
+                        uint32_t indexByteCount;
+                        if (!in.read(reinterpret_cast<char*>(&indexByteCount), sizeof(indexByteCount))) break;
+                        cp.indices.resize(indexByteCount);
+                        if (!in.read(reinterpret_cast<char*>(cp.indices.data()), indexByteCount)) break;
+
+                        cachePrims.push_back(std::move(cp));
+                    }
+
+                    if (cachePrims.size() == hdr.primCount) {
+                        // Build shared buffers
+                        m_useSharedBuffers = true;
+                        std::vector<float> allVertices;
+                        std::vector<unsigned char> allIndices;
+                        allVertices.reserve( std::accumulate(cachePrims.begin(), cachePrims.end(), size_t{0},
+                            [](size_t s, const TempCachePrim& c){ return s + c.vertex.size(); }) );
+                        allIndices.reserve( std::accumulate(cachePrims.begin(), cachePrims.end(), size_t{0},
+                            [](size_t s, const TempCachePrim& c){ return s + c.indices.size(); }) );
+
+                        m_primitives.clear();
+                        m_primitives.reserve(cachePrims.size());
+
+                        size_t vertexFloatsSoFar = 0; // floats count; 8 floats per vertex
+                        size_t indexBytesSoFar = 0;
+                        for (const auto& cp : cachePrims) {
+                            GLTFPrimitive prim;
+                            prim.m_materialIndex = cp.materialIndex;
+                            prim.m_indexType = cp.indexType;
+                            prim.m_indexCount = cp.indexCount;
+                            prim.m_baseVertex = static_cast<int>(vertexFloatsSoFar / 8);
+                            prim.m_indexOffsetBytes = static_cast<unsigned int>(indexBytesSoFar);
+
+                            allVertices.insert(allVertices.end(), cp.vertex.begin(), cp.vertex.end());
+                            allIndices.insert(allIndices.end(), cp.indices.begin(), cp.indices.end());
+
+                            indexBytesSoFar += cp.indices.size();
+                            vertexFloatsSoFar += cp.vertex.size();
+                            m_primitives.push_back(std::move(prim));
+                        }
+
+                        glGenVertexArrays(1, &m_sharedVAO);
+                        glGenBuffers(1, &m_sharedVBO);
+                        glGenBuffers(1, &m_sharedEBO);
+
+                        glBindVertexArray(m_sharedVAO);
+                        glBindBuffer(GL_ARRAY_BUFFER, m_sharedVBO);
+                        glBufferData(GL_ARRAY_BUFFER, allVertices.size() * sizeof(float), allVertices.data(), GL_STATIC_DRAW);
+                        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_sharedEBO);
+                        glBufferData(GL_ELEMENT_ARRAY_BUFFER, allIndices.size(), allIndices.data(), GL_STATIC_DRAW);
+
+                        glEnableVertexAttribArray(0);
+                        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+                        glEnableVertexAttribArray(1);
+                        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+                        glEnableVertexAttribArray(2);
+                        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+                        glBindVertexArray(0);
+
+                        loadedGeometryFromCache = true;
+                        spdlog::info("Loaded GLTF geometry from cache (shared buffers): {} ({} primitives)", path, hdr.primCount);
+                    } else {
+                        m_primitives.clear();
+                    }
+                }
+            }
+        }
+    }
 
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
@@ -103,9 +246,42 @@ bool GLTFMesh::Load(const std::string& path) {
 
     LoadMaterials(model);
 
-    const tinygltf::Scene& scene = model.scenes[model.defaultScene >= 0 ? model.defaultScene : 0];
-    for (int nodeIdx : scene.nodes) {
-        ProcessNode(model, model.nodes[nodeIdx], glm::mat4(1.0f));
+    if (!loadedGeometryFromCache) {
+        const tinygltf::Scene& scene = model.scenes[model.defaultScene >= 0 ? model.defaultScene : 0];
+        for (int nodeIdx : scene.nodes) {
+            ProcessNode(model, model.nodes[nodeIdx], glm::mat4(1.0f));
+        }
+        // Save geometry cache
+        if (!m_tempCache.empty()) {
+            std::ofstream out(cachePath, std::ios::binary | std::ios::trunc);
+            if (out) {
+                MeshCacheHeader hdr{};
+                std::memset(&hdr, 0, sizeof(hdr));
+                std::memcpy(hdr.magic, "MHMESH\0", 8);
+                hdr.version = 1;
+                hdr.srcSize = FileSize(srcPath);
+                hdr.srcMTimeNs = FileMTimeNs(srcPath);
+                hdr.primCount = static_cast<uint32_t>(m_tempCache.size());
+                out.write(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
+
+                for (const auto& cp : m_tempCache) {
+                    int32_t materialIndex = cp.materialIndex;
+                    uint32_t indexType = cp.indexType;
+                    uint32_t indexCount = cp.indexCount;
+                    uint32_t vertexFloatCount = static_cast<uint32_t>(cp.vertex.size());
+                    out.write(reinterpret_cast<const char*>(&materialIndex), sizeof(materialIndex));
+                    out.write(reinterpret_cast<const char*>(&indexType), sizeof(indexType));
+                    out.write(reinterpret_cast<const char*>(&indexCount), sizeof(indexCount));
+                    out.write(reinterpret_cast<const char*>(&vertexFloatCount), sizeof(vertexFloatCount));
+                    out.write(reinterpret_cast<const char*>(cp.vertex.data()), cp.vertex.size() * sizeof(float));
+                    uint32_t indexByteCount = static_cast<uint32_t>(cp.indices.size());
+                    out.write(reinterpret_cast<const char*>(&indexByteCount), sizeof(indexByteCount));
+                    out.write(reinterpret_cast<const char*>(cp.indices.data()), cp.indices.size());
+                }
+                spdlog::info("Wrote GLTF geometry cache: {} ({} primitives)", cachePath.string(), m_tempCache.size());
+            }
+            m_tempCache.clear();
+        }
     }
 
     m_shader = std::make_unique<Shader>("../shaders/mesh.vert", "../shaders/mesh.frag");
@@ -148,6 +324,7 @@ void GLTFMesh::ProcessNode(const tinygltf::Model& model, const tinygltf::Node& n
 }
 
 void GLTFMesh::ProcessMesh(const tinygltf::Model& model, int meshIndex, const glm::mat4& transform) {
+    PROFILE_FUNCTION();
     const tinygltf::Mesh& mesh = model.meshes[meshIndex];
 
     for (const auto& primitive : mesh.primitives) {
@@ -162,7 +339,7 @@ void GLTFMesh::ProcessMesh(const tinygltf::Model& model, int meshIndex, const gl
 
         prim.m_indexCount = indexAccessor.count;
 
-        std::vector<float> vertexData;
+    std::vector<float> vertexData;
         int positionAccessorIdx = primitive.attributes.count("POSITION") ? primitive.attributes.at("POSITION") : -1;
         int normalAccessorIdx = primitive.attributes.count("NORMAL") ? primitive.attributes.at("NORMAL") : -1;
         int texcoordAccessorIdx = primitive.attributes.count("TEXCOORD_0") ? primitive.attributes.at("TEXCOORD_0") : -1;
@@ -196,24 +373,38 @@ void GLTFMesh::ProcessMesh(const tinygltf::Model& model, int meshIndex, const gl
             texData = &texBuffer.data[texBufferView.byteOffset + texAccessor.byteOffset];
         }
 
+        // SPEED
+        vertexData.reserve(vertexData.size() + posAccessor.count * 8);
+
         for (size_t i = 0; i < posAccessor.count; ++i) {
             const float* positions = reinterpret_cast<const float*>(posData + i * posStride);
-            glm::vec3 pos(positions[0], positions[1], positions[2]);
-            glm::vec4 transformedPos = transform * glm::vec4(pos, 1.0f);
-
-            vertexData.push_back(transformedPos.x);
-            vertexData.push_back(transformedPos.y);
-            vertexData.push_back(transformedPos.z);
+            // MORE SPEED
+            if (transform == glm::mat4(1.0f)) {
+                vertexData.push_back(positions[0]);
+                vertexData.push_back(positions[1]);
+                vertexData.push_back(positions[2]);
+            } else {
+                glm::vec3 pos(positions[0], positions[1], positions[2]);
+                glm::vec4 transformedPos = transform * glm::vec4(pos, 1.0f);
+                vertexData.push_back(transformedPos.x);
+                vertexData.push_back(transformedPos.y);
+                vertexData.push_back(transformedPos.z);
+            }
 
             if (normData) {
                 const float* normals = reinterpret_cast<const float*>(normData + i * normStride);
-                glm::vec3 normal(normals[0], normals[1], normals[2]);
-                glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(transform)));
-                glm::vec3 transformedNormal = glm::normalize(normalMatrix * normal);
-
-                vertexData.push_back(transformedNormal.x);
-                vertexData.push_back(transformedNormal.y);
-                vertexData.push_back(transformedNormal.z);
+                if (transform == glm::mat4(1.0f)) {
+                    vertexData.push_back(normals[0]);
+                    vertexData.push_back(normals[1]);
+                    vertexData.push_back(normals[2]);
+                } else {
+                    glm::vec3 normal(normals[0], normals[1], normals[2]);
+                    glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(transform)));
+                    glm::vec3 transformedNormal = glm::normalize(normalMatrix * normal);
+                    vertexData.push_back(transformedNormal.x);
+                    vertexData.push_back(transformedNormal.y);
+                    vertexData.push_back(transformedNormal.z);
+                }
             } else {
                 vertexData.push_back(0.0f);
                 vertexData.push_back(1.0f);
@@ -242,22 +433,25 @@ void GLTFMesh::ProcessMesh(const tinygltf::Model& model, int meshIndex, const gl
         const unsigned char* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, prim.m_EBO);
+
+        std::vector<unsigned char> indexBytes;
+        indexBytes.reserve(indexAccessor.count * 4); // upper bound
         if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
-            std::vector<unsigned int> indices32;
-            const unsigned short* indices16 = reinterpret_cast<const unsigned short*>(indexData);
-            for (size_t i = 0; i < indexAccessor.count; ++i) {
-                indices32.push_back(static_cast<unsigned int>(indices16[i]));
-            }
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices32.size() * sizeof(unsigned int), indices32.data(), GL_STATIC_DRAW);
+            prim.m_indexType = GL_UNSIGNED_SHORT;
+            size_t bytes = indexAccessor.count * sizeof(unsigned short);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, bytes, indexData, GL_STATIC_DRAW);
+            indexBytes.assign(indexData, indexData + bytes);
         } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexAccessor.count * sizeof(unsigned int), indexData, GL_STATIC_DRAW);
+            prim.m_indexType = GL_UNSIGNED_INT;
+            size_t bytes = indexAccessor.count * sizeof(unsigned int);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, bytes, indexData, GL_STATIC_DRAW);
+            indexBytes.assign(indexData, indexData + bytes);
         } else {
-            std::vector<unsigned int> indices32;
-            const unsigned char* indices8 = indexData;
-            for (size_t i = 0; i < indexAccessor.count; ++i) {
-                indices32.push_back(static_cast<unsigned int>(indices8[i]));
-            }
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices32.size() * sizeof(unsigned int), indices32.data(), GL_STATIC_DRAW);
+            // Fallback to 8-bit indices
+            prim.m_indexType = GL_UNSIGNED_BYTE;
+            size_t bytes = indexAccessor.count * sizeof(unsigned char);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, bytes, indexData, GL_STATIC_DRAW);
+            indexBytes.assign(indexData, indexData + bytes);
         }
 
         glEnableVertexAttribArray(0);
@@ -271,11 +465,21 @@ void GLTFMesh::ProcessMesh(const tinygltf::Model& model, int meshIndex, const gl
 
         glBindVertexArray(0);
 
+        // Save CPU-side data for cache
+        TempCachePrim cachePrim;
+        cachePrim.materialIndex = prim.m_materialIndex;
+        cachePrim.indexType = prim.m_indexType;
+        cachePrim.indexCount = prim.m_indexCount;
+        cachePrim.vertex = vertexData; // copy
+        cachePrim.indices = std::move(indexBytes);
+        m_tempCache.push_back(std::move(cachePrim));
+
         m_primitives.push_back(std::move(prim));
     }
 }
 
 void GLTFMesh::LoadMaterials(const tinygltf::Model& model) {
+    PROFILE_FUNCTION();
     for (const auto& mat : model.materials) {
         GLTFMaterial material;
 
@@ -314,6 +518,7 @@ void GLTFMesh::LoadMaterials(const tinygltf::Model& model) {
 }
 
 unsigned int GLTFMesh::LoadTextureFromModel(const tinygltf::Model& model, int textureIndex) {
+    PROFILE_FUNCTION();
     if (textureIndex < 0 || textureIndex >= model.textures.size()) return 0;
 
     const tinygltf::Texture& texture = model.textures[textureIndex];
@@ -393,6 +598,10 @@ void GLTFMesh::Render(const glm::mat4& view, const glm::mat4& projection, const 
     m_shader->SetVec3("uCameraPos", cameraPos);
     m_shader->SetVec3("uLightDir", glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f)));
 
+    if (m_useSharedBuffers) {
+        glBindVertexArray(m_sharedVAO);
+    }
+
     for (const auto& prim : m_primitives) {
         bool hasTransparency = false;
 
@@ -428,13 +637,21 @@ void GLTFMesh::Render(const glm::mat4& view, const glm::mat4& projection, const 
             glDepthMask(GL_TRUE);
         }
 
-        glBindVertexArray(prim.m_VAO);
-        glDrawElements(GL_TRIANGLES, prim.m_indexCount, GL_UNSIGNED_INT, 0);
-        glBindVertexArray(0);
+        if (m_useSharedBuffers) {
+            const void* offsetPtr = reinterpret_cast<const void*>(static_cast<uintptr_t>(prim.m_indexOffsetBytes));
+            glDrawElementsBaseVertex(GL_TRIANGLES, prim.m_indexCount, prim.m_indexType, offsetPtr, prim.m_baseVertex);
+        } else {
+            glBindVertexArray(prim.m_VAO);
+            glDrawElements(GL_TRIANGLES, prim.m_indexCount, prim.m_indexType, 0);
+            glBindVertexArray(0);
+        }
     }
 
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
+    if (m_useSharedBuffers) {
+        glBindVertexArray(0);
+    }
     m_shader->Unbind();
 }
 
