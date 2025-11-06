@@ -27,7 +27,7 @@ void GraphExecutor::ExecuteTickEvent(float deltaTime) {
 
     m_PinValues.clear();
 
-    spdlog::debug("[GraphExecutor] ExecuteTickEvent called with deltaTime={}", deltaTime);
+    // spdlog::debug("[GraphExecutor] ExecuteTickEvent called with deltaTime={}", deltaTime);
 
     for (auto& node : m_pGraph->GetNodes()) {
         if (node.Type == AnimationGraph::NodeType::Event &&

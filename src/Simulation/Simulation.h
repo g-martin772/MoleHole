@@ -2,6 +2,7 @@
 #include <memory>
 
 #include "Scene.h"
+#include "Physics.h"
 
 class AnimationGraph;
 class GraphExecutor;
@@ -24,24 +25,25 @@ public:
     void Pause();
     void Reset();
 
-    State GetState() const { return m_state; }
-    bool IsRunning() const { return m_state == State::Running; }
-    bool IsPaused() const { return m_state == State::Paused; }
-    bool IsStopped() const { return m_state == State::Stopped; }
+    State GetState() const { return m_State; }
+    bool IsRunning() const { return m_State == State::Running; }
+    bool IsPaused() const { return m_State == State::Paused; }
+    bool IsStopped() const { return m_State == State::Stopped; }
 
     Scene* GetScene() const;
-    float GetSimulationTime() const { return m_simulationTime; }
+    float GetSimulationTime() const { return m_SimulationTime; }
 
     void SetAnimationGraph(AnimationGraph* graph);
 
 private:
-    std::unique_ptr<Scene> m_scene;
-    std::unique_ptr<Scene> m_savedScene;
-    std::unique_ptr<GraphExecutor> m_pGraphExecutor;
-    AnimationGraph* m_pAnimationGraph;
-    State m_state;
-    float m_simulationTime;
-    bool m_startEventExecuted;
+    std::unique_ptr<Scene> m_Scene;
+    std::unique_ptr<Scene> m_SavedScene;
+    std::unique_ptr<GraphExecutor> m_GraphExecutor;
+    std::unique_ptr<Physics> m_Physics;
+    AnimationGraph* m_AnimationGraph;
+    State m_State;
+    float m_SimulationTime;
+    bool m_StartEventExecuted;
 
     void SaveSceneState() const;
     void RestoreSceneState() const;

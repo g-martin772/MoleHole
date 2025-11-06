@@ -831,7 +831,16 @@ void UI::RenderMeshesSection(Scene* scene) {
                     }
                 }
 
+                if (ImGui::DragFloat("Mass", &mesh.massKg, 1000.0f)) {
+                    meshChanged = true;
+                }
+
+
                 if (ImGui::DragFloat3("Position", &mesh.position[0], 0.1f)) {
+                    meshChanged = true;
+                }
+
+                if (ImGui::DragFloat3("Center of Mass Offset", &mesh.comOffset[0], 0.0f)) {
                     meshChanged = true;
                 }
 
@@ -933,7 +942,9 @@ void UI::RenderSpheresSection(Scene* scene) {
                     sphere.name = nameBuffer;
                     sphereChanged = true;
                 }
-
+                if (ImGui::DragFloat("Mass", &sphere.massKg, 1000.0f)) {
+                    sphereChanged = true;
+                }
                 if (ImGui::DragFloat3("Position", &sphere.position[0], 0.1f)) {
                     sphereChanged = true;
                 }
