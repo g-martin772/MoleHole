@@ -38,8 +38,11 @@ void Scene::Serialize(const std::filesystem::path &path) {
         out << YAML::BeginMap;
         out << YAML::Key << "name" << YAML::Value << mesh.name;
         out << YAML::Key << "path" << YAML::Value << mesh.path;
+        out << YAML::Key << "mass" << YAML::Value << mesh.massKg;
         out << YAML::Key << "position" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.position.x << mesh.
                 position.y << mesh.position.z << YAML::EndSeq;
+        out << YAML::Key << "com_offset" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.comOffset.x << mesh.
+                comOffset.y << mesh.comOffset.z << YAML::EndSeq;
         out << YAML::Key << "rotation" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.rotation.w << mesh.
                 rotation.x << mesh.rotation.y << mesh.rotation.z << YAML::EndSeq;
         out << YAML::Key << "scale" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.scale.x << mesh.scale.y <<
@@ -52,6 +55,7 @@ void Scene::Serialize(const std::filesystem::path &path) {
     for (const auto &sphere: spheres) {
         out << YAML::BeginMap;
         out << YAML::Key << "name" << YAML::Value << sphere.name;
+        out << YAML::Key << "mass" << YAML::Value << sphere.massKg;
         out << YAML::Key << "texture_path" << YAML::Value << sphere.texturePath;
         out << YAML::Key << "position" << YAML::Value << YAML::Flow << YAML::BeginSeq << sphere.position.x << sphere.
                 position.y << sphere.position.z << YAML::EndSeq;
@@ -118,8 +122,11 @@ void Scene::Deserialize(const std::filesystem::path &path, bool setCurrentPath) 
             MeshObject mesh;
             mesh.name = node["name"].as<std::string>();
             mesh.path = node["path"].as<std::string>();
+            mesh.massKg = node["mass"].as<float>();
             auto pos = node["position"];
             mesh.position = glm::vec3(pos[0].as<float>(), pos[1].as<float>(), pos[2].as<float>());
+            auto comOffset = node["com_offset"];
+            mesh.comOffset = glm::vec3(comOffset[0].as<float>(), comOffset[1].as<float>(), comOffset[2].as<float>());
             auto rot = node["rotation"];
             mesh.rotation = glm::quat(rot[0].as<float>(), rot[1].as<float>(), rot[2].as<float>(), rot[3].as<float>());
             auto scale = node["scale"];
@@ -133,6 +140,7 @@ void Scene::Deserialize(const std::filesystem::path &path, bool setCurrentPath) 
             Sphere sphere;
             sphere.name = node["name"].as<std::string>();
             sphere.texturePath = node["texture_path"].as<std::string>();
+            sphere.massKg = node["mass"].as<float>();
             auto pos = node["position"];
             sphere.position = glm::vec3(pos[0].as<float>(), pos[1].as<float>(), pos[2].as<float>());
             auto rot = node["rotation"];

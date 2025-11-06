@@ -50,16 +50,19 @@ struct BlackHoleHash {
 };
 
 struct MeshObject {
+    float massKg;
     std::string name;
     std::string path;
     glm::vec3 position;
+    glm::vec3 comOffset;
     glm::quat rotation;
     glm::vec3 scale;
 
-    MeshObject() : position(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), scale(1.0f) {}
+    MeshObject() : massKg(1000.0f), position(0.0f), comOffset(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), scale(1.0f) {}
 };
 
 struct Sphere {
+    float massKg;
     std::string name;
     std::string texturePath;
     glm::vec3 position;
@@ -67,7 +70,7 @@ struct Sphere {
     glm::vec4 color;
     float spin, radius;
 
-    Sphere() : position(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), color(0.5f, 0.5f, 0.5f, 1.0f), spin(0.0f), radius(1.0f) {}
+    Sphere() : massKg(1000.0f), position(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), color(0.5f, 0.5f, 0.5f, 1.0f), spin(0.0f), radius(1.0f) {}
 };
 
 struct Scene {
