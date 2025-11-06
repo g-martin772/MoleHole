@@ -81,6 +81,67 @@ target_link_libraries(MoleHole
     PhysXCooking
 )
 
+if (WIN32)
+    find_package(PkgConfig QUIET)
+    if (PkgConfig_FOUND)
+        pkg_check_modules(FFMPEG_PKG QUIET libavcodec libavformat libavutil libswscale)
+    endif()
+
+    if (FFMPEG_PKG_FOUND)
+        include_directories(${FFMPEG_PKG_INCLUDE_DIRS})
+        link_directories(${FFMPEG_PKG_LIBRARY_DIRS})
+        target_link_libraries(MoleHole PRIVATE ${FFMPEG_PKG_LIBRARIES})
+    else()
+        if (NOT DEFINED FFMPEG_DIR AND DEFINED ENV{FFMPEG_DIR})
+            set(FFMPEG_DIR $ENV{FFMPEG_DIR})
+        endif()
+
+        set(_ffmpeg_hints
+            ${FFMPEG_DIR}
+            "C:/ffmpeg"
+            "C:/ffmpeg/build"
+            "C:/local/ffmpeg"
+            "C:/Program Files/ffmpeg"
+            "C:/Program Files/FFmpeg"
+        )
+
+        find_path(FFMPEG_INCLUDE_DIR
+            NAMES libavcodec/avcodec.h avcodec.h
+            HINTS ${_ffmpeg_hints}
+            PATH_SUFFIXES include include/ffmpeg
+        )
+
+        find_library(AVCODEC_LIB
+            NAMES avcodec avcodec.lib libavcodec-58 libavcodec-59
+            HINTS ${_ffmpeg_hints}
+            PATH_SUFFIXES lib lib64 lib/x64
+        )
+        find_library(AVFORMAT_LIB
+            NAMES avformat avformat.lib libavformat-58 libavformat-59
+            HINTS ${_ffmpeg_hints}
+            PATH_SUFFIXES lib lib64 lib/x64
+        )
+        find_library(AVUTIL_LIB
+            NAMES avutil avutil.lib libavutil-56 libavutil-57
+            HINTS ${_ffmpeg_hints}
+            PATH_SUFFIXES lib lib64 lib/x64
+        )
+        find_library(SWSCALE_LIB
+            NAMES swscale swscale.lib libswscale-5 libswscale-6
+            HINTS ${_ffmpeg_hints}
+            PATH_SUFFIXES lib lib64 lib/x64
+        )
+
+        if (FFMPEG_INCLUDE_DIR AND AVCODEC_LIB AND AVFORMAT_LIB AND AVUTIL_LIB)
+            include_directories(${FFMPEG_INCLUDE_DIR})
+            target_link_libraries(MoleHole PRIVATE ${AVCODEC_LIB} ${AVFORMAT_LIB} ${AVUTIL_LIB} ${SWSCALE_LIB})
+            message(STATUS "FFmpeg: found and linked (include=${FFMPEG_INCLUDE_DIR})")
+        else()
+            message(WARNING "FFmpeg not found!")
+        endif()
+    endif()
+endif()
+
 if (UNIX)
     set(OpenGL_GL_PREFERENCE GLVND)
     find_package(OpenGL REQUIRED)
