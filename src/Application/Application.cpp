@@ -224,6 +224,7 @@ void Application::InitializeRenderer() {
 
 void Application::InitializeSimulation() {
     m_simulation.SetAnimationGraph(m_ui.GetAnimationGraph());
+    m_simulation.GetPhysics()->SetRenderer(&m_renderer);
 }
 
 void Application::UpdateWindowState() {

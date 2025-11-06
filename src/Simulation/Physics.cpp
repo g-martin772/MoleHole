@@ -1,6 +1,8 @@
 #include "Physics.h"
 
 #include <spdlog/spdlog.h>
+#include "Renderer/Renderer.h"
+#include "Renderer/GLTFMesh.h"
 
 void Physics::Init() {
     spdlog::info("Initializing PhysX...");
@@ -20,6 +22,12 @@ void Physics::Init() {
     m_Physics = PxCreatePhysics(PX_PHYSICS_VERSION, *m_Foundation, PxTolerancesScale(), true, m_pvd);
     if (!m_Physics) {
         spdlog::error("PxCreatePhysics failed!");
+        return;
+    }
+
+    m_Cooking = PxCreateCooking(PX_PHYSICS_VERSION, *m_Foundation, PxCookingParams(PxTolerancesScale()));
+    if (!m_Cooking) {
+        spdlog::error("PxCreateCooking failed!");
         return;
     }
 
@@ -55,6 +63,13 @@ void Physics::Shutdown() {
         m_Scene = nullptr;
     }
 
+    for (auto& [path, mesh] : m_MeshCache) {
+        if (mesh) {
+            mesh->release();
+        }
+    }
+    m_MeshCache.clear();
+
     if (m_Material) {
         m_Material->release();
         m_Material = nullptr;
@@ -63,6 +78,11 @@ void Physics::Shutdown() {
     if (m_Dispatcher) {
         m_Dispatcher->release();
         m_Dispatcher = nullptr;
+    }
+
+    if (m_Cooking) {
+        m_Cooking->release();
+        m_Cooking = nullptr;
     }
 
     if (m_Physics) {
@@ -103,6 +123,7 @@ void Physics::SetScene(Scene *scene) {
         data.radius = 0.0f;
         data.isSphere = false;
         data.mass = mesh.massKg;
+        data.meshPath = mesh.path;
 
         CreatePhysicsBody(data);
     }
@@ -157,6 +178,21 @@ void Physics::CreatePhysicsBody(PhysicsBodyData &data) {
     PxShape *shape = nullptr;
     if (data.isSphere) {
         shape = PxRigidActorExt::createExclusiveShape(*body, PxSphereGeometry(data.radius), *m_Material);
+    } else if (!data.meshPath.empty()) {
+        PxConvexMesh* convexMesh = LoadConvexMesh(data.meshPath);
+        if (convexMesh) {
+            glm::vec3 scale = data.sceneScale ? *data.sceneScale : glm::vec3(1.0f);
+            PxMeshScale meshScale(PxVec3(scale.x, scale.y, scale.z));
+            shape = PxRigidActorExt::createExclusiveShape(*body,
+                                                          PxConvexMeshGeometry(convexMesh, meshScale),
+                                                          *m_Material);
+        } else {
+            spdlog::warn("Failed to load convex mesh for '{}', using box collider", data.meshPath);
+            glm::vec3 scale = data.sceneScale ? *data.sceneScale : glm::vec3(1.0f);
+            shape = PxRigidActorExt::createExclusiveShape(*body,
+                                                          PxBoxGeometry(scale.x * 0.5f, scale.y * 0.5f, scale.z * 0.5f),
+                                                          *m_Material);
+        }
     } else {
         glm::vec3 scale = data.sceneScale ? *data.sceneScale : glm::vec3(1.0f);
         shape = PxRigidActorExt::createExclusiveShape(*body,
@@ -223,3 +259,62 @@ void Physics::UpdatePhysicsBodies() {
         body.actor->setAngularDamping(0.1f);
     }
 }
+
+PxConvexMesh* Physics::LoadConvexMesh(const std::string& path) {
+    auto it = m_MeshCache.find(path);
+    if (it != m_MeshCache.end()) {
+        return it->second;
+    }
+
+    spdlog::debug("Creating convex mesh collision for: {}", path);
+
+    auto gltfMesh = m_Renderer->m_meshCache[path];
+    if (!gltfMesh || !gltfMesh->IsLoaded()) {
+        spdlog::error("Mesh not loaded in renderer: {}", path);
+        return nullptr;
+    }
+
+    auto geometry = gltfMesh->GetPhysicsGeometry();
+
+    if (geometry.vertices.empty()) {
+        spdlog::error("No valid vertex data in mesh: {}", path);
+        return nullptr;
+    }
+
+    std::vector<PxVec3> pxVertices;
+    pxVertices.reserve(geometry.vertices.size());
+    for (const auto& v : geometry.vertices) {
+        pxVertices.emplace_back(v.x, v.y, v.z);
+    }
+
+    PxConvexMeshDesc convexDesc;
+    convexDesc.points.count = static_cast<PxU32>(pxVertices.size());
+    convexDesc.points.stride = sizeof(PxVec3);
+    convexDesc.points.data = pxVertices.data();
+    convexDesc.flags = PxConvexFlag::eCOMPUTE_CONVEX | PxConvexFlag::eQUANTIZE_INPUT;
+    convexDesc.vertexLimit = 255;
+
+    PxDefaultMemoryOutputStream writeBuffer;
+    PxConvexMeshCookingResult::Enum result;
+    bool success = m_Cooking->cookConvexMesh(convexDesc, writeBuffer, &result);
+
+    if (!success || result != PxConvexMeshCookingResult::eSUCCESS) {
+        spdlog::error("Failed to cook convex mesh for: {} (result: {})", path, static_cast<int>(result));
+        return nullptr;
+    }
+
+    PxDefaultMemoryInputData readBuffer(writeBuffer.getData(), writeBuffer.getSize());
+    PxConvexMesh* convexMesh = m_Physics->createConvexMesh(readBuffer);
+
+    if (!convexMesh) {
+        spdlog::error("Failed to create convex mesh for: {}", path);
+        return nullptr;
+    }
+
+    m_MeshCache[path] = convexMesh;
+    spdlog::info("Successfully created convex mesh collision: {} ({} input vertices -> {} hull vertices)",
+                 path, pxVertices.size(), convexMesh->getNbVertices());
+
+    return convexMesh;
+}
+

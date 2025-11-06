@@ -74,6 +74,7 @@ target_link_libraries(MoleHole
     PhysXCommon
     PhysXFoundation
     PhysXExtensions
+    PhysXCooking
 )
 
 if (UNIX)
