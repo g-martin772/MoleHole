@@ -212,7 +212,7 @@ void AnimationGraph::Render() {
                 }
                 if (!inputPinUsed && startPin && endPin && ArePinsCompatible(startPin->Type, endPin->Type)) {
                     if (ed::AcceptNewItem()) {
-                        m_Links.push_back({GenerateRandomId(), startPinId, endPinId});
+                        m_Links.push_back({ed::LinkId(GenerateRandomId()), startPinId, endPinId});
                     }
                 } else {
                     ed::RejectNewItem(ImColor(255, 0, 0, 255), 2.0f);
