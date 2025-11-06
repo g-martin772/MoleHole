@@ -1,6 +1,6 @@
 name: test scene
 black_holes:
-  - mass: 5.46
+  - mass: 2.56
     position: [0, 0, -5]
     show_accretion_disk: true
     accretion_disk_density: 1

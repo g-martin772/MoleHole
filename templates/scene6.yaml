@@ -1,0 +1,190 @@
+name: ""
+black_holes:
+  - mass: 2.24
+    position: [9.043458, -7.4006925, -10.396966]
+    show_accretion_disk: true
+    accretion_disk_density: 1
+    accretion_disk_size: 15
+    accretion_disk_color: [1, 0.5, 0]
+    spin: 0.5
+    spin_axis: [0, 1, 0]
+  - mass: 1.4
+    position: [69.5, 14.55, 7.2]
+    show_accretion_disk: true
+    accretion_disk_density: 1
+    accretion_disk_size: 15
+    accretion_disk_color: [1, 0.5, 0]
+    spin: 0.5
+    spin_axis: [0, 1, 0]
+meshes:
+  - name: scene
+    path: /home/leo/01-Coding/MoleHole2/assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
+    position: [0, -6.6, 35.1]
+    rotation: [1, 0, 0, 0]
+    scale: [1, 1, 1]
+spheres:
+  []
+animation_graph:
+  variables:
+    []
+  nodes:
+    - id: 16775
+      name: Get BlackHole From Scene
+      type: 8
+      subtype: 34
+      scene_object_index: 1
+      inputs:
+        []
+      outputs:
+        - id: 167750
+          name: BlackHole
+          type: 19
+          is_input: false
+    - id: 58282
+      name: Tick Update
+      type: 0
+      subtype: 32
+      inputs:
+        []
+      outputs:
+        - id: 582820
+          name: Flow
+          type: 0
+          is_input: false
+        - id: 582821
+          name: Delta Time
+          type: 2
+          is_input: false
+    - id: 870778
+      name: Get BlackHole
+      type: 4
+      subtype: 34
+      inputs:
+        - id: 8707780
+          name: BlackHole
+          type: 19
+          is_input: true
+      outputs:
+        - id: 8707781
+          name: Mass
+          type: 2
+          is_input: false
+        - id: 8707782
+          name: Position
+          type: 4
+          is_input: false
+        - id: 8707783
+          name: Show Disk
+          type: 1
+          is_input: false
+        - id: 8707784
+          name: Disk Density
+          type: 2
+          is_input: false
+        - id: 8707785
+          name: Disk Size
+          type: 2
+          is_input: false
+        - id: 8707786
+          name: Disk Color
+          type: 4
+          is_input: false
+        - id: 8707787
+          name: Spin
+          type: 2
+          is_input: false
+        - id: 8707788
+          name: Spin Axis
+          type: 4
+          is_input: false
+    - id: 317685
+      name: Set BlackHole
+      type: 5
+      subtype: 34
+      inputs:
+        - id: 3176850
+          name: Flow
+          type: 0
+          is_input: true
+        - id: 3176851
+          name: BlackHole
+          type: 19
+          is_input: true
+        - id: 3176852
+          name: Mass
+          type: 2
+          is_input: true
+        - id: 3176853
+          name: Position
+          type: 4
+          is_input: true
+        - id: 3176854
+          name: Show Disk
+          type: 1
+          is_input: true
+        - id: 3176855
+          name: Disk Density
+          type: 2
+          is_input: true
+        - id: 3176856
+          name: Disk Size
+          type: 2
+          is_input: true
+        - id: 3176857
+          name: Disk Color
+          type: 4
+          is_input: true
+        - id: 3176858
+          name: Spin
+          type: 2
+          is_input: true
+        - id: 3176859
+          name: Spin Axis
+          type: 4
+          is_input: true
+      outputs:
+        - id: 3176860
+          name: Flow
+          type: 0
+          is_input: false
+        - id: 3176861
+          name: BlackHole
+          type: 19
+          is_input: false
+    - id: 966941
+      name: Add Float
+      type: 1
+      subtype: 1
+      inputs:
+        - id: 9669410
+          name: A
+          type: 2
+          is_input: true
+        - id: 9669411
+          name: B
+          type: 2
+          is_input: true
+      outputs:
+        - id: 9669412
+          name: Result
+          type: 2
+          is_input: false
+  links:
+    - id: 559290
+      start_pin_id: 582820
+      end_pin_id: 3176850
+    - id: 167235
+      start_pin_id: 582821
+      end_pin_id: 9669410
+    - id: 136958
+      start_pin_id: 8707781
+      end_pin_id: 9669411
+    - id: 137217
+      start_pin_id: 9669412
+      end_pin_id: 3176852
+    - id: 335765
+      start_pin_id: 167750
+      end_pin_id: 3176851
+    - id: 332051
+      start_pin_id: 167750
+      end_pin_id: 8707780
