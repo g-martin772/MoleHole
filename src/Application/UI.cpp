@@ -844,6 +844,10 @@ void UI::RenderMeshesSection(Scene* scene) {
                     meshChanged = true;
                 }
 
+                if (ImGui::DragFloat3("Velocity", &mesh.velocity[0], 0.1f)) {
+                    meshChanged = true;
+                }
+
                 glm::vec3 eulerAngles = glm::eulerAngles(mesh.rotation);
                 eulerAngles = glm::degrees(eulerAngles);
                 if (ImGui::DragFloat3("Rotation (deg)", &eulerAngles[0], 1.0f)) {
@@ -946,6 +950,9 @@ void UI::RenderSpheresSection(Scene* scene) {
                     sphereChanged = true;
                 }
                 if (ImGui::DragFloat3("Position", &sphere.position[0], 0.1f)) {
+                    sphereChanged = true;
+                }
+                if (ImGui::DragFloat3("Velocity", &sphere.velocity[0], 0.1f)) {
                     sphereChanged = true;
                 }
                 if (ImGui::DragFloat("Radius", &sphere.radius, 0.05f, 0.01f, 1e6f)) {

@@ -16,6 +16,7 @@ struct PhysicsBodyData {
     glm::vec3* scenePosition = nullptr;
     glm::quat* sceneRotation = nullptr;
     glm::vec3* sceneScale = nullptr;
+    glm::vec3 initialVelocity = glm::vec3(0.0f);
     float radius = 1.0f;
     bool isSphere = false;
     std::string meshPath;

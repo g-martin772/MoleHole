@@ -124,6 +124,8 @@ void Physics::SetScene(Scene *scene) {
         data.isSphere = false;
         data.mass = mesh.massKg;
         data.meshPath = mesh.path;
+        data.initialVelocity = mesh.velocity;
+        data.initialVelocity = mesh.velocity;
 
         CreatePhysicsBody(data);
     }
@@ -136,7 +138,9 @@ void Physics::SetScene(Scene *scene) {
         data.sceneScale = nullptr;
         data.radius = sphere.radius;
         data.isSphere = true;
+        data.initialVelocity = sphere.velocity;
         data.mass = sphere.massKg;
+        data.initialVelocity = sphere.velocity;
 
         CreatePhysicsBody(data);
     }
@@ -158,7 +162,6 @@ void Physics::Apply() {
 void Physics::Update(float deltaTime) {
     ApplyGravitationalForces();
     UpdatePhysicsBodies();
-
     m_Scene->simulate(deltaTime);
     m_Scene->fetchResults(true);
 }
@@ -206,6 +209,10 @@ void Physics::CreatePhysicsBody(PhysicsBodyData &data) {
         return;
     }
 
+    body->setLinearVelocity(PxVec3(data.initialVelocity.x, data.initialVelocity.y, data.initialVelocity.z));
+
+    body->setLinearDamping(0.0f);
+    body->setAngularDamping(0.0f);
     PxRigidBodyExt::setMassAndUpdateInertia(*body, data.mass);
 
     m_Scene->addActor(*body);
@@ -238,7 +245,6 @@ void Physics::ApplyGravitationalForces() {
                 distSq = minDist * minDist;
             }
 
-            float dist = sqrtf(distSq);
             direction = direction.getNormalized();
 
             // F = G * m1 * m2 / r^2
@@ -252,12 +258,7 @@ void Physics::ApplyGravitationalForces() {
 }
 
 void Physics::UpdatePhysicsBodies() {
-    for (auto& body : m_Bodies) {
-        if (!body.actor) continue;
 
-        body.actor->setLinearDamping(0.1f);
-        body.actor->setAngularDamping(0.1f);
-    }
 }
 
 PxConvexMesh* Physics::LoadConvexMesh(const std::string& path) {
