@@ -22,16 +22,11 @@ void main() {
     vec3 p = aPos;
     p.y = u_planeY;
 
-    float displacement = 0.0;
+    float displacement = 0.0f;
     for (int i = 0; i < u_numBlackHoles; ++i) {
         vec3 bh = u_blackHolePositions[i];
-        float mass = u_blackHoleMasses[i];
-        float rs = 2.0 * mass;
-        float r = length(p.xz - bh.xz);
-        if (r > rs) {
-            float lens = rs / max(r - rs, 0.01);
-            displacement += lens;
-        }
+        float r = length(p.xz - bh.xz);        
+        displacement += 200.0f * u_blackHoleMasses[i] / r;
     }
     p.y -= displacement;
 

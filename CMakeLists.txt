@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(MoleHole)
 
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Don't set global C++ standard - let dependencies use their own defaults
+# set(CMAKE_CXX_STANDARD 23)
+# set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(TARGET_BUILD_PLATFORM "linux" CACHE STRING "PhysX target platform")
 set(PHYSX_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/physx/physx" CACHE PATH "Root of the PhysX source tree")
@@ -30,7 +31,7 @@ add_subdirectory(dependencies/imguizmo)
 add_subdirectory(dependencies/imgui)
 add_subdirectory(dependencies/nodes)
 add_subdirectory(dependencies/tinygltf)
-#add_subdirectory(dependencies/physx/physx/compiler/public)
+add_subdirectory(dependencies/physx/physx/compiler/public)
 
 file(GLOB SOURCES
         src/*.cpp
@@ -43,6 +44,14 @@ add_executable(MoleHole ${SOURCES})
 # Set C++23 only for the main MoleHole target
 set_property(TARGET MoleHole PROPERTY CXX_STANDARD 23)
 set_property(TARGET MoleHole PROPERTY CXX_STANDARD_REQUIRED ON)
+
+# Define debug/release macros for PhysX compatibility
+target_compile_definitions(MoleHole PRIVATE 
+    $<$<CONFIG:Debug>:_DEBUG>
+    $<$<CONFIG:Release>:NDEBUG>
+    $<$<CONFIG:RelWithDebInfo>:NDEBUG>
+    $<$<CONFIG:MinSizeRel>:NDEBUG>
+)
 
 include_directories(
     src
@@ -86,7 +95,7 @@ if (UNIX)
     find_package(OpenGL REQUIRED)
     target_link_libraries(MoleHole OpenGL::GL)
     target_link_libraries(MoleHole X11 Xrandr Xi Xxf86vm Xcursor Xinerama pthread dl m)
-    
+
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(FFMPEG REQUIRED libavcodec libavformat libavutil libswscale)
     include_directories(${FFMPEG_INCLUDE_DIRS})

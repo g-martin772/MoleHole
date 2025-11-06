@@ -157,7 +157,7 @@ vec3 calculateAcceleration(float angMomentumSqrd, vec3 relPos) {
     if (r5 < EPSILON)
         return (-1.5f * angMomentumSqrd * relPos) / (1.0f * EPSILON);
     
-    return (-1.5f * angMomentumSqrd * relPos) / (1.0f * r5);
+    return (-1.0f * angMomentumSqrd * relPos) * 2.0f / r5;
 }
 vec3 toSpherical(vec3 pos) {
     float rho = sqrt(pow(pos.x, 2) + pow(pos.y, 2) + pow(pos.z, 2));
@@ -310,7 +310,7 @@ vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
                 currentStepSize *= min(1.0, distanceToBH / r_s);
                 
                 if (u_gravitationalLensingEnabled == 1) {
-                    rayDirection += calculateAcceleration(dot(angMomentum, angMomentum), relativePos) * u_blackHoleMasses[j] * 2.0f * currentStepSize;
+                    rayDirection += calculateAcceleration(dot(angMomentum, angMomentum), relativePos) * u_blackHoleMasses[j] * currentStepSize;
                     rayDirection = normalize(rayDirection);
                 }
 
