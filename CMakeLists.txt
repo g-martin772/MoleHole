@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(MoleHole)
 
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set(TARGET_BUILD_PLATFORM "linux" CACHE STRING "PhysX target platform")
 set(PHYSX_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/physx/physx" CACHE PATH "Root of the PhysX source tree")
 set(PXSHARED_PATH "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/physx/pxshared" CACHE PATH "Path to PxShared")
@@ -27,7 +30,7 @@ add_subdirectory(dependencies/imguizmo)
 add_subdirectory(dependencies/imgui)
 add_subdirectory(dependencies/nodes)
 add_subdirectory(dependencies/tinygltf)
-add_subdirectory(dependencies/physx/physx/compiler/public)
+#add_subdirectory(dependencies/physx/physx/compiler/public)
 
 file(GLOB SOURCES
         src/*.cpp
@@ -54,7 +57,7 @@ include_directories(
     dependencies/nativefiledialog-extended/src/include
     dependencies/stb-image
     dependencies/nodes
-    dependencies/physx/physx/include 
+    dependencies/physx/physx/include
     dependencies/physx/pxshared/include
 )
 
