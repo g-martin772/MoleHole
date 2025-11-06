@@ -68,6 +68,12 @@ public:
     bool IsLoaded() const { return m_loaded; }
     std::string GetPath() const { return m_path; }
 
+    struct PhysicsGeometry {
+        std::vector<glm::vec3> vertices;
+        std::vector<unsigned int> indices;
+    };
+    PhysicsGeometry GetPhysicsGeometry() const;
+
 private:
     void ProcessNode(const tinygltf::Model& model, const tinygltf::Node& node, const glm::mat4& parentTransform);
     void ProcessMesh(const tinygltf::Model& model, int meshIndex, const glm::mat4& transform);

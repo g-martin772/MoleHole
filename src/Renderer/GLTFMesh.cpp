@@ -661,3 +661,109 @@ glm::mat4 GLTFMesh::GetTransform() const {
     transform = glm::scale(transform, m_scale);
     return transform;
 }
+
+GLTFMesh::PhysicsGeometry GLTFMesh::GetPhysicsGeometry() const {
+    PhysicsGeometry result;
+
+    if (!m_loaded) return result;
+
+    if (m_useSharedBuffers && m_sharedVBO && m_sharedEBO) {
+        glBindBuffer(GL_ARRAY_BUFFER, m_sharedVBO);
+        GLint vboSize = 0;
+        glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &vboSize);
+
+        size_t vertexStride = 8 * sizeof(float);
+        size_t vertexCount = vboSize / vertexStride;
+
+        std::vector<float> vertexData(vboSize / sizeof(float));
+        glGetBufferSubData(GL_ARRAY_BUFFER, 0, vboSize, vertexData.data());
+
+        for (size_t i = 0; i < vertexCount; ++i) {
+            size_t baseIndex = i * 8;
+            result.vertices.emplace_back(
+                vertexData[baseIndex + 0],
+                vertexData[baseIndex + 1],
+                vertexData[baseIndex + 2]
+            );
+        }
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_sharedEBO);
+        GLint eboSize = 0;
+        glGetBufferParameteriv(GL_ELEMENT_ARRAY_BUFFER, GL_BUFFER_SIZE, &eboSize);
+
+        if (!m_primitives.empty()) {
+            unsigned int indexType = m_primitives[0].m_indexType;
+
+            if (indexType == GL_UNSIGNED_INT) {
+                std::vector<unsigned int> indices(eboSize / sizeof(unsigned int));
+                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, eboSize, indices.data());
+                result.indices.assign(indices.begin(), indices.end());
+            } else if (indexType == GL_UNSIGNED_SHORT) {
+                std::vector<unsigned short> indices(eboSize / sizeof(unsigned short));
+                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, eboSize, indices.data());
+                for (auto idx : indices) {
+                    result.indices.push_back(static_cast<unsigned int>(idx));
+                }
+            } else if (indexType == GL_UNSIGNED_BYTE) {
+                std::vector<unsigned char> indices(eboSize / sizeof(unsigned char));
+                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, eboSize, indices.data());
+                for (auto idx : indices) {
+                    result.indices.push_back(static_cast<unsigned int>(idx));
+                }
+            }
+        }
+    } else {
+        for (const auto& primitive : m_primitives) {
+            glBindBuffer(GL_ARRAY_BUFFER, primitive.m_VBO);
+            GLint vboSize = 0;
+            glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &vboSize);
+
+            size_t vertexStride = 8 * sizeof(float);
+            size_t vertexCount = vboSize / vertexStride;
+
+            std::vector<float> vertexData(vboSize / sizeof(float));
+            glGetBufferSubData(GL_ARRAY_BUFFER, 0, vboSize, vertexData.data());
+
+            size_t indexOffset = result.vertices.size();
+
+            for (size_t i = 0; i < vertexCount; ++i) {
+                size_t baseIndex = i * 8;
+                result.vertices.emplace_back(
+                    vertexData[baseIndex + 0],
+                    vertexData[baseIndex + 1],
+                    vertexData[baseIndex + 2]
+                );
+            }
+
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, primitive.m_EBO);
+            GLint eboSize = 0;
+            glGetBufferParameteriv(GL_ELEMENT_ARRAY_BUFFER, GL_BUFFER_SIZE, &eboSize);
+
+            if (primitive.m_indexType == GL_UNSIGNED_INT) {
+                std::vector<unsigned int> indices(eboSize / sizeof(unsigned int));
+                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, eboSize, indices.data());
+                for (auto idx : indices) {
+                    result.indices.push_back(static_cast<unsigned int>(indexOffset + idx));
+                }
+            } else if (primitive.m_indexType == GL_UNSIGNED_SHORT) {
+                std::vector<unsigned short> indices(eboSize / sizeof(unsigned short));
+                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, eboSize, indices.data());
+                for (auto idx : indices) {
+                    result.indices.push_back(static_cast<unsigned int>(indexOffset + idx));
+                }
+            } else if (primitive.m_indexType == GL_UNSIGNED_BYTE) {
+                std::vector<unsigned char> indices(eboSize / sizeof(unsigned char));
+                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, eboSize, indices.data());
+                for (auto idx : indices) {
+                    result.indices.push_back(static_cast<unsigned int>(indexOffset + idx));
+                }
+            }
+        }
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    return result;
+}
+

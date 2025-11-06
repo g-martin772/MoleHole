@@ -34,6 +34,7 @@ public:
     float GetSimulationTime() const { return m_SimulationTime; }
 
     void SetAnimationGraph(AnimationGraph* graph);
+    Physics* GetPhysics() const { return m_Physics.get(); }
 
 private:
     std::unique_ptr<Scene> m_Scene;
