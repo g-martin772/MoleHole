@@ -433,7 +433,99 @@ void UI::RenderCameraControlsSection() {
 
 void UI::RenderRenderingFlagsSection() {
     if (ImGui::CollapsingHeader("Rendering Flags", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::TextDisabled("Rendering flags TODO...");
+        auto& config = Application::State();
+        
+        // General rendering flags
+        ImGui::Text("General Settings");
+        ImGui::Separator();
+        
+        bool renderBlackHoles = config.GetProperty<int>("renderBlackHoles", 1);
+        if (ImGui::Checkbox("Render Black Holes", &renderBlackHoles)) {
+            config.SetProperty<int>("renderBlackHoles", renderBlackHoles ? 1 : 0);
+            m_configDirty = true;
+        }
+        
+        bool gravitationalLensing = config.GetProperty<int>("gravitationalLensingEnabled", 1);
+        if (ImGui::Checkbox("Gravitational Lensing", &gravitationalLensing)) {
+            config.SetProperty<int>("gravitationalLensingEnabled", gravitationalLensing ? 1 : 0);
+            m_configDirty = true;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Enable/disable gravitational light bending effects");
+        }
+        
+        bool gravitationalRedshift = config.GetProperty<int>("gravitationalRedshiftEnabled", 1);
+        if (ImGui::Checkbox("Gravitational Redshift", &gravitationalRedshift)) {
+            config.SetProperty<int>("gravitationalRedshiftEnabled", gravitationalRedshift ? 1 : 0);
+            m_configDirty = true;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Enable/disable gravitational redshift in accretion disk");
+        }
+        
+        ImGui::Spacing();
+        ImGui::Text("Accretion Disk Settings");
+        ImGui::Separator();
+        
+        bool accretionDisk = config.GetProperty<int>("accretionDiskEnabled", 1);
+        if (ImGui::Checkbox("Accretion Disk", &accretionDisk)) {
+            config.SetProperty<int>("accretionDiskEnabled", accretionDisk ? 1 : 0);
+            m_configDirty = true;
+        }
+        
+        float accDiskHeight = config.GetProperty<float>("accDiskHeight", 0.2f);
+        if (ImGui::SliderFloat("Disk Height", &accDiskHeight, 0.01f, 2.0f)) {
+            config.SetProperty<float>("accDiskHeight", accDiskHeight);
+            m_configDirty = true;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Vertical thickness of the accretion disk");
+        }
+        
+        float accDiskTemp = config.GetProperty<float>("accDiskTemp", 2000.0f);
+        if (ImGui::SliderFloat("Disk Temperature (K)", &accDiskTemp, 1000.0f, 40000.0f)) {
+            config.SetProperty<float>("accDiskTemp", accDiskTemp);
+            m_configDirty = true;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Base temperature of the accretion disk in Kelvin");
+        }
+        
+        float accDiskNoiseScale = config.GetProperty<float>("accDiskNoiseScale", 1.0f);
+        if (ImGui::SliderFloat("Noise Scale", &accDiskNoiseScale, 0.1f, 10.0f)) {
+            config.SetProperty<float>("accDiskNoiseScale", accDiskNoiseScale);
+            m_configDirty = true;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Scale of the noise pattern in the accretion disk");
+        }
+        
+        float accDiskNoiseLOD = config.GetProperty<float>("accDiskNoiseLOD", 5.0f);
+        if (ImGui::SliderFloat("Noise LOD", &accDiskNoiseLOD, 1.0f, 10.0f)) {
+            config.SetProperty<float>("accDiskNoiseLOD", accDiskNoiseLOD);
+            m_configDirty = true;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Level of detail for noise (more octaves = more detail)");
+        }
+        
+        float accDiskSpeed = config.GetProperty<float>("accDiskSpeed", 0.5f);
+        if (ImGui::SliderFloat("Disk Rotation Speed", &accDiskSpeed, 0.0f, 5.0f)) {
+            config.SetProperty<float>("accDiskSpeed", accDiskSpeed);
+            m_configDirty = true;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Rotation speed of the accretion disk animation");
+        }
+        
+        bool dopplerBeaming = config.GetProperty<float>("dopplerBeamingEnabled", 1.0f) > 0.5f;
+        if (ImGui::Checkbox("Doppler Beaming", &dopplerBeaming)) {
+            config.SetProperty<float>("dopplerBeamingEnabled", dopplerBeaming ? 1.0f : 0.0f);
+            m_configDirty = true;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Enable relativistic Doppler shift and beaming effects");
+        }
     }
 }
 
@@ -1655,4 +1747,3 @@ void UI::RenderExportProgress() {
         ImGui::TextDisabled("No export in progress");
     }
 }
-

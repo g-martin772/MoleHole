@@ -167,6 +167,8 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const C
 void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time) {
     m_computeShader->Bind();
 
+    auto& config = Application::State();
+
     glm::vec3 cameraPos = camera.GetPosition();
     glm::vec3 cameraFront = camera.GetFront();
     glm::vec3 cameraUp = camera.GetUp();
@@ -179,6 +181,18 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     m_computeShader->SetFloat("u_fov", camera.GetFov());
     m_computeShader->SetFloat("u_aspect", static_cast<float>(m_width) / static_cast<float>(m_height));
     m_computeShader->SetFloat("u_time", time);
+
+    // Rendering settings from AppState
+    m_computeShader->SetInt("u_gravitationalLensingEnabled", config.GetProperty<int>("gravitationalLensingEnabled", 1));
+    m_computeShader->SetInt("u_accretionDiskEnabled", config.GetProperty<int>("accretionDiskEnabled", 1));
+    m_computeShader->SetInt("u_renderBlackHoles", config.GetProperty<int>("renderBlackHoles", 1));
+    m_computeShader->SetFloat("u_accDiskHeight", config.GetProperty<float>("accDiskHeight", 0.2f));
+    m_computeShader->SetFloat("u_accDiskNoiseScale", config.GetProperty<float>("accDiskNoiseScale", 1.0f));
+    m_computeShader->SetFloat("u_accDiskNoiseLOD", config.GetProperty<float>("accDiskNoiseLOD", 5.0f));
+    m_computeShader->SetFloat("u_accDiskSpeed", config.GetProperty<float>("accDiskSpeed", 0.5f));
+    m_computeShader->SetFloat("u_dopplerBeamingEnabled", config.GetProperty<float>("dopplerBeamingEnabled", 1.0f));
+    m_computeShader->SetFloat("u_accDiskTemp", config.GetProperty<float>("accDiskTemp", 2000.0f));
+    m_computeShader->SetInt("u_gravitationalRedshiftEnabled", config.GetProperty<int>("gravitationalRedshiftEnabled", 1));
 
     int numBlackHoles = std::min(static_cast<int>(blackHoles.size()), 8);
     m_computeShader->SetInt("u_numBlackHoles", numBlackHoles);
@@ -217,16 +231,4 @@ void BlackHoleRenderer::Resize(int width, int height) {
     m_width = width;
     m_height = height;
     CreateComputeTexture();
-}
-
-float BlackHoleRenderer::CalculateSchwarzschildRadius(float mass) {
-    // rs = 2GM/c²
-    // For solar mass units: rs ≈ 2.95 km per solar mass
-    const float solarMassInKg = 1.989e30f;
-    float massInKg = mass * solarMassInKg;
-    return (2.0f * G * massInKg) / (c * c);
-}
-
-float BlackHoleRenderer::GetEventHorizonRadius(float mass) {
-    return CalculateSchwarzschildRadius(mass);
 }

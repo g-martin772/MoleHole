@@ -239,7 +239,7 @@ float snoise(vec3 v) {
 }
 void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin) {    
     
-    float iscoRadius = 2.0f * eventHorizonRadius;
+    float iscoRadius = 4.0f * eventHorizonRadius;
     float outerRadius = 8.0 * eventHorizonRadius;
     float distanceFromCenter = length(pos);
 
