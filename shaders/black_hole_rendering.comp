@@ -6,6 +6,8 @@ layout(rgba32f, binding = 0) uniform image2D l_outputImage;
 // textures
 uniform sampler2D u_skyboxTexture;
 uniform sampler2D u_blackbodyLUT; // 2D LUT: x=temperature, y=redshift factor
+uniform sampler2D u_accelerationLUT; // 2D LUT: x=angular momentum squared, y=radius
+uniform sampler2D u_hrDiagramLUT; // 1D LUT: mass -> temperature, luminosity, radius
 
 // constants
 const float EPSILON = 0.01;
@@ -40,12 +42,8 @@ uniform float u_accDiskNoiseScale = 1.0;
 uniform float u_accDiskNoiseLOD = 5.0;
 uniform float u_accDiskSpeed = 0.5;
 uniform float u_dopplerBeamingEnabled = 1.0;
-
-const mat3 rec2020Transform = mat3(
-1.7167, -0.6667, 0.0176,
--0.3557, 1.6165, -0.0428,
--0.2534, 0.0158, 0.9421
-);
+uniform int u_useAccelerationLUT = 1;
+uniform int u_useHRDiagramLUT = 1;
 
 // new uniforms for disk temperature and GR redshift toggle
 uniform float u_accDiskTemp = 2000.0;
@@ -58,34 +56,19 @@ uniform float u_lutTempMax = 40000.0;
 uniform float u_lutRedshiftMin = 0.1;
 uniform float u_lutRedshiftMax = 3.0;
 
-// color conversion / blackbody sampling helpers
-vec3 convertToRGB(float cX, float cY, float cZ, float normalized_cY) {
-    float denom = cX + cY + cZ;
-    float x = denom > 0.0 ? cX / denom : 0.0;
-    float y = denom > 0.0 ? cY / denom : 0.0;
-    float z = 1.0 - x - y;
+// Acceleration LUT parameters (must match AccelerationLUTGenerator constants)
+const float ACC_LUT_R_MIN = 0.01;
+const float ACC_LUT_R_MAX = 50.0;
+const float ACC_LUT_ANG_MOM_MIN = 0.0;
+const float ACC_LUT_ANG_MOM_MAX = 100.0;
+const float ACC_LUT_LOG_R_MIN = log(ACC_LUT_R_MIN);
+const float ACC_LUT_LOG_R_MAX = log(ACC_LUT_R_MAX);
 
-    float X = x / max(y, 1e-6);
-    float Y = 1.0;
-    float Z = z / max(y, 1e-6);
-
-    vec3 inputColor = vec3(X, Y, Z);
-    vec3 outputColor = rec2020Transform * inputColor;
-
-    float R = max(outputColor.r, 0.0);
-    float G = max(outputColor.g, 0.0);
-    float B = max(outputColor.b, 0.0);
-
-    float maxVal = max(max(R, G), B);
-    if (maxVal > 1.0) {
-        float invMaxVal = 1.0 / maxVal;
-        R *= invMaxVal;
-        G *= invMaxVal;
-        B *= invMaxVal;
-    }
-
-    return vec3(R, G, B) * normalized_cY;
-}
+// HR Diagram LUT parameters (must match HRDiagramLUTGenerator constants)
+const float HR_MASS_MIN = 0.08;
+const float HR_MASS_MAX = 100.0;
+const float HR_LOG_MASS_MIN = log(HR_MASS_MIN);
+const float HR_LOG_MASS_MAX = log(HR_MASS_MAX);
 
 vec3 getBlackbodyColorLUT(float temperature, float redshiftFactor) {
     // Map temperature to [0,1] range for LUT lookup
@@ -102,11 +85,6 @@ vec3 getBlackbodyColorLUT(float temperature, float redshiftFactor) {
     vec3 color = texture(u_blackbodyLUT, vec2(tempNorm, redshiftNorm)).rgb;
     
     return color;
-}
-
-// Wrapper that chooses between LUT and full calculation
-vec3 getBlackbodyColor(float temperature, float redshiftFactor) {
-    return getBlackbodyColorLUT(temperature, redshiftFactor);
 }
 
 float calculateRedShift(vec3 pos)
@@ -150,14 +128,42 @@ float calculateDopplerEffect(vec3 pos, vec3 viewDir)
 float calculateEventHorizonRadius(float mass) {
     return 2.0f * mass;
 }
-vec3 calculateAcceleration(float angMomentumSqrd, vec3 relPos) {
-    float r5 = pow(dot(relPos, relPos), 2.5);
+
+// Get temperature from black hole mass using HR diagram
+float getTemperatureFromMass(float mass) {
+    if (u_useHRDiagramLUT == 1) {
+        // Map mass to [0,1] using log scale (matching the generator)
+        float logMass = log(clamp(mass, HR_MASS_MIN, HR_MASS_MAX));
+        float massNorm = (logMass - HR_LOG_MASS_MIN) / (HR_LOG_MASS_MAX - HR_LOG_MASS_MIN);
+        massNorm = clamp(massNorm, 0.0, 1.0);
+        
+        // Sample the LUT (returns vec3: temperature, luminosity, radius)
+        // We only use the temperature (r channel)
+        vec3 hrData = texture(u_hrDiagramLUT, vec2(massNorm, 0.5)).rgb;
+        return hrData.r; // temperature
+    } else {
+        // Fallback: use the uniform temperature
+        return u_accDiskTemp;
+    }
+}
+
+vec3 calculateAccelerationLUT(float angMomentumSqrd, vec3 relPos) {
+    float rSqrd = dot(relPos, relPos);
+    float r = sqrt(rSqrd);
     
-    // avoid division by zero
-    if (r5 < EPSILON)
-        return (-1.5f * angMomentumSqrd * relPos) / (1.0f * EPSILON);
+    // Map angular momentum squared to [0,1] for LUT lookup
+    float angMomNorm = (angMomentumSqrd - ACC_LUT_ANG_MOM_MIN) / (ACC_LUT_ANG_MOM_MAX - ACC_LUT_ANG_MOM_MIN);
+    angMomNorm = clamp(angMomNorm, 0.0, 1.0);
     
-    return (-1.0f * angMomentumSqrd * relPos) * 2.0f / r5;
+    // Map radius to [0,1] using log scale (matching the generator)
+    float logR = log(max(r, ACC_LUT_R_MIN));
+    float rNorm = (logR - ACC_LUT_LOG_R_MIN) / (ACC_LUT_LOG_R_MAX - ACC_LUT_LOG_R_MIN);
+    rNorm = clamp(rNorm, 0.0, 1.0);
+    
+    // Sample the LUT (x = angular momentum, y = radius)
+    float factor = texture(u_accelerationLUT, vec2(angMomNorm, rNorm)).r;
+    
+    return factor * relPos;
 }
 vec3 toSpherical(vec3 pos) {
     float rho = sqrt(pow(pos.x, 2) + pow(pos.y, 2) + pow(pos.z, 2));
@@ -175,8 +181,6 @@ vec2 directionToSpherical(vec3 direction) {
 
     return vec2(u, v);
 }
-
-
 
 // noise functions
 vec4 permute(vec4 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
@@ -237,9 +241,9 @@ float snoise(vec3 v) {
     m = m * m;
     return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
-void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin) {    
+void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin, float blackHoleMass) {    
     
-    float iscoRadius = 4.0f * eventHorizonRadius;
+    float iscoRadius = 2.5f * eventHorizonRadius;
     float outerRadius = 8.0 * eventHorizonRadius;
     float distanceFromCenter = length(pos);
 
@@ -279,8 +283,11 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
 
     float dopplerRedshift = 1.0 / mix(1.0, doppler * grFactor, float(u_dopplerBeamingEnabled > 0.5));
 
-    float temp = max(100.0, u_accDiskTemp);
-    vec3 bbColor = getBlackbodyColor(temp, dopplerRedshift);
+    // Use HR diagram to get temperature from black hole mass
+    float temp = getTemperatureFromMass(blackHoleMass);
+    temp = max(100.0, temp);
+    
+    vec3 bbColor = getBlackbodyColorLUT(temp, dopplerRedshift);
     
     color += bbColor * alpha * abs(noise);
 }
@@ -310,13 +317,16 @@ vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
                 currentStepSize *= min(1.0, distanceToBH / r_s);
                 
                 if (u_gravitationalLensingEnabled == 1) {
-                    rayDirection += calculateAcceleration(dot(angMomentum, angMomentum), relativePos) * u_blackHoleMasses[j] * currentStepSize;
+                    float angMomSqrd = dot(angMomentum, angMomentum);                    
+                    vec3 acceleration = calculateAccelerationLUT(angMomSqrd, relativePos);
+                    
+                    rayDirection += acceleration * u_blackHoleMasses[j] * currentStepSize;
                     rayDirection = normalize(rayDirection);
                 }
 
                 // Add accretion disk color for current position (relative to this black hole)
                 if (u_accretionDiskEnabled == 1) {
-                    adiskColor(relativePos, color, alpha, r_s, rayOrigin);
+                    adiskColor(relativePos, color, alpha, r_s, rayOrigin, u_blackHoleMasses[j]);
                 }
                 
                 // Check for event horizon collision

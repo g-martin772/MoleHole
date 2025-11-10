@@ -55,6 +55,9 @@ if (WIN32)
     file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/physx/physx/source/compiler/cmake/windows/CMakeLists.txt" "${PHYSX_CMAKE}")
 endif()
 
+# Disable strict warnings for PhysX to prevent build failures on newer compilers
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=mismatched-new-delete -Wno-error=restrict -Wno-error=class-memaccess")
+
 add_subdirectory(dependencies/glfw)
 add_subdirectory(dependencies/glad/cmake)
 add_subdirectory(dependencies/glm)

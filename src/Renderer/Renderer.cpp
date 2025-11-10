@@ -705,9 +705,18 @@ void Renderer::RenderMeshes(Scene* scene) {
     }
 }
 
-void Renderer::RenderSpheres(Scene* scene) {
+void Renderer::RenderSpheres(Scene * scene) {
     if (!scene || !camera) return;
     if (scene->spheres.empty()) return;
+    
+    // Bind HR diagram and blackbody LUTs once before rendering all spheres
+    if (blackHoleRenderer) {
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, blackHoleRenderer->GetBlackbodyLUT());
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, blackHoleRenderer->GetHRDiagramLUT());
+    }
+    
     for (const auto& sphereObj : scene->spheres) {
         glm::mat4 model = glm::translate(glm::mat4(1.0f), sphereObj.position);
         model = glm::scale(model, glm::vec3(sphereObj.radius));
@@ -715,6 +724,24 @@ void Renderer::RenderSpheres(Scene* scene) {
         sphereShader->SetMat4("uModel", model);
         sphereShader->SetMat4("uVP", camera->GetViewProjectionMatrix());
         sphereShader->SetVec3("uColor", sphereObj.color);
+        
+        sphereShader->SetFloat("uMass", sphereObj.massKg);
+        
+        // Bind LUT textures
+        if (blackHoleRenderer) {
+            sphereShader->SetInt("u_blackbodyLUT", 2);
+            sphereShader->SetInt("u_hrDiagramLUT", 3);
+            sphereShader->SetInt("u_useHRDiagramLUT", 1);
+            
+            // Set LUT parameters (must match the generator constants)
+            sphereShader->SetFloat("u_lutTempMin", 1000.0f);
+            sphereShader->SetFloat("u_lutTempMax", 40000.0f);
+            sphereShader->SetFloat("u_lutRedshiftMin", 0.1f);
+            sphereShader->SetFloat("u_lutRedshiftMax", 3.0f);
+        } else {
+            sphereShader->SetInt("u_useHRDiagramLUT", 0);
+        }
+        
         glBindVertexArray(m_SphereVAO);
         glDrawElements(GL_TRIANGLES, m_SphereIndexCount, GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
