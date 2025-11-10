@@ -5,14 +5,18 @@
 
 #include "Application/Application.h"
 #include "BlackbodyLUTGenerator.h"
+#include "AccelerationLUTGenerator.h"
+#include "HRDiagramLUTGenerator.h"
 
 BlackHoleRenderer::BlackHoleRenderer()
-    : m_computeTexture(0), m_blackbodyLUT(0), m_quadVAO(0), m_quadVBO(0), m_width(800), m_height(600) {
+    : m_computeTexture(0), m_blackbodyLUT(0), m_accelerationLUT(0), m_hrDiagramLUT(0), m_quadVAO(0), m_quadVBO(0), m_width(800), m_height(600) {
 }
 
 BlackHoleRenderer::~BlackHoleRenderer() {
     if (m_computeTexture) glDeleteTextures(1, &m_computeTexture);
     if (m_blackbodyLUT) glDeleteTextures(1, &m_blackbodyLUT);
+    if (m_accelerationLUT) glDeleteTextures(1, &m_accelerationLUT);
+    if (m_hrDiagramLUT) glDeleteTextures(1, &m_hrDiagramLUT);
     if (m_quadVAO) glDeleteVertexArrays(1, &m_quadVAO);
     if (m_quadVBO) glDeleteBuffers(1, &m_quadVBO);
 }
@@ -25,29 +29,22 @@ void BlackHoleRenderer::Init(int width, int height) {
     m_displayShader = std::make_unique<Shader>("../shaders/blackhole_display.vert", "../shaders/blackhole_display.frag");
 
     m_blackbodyLUTGenerator = std::make_unique<MoleHole::BlackbodyLUTGenerator>();
+    m_accelerationLUTGenerator = std::make_unique<MoleHole::AccelerationLUTGenerator>();
+    m_hrDiagramLUTGenerator = std::make_unique<MoleHole::HRDiagramLUTGenerator>();
     
     CreateComputeTexture();
     CreateFullscreenQuad();
     LoadSkybox();
     GenerateBlackbodyLUT();
+    GenerateAccelerationLUT();
+    GenerateHRDiagramLUT();
 
     spdlog::info("BlackHoleRenderer initialized with {}x{} resolution", width, height);
 }
 
 void BlackHoleRenderer::LoadSkybox() {
-    const std::string carinaPath = "../assets/space.hdr";
     const std::string defaultPath = "../assets/space.hdr";
-
-    // Try to load Carina nebula HDR first, fall back to default if missing
-    m_skyboxTexture = std::unique_ptr<Image>(Image::LoadHDR(carinaPath));
-    if (!m_skyboxTexture) {
-        spdlog::warn("Failed to load '{}', falling back to '{}'", carinaPath, defaultPath);
-        m_skyboxTexture = std::unique_ptr<Image>(Image::LoadHDR(defaultPath));
-    }
-
-    if (!m_skyboxTexture) {
-        spdlog::error("Failed to load skybox texture (tried '{}' and '{}')", carinaPath, defaultPath);
-    }
+    m_skyboxTexture = std::unique_ptr<Image>(Image::LoadHDR(defaultPath));
 }
 
 void BlackHoleRenderer::GenerateBlackbodyLUT() {
@@ -77,6 +74,64 @@ void BlackHoleRenderer::GenerateBlackbodyLUT() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     
     spdlog::info("Blackbody LUT generated successfully");
+}
+
+void BlackHoleRenderer::GenerateAccelerationLUT() {
+    using namespace MoleHole;
+    
+    spdlog::info("Generating acceleration LUT ({}x{})...", 
+                 AccelerationLUTGenerator::LUT_WIDTH, 
+                 AccelerationLUTGenerator::LUT_HEIGHT);
+    
+    // Generate the LUT data
+    auto lutData = AccelerationLUTGenerator::generateLUT();
+    
+    // Create and upload the OpenGL texture
+    if (m_accelerationLUT) {
+        glDeleteTextures(1, &m_accelerationLUT);
+    }
+    
+    glGenTextures(1, &m_accelerationLUT);
+    glBindTexture(GL_TEXTURE_2D, m_accelerationLUT);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 
+                 AccelerationLUTGenerator::LUT_WIDTH, 
+                 AccelerationLUTGenerator::LUT_HEIGHT, 
+                 0, GL_RED, GL_FLOAT, lutData.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    spdlog::info("Acceleration LUT generated successfully");
+}
+
+void BlackHoleRenderer::GenerateHRDiagramLUT() {
+    using namespace MoleHole;
+    
+    spdlog::info("Generating HR diagram LUT ({} samples)...", 
+                 HRDiagramLUTGenerator::LUT_SIZE);
+    
+    // Generate the LUT data
+    auto lutData = HRDiagramLUTGenerator::generateLUT();
+    
+    // Create and upload the OpenGL texture (1D texture for mass lookup)
+    if (m_hrDiagramLUT) {
+        glDeleteTextures(1, &m_hrDiagramLUT);
+    }
+    
+    glGenTextures(1, &m_hrDiagramLUT);
+    glBindTexture(GL_TEXTURE_2D, m_hrDiagramLUT);
+    // Use 2D texture with height=1 for compatibility
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, 
+                 HRDiagramLUTGenerator::LUT_SIZE, 
+                 1, 
+                 0, GL_RGB, GL_FLOAT, lutData.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    spdlog::info("HR diagram LUT generated successfully");
 }
 
 void BlackHoleRenderer::CreateComputeTexture() {
@@ -146,6 +201,22 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const C
         m_computeShader->SetFloat("u_lutRedshiftMin", 0.1f);
         m_computeShader->SetFloat("u_lutRedshiftMax", 3.0f);
         m_computeShader->SetInt("u_useBlackbodyLUT", 1);
+    }
+
+    // Bind acceleration LUT to unit 3
+    if (m_accelerationLUT) {
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, m_accelerationLUT);
+        m_computeShader->SetInt("u_accelerationLUT", 3);
+        m_computeShader->SetInt("u_useAccelerationLUT", 1);
+    }
+
+    // Bind HR diagram LUT to unit 4
+    if (m_hrDiagramLUT) {
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, m_hrDiagramLUT);
+        m_computeShader->SetInt("u_hrDiagramLUT", 4);
+        m_computeShader->SetInt("u_useHRDiagramLUT", 1);
     }
 
     auto& config = Application::State();

@@ -25,7 +25,7 @@ void main() {
     float displacement = 0.0f;
     for (int i = 0; i < u_numBlackHoles; ++i) {
         vec3 bh = u_blackHolePositions[i];
-        float r = length(p.xz - bh.xz);        
+        float r = length(p.xz - bh.xz); 
         displacement += 200.0f * u_blackHoleMasses[i] / r;
     }
     p.y -= displacement;
