@@ -5,50 +5,45 @@
 namespace MoleHole {
 
 BlackbodyLUTGenerator::RGB BlackbodyLUTGenerator::convertToRGB(float cX, float cY, float cZ, float normalized_cY) {
-    float denom = cX + cY + cZ;
-    float x = denom > 0.0f ? cX / denom : 0.0f;
-    float y = denom > 0.0f ? cY / denom : 0.0f;
-    float z = 1.0f - x - y;
+    // Standard XYZ to sRGB transformation matrix (D65 illuminant)
+    // This is the correct matrix for converting CIE XYZ to sRGB
+    const float xyz_to_srgb[3][3] = {
+        { 3.2406f, -1.5372f, -0.4986f},
+        {-0.9689f,  1.8758f,  0.0415f},
+        { 0.0557f, -0.2040f,  1.0570f}
+    };
+    
+    float R = xyz_to_srgb[0][0] * cX + xyz_to_srgb[0][1] * cY + xyz_to_srgb[0][2] * cZ;
+    float G = xyz_to_srgb[1][0] * cX + xyz_to_srgb[1][1] * cY + xyz_to_srgb[1][2] * cZ;
+    float B = xyz_to_srgb[2][0] * cX + xyz_to_srgb[2][1] * cY + xyz_to_srgb[2][2] * cZ;
 
-    float X = x / std::max(y, 1e-6f);
-    float Y = 1.0f;
-    float Z = z / std::max(y, 1e-6f);
-
-    // Apply Rec.2020 transform
-    float R = rec2020[0][0] * X + rec2020[0][1] * Y + rec2020[0][2] * Z;
-    float G = rec2020[1][0] * X + rec2020[1][1] * Y + rec2020[1][2] * Z;
-    float B = rec2020[2][0] * X + rec2020[2][1] * Y + rec2020[2][2] * Z;
-
-    // Clamp negatives
+    // Clamp negatives (out of gamut colors)
     R = std::max(R, 0.0f);
     G = std::max(G, 0.0f);
     B = std::max(B, 0.0f);
 
-    // Normalize to prevent overflow
-    float maxVal = std::max({R, G, B});
-    if (maxVal > 1.0f) {
-        float invMaxVal = 1.0f / maxVal;
-        R *= invMaxVal;
-        G *= invMaxVal;
-        B *= invMaxVal;
-    }
+    // Scale by normalized brightness
+    R *= normalized_cY;
+    G *= normalized_cY;
+    B *= normalized_cY;
 
-    return {R * normalized_cY, G * normalized_cY, B * normalized_cY};
+    return {R, G, B};
 }
 
 BlackbodyLUTGenerator::RGB BlackbodyLUTGenerator::getBlackbodyColor(float temperature, float redshiftFactor) {
     float cX = 0.0f;
     float cY = 0.0f;
     float cZ = 0.0f;
-    float wavelength = 380.0f;
+    
     float adjustedTemperature = std::max(1.0f, temperature) / std::max(1e-6f, redshiftFactor);
 
-    const int integrationNum = 80;
+    // Integrate over visible spectrum (380nm to 780nm in 5nm steps)
+    const int integrationNum = 81; // (780-380)/5 + 1 = 81 samples
     for (int i = 0; i < integrationNum; i++) {
-        wavelength += 5.0f;
-        float lambda = wavelength * 1e-9f;
+        float wavelength = 380.0f + i * 5.0f; // Start at 380nm, increment by 5nm
+        float lambda = wavelength * 1e-9f; // Convert to meters
         
-        // Planck's law
+        // Planck's law for blackbody radiation
         float exponent = (PlanckConstant * LightSpeed) / (lambda * BoltzmannConstant * adjustedTemperature);
         
         // Prevent overflow for very large exponents
@@ -56,17 +51,34 @@ BlackbodyLUTGenerator::RGB BlackbodyLUTGenerator::getBlackbodyColor(float temper
             continue; // Negligible contribution
         }
         
+        // Spectral radiance from Planck's law
         float intensity = ((2.0f * PlanckConstant * std::pow(LightSpeed, 2.0f)) / std::pow(lambda, 5.0f)) /
                          (std::exp(exponent) - 1.0f);
         
-        cX += intensity * matchingFunctionsX[i] * 5.0f;
-        cY += intensity * matchingFunctionsY[i] * 5.0f;
-        cZ += intensity * matchingFunctionsZ[i] * 5.0f;
+        // Integrate with CIE color matching functions
+        cX += intensity * matchingFunctionsX[i];
+        cY += intensity * matchingFunctionsY[i];
+        cZ += intensity * matchingFunctionsZ[i];
     }
 
-    // Guard cY and normalize
-    cY = std::max(cY, 1e-12f);
-    float log_cY = std::log(cY);
+    // Check if we have any light
+    if (cY < 1e-12f) {
+        return {0.0f, 0.0f, 0.0f};
+    }
+    
+    // Normalize XYZ values by Y (luminance) to get standard tristimulus values
+    // This preserves the color while normalizing brightness
+    float maxXYZ = std::max({cX, cY, cZ});
+    float scale = 0.0f;
+    if (maxXYZ > 0.0f) {
+        scale = 1.0f / maxXYZ;
+        cX *= scale;
+        cY *= scale;
+        cZ *= scale;
+    }
+    
+    // Calculate brightness factor from original Y value
+    float log_cY = std::log(cY / scale); // Use pre-normalized Y
     float normalized_cY = std::clamp((log_cY - LogMin_cY) / (LogMax_cY - LogMin_cY), 0.0f, 1.0f);
 
     return convertToRGB(cX, cY, cZ, normalized_cY);
@@ -100,4 +112,3 @@ std::vector<float> BlackbodyLUTGenerator::generateLUT() {
 }
 
 } // namespace MoleHole
-
