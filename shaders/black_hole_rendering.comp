@@ -251,7 +251,7 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
     
     float density = max(0.0, 1.0 - length(pos.xyz / vec3(outerRadius, u_accDiskHeight, outerRadius)));
     
-    if (density < EPSILON) return;
+    if (density < EPSILON) return;  
     
     vec3 sphericalCoord = toSpherical(pos);
 
