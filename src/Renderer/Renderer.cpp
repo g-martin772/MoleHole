@@ -72,8 +72,6 @@ void Renderer::Init() {
 
     blackHoleRenderer = std::make_unique<BlackHoleRenderer>();
     blackHoleRenderer->Init(last_img_width, last_img_height);
-    visualRenderer = std::make_unique<VisualRenderer>();
-    visualRenderer->Init(last_img_width, last_img_height);
 
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
@@ -139,9 +137,6 @@ void Renderer::RenderScene(Scene *scene) {
         case ViewportMode::Simulation3D:
             title = "Viewport - 3D Simulation";
             break;
-        case ViewportMode::SimulationVisual:
-            title = "Viewport - Visual Simulation";
-            break;
         default:
             title = "Viewport";
             break;
@@ -169,9 +164,6 @@ void Renderer::RenderScene(Scene *scene) {
         }
         if (blackHoleRenderer) {
             blackHoleRenderer->Resize(img_width, img_height);
-        }
-        if (visualRenderer) {
-            visualRenderer->Resize(img_width, img_height);
         }
     }
 
@@ -222,9 +214,6 @@ void Renderer::RenderScene(Scene *scene) {
             break;
         case ViewportMode::Simulation3D:
             Render3DSimulation(scene);
-            break;
-        case ViewportMode::SimulationVisual:
-            RenderVisualSimulation(scene);
             break;
     }
 
@@ -475,14 +464,6 @@ void Renderer::Render3DSimulation(Scene *scene) {
     glDisable(GL_DEPTH_TEST);
 }
 
-void Renderer::RenderVisualSimulation(Scene *scene) {
-
-    if (!scene || !visualRenderer) return;
-
-    auto currentTime = static_cast<float>(glfwGetTime());
-    visualRenderer->Render(scene->blackHoles, *camera, currentTime);
-}
-
 void Renderer::UpdateCamera(float deltaTime) {
     if (ImGuizmo::IsUsing()) {
         return;
@@ -650,9 +631,6 @@ void Renderer::RenderToFramebuffer(unsigned int fbo, int width, int height, Scen
     if (blackHoleRenderer) {
         blackHoleRenderer->Resize(width, height);
     }
-    if (visualRenderer) {
-        visualRenderer->Resize(width, height);
-    }
 
     switch (selectedViewport) {
         case ViewportMode::Demo1:
@@ -664,18 +642,12 @@ void Renderer::RenderToFramebuffer(unsigned int fbo, int width, int height, Scen
         case ViewportMode::Simulation3D:
             Render3DSimulation(scene);
             break;
-        case ViewportMode::SimulationVisual:
-            RenderVisualSimulation(scene);
-            break;
     }
     
     glFlush();
 
     if (blackHoleRenderer) {
         blackHoleRenderer->Resize(oldViewport[2], oldViewport[3]);
-    }
-    if (visualRenderer) {
-        visualRenderer->Resize(oldViewport[2], oldViewport[3]);
     }
 
     camera.release();
