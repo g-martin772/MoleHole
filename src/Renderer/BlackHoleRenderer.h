@@ -16,7 +16,7 @@ public:
     ~BlackHoleRenderer();
 
     void Init(int width, int height);
-    void Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time);
+    void Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const Camera& camera, float time);
     void Resize(int width, int height);
     void RenderToScreen();
 
@@ -36,7 +36,7 @@ private:
     void GenerateBlackbodyLUT();
     void GenerateAccelerationLUT();
     void GenerateHRDiagramLUT();
-    void UpdateUniforms(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time);
+    void UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const Camera& camera, float time);
 
     std::unique_ptr<Shader> m_computeShader;
     std::unique_ptr<Shader> m_displayShader;

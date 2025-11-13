@@ -19,6 +19,15 @@ uniform int u_numBlackHoles;
 uniform vec3 u_blackHolePositions[8];
 uniform float u_blackHoleMasses[8];
 
+// spheres
+const int MAX_SPHERES = 16;
+uniform int u_numSpheres;
+uniform vec3 u_spherePositions[MAX_SPHERES];
+uniform float u_sphereRadii[MAX_SPHERES];
+uniform vec4 u_sphereColors[MAX_SPHERES];
+uniform float u_sphereMasses[MAX_SPHERES]; // In solar masses for HR diagram
+uniform int u_renderSpheres = 1;
+
 // debug
 uniform int u_debugMode = 0;
 
@@ -241,6 +250,69 @@ float snoise(vec3 v) {
     m = m * m;
     return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
+
+// Ray-sphere intersection
+// Returns true if intersection found, outputs distance t
+bool intersectSphere(vec3 rayOrigin, vec3 rayDir, vec3 sphereCenter, float radius, out float t) {
+    vec3 oc = rayOrigin - sphereCenter;
+    float b = dot(oc, rayDir);
+    float c = dot(oc, oc) - radius * radius;
+    float discriminant = b * b - c;
+    
+    if (discriminant < 0.0) return false;
+    
+    float sqrtD = sqrt(discriminant);
+    float t0 = -b - sqrtD;
+    float t1 = -b + sqrtD;
+    
+    // Return nearest positive intersection
+    if (t0 > EPSILON) {
+        t = t0;
+        return true;
+    }
+    if (t1 > EPSILON) {
+        t = t1;
+        return true;
+    }
+    
+    return false;
+}
+
+// Render a sphere with lighting and HR diagram color
+vec3 renderSphere(vec3 hitPoint, vec3 rayDir, int sphereIndex, vec3 lightDir) {
+    vec3 sphereCenter = u_spherePositions[sphereIndex];
+    vec3 normal = normalize(hitPoint - sphereCenter);
+    
+    // Get base color from HR diagram if mass is valid
+    vec3 baseColor = u_sphereColors[sphereIndex].rgb;
+    float mass = u_sphereMasses[sphereIndex];
+    
+    if (u_useHRDiagramLUT == 1 && mass > 0.0) {
+        float temp = getTemperatureFromMass(mass);
+        if (temp > 0.0) {
+            // Map temperature to [0,1] range for LUT lookup
+            float tempRange = u_lutTempMax - u_lutTempMin;
+            float tempNorm = (temp - u_lutTempMin) / tempRange;
+            tempNorm = clamp(tempNorm, 0.0, 1.0);
+            
+            // Use redshift = 1.0 (no redshift) for static spheres
+            float redshiftNorm = (1.0 - u_lutRedshiftMin) / (u_lutRedshiftMax - u_lutRedshiftMin);
+            redshiftNorm = clamp(redshiftNorm, 0.0, 1.0);
+            
+            // Sample the blackbody LUT
+            baseColor = texture(u_blackbodyLUT, vec2(tempNorm, redshiftNorm)).rgb;
+        }
+    }
+    
+    // Simple diffuse + ambient lighting
+    float diffuse = max(dot(normal, lightDir), 0.0);
+    float ambient = 0.3;
+    
+    vec3 color = baseColor * (ambient + diffuse * 0.7);
+    
+    return color;
+}
+
 void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin, float blackHoleMass) {    
     
     float iscoRadius = 2.5f * eventHorizonRadius;
@@ -341,6 +413,34 @@ vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
             }
                     
             rayOrigin += rayDirection * currentStepSize;
+        }
+
+        // Check for sphere intersections AFTER ray marching
+        // This is more efficient than checking every step
+        if (u_renderSpheres == 1 && u_numSpheres > 0 && !hitEventHorizon) {
+            float closestT = 1e10;
+            int closestSphere = -1;
+
+            // Find closest sphere intersection
+            for (int i = 0; i < u_numSpheres; i++) {
+                float t;
+                if (intersectSphere(rayOrigin, rayDirection, u_spherePositions[i], u_sphereRadii[i], t)) {
+                    if (t < closestT) {
+                        closestT = t;
+                        closestSphere = i;
+                    }
+                }
+            }
+
+            // If we hit a sphere, render it and return early
+            if (closestSphere >= 0) {
+                vec3 hitPoint = rayOrigin + rayDirection * closestT;
+
+                // Simple directional light (can be made into a uniform later)
+                vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+
+                color = renderSphere(hitPoint, rayDirection, closestSphere, lightDir);
+            }
         }
     }
     

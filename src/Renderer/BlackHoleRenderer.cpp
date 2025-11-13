@@ -213,8 +213,8 @@ void BlackHoleRenderer::CreateFullscreenQuad() {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
 }
 
-void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time) {
-    UpdateUniforms(blackHoles, camera, time);
+void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const Camera& camera, float time) {
+    UpdateUniforms(blackHoles, spheres, camera, time);
 
     m_computeShader->Bind();
 
@@ -332,7 +332,7 @@ void BlackHoleRenderer::ApplyBloom() {
     glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
 }
 
-void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time) {
+void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const Camera& camera, float time) {
     m_computeShader->Bind();
 
     auto& config = Application::State();
@@ -362,6 +362,7 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     m_computeShader->SetFloat("u_accDiskTemp", config.GetProperty<float>("accDiskTemp", 2000.0f));
     m_computeShader->SetInt("u_gravitationalRedshiftEnabled", config.GetProperty<int>("gravitationalRedshiftEnabled", 1));
 
+    // Black holes
     int numBlackHoles = std::min(static_cast<int>(blackHoles.size()), 8);
     m_computeShader->SetInt("u_numBlackHoles", numBlackHoles);
 
@@ -376,6 +377,30 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
 
         m_computeShader->SetVec3(posUniform, bh.position);
         m_computeShader->SetFloat(massUniform, normalizedMass);
+    }
+    
+    // Spheres
+    int renderSpheres = config.GetProperty<int>("renderSpheresInRayMarching", 1);
+    m_computeShader->SetInt("u_renderSpheres", renderSpheres);
+    
+    int numSpheres = std::min(static_cast<int>(spheres.size()), 16); // MAX_SPHERES = 16
+    m_computeShader->SetInt("u_numSpheres", numSpheres);
+    
+    for (int i = 0; i < numSpheres; i++) {
+        const Sphere& sphere = spheres[i];
+        
+        std::string posUniform = "u_spherePositions[" + std::to_string(i) + "]";
+        std::string radiusUniform = "u_sphereRadii[" + std::to_string(i) + "]";
+        std::string colorUniform = "u_sphereColors[" + std::to_string(i) + "]";
+        std::string massUniform = "u_sphereMasses[" + std::to_string(i) + "]";
+        
+        m_computeShader->SetVec3(posUniform, sphere.position);
+        m_computeShader->SetFloat(radiusUniform, sphere.radius);
+        m_computeShader->SetVec4(colorUniform, sphere.color);
+        
+        // Convert mass from kg to solar masses (1 solar mass = 1.989e30 kg)
+        float massInSolarMasses = sphere.massKg / 1.989e30f;
+        m_computeShader->SetFloat(massUniform, massInSolarMasses);
     }
 
     m_computeShader->Unbind();
@@ -398,7 +423,7 @@ void BlackHoleRenderer::RenderToScreen() {
     // Set bloom parameters
     int bloomEnabled = config.GetProperty<int>("bloomEnabled", 1);
     float bloomIntensity = config.GetProperty<float>("bloomIntensity", 1.0f);
-    int bloomDebug = config.GetProperty<int>("bloomDebug", 2);
+    int bloomDebug = config.GetProperty<int>("bloomDebug", 0);
     m_displayShader->SetInt("u_bloomEnabled", bloomEnabled);
     m_displayShader->SetFloat("u_bloomIntensity", bloomIntensity);
     m_displayShader->SetInt("u_bloomDebug", bloomDebug);

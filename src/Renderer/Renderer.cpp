@@ -433,7 +433,9 @@ void Renderer::Render2DRays(Scene *scene) {
     for (const auto &bh: scene->blackHoles) {
         DrawCircle(glm::vec2(bh.position.x, bh.position.y), 0.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
     }
-    blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime);
+    // 2D rays don't use spheres, pass empty vector
+    std::vector<Sphere> emptySpheres;
+    blackHoleRenderer->Render(scene->blackHoles, emptySpheres, *camera, currentTime);
 }
 
 void Renderer::Render3DSimulation(Scene *scene) {
@@ -448,7 +450,7 @@ void Renderer::Render3DSimulation(Scene *scene) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    blackHoleRenderer->Render(scene->blackHoles, *camera, currentTime);
+    blackHoleRenderer->Render(scene->blackHoles, scene->spheres, *camera, currentTime);
     blackHoleRenderer->RenderToScreen();
 
     glDisable(GL_BLEND);
@@ -459,7 +461,7 @@ void Renderer::Render3DSimulation(Scene *scene) {
     }
 
     RenderMeshes(scene);
-    RenderSpheres(scene);
+    //RenderSpheres(scene);
 
     glDisable(GL_DEPTH_TEST);
 }
