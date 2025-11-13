@@ -9,11 +9,16 @@
 #include "HRDiagramLUTGenerator.h"
 
 BlackHoleRenderer::BlackHoleRenderer()
-    : m_computeTexture(0), m_blackbodyLUT(0), m_accelerationLUT(0), m_hrDiagramLUT(0), m_quadVAO(0), m_quadVBO(0), m_width(800), m_height(600) {
+    : m_computeTexture(0), m_bloomBrightTexture(0), m_bloomBlurTexture{0, 0}, 
+      m_bloomFinalTextureIndex(0),
+      m_blackbodyLUT(0), m_accelerationLUT(0), m_hrDiagramLUT(0), 
+      m_quadVAO(0), m_quadVBO(0), m_width(800), m_height(600) {
 }
 
 BlackHoleRenderer::~BlackHoleRenderer() {
     if (m_computeTexture) glDeleteTextures(1, &m_computeTexture);
+    if (m_bloomBrightTexture) glDeleteTextures(1, &m_bloomBrightTexture);
+    if (m_bloomBlurTexture[0]) glDeleteTextures(2, m_bloomBlurTexture);
     if (m_blackbodyLUT) glDeleteTextures(1, &m_blackbodyLUT);
     if (m_accelerationLUT) glDeleteTextures(1, &m_accelerationLUT);
     if (m_hrDiagramLUT) glDeleteTextures(1, &m_hrDiagramLUT);
@@ -27,12 +32,15 @@ void BlackHoleRenderer::Init(int width, int height) {
 
     m_computeShader = std::make_unique<Shader>("../shaders/black_hole_rendering.comp", true);
     m_displayShader = std::make_unique<Shader>("../shaders/blackhole_display.vert", "../shaders/blackhole_display.frag");
+    m_bloomExtractShader = std::make_unique<Shader>("../shaders/bloom_extract.comp", true);
+    m_bloomBlurShader = std::make_unique<Shader>("../shaders/bloom_blur.comp", true);
 
     m_blackbodyLUTGenerator = std::make_unique<MoleHole::BlackbodyLUTGenerator>();
     m_accelerationLUTGenerator = std::make_unique<MoleHole::AccelerationLUTGenerator>();
     m_hrDiagramLUTGenerator = std::make_unique<MoleHole::HRDiagramLUTGenerator>();
     
     CreateComputeTexture();
+    CreateBloomTextures();
     CreateFullscreenQuad();
     LoadSkybox();
     GenerateBlackbodyLUT();
@@ -150,6 +158,36 @@ void BlackHoleRenderer::CreateComputeTexture() {
     glBindImageTexture(0, m_computeTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 }
 
+void BlackHoleRenderer::CreateBloomTextures() {
+    // Delete existing textures if they exist
+    if (m_bloomBrightTexture) {
+        glDeleteTextures(1, &m_bloomBrightTexture);
+    }
+    if (m_bloomBlurTexture[0]) {
+        glDeleteTextures(2, m_bloomBlurTexture);
+    }
+
+    // Create bright extraction texture
+    glGenTextures(1, &m_bloomBrightTexture);
+    glBindTexture(GL_TEXTURE_2D, m_bloomBrightTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_width, m_height, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Create ping-pong textures for blur
+    for (int i = 0; i < 2; i++) {
+        glGenTextures(1, &m_bloomBlurTexture[i]);
+        glBindTexture(GL_TEXTURE_2D, m_bloomBlurTexture[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_width, m_height, 0, GL_RGBA, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+}
+
 void BlackHoleRenderer::CreateFullscreenQuad() {
     float quadVertices[] = {
         // positions   // texCoords
@@ -233,6 +271,65 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const C
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
 
     m_computeShader->Unbind();
+    
+    // Apply bloom effect
+    ApplyBloom();
+}
+
+void BlackHoleRenderer::ApplyBloom() {
+    auto& config = Application::State();
+    
+    // Check if bloom is enabled
+    int bloomEnabled = config.GetProperty<int>("bloomEnabled", 1);
+    if (!bloomEnabled) {
+        return;
+    }
+    
+    unsigned int groupsX = (m_width + 15) / 16;
+    unsigned int groupsY = (m_height + 15) / 16;
+    
+    // Step 1: Extract bright areas
+    m_bloomExtractShader->Bind();
+    
+    float bloomThreshold = config.GetProperty<float>("bloomThreshold", 1.0f);
+    m_bloomExtractShader->SetFloat("u_bloomThreshold", bloomThreshold);
+    
+    glBindImageTexture(0, m_computeTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(1, m_bloomBrightTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+    
+    glDispatchCompute(groupsX, groupsY, 1);
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    
+    m_bloomExtractShader->Unbind();
+    
+    // Step 2: Apply Gaussian blur (ping-pong between two textures)
+    m_bloomBlurShader->Bind();
+    
+    int blurPasses = config.GetProperty<int>("bloomBlurPasses", 4);
+    
+    bool horizontal = true;
+    unsigned int srcTexture = m_bloomBrightTexture;
+    
+    for (int i = 0; i < blurPasses * 2; i++) {
+        m_bloomBlurShader->SetInt("u_horizontal", horizontal ? 1 : 0);
+        
+        int dstIndex = horizontal ? 0 : 1;
+        
+        glBindImageTexture(0, srcTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+        glBindImageTexture(1, m_bloomBlurTexture[dstIndex], 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+        
+        glDispatchCompute(groupsX, groupsY, 1);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        
+        srcTexture = m_bloomBlurTexture[dstIndex];
+        m_bloomFinalTextureIndex = dstIndex;
+        horizontal = !horizontal;
+    }
+    
+    m_bloomBlurShader->Unbind();
+    
+    // Ensure bloom texture writes are visible to texture fetches in fragment shader
+    glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
 }
 
 void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time) {
@@ -285,11 +382,26 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
 }
 
 void BlackHoleRenderer::RenderToScreen() {
+    auto& config = Application::State();
+    
     m_displayShader->Bind();
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_computeTexture);
     m_displayShader->SetInt("u_raytracedImage", 0);
+
+    // Bind bloom texture
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_bloomBlurTexture[m_bloomFinalTextureIndex]); // Use final blur result
+    m_displayShader->SetInt("u_bloomImage", 1);
+    
+    // Set bloom parameters
+    int bloomEnabled = config.GetProperty<int>("bloomEnabled", 1);
+    float bloomIntensity = config.GetProperty<float>("bloomIntensity", 1.0f);
+    int bloomDebug = config.GetProperty<int>("bloomDebug", 2);
+    m_displayShader->SetInt("u_bloomEnabled", bloomEnabled);
+    m_displayShader->SetFloat("u_bloomIntensity", bloomIntensity);
+    m_displayShader->SetInt("u_bloomDebug", bloomDebug);
 
     glBindVertexArray(m_quadVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -302,4 +414,5 @@ void BlackHoleRenderer::Resize(int width, int height) {
     m_width = width;
     m_height = height;
     CreateComputeTexture();
+    CreateBloomTextures();
 }

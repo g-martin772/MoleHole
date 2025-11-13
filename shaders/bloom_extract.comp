@@ -1,0 +1,32 @@
+#version 460 core
+
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(rgba32f, binding = 0) readonly uniform image2D u_inputImage;
+layout(rgba32f, binding = 1) writeonly uniform image2D u_brightImage;
+
+uniform float u_bloomThreshold = 0.3;
+
+// Extract bright areas from the input image
+void main() {
+    ivec2 texCoords = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imageSize = imageSize(u_inputImage);
+    
+    if (texCoords.x >= imageSize.x || texCoords.y >= imageSize.y) {
+        return;
+    }
+    
+    vec4 color = imageLoad(u_inputImage, texCoords);
+    
+    // Calculate luminance using standard coefficients
+    float luminance = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+    
+    // Extract bright areas above threshold
+    vec3 brightColor = vec3(0.0);
+    if (luminance > u_bloomThreshold) {
+        // Keep the full bright color above threshold
+        brightColor = color.rgb;
+    }
+    
+    imageStore(u_brightImage, texCoords, vec4(brightColor, 1.0));
+}
+
