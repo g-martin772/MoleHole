@@ -374,9 +374,13 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
 
         std::string posUniform = "u_blackHolePositions[" + std::to_string(i) + "]";
         std::string massUniform = "u_blackHoleMasses[" + std::to_string(i) + "]";
+        std::string spinUniform = "u_blackHoleSpins[" + std::to_string(i) + "]";
+        std::string spinAxisUniform = "u_blackHoleSpinAxes[" + std::to_string(i) + "]";
 
         m_computeShader->SetVec3(posUniform, bh.position);
         m_computeShader->SetFloat(massUniform, normalizedMass);
+        m_computeShader->SetFloat(spinUniform, bh.spin);
+        m_computeShader->SetVec3(spinAxisUniform, glm::normalize(bh.spinAxis));
     }
     
     // Spheres

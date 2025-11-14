@@ -18,6 +18,8 @@ const float PI = 3.1415926535;
 uniform int u_numBlackHoles;
 uniform vec3 u_blackHolePositions[8];
 uniform float u_blackHoleMasses[8];
+uniform float u_blackHoleSpins[8]; // 0.0 to 1.0
+uniform vec3 u_blackHoleSpinAxes[8]; // normalized spin axis
 
 // spheres
 const int MAX_SPHERES = 16;
@@ -136,6 +138,15 @@ float calculateDopplerEffect(vec3 pos, vec3 viewDir)
 // calculation methods
 float calculateEventHorizonRadius(float mass) {
     return 2.0f * mass;
+}
+
+// Calculate specific angular momentum from black hole spin parameter
+// For a Kerr black hole: a = J/M where J is angular momentum and M is mass
+// spin parameter is dimensionless (0 to 1), a = spin * M
+vec3 calculateAngularMomentumFromSpin(float spin, vec3 spinAxis, float mass) {
+    // Specific angular momentum a = spin * M (in geometric units where G=c=1)
+    float a = spin * mass;
+    return a * normalize(spinAxis);
 }
 
 // Get temperature from black hole mass using HR diagram
@@ -382,14 +393,28 @@ vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
             for (int j = 0; j < u_numBlackHoles; j++) {
                 vec3 relativePos = rayOrigin - u_blackHolePositions[j];
                 float distanceToBH = length(relativePos);
-                vec3 angMomentum = cross(relativePos, rayDirection);
+                
+                // Calculate orbital angular momentum of the light ray
+                vec3 orbitalAngMomentum = cross(relativePos, rayDirection);
+                
+                // Get the black hole's intrinsic angular momentum from its spin
+                vec3 bhAngMomentum = calculateAngularMomentumFromSpin(
+                    u_blackHoleSpins[j], 
+                    u_blackHoleSpinAxes[j], 
+                    u_blackHoleMasses[j]
+                );
+                
+                // Total angular momentum: orbital + contribution from frame-dragging
+                // For simplicity, we use the orbital component's magnitude modified by spin
+                vec3 totalAngMomentum = orbitalAngMomentum + bhAngMomentum * 0.1; // Scale factor for frame-dragging effect
+                float angMomSqrd = dot(totalAngMomentum, totalAngMomentum);
+                
                 float r_s = calculateEventHorizonRadius(u_blackHoleMasses[j]);
                 
                 // Adaptive step sizing based on distance to event horizon
                 currentStepSize *= min(1.0, distanceToBH / r_s);
                 
                 if (u_gravitationalLensingEnabled == 1) {
-                    float angMomSqrd = dot(angMomentum, angMomentum);                    
                     vec3 acceleration = calculateAccelerationLUT(angMomSqrd, relativePos);
                     
                     rayDirection += acceleration * u_blackHoleMasses[j] * currentStepSize;

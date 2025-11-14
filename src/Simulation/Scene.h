@@ -31,6 +31,11 @@ struct BlackHole {
                spin == other.spin &&
                spinAxis == other.spinAxis;
     }
+
+    float GetEventHorizonRadius() const {
+        // Simplified Schwarzschild radius calculation (in arbitrary units)
+        return 2.0f * mass;
+    }
 };
 
 struct BlackHoleHash {
