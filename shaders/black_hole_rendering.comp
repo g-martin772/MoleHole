@@ -140,13 +140,9 @@ float calculateEventHorizonRadius(float mass) {
     return 2.0f * mass;
 }
 
-// Calculate specific angular momentum from black hole spin parameter
-// For a Kerr black hole: a = J/M where J is angular momentum and M is mass
-// spin parameter is dimensionless (0 to 1), a = spin * M
 vec3 calculateAngularMomentumFromSpin(float spin, vec3 spinAxis, float mass) {
-    // Specific angular momentum a = spin * M (in geometric units where G=c=1)
-    float a = spin * mass;
-    return a * normalize(spinAxis);
+    float h = spin * mass;
+    return h * normalize(spinAxis);
 }
 
 // Get temperature from black hole mass using HR diagram
