@@ -13,6 +13,7 @@ class Camera;
 struct BlackHole {
     float mass;
     glm::vec3 position;
+    glm::vec3 velocity;
     bool showAccretionDisk;
     float accretionDiskDensity;
     float accretionDiskSize;
@@ -24,6 +25,7 @@ struct BlackHole {
     bool operator==(const BlackHole& other) const {
         return mass == other.mass &&
                position == other.position &&
+               velocity == other.velocity &&
                showAccretionDisk == other.showAccretionDisk &&
                accretionDiskDensity == other.accretionDiskDensity &&
                accretionDiskSize == other.accretionDiskSize &&
@@ -48,9 +50,13 @@ struct BlackHoleHash {
         std::size_t h6 = std::hash<float>{}(bh.spinAxis.x);
         std::size_t h7 = std::hash<float>{}(bh.spinAxis.y);
         std::size_t h8 = std::hash<float>{}(bh.spinAxis.z);
+        std::size_t h9 = std::hash<float>{}(bh.velocity.x);
+        std::size_t h10 = std::hash<float>{}(bh.velocity.y);
+        std::size_t h11 = std::hash<float>{}(bh.velocity.z);
 
         return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h4 << 3) ^
-               (h5 << 4) ^ (h6 << 5) ^ (h7 << 6) ^ (h8 << 7);
+               (h5 << 4) ^ (h6 << 5) ^ (h7 << 6) ^ (h8 << 7) ^
+               (h9 << 8) ^ (h10 << 9) ^ (h11 << 10);
     }
 };
 

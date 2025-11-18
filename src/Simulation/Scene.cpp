@@ -21,6 +21,8 @@ void Scene::Serialize(const std::filesystem::path &path) {
         out << YAML::Key << "mass" << YAML::Value << bh.mass;
         out << YAML::Key << "position" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.position.x << bh.position.y
                 << bh.position.z << YAML::EndSeq;
+        out << YAML::Key << "velocity" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.velocity.x << bh.velocity.y
+                << bh.velocity.z << YAML::EndSeq;
         out << YAML::Key << "show_accretion_disk" << YAML::Value << bh.showAccretionDisk;
         out << YAML::Key << "accretion_disk_density" << YAML::Value << bh.accretionDiskDensity;
         out << YAML::Key << "accretion_disk_size" << YAML::Value << bh.accretionDiskSize;
@@ -98,6 +100,8 @@ void Scene::Deserialize(const std::filesystem::path &path, bool setCurrentPath) 
             bh.mass = node["mass"].as<float>();
             auto pos = node["position"];
             bh.position = glm::vec3(pos[0].as<float>(), pos[1].as<float>(), pos[2].as<float>());
+            auto vel = node["velocity"];
+            bh.velocity = glm::vec3(vel[0].as<float>(), vel[1].as<float>(), vel[2].as<float>());
             bh.showAccretionDisk = node["show_accretion_disk"].as<bool>();
             bh.accretionDiskDensity = node["accretion_disk_density"].as<float>();
             bh.accretionDiskSize = node["accretion_disk_size"].as<float>();
