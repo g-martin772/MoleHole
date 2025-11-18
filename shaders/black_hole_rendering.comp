@@ -11,7 +11,7 @@ uniform sampler2D u_hrDiagramLUT; // 1D LUT: mass -> temperature, luminosity, ra
 
 // constants
 const float EPSILON = 0.01;
-const float STEP_SIZE = 0.1;
+const float STEP_SIZE = 1.0;
 const float PI = 3.1415926535;
 
 // black holes
@@ -380,7 +380,7 @@ vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
     
     float stepSize = STEP_SIZE;
     
-    for (int i = 0; i < 1500; i++) {
+    for (int i = 0; i < 200; i++) {
         if (u_renderBlackHoles == 1) {
             
             // Reset step size to base value each iteration

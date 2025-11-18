@@ -53,7 +53,6 @@ vec3 getBlackbodyColorFromTemperature(float temperature) {
 }
 
 void main() {
-    float lighting = 0.5 + 0.5 * Normal.z;
     
     vec3 finalColor = uColor;
     
@@ -67,5 +66,5 @@ void main() {
         }
     }
     
-    FragColor = vec4(finalColor * lighting, 1.0);
+    FragColor = vec4(finalColor, 1.0);
 }
