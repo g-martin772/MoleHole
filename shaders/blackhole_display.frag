@@ -13,17 +13,13 @@ void main() {
     vec3 bloomColor = texture(u_bloomImage, TexCoord).rgb;
     
     if (u_bloomDebug == 1) {
-        // Show only bloom
         FragColor = vec4(bloomColor * u_bloomIntensity, 1.0);
     } else if (u_bloomDebug == 2) {
-        // Show bloom amplified for debugging
         FragColor = vec4(bloomColor * 10.0, 1.0);
     } else if (u_bloomEnabled == 1) {
-        // Normal mode with bloom
         color += bloomColor * u_bloomIntensity;
         FragColor = vec4(color, 1.0);
     } else {
-        // Bloom disabled
         FragColor = vec4(color, 1.0);
     }
 }
