@@ -140,6 +140,10 @@ float calculateEventHorizonRadius(float mass) {
     return 2.0f * mass;
 }
 
+float calculateInfluenceRadius(float r_s) {
+    return 5.0f * r_s;
+}
+
 vec3 calculateAngularMomentumFromSpin(float spin, vec3 spinAxis, float mass) {
     float h = spin * mass;
     return h * normalize(spinAxis);
@@ -322,8 +326,8 @@ vec3 renderSphere(vec3 hitPoint, vec3 rayDir, int sphereIndex, vec3 lightDir) {
 
 void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin, float blackHoleMass) {    
     
-    float iscoRadius = 2.5f * eventHorizonRadius;
-    float outerRadius = 8.0 * eventHorizonRadius;
+    float iscoRadius = 2.0f * eventHorizonRadius;
+    float outerRadius = 5.0f * eventHorizonRadius;
     float distanceFromCenter = length(pos);
 
     if (distanceFromCenter < iscoRadius) return;
@@ -406,6 +410,11 @@ vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
                 float angMomSqrd = dot(totalAngMomentum, totalAngMomentum);
                 
                 float r_s = calculateEventHorizonRadius(u_blackHoleMasses[j]);
+                float r_i = calculateInfluenceRadius(r_s);
+                
+                if (distanceToBH > r_i) {
+                    continue;
+                }
                 
                 // Adaptive step sizing based on distance to event horizon
                 currentStepSize *= min(1.0, distanceToBH / r_s);
@@ -416,7 +425,7 @@ vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
                     rayDirection += acceleration * u_blackHoleMasses[j] * currentStepSize;
                     rayDirection = normalize(rayDirection);
                 }
-
+                
                 // Add accretion disk color for current position (relative to this black hole)
                 if (u_accretionDiskEnabled == 1) {
                     adiskColor(relativePos, color, alpha, r_s, rayOrigin, u_blackHoleMasses[j]);
