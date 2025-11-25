@@ -46,11 +46,13 @@ void Physics::Init() {
         return;
     }
 
-    m_Cooking = PxCreateCooking(PX_PHYSICS_VERSION, *m_Foundation, PxCookingParams(PxTolerancesScale()));
-    if (!m_Cooking) {
-        spdlog::error("PxCreateCooking failed!");
-        return;
-    }
+    // Note: In PhysX 5.5, PxCooking is created through PxCreateCooking
+    // This function may have been refactored in 5.5
+    // m_Cooking = PxCreateCooking(PX_PHYSICS_VERSION, *m_Foundation, PxCookingParams(PxTolerancesScale()));
+    // if (!m_Cooking) {
+    //     spdlog::error("PxCreateCooking failed!");
+    //     return;
+    // }
 
     m_Dispatcher = PxDefaultCpuDispatcherCreate(2);
 
@@ -108,11 +110,6 @@ void Physics::Shutdown() {
     if (m_Dispatcher) {
         m_Dispatcher->release();
         m_Dispatcher = nullptr;
-    }
-
-    if (m_Cooking) {
-        m_Cooking->release();
-        m_Cooking = nullptr;
     }
 
     if (m_Physics) {
@@ -370,20 +367,16 @@ PxConvexMesh* Physics::LoadConvexMesh(const std::string& path) {
     convexDesc.flags = PxConvexFlag::eCOMPUTE_CONVEX | PxConvexFlag::eQUANTIZE_INPUT;
     convexDesc.vertexLimit = 255;
 
-    PxDefaultMemoryOutputStream writeBuffer;
     PxConvexMeshCookingResult::Enum result;
-    bool success = m_Cooking->cookConvexMesh(convexDesc, writeBuffer, &result);
+    PxConvexMesh* convexMesh = PxCreateConvexMesh(
+        PxCookingParams(m_Physics->getTolerancesScale()),
+        convexDesc,
+        *PxGetStandaloneInsertionCallback(),
+        &result
+    );
 
-    if (!success || result != PxConvexMeshCookingResult::eSUCCESS) {
+    if (!convexMesh || result != PxConvexMeshCookingResult::eSUCCESS) {
         spdlog::error("Failed to cook convex mesh for: {} (result: {})", path, static_cast<int>(result));
-        return nullptr;
-    }
-
-    PxDefaultMemoryInputData readBuffer(writeBuffer.getData(), writeBuffer.getSize());
-    PxConvexMesh* convexMesh = m_Physics->createConvexMesh(readBuffer);
-
-    if (!convexMesh) {
-        spdlog::error("Failed to create convex mesh for: {}", path);
         return nullptr;
     }
 

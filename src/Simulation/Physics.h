@@ -3,7 +3,10 @@
 #include <vector>
 #include <unordered_map>
 
+#ifndef _DEBUG
 #define _DEBUG
+#endif
+#include <version>
 #include <PxPhysicsAPI.h>
 
 using namespace physx;
@@ -58,7 +61,6 @@ private:
     PxScene* m_Scene = nullptr;
     PxMaterial* m_Material = nullptr;
     PxPvd* m_pvd = nullptr;
-    PxCooking* m_Cooking = nullptr;
     Renderer* m_Renderer = nullptr;
 
     std::vector<PhysicsBodyData> m_Bodies;
