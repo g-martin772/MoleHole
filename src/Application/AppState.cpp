@@ -163,6 +163,11 @@ YAML::Node AppState::SerializeToYaml() const {
     config["rendering"]["maxRaySteps"] = rendering.maxRaySteps;
     config["rendering"]["rayStepSize"] = rendering.rayStepSize;
     config["rendering"]["debugMode"] = static_cast<int>(rendering.debugMode);
+    config["rendering"]["physicsDebugEnabled"] = rendering.physicsDebugEnabled;
+    config["rendering"]["physicsDebugDepthTest"] = rendering.physicsDebugDepthTest;
+    config["rendering"]["physicsDebugScale"] = rendering.physicsDebugScale;
+    config["rendering"]["physicsDebugFlags"] = rendering.physicsDebugFlags;
+
 
     config["camera"]["position"] = camera.position;
     config["camera"]["front"] = camera.front;
@@ -206,6 +211,10 @@ void AppState::DeserializeFromYaml(const YAML::Node& config) {
         if (renderingNode["maxRaySteps"]) rendering.maxRaySteps = renderingNode["maxRaySteps"].as<int>();
         if (renderingNode["rayStepSize"]) rendering.rayStepSize = renderingNode["rayStepSize"].as<float>();
         if (renderingNode["debugMode"]) rendering.debugMode = static_cast<DebugMode>(renderingNode["debugMode"].as<int>());
+        if (renderingNode["physicsDebugEnabled"]) rendering.physicsDebugEnabled = renderingNode["physicsDebugEnabled"].as<bool>();
+        if (renderingNode["physicsDebugDepthTest"]) rendering.physicsDebugDepthTest = renderingNode["physicsDebugDepthTest"].as<bool>();
+        if (renderingNode["physicsDebugScale"]) rendering.physicsDebugScale = renderingNode["physicsDebugScale"].as<float>();
+        if (renderingNode["physicsDebugFlags"]) rendering.physicsDebugFlags = renderingNode["physicsDebugFlags"].as<uint32_t>();
     }
 
     if (config["camera"]) {
@@ -253,3 +262,4 @@ YAML::Node AppState::StateValueToYamlNode(const StateValue& value) {
         return node;
     }, value);
 }
+

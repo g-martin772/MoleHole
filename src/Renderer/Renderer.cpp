@@ -1,5 +1,6 @@
 #include <glad/gl.h>
 #include "Renderer.h"
+#include "PhysicsDebugRenderer.h"
 #include <GLFW/glfw3.h>
 #include "imgui.h"
 #include "ImGuizmo.h"
@@ -85,6 +86,10 @@ void Renderer::Init() {
 
     gravityGridRenderer = std::make_unique<GravityGridRenderer>();
     gravityGridRenderer->Init();
+
+    m_physicsDebugRenderer = std::make_unique<PhysicsDebugRenderer>();
+    m_physicsDebugRenderer->Init();
+
     InitSphereGeometry();
 }
 
@@ -458,6 +463,14 @@ void Renderer::Render3DSimulation(Scene *scene) {
 
     if (Application::State().rendering.debugMode == DebugMode::GravityGrid && gravityGridRenderer) {
         gravityGridRenderer->Render(scene->blackHoles, *camera, currentTime);
+    }
+
+    if (m_physicsDebugRenderer && m_physicsDebugRenderer->IsEnabled()) {
+        auto& simulation = Application::GetSimulation();
+        if (simulation.GetPhysics()) {
+            const PxRenderBuffer* renderBuffer = simulation.GetPhysics()->GetDebugRenderBuffer();
+            m_physicsDebugRenderer->Render(renderBuffer, camera.get());
+        }
     }
 
     RenderMeshes(scene);

@@ -52,6 +52,10 @@ public:
     void onTrigger(PxTriggerPair* pairs, PxU32 count) override {}
     void onAdvance(const PxRigidBody*const* bodyBuffer, const PxTransform* poseBuffer, const PxU32 count) override {}
 
+    const PxRenderBuffer* GetDebugRenderBuffer() const;
+    void SetVisualizationParameter(PxVisualizationParameter::Enum param, float value);
+    void SetVisualizationScale(float scale);
+
 private:
     PxDefaultAllocator m_Allocator;
     PxDefaultErrorCallback m_ErrorCallback;
@@ -61,6 +65,7 @@ private:
     PxScene* m_Scene = nullptr;
     PxMaterial* m_Material = nullptr;
     PxPvd* m_pvd = nullptr;
+    PxCooking* m_Cooking = nullptr;
     Renderer* m_Renderer = nullptr;
 
     std::vector<PhysicsBodyData> m_Bodies;

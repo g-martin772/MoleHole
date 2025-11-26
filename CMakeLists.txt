@@ -57,6 +57,7 @@ endif()
 
 # Disable strict warnings for PhysX to prevent build failures on newer compilers
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=mismatched-new-delete -Wno-error=restrict -Wno-error=class-memaccess")
+add_compile_options(-Wno-error=template-id-cdtor)
 
 add_subdirectory(dependencies/glfw)
 add_subdirectory(dependencies/glad/cmake)
@@ -80,6 +81,16 @@ add_executable(MoleHole ${SOURCES})
 
 set_property(TARGET MoleHole PROPERTY CXX_STANDARD 23)
 set_property(TARGET MoleHole PROPERTY CXX_STANDARD_REQUIRED ON)
+set_property(TARGET
+        PhysX
+        PhysXPvdSDK
+        PhysXCharacterKinematic
+        PhysXCommon
+        PhysXCooking
+        PhysXExtensions
+        PhysXTask
+        PhysXVehicle
+        PROPERTY CXX_STANDARD 11)
 
 # Define debug/release macros for PhysX compatibility
 target_compile_definitions(MoleHole PRIVATE 

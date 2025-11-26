@@ -3,6 +3,14 @@
 #include <spdlog/spdlog.h>
 #include <filesystem>
 #include "LinuxGtkInit.h"
+#include "Renderer/PhysicsDebugRenderer.h"
+
+#ifndef _DEBUG
+#define _DEBUG
+#endif
+#include <PxPhysicsAPI.h>
+
+using namespace physx;
 
 Application& Application::Instance() {
     static Application instance;
@@ -225,6 +233,37 @@ void Application::InitializeRenderer() {
 void Application::InitializeSimulation() {
     m_simulation.SetAnimationGraph(m_ui.GetAnimationGraph());
     m_simulation.GetPhysics()->SetRenderer(&m_renderer);
+
+    auto* physics = m_simulation.GetPhysics();
+    if (physics) {
+        physics->SetVisualizationScale(m_state.rendering.physicsDebugScale);
+
+        uint32_t flags = m_state.rendering.physicsDebugFlags;
+        physics->SetVisualizationParameter(PxVisualizationParameter::eWORLD_AXES, (flags & (1 << 0)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eBODY_AXES, (flags & (1 << 1)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eBODY_MASS_AXES, (flags & (1 << 2)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eBODY_LIN_VELOCITY, (flags & (1 << 3)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eBODY_ANG_VELOCITY, (flags & (1 << 4)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eCONTACT_POINT, (flags & (1 << 5)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eCONTACT_NORMAL, (flags & (1 << 6)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eCONTACT_ERROR, (flags & (1 << 7)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eCONTACT_FORCE, (flags & (1 << 8)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eACTOR_AXES, (flags & (1 << 9)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_AABBS, (flags & (1 << 10)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_SHAPES, (flags & (1 << 11)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_AXES, (flags & (1 << 12)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_COMPOUNDS, (flags & (1 << 13)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_FNORMALS, (flags & (1 << 14)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_EDGES, (flags & (1 << 15)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_STATIC, (flags & (1 << 16)) ? 1.0f : 0.0f);
+        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_DYNAMIC, (flags & (1 << 17)) ? 1.0f : 0.0f);
+    }
+
+    auto* physicsDebugRenderer = m_renderer.GetPhysicsDebugRenderer();
+    if (physicsDebugRenderer) {
+        physicsDebugRenderer->SetEnabled(m_state.rendering.physicsDebugEnabled);
+        physicsDebugRenderer->SetDepthTestEnabled(m_state.rendering.physicsDebugDepthTest);
+    }
 }
 
 void Application::UpdateWindowState() {

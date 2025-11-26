@@ -46,13 +46,11 @@ void Physics::Init() {
         return;
     }
 
-    // Note: In PhysX 5.5, PxCooking is created through PxCreateCooking
-    // This function may have been refactored in 5.5
-    // m_Cooking = PxCreateCooking(PX_PHYSICS_VERSION, *m_Foundation, PxCookingParams(PxTolerancesScale()));
-    // if (!m_Cooking) {
-    //     spdlog::error("PxCreateCooking failed!");
-    //     return;
-    // }
+    m_Cooking = PxCreateCooking(PX_PHYSICS_VERSION, *m_Foundation, PxCookingParams(PxTolerancesScale()));
+    if (!m_Cooking) {
+        spdlog::error("PxCreateCooking failed!");
+        return;
+    }
 
     m_Dispatcher = PxDefaultCpuDispatcherCreate(2);
 
@@ -68,7 +66,9 @@ void Physics::Init() {
         return;
     }
 
-    m_Material = m_Physics->createMaterial(0.5f, 0.5f, 0.6f); // static friction, dynamic friction, restitution
+    m_Material = m_Physics->createMaterial(0.5f, 0.5f, 0.6f);
+
+    m_Scene->setVisualizationParameter(PxVisualizationParameter::eSCALE, 1.0f);
 
     spdlog::info("PhysX initialized successfully");
 }
@@ -105,6 +105,11 @@ void Physics::Shutdown() {
     if (m_Material) {
         m_Material->release();
         m_Material = nullptr;
+    }
+
+    if (m_Cooking) {
+        m_Cooking->release();
+        m_Cooking = nullptr;
     }
 
     if (m_Dispatcher) {
@@ -260,6 +265,7 @@ void Physics::CreatePhysicsBody(PhysicsBodyData &data) {
     }
 
     shape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, true);
+    shape->setFlag(PxShapeFlag::eVISUALIZATION, true);
     shape->setSimulationFilterData(PxFilterData(1, 1, 0, 0));
 
     body->setLinearVelocity(PxVec3(data.initialVelocity.x, data.initialVelocity.y, data.initialVelocity.z));
@@ -267,6 +273,8 @@ void Physics::CreatePhysicsBody(PhysicsBodyData &data) {
     body->setLinearDamping(0.0f);
     body->setAngularDamping(0.0f);
     PxRigidBodyExt::setMassAndUpdateInertia(*body, data.mass);
+
+    body->setActorFlag(PxActorFlag::eVISUALIZATION, true);
 
     m_Scene->addActor(*body);
     data.actor = body;
@@ -364,19 +372,21 @@ PxConvexMesh* Physics::LoadConvexMesh(const std::string& path) {
     convexDesc.points.count = static_cast<PxU32>(pxVertices.size());
     convexDesc.points.stride = sizeof(PxVec3);
     convexDesc.points.data = pxVertices.data();
-    convexDesc.flags = PxConvexFlag::eCOMPUTE_CONVEX | PxConvexFlag::eQUANTIZE_INPUT;
-    convexDesc.vertexLimit = 255;
+    convexDesc.flags = PxConvexFlag::eCOMPUTE_CONVEX;
 
+    PxDefaultMemoryOutputStream buf;
     PxConvexMeshCookingResult::Enum result;
-    PxConvexMesh* convexMesh = PxCreateConvexMesh(
-        PxCookingParams(m_Physics->getTolerancesScale()),
-        convexDesc,
-        *PxGetStandaloneInsertionCallback(),
-        &result
-    );
 
-    if (!convexMesh || result != PxConvexMeshCookingResult::eSUCCESS) {
+    if (!m_Cooking->cookConvexMesh(convexDesc, buf, &result)) {
         spdlog::error("Failed to cook convex mesh for: {} (result: {})", path, static_cast<int>(result));
+        return nullptr;
+    }
+
+    PxDefaultMemoryInputData input(buf.getData(), buf.getSize());
+    PxConvexMesh* convexMesh = m_Physics->createConvexMesh(input);
+
+    if (!convexMesh) {
+        spdlog::error("Failed to create convex mesh from cooked data for: {}", path);
         return nullptr;
     }
 
@@ -406,10 +416,13 @@ void Physics::CreateBlackHoleBody(BlackHoleBodyData &data) {
     }
 
     shape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, true);
+    shape->setFlag(PxShapeFlag::eVISUALIZATION, true);
     shape->setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, false);
     shape->setSimulationFilterData(PxFilterData(2, 2, 0, 0));
 
     blackHoleActor->userData = reinterpret_cast<void*>(data.sceneIndex);
+
+    blackHoleActor->setActorFlag(PxActorFlag::eVISUALIZATION, true);
 
     m_Scene->addActor(*blackHoleActor);
     data.actor = blackHoleActor;
@@ -516,3 +529,23 @@ void Physics::ProcessDeletedBodies() {
         }
     }
 }
+
+const PxRenderBuffer* Physics::GetDebugRenderBuffer() const {
+    if (!m_Scene) {
+        return nullptr;
+    }
+    return &m_Scene->getRenderBuffer();
+}
+
+void Physics::SetVisualizationParameter(PxVisualizationParameter::Enum param, float value) {
+    if (m_Scene) {
+        m_Scene->setVisualizationParameter(param, value);
+    }
+}
+
+void Physics::SetVisualizationScale(float scale) {
+    if (m_Scene) {
+        m_Scene->setVisualizationParameter(PxVisualizationParameter::eSCALE, scale);
+    }
+}
+

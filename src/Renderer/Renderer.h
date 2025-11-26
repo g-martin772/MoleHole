@@ -13,6 +13,7 @@
 #include "Input.h"
 #include "GravityGridRenderer.h"
 
+class PhysicsDebugRenderer;
 struct GLFWwindow;
 
 class Renderer {
@@ -47,6 +48,7 @@ public:
     void SetSelectedViewport(ViewportMode mode) { selectedViewport = mode; }
 
     GravityGridRenderer* GetGravityGridRenderer() { return gravityGridRenderer.get(); }
+    PhysicsDebugRenderer* GetPhysicsDebugRenderer() { return m_physicsDebugRenderer.get(); }
 
     GLFWwindow* window = nullptr;
     int last_img_width = 800;
@@ -92,4 +94,5 @@ private:
     int m_SphereIndexCount = 0;
 
     std::unique_ptr<GravityGridRenderer> gravityGridRenderer;
+    std::unique_ptr<PhysicsDebugRenderer> m_physicsDebugRenderer;
 };

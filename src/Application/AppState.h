@@ -47,6 +47,11 @@ public:
         int maxRaySteps = 1000;
         float rayStepSize = 0.01f;
         DebugMode debugMode = DebugMode::Normal;
+
+        bool physicsDebugEnabled = false;
+        bool physicsDebugDepthTest = true;
+        float physicsDebugScale = 1.0f;
+        uint32_t physicsDebugFlags = 0;
     } rendering;
 
     struct CameraState {
