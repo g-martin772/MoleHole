@@ -61,6 +61,8 @@ private:
     void RenderMeshesSection(Scene* scene);
     void RenderSpheresSection(Scene *scene);
 
+    void Style();
+
     void RenderAnimationGraphWindow(Scene* scene);
 
     void HandleImageShortcuts(Scene *scene, bool takeViewportScreenshot, bool takeFullScreenshot,
