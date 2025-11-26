@@ -91,6 +91,8 @@ private:
 
     std::unique_ptr<AnimationGraph> m_AnimationGraph;
 
+    struct ImFont* m_iconFont = nullptr;
+
     bool m_showExportWindow = false;
     struct {
         int width = 1920;

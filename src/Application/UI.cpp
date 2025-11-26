@@ -1,5 +1,6 @@
 #include "UI.h"
 #include "Application.h"
+#include "IconsFontAwesome6.h"
 #include "imgui.h"
 #include "ImGuizmo.h"
 #include "spdlog/spdlog.h"
@@ -179,17 +180,32 @@ void UI::RenderMainUI(float fps, Scene* scene) {
 //
 // --------------------------------------------------------------------------------------------
 //
-// 
-//
+// Set custom font.
+// Set custom theme.
 
 void UI::Style() {
 
-    const ImGuiIO &io = ImGui::GetIO();
-    ImFont *customFont = io.Fonts->AddFontFromFileTTF("../font/DidotLTPro-Bold.ttf", 20.0f);
+    ImGuiIO &io = ImGui::GetIO();
+    ImFont *customFont = io.Fonts->AddFontFromFileTTF("../font/DidotLTPro-Bold.ttf", 16.0f);
     if (customFont) {
         spdlog::info("Custom font loaded successfully");
     } else {
         spdlog::warn("Failed to load custom font, using default font");
+    }
+    
+    // Load Font Awesome icon font
+    // Font Awesome 6 Free is licensed under SIL OFL 1.1 (https://scripts.sil.org/OFL)
+    static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+    ImFontConfig icons_config;
+    //icons_config.MergeMode = false;
+    //icons_config.PixelSnapH = true;
+    //icons_config.GlyphMinAdvanceX = 24.0f;
+    
+    m_iconFont = io.Fonts->AddFontFromFileTTF("../font/fa-solid-900.ttf", 24.0f, &icons_config, icons_ranges);
+    if (m_iconFont) {
+        spdlog::info("Font Awesome icon font loaded successfully");
+    } else {
+        spdlog::warn("Failed to load Font Awesome icon font");
     }
     
     
@@ -244,26 +260,26 @@ void UI::Style() {
 	style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(1.0f, 1.0f, 1.0f, 0.39215687f);
 	style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(1.0f, 1.0f, 1.0f, 0.47058824f);
 	style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.0f, 0.0f, 0.0f, 0.09803922f);
-	style.Colors[ImGuiCol_CheckMark] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-	style.Colors[ImGuiCol_SliderGrab] = ImVec4(1.0f, 1.0f, 1.0f, 0.39215687f);
+	style.Colors[ImGuiCol_CheckMark] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_SliderGrab] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
 	style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(1.0f, 1.0f, 1.0f, 0.3137255f);
-	style.Colors[ImGuiCol_Button] = ImVec4(1.0f, 1.0f, 1.0f, 0.09803922f);
+	style.Colors[ImGuiCol_Button] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
 	style.Colors[ImGuiCol_ButtonHovered] = ImVec4(1.0f, 1.0f, 1.0f, 0.15686275f);
 	style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.0f, 0.0f, 0.0f, 0.047058824f);
-	style.Colors[ImGuiCol_Header] = ImVec4(1.0f, 1.0f, 1.0f, 0.09803922f);
+	style.Colors[ImGuiCol_Header] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
 	style.Colors[ImGuiCol_HeaderHovered] = ImVec4(1.0f, 1.0f, 1.0f, 0.15686275f);
 	style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.0f, 0.0f, 0.0f, 0.047058824f);
-	style.Colors[ImGuiCol_Separator] = ImVec4(1.0f, 1.0f, 1.0f, 0.15686275f);
-	style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(1.0f, 1.0f, 1.0f, 0.23529412f);
-	style.Colors[ImGuiCol_SeparatorActive] = ImVec4(1.0f, 1.0f, 1.0f, 0.23529412f);
+	style.Colors[ImGuiCol_Separator] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_SeparatorActive] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
 	style.Colors[ImGuiCol_ResizeGrip] = ImVec4(1.0f, 1.0f, 1.0f, 0.15686275f);
 	style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(1.0f, 1.0f, 1.0f, 0.23529412f);
 	style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(1.0f, 1.0f, 1.0f, 0.23529412f);
-	style.Colors[ImGuiCol_Tab] = ImVec4(1.0f, 1.0f, 1.0f, 0.09803922f);
-	style.Colors[ImGuiCol_TabHovered] = ImVec4(1.0f, 1.0f, 1.0f, 0.15686275f);
-	style.Colors[ImGuiCol_TabActive] = ImVec4(1.0f, 1.0f, 1.0f, 0.3137255f);
-	style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.0f, 0.0f, 0.0f, 0.15686275f);
-	style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(1.0f, 1.0f, 1.0f, 0.23529412f);
+	style.Colors[ImGuiCol_Tab] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_TabHovered] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_TabActive] = ImVec4(250.0f/255,155.0f/255,80.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_TabUnfocused] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(250.0f/255,150.0f/255,80.0f/255,255.0f/255);
 	style.Colors[ImGuiCol_PlotLines] = ImVec4(1.0f, 1.0f, 1.0f, 0.3529412f);
 	style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 	style.Colors[ImGuiCol_PlotHistogram] = ImVec4(1.0f, 1.0f, 1.0f, 0.3529412f);
@@ -1849,21 +1865,25 @@ void UI::RenderSimulationControls() {
     ImGui::SetNextWindowPos(ImVec2(viewportPos.x + viewportSize.x * 0.5f, viewportPos.y + 8), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
 
     if (ImGui::Begin("##SimulationControls", nullptr, flags)) {
-        constexpr float buttonSize = 36.0f;
+        constexpr float buttonSize = 64.0f;
 
         bool isStopped = simulation.IsStopped();
-        bool isRunning = simulation.IsRunning();
         bool isPaused = simulation.IsPaused();
 
+        // Use icon font if available, otherwise fall back to text
+        if (m_iconFont) {
+            ImGui::PushFont(m_iconFont);
+        }
+
         if (isStopped || isPaused) {
-            if (ImGui::Button(isPaused ? "|>" : ">>", ImVec2(buttonSize, buttonSize))) {
+            if (ImGui::Button(m_iconFont ? ICON_FA_PLAY : (isPaused ? "|>" : ">>"), ImVec2(buttonSize, buttonSize))) {
                 simulation.Start();
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip(isPaused ? "Resume" : "Start");
             }
         } else {
-            if (ImGui::Button("||", ImVec2(buttonSize, buttonSize))) {
+            if (ImGui::Button(m_iconFont ? ICON_FA_PAUSE : "||", ImVec2(buttonSize, buttonSize))) {
                 simulation.Pause();
             }
             if (ImGui::IsItemHovered()) {
@@ -1873,11 +1893,15 @@ void UI::RenderSimulationControls() {
 
         ImGui::SameLine();
 
-        if (ImGui::Button("[]", ImVec2(buttonSize, buttonSize))) {
+        if (ImGui::Button(m_iconFont ? ICON_FA_STOP : "[]", ImVec2(buttonSize, buttonSize))) {
             simulation.Stop();
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Stop");
+        }
+
+        if (m_iconFont) {
+            ImGui::PopFont();
         }
 
         if (!isStopped) {

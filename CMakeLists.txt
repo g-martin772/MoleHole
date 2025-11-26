@@ -57,7 +57,12 @@ endif()
 
 # Disable strict warnings for PhysX to prevent build failures on newer compilers
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=mismatched-new-delete -Wno-error=restrict -Wno-error=class-memaccess")
-add_compile_options(-Wno-error=template-id-cdtor)
+# Only add template-id-cdtor flag if the compiler supports it (Clang 15+)
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-Wno-error=template-id-cdtor" COMPILER_SUPPORTS_TEMPLATE_ID_CDTOR)
+if(COMPILER_SUPPORTS_TEMPLATE_ID_CDTOR)
+    add_compile_options(-Wno-error=template-id-cdtor)
+endif()
 
 add_subdirectory(dependencies/glfw)
 add_subdirectory(dependencies/glad/cmake)
