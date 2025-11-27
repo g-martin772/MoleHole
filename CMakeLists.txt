@@ -64,6 +64,11 @@ if(COMPILER_SUPPORTS_TEMPLATE_ID_CDTOR)
     add_compile_options(-Wno-error=template-id-cdtor)
 endif()
 
+if(POLICY CMP0153)
+    cmake_policy(SET CMP0153 OLD)
+endif()
+set(CMAKE_POLICY_DEFAULT_CMP0153 OLD)
+
 add_subdirectory(dependencies/glfw)
 add_subdirectory(dependencies/glad/cmake)
 add_subdirectory(dependencies/glm)
