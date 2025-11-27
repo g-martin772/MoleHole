@@ -133,8 +133,11 @@ void UI::RenderDockspace(Scene* scene) {
     HandleImageShortcuts(scene, doTakeScreenshotViewport, doTakeScreenshot, doTakeScreenshotViewportDialog, doTakeScreenshotDialog);
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + ImGui::GetFrameHeight()));
-    ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, viewport->Size.y - ImGui::GetFrameHeight()));
+    const float sidebarWidth = 80.0f; // Match the sidebar width from RenderSidebar()
+    
+    // Position dockspace to the right of the sidebar
+    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + sidebarWidth, viewport->Pos.y + ImGui::GetFrameHeight()));
+    ImGui::SetNextWindowSize(ImVec2(viewport->Size.x - sidebarWidth, viewport->Size.y - ImGui::GetFrameHeight()));
     ImGui::SetNextWindowViewport(viewport->ID);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
@@ -1205,13 +1208,6 @@ void UI::RenderBlackHolesSection(Scene* scene) {
                 if (ImGui::DragFloat3("Position", &bh.position[0], 0.05f)) bhChanged = true;
                 if (ImGui::DragFloat3("Spin Axis", &bh.spinAxis[0], 0.01f, -1.0f, 1.0f)) bhChanged = true;
 
-                ImGui::Separator();
-                ImGui::Text("Accretion Disk");
-                ImGui::Checkbox("Show Accretion Disk", &bh.showAccretionDisk);
-                ImGui::DragFloat("Density", &bh.accretionDiskDensity, 0.01f, 0.0f, 1e6f);
-                ImGui::DragFloat("Size", &bh.accretionDiskSize, 0.01f, 0.0f, 1e6f);
-                ImGui::ColorEdit3("Color", &bh.accretionDiskColor[0]);
-
                 if (bhChanged) {
                     if (!scene->currentPath.empty()) {
                         scene->Serialize(scene->currentPath);
@@ -1950,8 +1946,8 @@ void UI::RenderSidebar() {
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.12f, 0.12f, 0.12f, 0.95f));
 
     if (ImGui::Begin("##Sidebar", nullptr, flags)) {
-        ImGui::SetCursorPosX((sidebarWidth - iconSize) * 0.5f);
-
+        //ImGui::SetCursorPosX((sidebarWidth - iconSize) * 0.5f);
+        
         // Structure: icon, tooltip, active state, index
         struct SidebarButton {
             const char* icon;
@@ -2095,9 +2091,7 @@ void UI::RenderSidebar() {
                 ImGui::PopStyleColor();
                 ImGui::PopStyleVar();
             }
-
-            ImGui::SetCursorPosX((sidebarWidth - iconSize) * 0.5f);
-
+            
             ImGui::PopID();
         }
 
