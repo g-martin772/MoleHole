@@ -40,6 +40,7 @@ private:
     void RenderSceneWindow(Scene* scene);
     void RenderSimulationWindow(Scene* scene);
     void RenderHelpWindow();
+    void RenderSidebar();
 
     void RenderSystemInfoSection(float fps);
     void RenderDisplaySettingsSection();
@@ -78,6 +79,10 @@ private:
     bool m_showDemoWindow = false;
     bool m_showHelpWindow = false;
     bool m_ShowAnimationGraph = true;
+    bool m_showSystemWindow = true;
+    bool m_showSceneWindow = true;
+    bool m_showSimulationWindow = true;
+    bool m_showSettingsWindow = false;
     bool m_initialized = false;
     bool m_configDirty = false;
     float m_saveTimer = 0.0f;
@@ -106,4 +111,8 @@ private:
         int framerate = 60;
         float tickrate = 60.0f;
     } m_videoConfig;
+
+    // Sidebar animation
+    float m_sidebarHoverAnim[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    int m_hoveredSidebarItem = -1;
 };

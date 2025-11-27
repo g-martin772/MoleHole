@@ -9,8 +9,12 @@
 #define ICON_FA_PLAY "\xef\x81\x8b"           // U+F04B
 #define ICON_FA_PAUSE "\xef\x81\x8c"          // U+F04C
 #define ICON_FA_STOP "\xef\x81\x8d"           // U+F04D
+#define ICON_FA_CHART_LINE "\xef\x88\x81"     // U+F201
+#define ICON_FA_MICROCHIP "\xef\x8b\x9b"      // U+F2DB
+#define ICON_FA_CUBES "\xef\x87\xb2"          // U+F1B2
+#define ICON_FA_IMAGE "\xef\x80\xbe"          // U+F03E
+#define ICON_FA_GEAR "\xef\x80\x93"           // U+F013
 
 // Font Awesome 6 Unicode range for ImGui font loading
 #define ICON_MIN_FA 0xe000
 #define ICON_MAX_FA 0xf8ff
-
