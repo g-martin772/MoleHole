@@ -55,13 +55,15 @@ if (WIN32)
     file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/physx/physx/source/compiler/cmake/windows/CMakeLists.txt" "${PHYSX_CMAKE}")
 endif()
 
-# Disable strict warnings for PhysX to prevent build failures on newer compilers
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=mismatched-new-delete -Wno-error=restrict -Wno-error=class-memaccess")
-# Only add template-id-cdtor flag if the compiler supports it (Clang 15+)
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag("-Wno-error=template-id-cdtor" COMPILER_SUPPORTS_TEMPLATE_ID_CDTOR)
-if(COMPILER_SUPPORTS_TEMPLATE_ID_CDTOR)
-    add_compile_options(-Wno-error=template-id-cdtor)
+set(PX_COPY_EXTERNAL_DLL OFF CACHE BOOL "Copy external DLLs" FORCE)
+
+if(NOT MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=mismatched-new-delete -Wno-error=restrict -Wno-error=class-memaccess")
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-Wno-error=template-id-cdtor" COMPILER_SUPPORTS_TEMPLATE_ID_CDTOR)
+    if(COMPILER_SUPPORTS_TEMPLATE_ID_CDTOR)
+        add_compile_options(-Wno-error=template-id-cdtor)
+    endif()
 endif()
 
 if(POLICY CMP0153)
@@ -91,16 +93,13 @@ add_executable(MoleHole ${SOURCES})
 
 set_property(TARGET MoleHole PROPERTY CXX_STANDARD 23)
 set_property(TARGET MoleHole PROPERTY CXX_STANDARD_REQUIRED ON)
-set_property(TARGET
-        PhysX
-        PhysXPvdSDK
-        PhysXCharacterKinematic
-        PhysXCommon
-        PhysXCooking
-        PhysXExtensions
-        PhysXTask
-        PhysXVehicle
-        PROPERTY CXX_STANDARD 11)
+set_property(TARGET PhysX PROPERTY CXX_STANDARD 11)
+set_property(TARGET PhysXPvdSDK PROPERTY CXX_STANDARD 11)
+set_property(TARGET PhysXCharacterKinematic PROPERTY CXX_STANDARD 11)
+set_property(TARGET PhysXCommon PROPERTY CXX_STANDARD 11)
+set_property(TARGET PhysXCooking PROPERTY CXX_STANDARD 11)
+set_property(TARGET PhysXExtensions PROPERTY CXX_STANDARD 11)
+set_property(TARGET PhysXTask PROPERTY CXX_STANDARD 11)
 
 # Define debug/release macros for PhysX compatibility
 target_compile_definitions(MoleHole PRIVATE 
