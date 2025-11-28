@@ -1,0 +1,8 @@
+//
+// Created by leo on 11/28/25.
+//
+
+#ifndef MOLEHOLE_SCENEWINDOW_H
+#define MOLEHOLE_SCENEWINDOW_H
+
+#endif //MOLEHOLE_SCENEWINDOW_H

@@ -14,6 +14,7 @@
 #define ICON_FA_CUBES "\xef\x87\xb2"          // U+F1B2
 #define ICON_FA_IMAGE "\xef\x80\xbe"          // U+F03E
 #define ICON_FA_GEAR "\xef\x80\x93"           // U+F013
+#define ICON_FA_CIRCLE_DOT "\xef\x86\x92"     // U+F192 (used for app icon - black hole)
 
 // Font Awesome 6 Unicode range for ImGui font loading
 #define ICON_MIN_FA 0xe000

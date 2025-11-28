@@ -1,0 +1,8 @@
+//
+// Created by leo on 11/28/25.
+//
+
+#ifndef MOLEHOLE_SIMULATIONWINDOW_H
+#define MOLEHOLE_SIMULATIONWINDOW_H
+
+#endif //MOLEHOLE_SIMULATIONWINDOW_H

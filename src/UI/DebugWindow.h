@@ -1,0 +1,8 @@
+//
+// Created by leo on 11/28/25.
+//
+
+#ifndef MOLEHOLE_DEBUGWINDOW_H
+#define MOLEHOLE_DEBUGWINDOW_H
+
+#endif //MOLEHOLE_DEBUGWINDOW_H

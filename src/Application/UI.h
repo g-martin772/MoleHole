@@ -40,6 +40,7 @@ private:
     void RenderSceneWindow(Scene* scene);
     void RenderSimulationWindow(Scene* scene);
     void RenderHelpWindow();
+    void RenderSettingsWindow();
     void RenderSidebar();
 
     void RenderSystemInfoSection(float fps);
@@ -57,7 +58,6 @@ private:
     void RenderScenePropertiesSection(Scene* scene);
     void RenderRecentScenesSection(Scene* scene);
 
-    void RenderSimulationGeneralSection();
     void RenderBlackHolesSection(Scene* scene);
     void RenderMeshesSection(Scene* scene);
     void RenderSpheresSection(Scene *scene);

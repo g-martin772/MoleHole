@@ -1,0 +1,8 @@
+//
+// Created by leo on 11/28/25.
+//
+
+#ifndef MOLEHOLE_SETTINGSPOPUP_H
+#define MOLEHOLE_SETTINGSPOPUP_H
+
+#endif //MOLEHOLE_SETTINGSPOPUP_H

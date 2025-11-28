@@ -1,6 +1,6 @@
 #include "UI.h"
 #include "Application.h"
-#include "IconsFontAwesome6.h"
+#include "../UI/IconsFontAwesome6.h"
 #include "imgui.h"
 #include "ImGuizmo.h"
 #include "spdlog/spdlog.h"
@@ -183,6 +183,10 @@ void UI::RenderMainUI(float fps, Scene* scene) {
     if (m_showExportWindow) {
         ShowExportWindow(scene);
     }
+
+    if (m_showSettingsWindow) {
+        RenderSettingsWindow();
+    }
 }
 
 
@@ -226,9 +230,7 @@ void UI::Style() {
 	
 	style.Alpha = 1.0f;
 	style.DisabledAlpha = 0.5f;
-	style.WindowPadding = ImVec2(13.0f, 10.0f);
 	style.WindowRounding = 0.0f;
-	style.WindowBorderSize = 1.0f;
 	style.WindowMinSize = ImVec2(32.0f, 32.0f);
 	style.WindowTitleAlign = ImVec2(0.5f, 0.5f);
 	style.WindowMenuButtonPosition = ImGuiDir_Right;
@@ -248,7 +250,7 @@ void UI::Style() {
 	style.ScrollbarRounding = 2.0f;
 	style.GrabMinSize = 12.1f;
 	style.GrabRounding = 1.0f;
-	style.TabRounding = 2.0f;
+	style.TabRounding = 4.0f;
 	style.TabBorderSize = 0.0f;
 	style.ColorButtonPosition = ImGuiDir_Right;
 	style.ButtonTextAlign = ImVec2(0.5f, 0.5f);
@@ -272,26 +274,28 @@ void UI::Style() {
 	style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(1.0f, 1.0f, 1.0f, 0.39215687f);
 	style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(1.0f, 1.0f, 1.0f, 0.47058824f);
 	style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.0f, 0.0f, 0.0f, 0.09803922f);
-	style.Colors[ImGuiCol_CheckMark] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
-	style.Colors[ImGuiCol_SliderGrab] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
+	// Darker orange accent color (from RGB 229,161,80 to 180,100,40)
+	style.Colors[ImGuiCol_CheckMark] = ImVec4(180.0f/255,100.0f/255,40.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_SliderGrab] = ImVec4(180.0f/255,100.0f/255,40.0f/255,255.0f/255);
 	style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(1.0f, 1.0f, 1.0f, 0.3137255f);
-	style.Colors[ImGuiCol_Button] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
-	style.Colors[ImGuiCol_ButtonHovered] = ImVec4(1.0f, 1.0f, 1.0f, 0.15686275f);
-	style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.0f, 0.0f, 0.0f, 0.047058824f);
-	style.Colors[ImGuiCol_Header] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
-	style.Colors[ImGuiCol_HeaderHovered] = ImVec4(1.0f, 1.0f, 1.0f, 0.15686275f);
-	style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.0f, 0.0f, 0.0f, 0.047058824f);
-	style.Colors[ImGuiCol_Separator] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
-	style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
-	style.Colors[ImGuiCol_SeparatorActive] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_Button] = ImVec4(180.0f/255,100.0f/255,40.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_ButtonHovered] = ImVec4(200.0f/255,120.0f/255,50.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_ButtonActive] = ImVec4(160.0f/255,90.0f/255,35.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_Header] = ImVec4(180.0f/255,100.0f/255,40.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_HeaderHovered] = ImVec4(200.0f/255,120.0f/255,50.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_HeaderActive] = ImVec4(160.0f/255,90.0f/255,35.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_Separator] = ImVec4(180.0f/255,100.0f/255,40.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(200.0f/255,120.0f/255,50.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_SeparatorActive] = ImVec4(160.0f/255,90.0f/255,35.0f/255,255.0f/255);
 	style.Colors[ImGuiCol_ResizeGrip] = ImVec4(1.0f, 1.0f, 1.0f, 0.15686275f);
 	style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(1.0f, 1.0f, 1.0f, 0.23529412f);
 	style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(1.0f, 1.0f, 1.0f, 0.23529412f);
-	style.Colors[ImGuiCol_Tab] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
-	style.Colors[ImGuiCol_TabHovered] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
-	style.Colors[ImGuiCol_TabActive] = ImVec4(250.0f/255,155.0f/255,80.0f/255,255.0f/255);
-	style.Colors[ImGuiCol_TabUnfocused] = ImVec4(229.0f/255,161.0f/255,80.0f/255,255.0f/255);
-	style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(250.0f/255,150.0f/255,80.0f/255,255.0f/255);
+	// Tab styling for IDE-like appearance
+	style.Colors[ImGuiCol_Tab] = ImVec4(0.15f, 0.15f, 0.15f, 1.0f);
+	style.Colors[ImGuiCol_TabHovered] = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+	style.Colors[ImGuiCol_TabActive] = ImVec4(180.0f/255,100.0f/255,40.0f/255,255.0f/255);
+	style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.12f, 0.12f, 0.12f, 1.0f);
+	style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.18f, 0.18f, 0.18f, 1.0f);
 	style.Colors[ImGuiCol_PlotLines] = ImVec4(1.0f, 1.0f, 1.0f, 0.3529412f);
 	style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 	style.Colors[ImGuiCol_PlotHistogram] = ImVec4(1.0f, 1.0f, 1.0f, 0.3529412f);
@@ -496,7 +500,6 @@ void UI::RenderSceneWindow(Scene* scene) {
 void UI::RenderSimulationWindow(Scene* scene) {
     ImGui::Begin("Simulation");
 
-    RenderSimulationGeneralSection();
     RenderBlackHolesSection(scene);
     RenderMeshesSection(scene);
     RenderSpheresSection(scene);
@@ -646,15 +649,6 @@ void UI::RenderRenderingFlagsSection() {
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Vertical thickness of the accretion disk");
-        }
-        
-        float accDiskTemp = config.GetProperty<float>("accDiskTemp", 2000.0f);
-        if (ImGui::SliderFloat("Disk Temperature (K)", &accDiskTemp, 1000.0f, 40000.0f)) {
-            config.SetProperty<float>("accDiskTemp", accDiskTemp);
-            m_configDirty = true;
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Base temperature of the accretion disk in Kelvin");
         }
         
         float accDiskNoiseScale = config.GetProperty<float>("accDiskNoiseScale", 1.0f);
@@ -1100,13 +1094,6 @@ void UI::RenderRecentScenesSection(Scene* scene) {
     }
 }
 
-void UI::RenderSimulationGeneralSection() {
-    if (ImGui::CollapsingHeader("General", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::TextDisabled("Simulation controls maybe...");
-        ImGui::Separator();
-    }
-}
-
 void UI::RenderBlackHolesSection(Scene* scene) {
     if (ImGui::CollapsingHeader("Black Holes", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (!scene) {
@@ -1193,11 +1180,24 @@ void UI::RenderBlackHolesSection(Scene* scene) {
             }
 
             ImGui::SameLine();
-            if (ImGui::Button("Select")) {
+            
+            // Styled Select button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 0.6f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(200.0f/255.0f, 120.0f/255.0f, 50.0f/255.0f, 0.8f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(160.0f/255.0f, 90.0f/255.0f, 35.0f/255.0f, 1.0f));
+            if (ImGui::SmallButton("Select")) {
                 scene->SelectObject(Scene::ObjectType::BlackHole, idx);
             }
+            ImGui::PopStyleColor(3);
+            
             ImGui::SameLine();
-            bool remove = ImGui::Button("Remove");
+            
+            // Styled Remove button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.2f, 0.6f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.8f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
+            bool remove = ImGui::SmallButton("Remove");
+            ImGui::PopStyleColor(3);
 
             if (open) {
                 BlackHole& bh = *it;
@@ -1293,11 +1293,24 @@ void UI::RenderMeshesSection(Scene* scene) {
             }
 
             ImGui::SameLine();
-            if (ImGui::Button("Select")) {
+            
+            // Styled Select button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 0.6f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(200.0f/255.0f, 120.0f/255.0f, 50.0f/255.0f, 0.8f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(160.0f/255.0f, 90.0f/255.0f, 35.0f/255.0f, 1.0f));
+            if (ImGui::SmallButton("Select")) {
                 scene->SelectObject(Scene::ObjectType::Mesh, idx);
             }
+            ImGui::PopStyleColor(3);
+            
             ImGui::SameLine();
-            bool remove = ImGui::Button("Remove");
+            
+            // Styled Remove button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.2f, 0.6f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.8f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
+            bool remove = ImGui::SmallButton("Remove");
+            ImGui::PopStyleColor(3);
 
             if (open) {
                 MeshObject& mesh = *it;
@@ -1426,11 +1439,24 @@ void UI::RenderSpheresSection(Scene* scene) {
             }
 
             ImGui::SameLine();
-            if (ImGui::Button("Select")) {
+            
+            // Styled Select button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 0.6f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(200.0f/255.0f, 120.0f/255.0f, 50.0f/255.0f, 0.8f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(160.0f/255.0f, 90.0f/255.0f, 35.0f/255.0f, 1.0f));
+            if (ImGui::SmallButton("Select")) {
                 scene->SelectObject(Scene::ObjectType::Sphere, idx);
             }
+            ImGui::PopStyleColor(3);
+            
             ImGui::SameLine();
-            bool remove = ImGui::Button("Remove");
+            
+            // Styled Remove button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.2f, 0.6f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.8f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
+            bool remove = ImGui::SmallButton("Remove");
+            ImGui::PopStyleColor(3);
 
             if (open) {
                 Sphere& sphere = *it;
@@ -1453,9 +1479,6 @@ void UI::RenderSpheresSection(Scene* scene) {
                     sphereChanged = true;
                 }
                 if (ImGui::DragFloat("Radius", &sphere.radius, 0.05f, 0.01f, 1e6f)) {
-                    sphereChanged = true;
-                }
-                if (ImGui::ColorEdit3("Color", &sphere.color[0])) {
                     sphereChanged = true;
                 }
 
@@ -1852,6 +1875,71 @@ void UI::RenderHelpWindow() {
     ImGui::End();
 }
 
+void UI::RenderSettingsWindow() {
+    // Open the popup when the window flag is set
+    if (m_showSettingsWindow && !ImGui::IsPopupOpen("Settings")) {
+        ImGui::OpenPopup("Settings");
+    }
+
+    // Center the popup
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(400, 250), ImGuiCond_Appearing);
+
+    // Popup styling
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 20));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+
+    if (ImGui::BeginPopupModal("Settings", &m_showSettingsWindow, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
+        ImGui::TextWrapped("Configure application settings");
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Display Settings Section
+        ImGui::Text("Display Settings");
+        ImGui::Spacing();
+
+        bool vsync = Application::State().window.vsync;
+        if (ImGui::Checkbox("Enable VSync", &vsync)) {
+            Application::State().window.vsync = vsync;
+            m_configDirty = true;
+        }
+
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Synchronize frame rate with display refresh rate\nReduces screen tearing but may limit FPS");
+        }
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("Current state: %s", Application::State().window.vsync ? "Enabled" : "Disabled");
+
+        // Spacer
+        ImGui::Spacing();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Info text
+        ImGui::TextWrapped("More settings will be added in future updates.");
+
+        // Bottom buttons
+        ImGui::Spacing();
+        ImGui::Separator();
+        
+        float buttonWidth = 120.0f;
+        float availWidth = ImGui::GetContentRegionAvail().x;
+        ImGui::SetCursorPosX((availWidth - buttonWidth) * 0.5f);
+        
+        if (ImGui::Button("Close", ImVec2(buttonWidth, 0))) {
+            m_showSettingsWindow = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar(2);
+}
+
 void UI::RenderSimulationControls() {
     auto& simulation = Application::GetSimulation();
     auto& renderer = Application::GetRenderer();
@@ -1959,7 +2047,7 @@ void UI::RenderSidebar() {
         SidebarButton buttons[] = {
             { ICON_FA_CHART_LINE, "Animation Graph", &m_ShowAnimationGraph, 0 },
             { ICON_FA_MICROCHIP, "System", &m_showSystemWindow, 1 },
-            { ICON_FA_CUBES, "Simulation", &m_showSimulationWindow, 2 },
+            { ICON_FA_CIRCLE_DOT, "Simulation", &m_showSimulationWindow, 2 },
             { ICON_FA_IMAGE, "Scene", &m_showSceneWindow, 3 },
             { ICON_FA_GEAR, "Settings (Coming Soon)", &m_showSettingsWindow, 4 }
         };
@@ -1974,7 +2062,7 @@ void UI::RenderSidebar() {
 
             // Calculate animation value
             float targetAnim = 0.0f;
-
+            
             ImVec2 buttonPos = ImGui::GetCursorScreenPos();
             ImVec2 buttonSize(iconSize, iconSize);
 
@@ -2008,11 +2096,11 @@ void UI::RenderSidebar() {
 
             ImVec4 iconColor;
             if (isActive) {
-                // Active color (orange accent)
+                // Active color (darker orange accent)
                 iconColor = ImVec4(
-                    0.9f,
-                    0.63f + animValue * 0.1f,
-                    0.31f,
+                    180.0f/255.0f,
+                    100.0f/255.0f,
+                    40.0f/255.0f,
                     1.0f
                 );
             } else {
@@ -2028,7 +2116,8 @@ void UI::RenderSidebar() {
             // Draw background with animation
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             if (animValue > 0.01f) {
-                float roundness = 8.0f;
+                // Use smaller radius for active state, larger for hover only
+                float roundness = isActive ? 0.0f : 8.0f;
                 ImVec2 bgPos = ImVec2(buttonPos.x - 4, buttonPos.y - 4);
                 ImVec2 bgSize = ImVec2(buttonPos.x + buttonSize.x + 4, buttonPos.y + buttonSize.y + 4);
 
@@ -2054,7 +2143,7 @@ void UI::RenderSidebar() {
                     drawList->AddRectFilled(
                         lineStart,
                         ImVec2(lineStart.x + lineWidth, lineEnd.y),
-                        ImGui::GetColorU32(ImVec4(0.9f, 0.63f, 0.31f, 1.0f)),
+                        ImGui::GetColorU32(ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 1.0f)),
                         lineWidth * 0.5f
                     );
                 }
