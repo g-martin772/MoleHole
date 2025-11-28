@@ -118,7 +118,7 @@ void Application::Render() {
     m_ui.RenderDockspace(scene);
     m_ui.RenderMainUI(GetFPS(), scene);
     m_renderer.RenderScene(scene);
-    m_ui.RenderSimulationControls();
+    m_ui.RenderSimulationControls(); // Delegates to SimulationWindow namespace
 
     for (const auto& [name, callback] : m_renderCallbacks) {
         try {

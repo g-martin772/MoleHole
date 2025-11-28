@@ -87,7 +87,8 @@ file(GLOB SOURCES
         src/*.cpp
         src/Application/*.cpp
         src/Simulation/*.cpp
-        src/Renderer/*.cpp)
+        src/Renderer/*.cpp
+        src/UI/*.cpp)
 
 add_executable(MoleHole ${SOURCES})
 

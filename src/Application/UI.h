@@ -22,10 +22,15 @@ public:
 
     enum class GizmoOperation { Translate, Rotate, Scale };
     GizmoOperation GetCurrentGizmoOperation() const { return m_currentGizmoOperation; }
+    void SetCurrentGizmoOperation(GizmoOperation op) { m_currentGizmoOperation = op; }
     bool IsUsingSnap() const { return m_useSnap; }
+    void SetUsingSnap(bool snap) { m_useSnap = snap; }
     const float* GetSnapTranslate() const { return m_snapTranslate; }
+    float* GetSnapTranslate() { return m_snapTranslate; }
     float GetSnapRotate() const { return m_snapRotate; }
+    float* GetSnapRotatePtr() { return &m_snapRotate; }
     float GetSnapScale() const { return m_snapScale; }
+    float* GetSnapScalePtr() { return &m_snapScale; }
 
     void TakeScreenshot();
     void TakeViewportScreenshot();
@@ -34,47 +39,31 @@ public:
 
     void ShowExportWindow(Scene* scene);
 
+    void MarkConfigDirty() { m_configDirty = true; }
+
+    // Sidebar accessors
+    float* GetSidebarHoverAnim() { return m_sidebarHoverAnim; }
+    int GetHoveredSidebarItem() const { return m_hoveredSidebarItem; }
+    void SetHoveredSidebarItem(int item) { m_hoveredSidebarItem = item; }
+    struct ImFont* GetIconFont() const { return m_iconFont; }
+    bool* GetShowAnimationGraphPtr() { return &m_ShowAnimationGraph; }
+    bool* GetShowSystemWindowPtr() { return &m_showSystemWindow; }
+    bool* GetShowSimulationWindowPtr() { return &m_showSimulationWindow; }
+    bool* GetShowSceneWindowPtr() { return &m_showSceneWindow; }
+    bool* GetShowSettingsWindowPtr() { return &m_showSettingsWindow; }
+    bool* GetShowDemoWindowPtr() { return &m_showDemoWindow; }
+    bool* GetShowHelpWindowPtr() { return &m_showHelpWindow; }
+    bool* GetShowExportWindowPtr() { return &m_showExportWindow; }
+
 private:
-    void RenderMainMenuBar(Scene *scene, bool& doSave, bool& doOpen, bool& doTakeScreenshotDialog, bool& doTakeScreenshotViewportDialog, bool& doTakeScreenshot, bool& doTakeScreenshotViewport);
-    void RenderSystemWindow(float fps);
-    void RenderSceneWindow(Scene* scene);
-    void RenderSimulationWindow(Scene* scene);
+    // Window rendering (kept for special cases like HelpWindow and export)
     void RenderHelpWindow();
-    void RenderSettingsWindow();
-    void RenderSidebar();
-
-    void RenderSystemInfoSection(float fps);
-    void RenderDisplaySettingsSection();
-    void RenderCameraControlsSection();
-    void RenderRenderingFlagsSection();
-    void RenderDebugSection();
-    void RenderScreenshotSection();
-
-    void RenderExportSection();
     void RenderImageExportSettings();
     void RenderVideoExportSettings();
     void RenderExportProgress();
 
-    void RenderScenePropertiesSection(Scene* scene);
-    void RenderRecentScenesSection(Scene* scene);
-
-    void RenderBlackHolesSection(Scene* scene);
-    void RenderMeshesSection(Scene* scene);
-    void RenderSpheresSection(Scene *scene);
-
     void Style();
 
-    void RenderAnimationGraphWindow(Scene* scene);
-
-    void HandleImageShortcuts(Scene *scene, bool takeViewportScreenshot, bool takeFullScreenshot,
-                              bool takeViewportScreenshotWithDialog, bool takeFullScreenshotWithDialog);
-
-    void HandleFileOperations(Scene* scene, bool doSave, bool doOpen);
-    void RenderDebugModeCombo();
-    void RenderDebugModeTooltip(int debugMode);
-    void LoadScene(Scene* scene, const std::string& path);
-    void AddToRecentScenes(const std::string& path);
-    void RemoveFromRecentScenes(const std::string& path);
 
     bool m_showDemoWindow = false;
     bool m_showHelpWindow = false;
