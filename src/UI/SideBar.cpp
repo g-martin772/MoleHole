@@ -14,9 +14,9 @@ void Render(UI* ui) {
     ImGuiIO& io = ImGui::GetIO();
     ImGuiViewport* viewport = ImGui::GetMainViewport();
 
-    const float sidebarWidth = 80.0f;
-    const float iconSize = 48.0f;
-    const float padding = 16.0f;
+    const float sidebarWidth = 60.0f;
+    const float iconSize = 64.0f;
+    const float padding = 10.0f;
     const float animSpeed = 8.0f;
 
     ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + ImGui::GetFrameHeight()));
@@ -66,7 +66,7 @@ void Render(UI* ui) {
             ImGui::SetCursorPosX((sidebarWidth - iconSize) * 0.5f);
             
             ImVec2 buttonPos = ImGui::GetCursorScreenPos();
-            ImVec2 buttonSize(iconSize, iconSize);
+            ImVec2 buttonSize(iconSize, iconSize - 10.0f);
 
             // Check if mouse is over this button
             if (ImGui::IsMouseHoveringRect(buttonPos, ImVec2(buttonPos.x + buttonSize.x, buttonPos.y + buttonSize.y))) {
@@ -119,7 +119,7 @@ void Render(UI* ui) {
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             if (animValue > 0.01f) {
                 // Use smaller radius for active state, larger for hover only
-                float roundness = isActive ? 4.0f : 8.0f;
+                float roundness = isActive ? 0.0f : 8.0f;
                 ImVec2 bgPos = ImVec2(buttonPos.x - 4, buttonPos.y - 4);
                 ImVec2 bgSize = ImVec2(buttonPos.x + buttonSize.x + 4, buttonPos.y + buttonSize.y + 4);
 

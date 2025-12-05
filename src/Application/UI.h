@@ -40,6 +40,9 @@ public:
     void ShowExportWindow(Scene* scene);
 
     void MarkConfigDirty() { m_configDirty = true; }
+    
+    void ReloadFonts();
+    std::vector<std::string> GetAvailableFonts() const;
 
     // Sidebar accessors
     float* GetSidebarHoverAnim() { return m_sidebarHoverAnim; }
@@ -86,6 +89,8 @@ private:
     std::unique_ptr<AnimationGraph> m_AnimationGraph;
 
     struct ImFont* m_iconFont = nullptr;
+    struct ImFont* m_mainFont = nullptr;
+    std::unordered_map<std::string, struct ImFont*> m_loadedFonts; // Map of font name to ImFont*
 
     bool m_showExportWindow = false;
     struct {

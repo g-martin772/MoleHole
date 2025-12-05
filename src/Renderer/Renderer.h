@@ -12,6 +12,7 @@
 #include "Camera.h"
 #include "Input.h"
 #include "GravityGridRenderer.h"
+#include "ObjectPathsRenderer.h"
 
 class PhysicsDebugRenderer;
 struct GLFWwindow;
@@ -48,6 +49,7 @@ public:
     void SetSelectedViewport(ViewportMode mode) { selectedViewport = mode; }
 
     GravityGridRenderer* GetGravityGridRenderer() { return gravityGridRenderer.get(); }
+    ObjectPathsRenderer* GetObjectPathsRenderer() { return objectPathsRenderer.get(); }
     PhysicsDebugRenderer* GetPhysicsDebugRenderer() { return m_physicsDebugRenderer.get(); }
 
     GLFWwindow* window = nullptr;
@@ -94,5 +96,6 @@ private:
     int m_SphereIndexCount = 0;
 
     std::unique_ptr<GravityGridRenderer> gravityGridRenderer;
+    std::unique_ptr<ObjectPathsRenderer> objectPathsRenderer;
     std::unique_ptr<PhysicsDebugRenderer> m_physicsDebugRenderer;
 };

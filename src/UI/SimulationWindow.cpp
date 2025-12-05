@@ -470,6 +470,10 @@ void Render(UI* ui, Scene* scene) {
                         sphereChanged = true;
                     }
 
+                    if (ImGui::DragFloat3("Velocity", &sphere.velocity[0], 0.1f)) {
+                        sphereChanged = true;
+                    }
+
                     if (ImGui::DragFloat("Radius", &sphere.radius, 0.1f, 0.1f, 100.0f)) {
                         sphereChanged = true;
                     }

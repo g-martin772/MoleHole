@@ -25,7 +25,8 @@ void RenderDebugModeCombo(UI* ui) {
         "Gravitational Field",
         "Spherical Shape",
         "LUT Visualization",
-        "Gravity Grid"
+        "Gravity Grid",
+        "Object Paths"
     };
 
     int debugMode = static_cast<int>(Application::State().rendering.debugMode);
@@ -64,6 +65,9 @@ void RenderDebugModeTooltip(int debugMode) {
             break;
         case 6:
             tooltip = "Gravity Grid overlay on ground plane\nColor shows dominant black hole per cell (by mass/distance^2)\nGrid helps visualize regions of influence";
+            break;
+        case 7:
+            tooltip = "Visualize object trajectories and paths\nShows the motion paths of objects in the scene\nHelps track object movement over time";
             break;
         default:
             tooltip = "Unknown debug mode";
@@ -204,6 +208,44 @@ void Render(UI* ui) {
                 glm::vec3 color = grid->GetColor();
                 if (ImGui::ColorEdit3("Grid Color", &color[0])) {
                     grid->SetColor(color);
+                }
+            }
+        }
+        
+        if (Application::State().rendering.debugMode == DebugMode::ObjectPaths) {
+            auto& renderer = Application::GetRenderer();
+            if (auto* paths = renderer.GetObjectPathsRenderer()) {
+                ImGui::Separator();
+                ImGui::TextDisabled("Object Paths Settings");
+
+                float duration = paths->GetSimulationDuration();
+                if (ImGui::DragFloat("Simulation Duration (s)", &duration, 0.5f, 0.1f, 100.0f)) {
+                    paths->SetSimulationDuration(duration);
+                }
+                
+                float timeStep = paths->GetTimeStep();
+                if (ImGui::DragFloat("Time Step (s)", &timeStep, 0.01f, 0.001f, 1.0f)) {
+                    paths->SetTimeStep(timeStep);
+                }
+                
+                float lineThickness = paths->GetLineThickness();
+                if (ImGui::DragFloat("Line Thickness (px)", &lineThickness, 0.1f, 0.5f, 10.0f)) {
+                    paths->SetLineThickness(lineThickness);
+                }
+                
+                float opacity = paths->GetOpacity();
+                if (ImGui::SliderFloat("Opacity", &opacity, 0.05f, 1.0f)) {
+                    paths->SetOpacity(opacity);
+                }
+
+                glm::vec3 meshColor = paths->GetMeshColor();
+                if (ImGui::ColorEdit3("Mesh Path Color", &meshColor[0])) {
+                    paths->SetMeshColor(meshColor);
+                }
+                
+                glm::vec3 sphereColor = paths->GetSphereColor();
+                if (ImGui::ColorEdit3("Sphere Path Color", &sphereColor[0])) {
+                    paths->SetSphereColor(sphereColor);
                 }
             }
         }

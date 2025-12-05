@@ -142,7 +142,7 @@ void UI::RenderDockspace(Scene* scene) {
     TopBar::HandleImageShortcuts(scene, doTakeScreenshotViewport, doTakeScreenshot, doTakeScreenshotViewportDialog, doTakeScreenshotDialog);
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const float sidebarWidth = 80.0f; // Match the sidebar width from RenderSidebar()
+    const float sidebarWidth = 60.0f; // Match the sidebar width from RenderSidebar()
     
     // Position dockspace to the right of the sidebar
     ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + sidebarWidth, viewport->Pos.y + ImGui::GetFrameHeight()));
@@ -223,11 +223,41 @@ void UI::RenderMainUI(float fps, Scene* scene) {
 void UI::Style() {
 
     ImGuiIO &io = ImGui::GetIO();
-    ImFont *customFont = io.Fonts->AddFontFromFileTTF("../font/DidotLTPro-Bold.ttf", 16.0f);
-    if (customFont) {
-        spdlog::info("Custom font loaded successfully");
+    
+    // Get all available fonts and load them at the configured size
+    float fontSize = Application::State().GetProperty<float>("fontSize", 16.0f);
+    std::vector<std::string> availableFonts = GetAvailableFonts();
+    
+    // Load all available fonts into the atlas
+    for (const auto& fontFile : availableFonts) {
+        std::string fontPath = "../font/" + fontFile;
+        ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), fontSize);
+        if (font) {
+            m_loadedFonts[fontFile] = font;
+            spdlog::info("Loaded font: {} ({}pt)", fontFile, fontSize);
+        } else {
+            spdlog::warn("Failed to load font: {}", fontFile);
+        }
+    }
+    
+    // Get configured font from settings, default to Roboto-Regular.ttf
+    std::string fontName = Application::State().GetProperty<std::string>("mainFont", "Roboto-Regular.ttf");
+    
+    // Set the configured font as main font
+    if (m_loadedFonts.count(fontName) > 0) {
+        m_mainFont = m_loadedFonts[fontName];
+        io.FontDefault = m_mainFont;
+        spdlog::info("Set main font to: {}", fontName);
+    } else if (!m_loadedFonts.empty()) {
+        // Fallback to first loaded font
+        m_mainFont = m_loadedFonts.begin()->second;
+        io.FontDefault = m_mainFont;
+        spdlog::warn("Font '{}' not found, using fallback: {}", fontName, m_loadedFonts.begin()->first);
     } else {
-        spdlog::warn("Failed to load custom font, using default font");
+        // Last resort: ImGui default font
+        m_mainFont = io.Fonts->AddFontDefault();
+        io.FontDefault = m_mainFont;
+        spdlog::warn("No fonts loaded, using ImGui default font");
     }
     
     // Load Font Awesome icon font
@@ -670,4 +700,51 @@ void UI::RenderExportProgress() {
     } else {
         ImGui::TextDisabled("No export in progress");
     }
+}
+
+void UI::ReloadFonts() {
+    // Switch to the selected font without rebuilding the atlas
+    std::string fontName = Application::State().GetProperty<std::string>("mainFont", "Roboto-Regular.ttf");
+    
+    // Check if the font is already loaded
+    if (m_loadedFonts.count(fontName) > 0) {
+        ImGuiIO& io = ImGui::GetIO();
+        m_mainFont = m_loadedFonts[fontName];
+        io.FontDefault = m_mainFont;
+        spdlog::info("Switched to font: {}", fontName);
+    } else {
+        spdlog::warn("Font '{}' not found in loaded fonts. Available fonts must be added via 'Add Custom Font'.", fontName);
+    }
+}
+
+std::vector<std::string> UI::GetAvailableFonts() const {
+    std::vector<std::string> fonts;
+    
+    try {
+        std::filesystem::path fontDir = "../font";
+        if (std::filesystem::exists(fontDir) && std::filesystem::is_directory(fontDir)) {
+            for (const auto& entry : std::filesystem::directory_iterator(fontDir)) {
+                if (entry.is_regular_file()) {
+                    std::string filename = entry.path().filename().string();
+                    std::string ext = entry.path().extension().string();
+                    
+                    // Convert extension to lowercase for comparison
+                    std::transform(ext.begin(), ext.end(), ext.begin(), 
+                                 [](unsigned char c){ return std::tolower(c); });
+                    
+                    // Only include .ttf files, exclude Font Awesome
+                    if (ext == ".ttf" && filename != "fa-solid-900.ttf") {
+                        fonts.push_back(filename);
+                    }
+                }
+            }
+        }
+    } catch (const std::exception& e) {
+        spdlog::error("Failed to scan font directory: {}", e.what());
+    }
+    
+    // Sort alphabetically
+    std::sort(fonts.begin(), fonts.end());
+    
+    return fonts;
 }

@@ -87,6 +87,9 @@ void Renderer::Init() {
     gravityGridRenderer = std::make_unique<GravityGridRenderer>();
     gravityGridRenderer->Init();
 
+    objectPathsRenderer = std::make_unique<ObjectPathsRenderer>();
+    objectPathsRenderer->Init();
+
     m_physicsDebugRenderer = std::make_unique<PhysicsDebugRenderer>();
     m_physicsDebugRenderer->Init();
 
@@ -463,6 +466,10 @@ void Renderer::Render3DSimulation(Scene *scene) {
 
     if (Application::State().rendering.debugMode == DebugMode::GravityGrid && gravityGridRenderer) {
         gravityGridRenderer->Render(scene->blackHoles, *camera, currentTime);
+    }
+
+    if (Application::State().rendering.debugMode == DebugMode::ObjectPaths && objectPathsRenderer) {
+        objectPathsRenderer->Render(scene->blackHoles, *camera, currentTime);
     }
 
     if (m_physicsDebugRenderer && m_physicsDebugRenderer->IsEnabled()) {
