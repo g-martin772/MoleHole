@@ -28,9 +28,9 @@ void RenderDebugModeCombo(UI* ui) {
         "Gravity Grid"
     };
 
-    int debugMode = static_cast<int>(Application::State().rendering.debugMode);
+    int debugMode = Application::State().GetInt(StateParameter::RenderingDebugMode);
     if (ImGui::Combo("Debug Mode", &debugMode, debugModeItems, IM_ARRAYSIZE(debugModeItems))) {
-        Application::State().rendering.debugMode = static_cast<DebugMode>(debugMode);
+        Application::State().SetInt(StateParameter::RenderingDebugMode, debugMode);
         ui->MarkConfigDirty();
     }
 
@@ -86,24 +86,24 @@ void Render(UI* ui) {
         ImGui::Text("General Settings");
         ImGui::Separator();
         
-        bool renderBlackHoles = config.GetProperty<int>("renderBlackHoles", 1);
+        bool renderBlackHoles = config.GetInt(StateParameter::RenderingBlackHolesEnabled) != 0;
         if (ImGui::Checkbox("Render Black Holes", &renderBlackHoles)) {
-            config.SetProperty<int>("renderBlackHoles", renderBlackHoles ? 1 : 0);
+            config.SetInt(StateParameter::RenderingBlackHolesEnabled, renderBlackHoles ? 1 : 0);
             ui->MarkConfigDirty();
         }
         
-        bool gravitationalLensing = config.GetProperty<int>("gravitationalLensingEnabled", 1);
+        bool gravitationalLensing = config.GetInt(StateParameter::RenderingGravitationalLensingEnabled) != 0;
         if (ImGui::Checkbox("Gravitational Lensing", &gravitationalLensing)) {
-            config.SetProperty<int>("gravitationalLensingEnabled", gravitationalLensing ? 1 : 0);
+            config.SetInt(StateParameter::RenderingGravitationalLensingEnabled, gravitationalLensing ? 1 : 0);
             ui->MarkConfigDirty();
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Enable/disable gravitational light bending effects");
         }
         
-        bool gravitationalRedshift = config.GetProperty<int>("gravitationalRedshiftEnabled", 1);
+        bool gravitationalRedshift = config.GetInt(StateParameter::RenderingGravitationalRedshiftEnabled) != 0;
         if (ImGui::Checkbox("Gravitational Redshift", &gravitationalRedshift)) {
-            config.SetProperty<int>("gravitationalRedshiftEnabled", gravitationalRedshift ? 1 : 0);
+            config.SetInt(StateParameter::RenderingGravitationalRedshiftEnabled, gravitationalRedshift ? 1 : 0);
             ui->MarkConfigDirty();
         }
         if (ImGui::IsItemHovered()) {
@@ -114,51 +114,51 @@ void Render(UI* ui) {
         ImGui::Text("Accretion Disk Settings");
         ImGui::Separator();
         
-        bool accretionDisk = config.GetProperty<int>("accretionDiskEnabled", 1);
+        bool accretionDisk = config.GetInt(StateParameter::RenderingAccretionDiskEnabled) != 0;
         if (ImGui::Checkbox("Accretion Disk", &accretionDisk)) {
-            config.SetProperty<int>("accretionDiskEnabled", accretionDisk ? 1 : 0);
+            config.SetInt(StateParameter::RenderingAccretionDiskEnabled, accretionDisk ? 1 : 0);
             ui->MarkConfigDirty();
         }
         
-        float accDiskHeight = config.GetProperty<float>("accDiskHeight", 0.2f);
+        float accDiskHeight = config.GetFloat(StateParameter::RenderingAccDiskHeight);
         if (ImGui::SliderFloat("Disk Height", &accDiskHeight, 0.01f, 2.0f)) {
-            config.SetProperty<float>("accDiskHeight", accDiskHeight);
+            config.SetFloat(StateParameter::RenderingAccDiskHeight, accDiskHeight);
             ui->MarkConfigDirty();
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Vertical thickness of the accretion disk");
         }
         
-        float accDiskNoiseScale = config.GetProperty<float>("accDiskNoiseScale", 1.0f);
+        float accDiskNoiseScale = config.GetFloat(StateParameter::RenderingAccDiskNoiseScale);
         if (ImGui::SliderFloat("Noise Scale", &accDiskNoiseScale, 0.1f, 10.0f)) {
-            config.SetProperty<float>("accDiskNoiseScale", accDiskNoiseScale);
+            config.SetFloat(StateParameter::RenderingAccDiskNoiseScale, accDiskNoiseScale);
             ui->MarkConfigDirty();
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Scale of the noise pattern in the accretion disk");
         }
         
-        float accDiskNoiseLOD = config.GetProperty<float>("accDiskNoiseLOD", 5.0f);
+        float accDiskNoiseLOD = config.GetFloat(StateParameter::RenderingAccDiskNoiseLOD);
         if (ImGui::SliderFloat("Noise LOD", &accDiskNoiseLOD, 1.0f, 10.0f)) {
-            config.SetProperty<float>("accDiskNoiseLOD", accDiskNoiseLOD);
+            config.SetFloat(StateParameter::RenderingAccDiskNoiseLOD, accDiskNoiseLOD);
             ui->MarkConfigDirty();
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Level of detail for noise (more octaves = more detail)");
         }
         
-        float accDiskSpeed = config.GetProperty<float>("accDiskSpeed", 0.5f);
+        float accDiskSpeed = config.GetFloat(StateParameter::RenderingAccDiskSpeed);
         if (ImGui::SliderFloat("Disk Rotation Speed", &accDiskSpeed, 0.0f, 5.0f)) {
-            config.SetProperty<float>("accDiskSpeed", accDiskSpeed);
+            config.SetFloat(StateParameter::RenderingAccDiskSpeed, accDiskSpeed);
             ui->MarkConfigDirty();
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Rotation speed of the accretion disk animation");
         }
         
-        bool dopplerBeaming = config.GetProperty<float>("dopplerBeamingEnabled", 1.0f) > 0.5f;
+        bool dopplerBeaming = config.GetInt(StateParameter::RenderingDopplerBeamingEnabled) != 0;
         if (ImGui::Checkbox("Doppler Beaming", &dopplerBeaming)) {
-            config.SetProperty<float>("dopplerBeamingEnabled", dopplerBeaming ? 1.0f : 0.0f);
+            config.SetInt(StateParameter::RenderingDopplerBeamingEnabled, dopplerBeaming ? 1 : 0);
             ui->MarkConfigDirty();
         }
         if (ImGui::IsItemHovered()) {
@@ -170,7 +170,7 @@ void Render(UI* ui) {
     if (ImGui::CollapsingHeader("Debug Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
         RenderDebugModeCombo(ui);
 
-        if (Application::State().rendering.debugMode == DebugMode::GravityGrid) {
+        if (static_cast<DebugMode>(Application::State().GetInt(StateParameter::RenderingDebugMode)) == DebugMode::GravityGrid) {
             auto& renderer = Application::GetRenderer();
             if (auto* grid = renderer.GetGravityGridRenderer()) {
                 ImGui::Separator();
@@ -230,9 +230,9 @@ void Render(UI* ui) {
             ImGui::Separator();
         }
 
-        bool enabled = config.rendering.physicsDebugEnabled;
+        bool enabled = config.GetBool(StateParameter::RenderingPhysicsDebugEnabled);
         if (ImGui::Checkbox("Enable PhysX Debug Rendering", &enabled)) {
-            config.rendering.physicsDebugEnabled = enabled;
+            config.SetBool(StateParameter::RenderingPhysicsDebugEnabled, enabled);
             physicsDebugRenderer->SetEnabled(enabled);
             ui->MarkConfigDirty();
         }
@@ -241,9 +241,9 @@ void Render(UI* ui) {
             ImGui::BeginDisabled();
         }
 
-        bool depthTest = config.rendering.physicsDebugDepthTest;
+        bool depthTest = config.GetBool(StateParameter::RenderingPhysicsDebugDepthTest);
         if (ImGui::Checkbox("Depth Test", &depthTest)) {
-            config.rendering.physicsDebugDepthTest = depthTest;
+            config.SetBool(StateParameter::RenderingPhysicsDebugDepthTest, depthTest);
             physicsDebugRenderer->SetDepthTestEnabled(depthTest);
             ui->MarkConfigDirty();
         }
@@ -251,9 +251,9 @@ void Render(UI* ui) {
             ImGui::SetTooltip("When enabled, debug geometry respects depth. When disabled, it draws on top.");
         }
 
-        float scale = config.rendering.physicsDebugScale;
+        float scale = config.GetFloat(StateParameter::RenderingPhysicsDebugScale);
         if (ImGui::SliderFloat("Visualization Scale", &scale, 0.1f, 20.0f)) {
-            config.rendering.physicsDebugScale = scale;
+            config.SetFloat(StateParameter::RenderingPhysicsDebugScale, scale);
             if (simulation.GetPhysics()) {
                 simulation.GetPhysics()->SetVisualizationScale(scale);
             }
@@ -281,7 +281,7 @@ void Render(UI* ui) {
         ImGui::Separator();
         ImGui::TextDisabled("Visualization Flags");
 
-        uint32_t flags = config.rendering.physicsDebugFlags;
+        uint32_t flags = static_cast<uint32_t>(config.GetInt(StateParameter::RenderingPhysicsDebugFlags));
         bool flagsChanged = false;
 
         ImGui::Text("Quick Presets:");
@@ -426,7 +426,7 @@ void Render(UI* ui) {
         }
 
         if (flagsChanged) {
-            config.rendering.physicsDebugFlags = flags;
+            config.SetInt(StateParameter::RenderingPhysicsDebugFlags, static_cast<int>(flags));
             if (simulation.GetPhysics()) {
                 auto* physics = simulation.GetPhysics();
                 physics->SetVisualizationParameter(PxVisualizationParameter::eWORLD_AXES, (flags & (1 << 0)) ? 1.0f : 0.0f);

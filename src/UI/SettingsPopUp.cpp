@@ -33,9 +33,9 @@ void Render(UI* ui, bool* showSettingsWindow) {
         ImGui::Text("Display Settings");
         ImGui::Spacing();
 
-        bool vsync = Application::State().window.vsync;
+        bool vsync = Application::State().GetBool(StateParameter::WindowVSync);
         if (ImGui::Checkbox("Enable VSync", &vsync)) {
-            Application::State().window.vsync = vsync;
+            Application::State().SetBool(StateParameter::WindowVSync, vsync);
             ui->MarkConfigDirty();
         }
 
@@ -44,7 +44,7 @@ void Render(UI* ui, bool* showSettingsWindow) {
         }
 
         ImGui::Spacing();
-        ImGui::TextDisabled("Current state: %s", Application::State().window.vsync ? "Enabled" : "Disabled");
+        ImGui::TextDisabled("Current state: %s", Application::State().GetBool(StateParameter::WindowVSync) ? "Enabled" : "Disabled");
 
         // Spacer
         ImGui::Spacing();

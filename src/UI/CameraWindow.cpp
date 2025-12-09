@@ -19,15 +19,15 @@ void Render(UI* ui) {
     auto& camera = renderer.camera;
 
     if (ImGui::CollapsingHeader("Camera Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
-        float cameraSpeed = Application::State().app.cameraSpeed;
+        float cameraSpeed = Application::State().GetFloat(StateParameter::AppCameraSpeed);
         if (ImGui::DragFloat("Movement Speed", &cameraSpeed, 0.1f, 0.1f, 50.0f)) {
-            Application::State().app.cameraSpeed = cameraSpeed;
+            Application::State().SetFloat(StateParameter::AppCameraSpeed, cameraSpeed);
             ui->MarkConfigDirty();
         }
 
-        float mouseSensitivity = Application::State().app.mouseSensitivity;
+        float mouseSensitivity = Application::State().GetFloat(StateParameter::AppMouseSensitivity);
         if (ImGui::DragFloat("Mouse Sensitivity", &mouseSensitivity, 0.01f, 0.01f, 5.0f)) {
-            Application::State().app.mouseSensitivity = mouseSensitivity;
+            Application::State().SetFloat(StateParameter::AppMouseSensitivity, mouseSensitivity);
             ui->MarkConfigDirty();
         }
 
@@ -59,9 +59,9 @@ void Render(UI* ui) {
                 ui->MarkConfigDirty();
             }
 
-            float fov = Application::State().rendering.fov;
+            float fov = Application::State().GetFloat(StateParameter::RenderingFov);
             if (ImGui::DragFloat("Field of View", &fov, 0.5f, 10.0f, 120.0f)) {
-                Application::State().rendering.fov = fov;
+                Application::State().SetFloat(StateParameter::RenderingFov, fov);
                 camera->SetFov(fov);
                 ui->MarkConfigDirty();
             }

@@ -23,18 +23,12 @@ void Render(UI* ui, float fps) {
 
     // Display Settings Section
     if (ImGui::CollapsingHeader("Display Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-        bool vsync = Application::State().window.vsync;
+        bool vsync = Application::State().GetBool(StateParameter::WindowVSync);
         if (ImGui::Checkbox("VSync", &vsync)) {
-            Application::State().window.vsync = vsync;
+            Application::State().SetBool(StateParameter::WindowVSync, vsync);
             ui->MarkConfigDirty();
         }
-        ImGui::Text("VSync State: %s", Application::State().window.vsync ? "Enabled" : "Disabled");
-
-        float beamSpacing = Application::State().GetProperty<float>("beamSpacing", 1.0f);
-        if (ImGui::DragFloat("Ray spacing", &beamSpacing, 0.01f, 0.0f, 1e10f)) {
-            Application::State().SetProperty("beamSpacing", beamSpacing);
-            ui->MarkConfigDirty();
-        }
+        ImGui::Text("VSync State: %s", Application::State().GetBool(StateParameter::WindowVSync) ? "Enabled" : "Disabled");
     }
 
     ImGui::End();

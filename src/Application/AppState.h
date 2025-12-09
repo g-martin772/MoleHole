@@ -2,12 +2,26 @@
 
 #include <string>
 #include <filesystem>
-#include <unordered_map>
+#include <array>
 #include <variant>
 #include <vector>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <yaml-cpp/yaml.h>
+
+/*
+TODO
+automate the SerializeToYaml and DeserializeFromYaml to use the specified groups.
+also, for defining config fields i only want to add them somewhere once by defining
+their metadata and the rest of the system just picks it up.
+so also create functions to draw the imgui editor ui for single parameters
+and entire groups and use these helper methods so new config values get automatically
+picked up as long as they belong to an existing section. consider the showInUI and isReadOnly flags.
+when provided also show the scaling values, things like mass might have units like kg,
+earth masses and solar masses or speed in km/h or multiples of c and so on that should be
+available via an additional dropdown. use macros where applicable but prefer
+c++ templates where possible. instead of InitializeDefaults like this the default value should come from the metadata
+ */
 
 enum class DebugMode {
     Normal = 0,
@@ -19,140 +33,157 @@ enum class DebugMode {
     GravityGrid = 6
 };
 
+enum class ParameterGroup {
+    Window,
+    Camera,
+    Rendering,
+    Physics,
+    Debug,
+    Simulation,
+    Application,
+    Export
+};
+
+enum class ParameterType {
+    Bool,
+    Int,
+    Float,
+    String,
+    Vec2,
+    Vec3,
+    Vec4,
+    Enum,
+    StringVector
+};
+
+enum class StateParameter {
+    WindowWidth,
+    WindowHeight,
+    WindowPosX,
+    WindowPosY,
+    WindowMaximized,
+    WindowVSync,
+
+    CameraPositionX,
+    CameraPositionY,
+    CameraPositionZ,
+    CameraFrontX,
+    CameraFrontY,
+    CameraFrontZ,
+    CameraUpX,
+    CameraUpY,
+    CameraUpZ,
+    CameraPitch,
+    CameraYaw,
+
+    RenderingFov,
+    RenderingMaxRaySteps,
+    RenderingRayStepSize,
+    RenderingDebugMode,
+    RenderingPhysicsDebugEnabled,
+    RenderingPhysicsDebugDepthTest,
+    RenderingPhysicsDebugScale,
+    RenderingPhysicsDebugFlags,
+
+    RenderingBlackHolesEnabled,
+    RenderingGravitationalLensingEnabled,
+    RenderingGravitationalRedshiftEnabled,
+    RenderingAccretionDiskEnabled,
+    RenderingAccDiskHeight,
+    RenderingAccDiskNoiseScale,
+    RenderingAccDiskNoiseLOD,
+    RenderingAccDiskSpeed,
+    RenderingDopplerBeamingEnabled,
+    RenderingBloomEnabled,
+    RenderingBloomThreshold,
+    RenderingBloomBlurPasses,
+    RenderingBloomIntensity,
+    RenderingBloomDebug,
+
+    AppLastOpenScene,
+    AppRecentScenes,
+    AppShowDemoWindow,
+    AppDebugMode,
+    AppUseKerrDistortion,
+    AppCameraSpeed,
+    AppMouseSensitivity,
+
+    COUNT
+};
+
+struct ParameterMetadata {
+    const char* name;
+    const char* displayName;
+    const char* tooltip;
+    ParameterType type;
+    ParameterGroup group;
+
+    float minValue = 0.0f;
+    float maxValue = 0.0f;
+    float dragSpeed = 1.0f;
+
+    std::vector<std::string> scaleValueNames;
+    std::vector<float> scaleValues;
+    std::vector<std::string> enumValues;
+
+    bool isReadOnly = false;
+    bool showInUI = true;
+};
+
 class AppState {
 public:
-    using StateValue = std::variant<bool, int, float, std::string, glm::vec2, glm::vec3>;
-
-    struct WindowState {
-        int width = 800;
-        int height = 600;
-        int posX = -1; // -1 means centered
-        int posY = -1; // -1 means centered
-        bool maximized = false;
-        bool vsync = true;
-    } window;
-
-    struct ApplicationState {
-        std::string lastOpenScene;
-        std::vector<std::string> recentScenes;
-        bool showDemoWindow = false;
-        int debugMode = 0;
-        bool useKerrDistortion = true;
-        float cameraSpeed = 5.0f;
-        float mouseSensitivity = 0.1f;
-    } app;
-
-    struct RenderingState {
-        float fov = 45.0f;
-        int maxRaySteps = 1000;
-        float rayStepSize = 0.01f;
-        DebugMode debugMode = DebugMode::Normal;
-
-        bool physicsDebugEnabled = false;
-        bool physicsDebugDepthTest = true;
-        float physicsDebugScale = 1.0f;
-        uint32_t physicsDebugFlags = 0;
-    } rendering;
-
-    struct CameraState {
-        glm::vec3 position = glm::vec3(0.0f, 0.0f, 5.0f);
-        glm::vec3 front = glm::vec3(0.0f, 0.0f, -1.0f);
-        glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-        float pitch = 0.0f;
-        float yaw = -90.0f;
-    } camera;
-
-    std::unordered_map<std::string, StateValue> customProperties;
+    using StateValue = std::variant<bool, int, float, std::string, glm::vec3, std::vector<std::string>>;
 
     void LoadFromFile(const std::filesystem::path &configPath = "config.yaml");
-
     void SaveToFile(const std::filesystem::path &configPath = "config.yaml");
 
     template<typename T>
-    void SetProperty(const std::string &key, const T &value);
+    void Set(StateParameter param, const T &value);
 
     template<typename T>
-    T GetProperty(const std::string &key, const T &defaultValue) const;
+    T Get(StateParameter param) const;
 
-    bool HasProperty(const std::string &key) const;
+    bool GetBool(StateParameter param) const;
+    int GetInt(StateParameter param) const;
+    float GetFloat(StateParameter param) const;
+    const std::string& GetString(StateParameter param) const;
+    glm::vec3 GetVec3(StateParameter param) const;
+    const std::vector<std::string>& GetStringVector(StateParameter param) const;
 
-    void RemoveProperty(const std::string &key);
+    void SetBool(StateParameter param, bool value);
+    void SetInt(StateParameter param, int value);
+    void SetFloat(StateParameter param, float value);
+    void SetString(StateParameter param, const std::string &value);
+    void SetVec3(StateParameter param, const glm::vec3 &value);
+    void SetStringVector(StateParameter param, const std::vector<std::string> &value);
 
-    void SetLastOpenScene(const std::string &scenePath);
-
-    std::string GetLastOpenScene() const;
+    glm::vec3 GetCameraPosition() const;
+    glm::vec3 GetCameraFront() const;
+    glm::vec3 GetCameraUp() const;
+    void SetCameraPosition(const glm::vec3 &position);
+    void SetCameraFront(const glm::vec3 &front);
+    void SetCameraUp(const glm::vec3 &up);
 
     void UpdateWindowState(int width, int height, int posX, int posY, bool maximized);
+    void UpdateCameraState(const glm::vec3 &position, const glm::vec3 &front, const glm::vec3 &up, float pitch, float yaw);
 
-    void UpdateCameraState(const glm::vec3 &position, const glm::vec3 &front, const glm::vec3 &up, float pitch,
-                           float yaw);
+    static const ParameterMetadata& GetMetadata(StateParameter param);
 
+private:
+    std::array<StateValue, static_cast<size_t>(StateParameter::COUNT)> m_values;
     std::filesystem::path m_configPath;
 
+    void InitializeDefaults();
     YAML::Node SerializeToYaml() const;
-
     void DeserializeFromYaml(const YAML::Node &node);
-
-    static StateValue YamlNodeToStateValue(const YAML::Node &node);
-
-    static YAML::Node StateValueToYamlNode(const StateValue &value);
 };
 
 template<typename T>
-void AppState::SetProperty(const std::string &key, const T &value) {
-    customProperties[key] = value;
+void AppState::Set(StateParameter param, const T &value) {
+    m_values[static_cast<size_t>(param)] = value;
 }
 
 template<typename T>
-T AppState::GetProperty(const std::string &key, const T &defaultValue) const {
-    if (auto it = customProperties.find(key); it != customProperties.end()) {
-        try {
-            return std::get<T>(it->second);
-        } catch (const std::bad_variant_access &) {
-            return defaultValue;
-        }
-    }
-    return defaultValue;
-}
-
-namespace YAML {
-    template<>
-    struct convert<glm::vec2> {
-        static Node encode(const glm::vec2 &rhs) {
-            Node node;
-            node.push_back(rhs.x);
-            node.push_back(rhs.y);
-            return node;
-        }
-
-        static bool decode(const Node &node, glm::vec2 &rhs) {
-            if (!node.IsSequence() || node.size() != 2) {
-                return false;
-            }
-            rhs.x = node[0].as<float>();
-            rhs.y = node[1].as<float>();
-            return true;
-        }
-    };
-
-    template<>
-    struct convert<glm::vec3> {
-        static Node encode(const glm::vec3 &rhs) {
-            Node node;
-            node.push_back(rhs.x);
-            node.push_back(rhs.y);
-            node.push_back(rhs.z);
-            return node;
-        }
-
-        static bool decode(const Node &node, glm::vec3 &rhs) {
-            if (!node.IsSequence() || node.size() != 3) {
-                return false;
-            }
-            rhs.x = node[0].as<float>();
-            rhs.y = node[1].as<float>();
-            rhs.z = node[2].as<float>();
-            return true;
-        }
-    };
+T AppState::Get(StateParameter param) const {
+    return std::get<T>(m_values[static_cast<size_t>(param)]);
 }

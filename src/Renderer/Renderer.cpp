@@ -77,10 +77,10 @@ void Renderer::Init() {
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
     // Set a much larger far plane for the camera to avoid grid clipping
-    camera = std::make_unique<Camera>(Application::State().rendering.fov, (float) width / (float) height, 0.01f, 10000.0f);
+    camera = std::make_unique<Camera>(Application::State().GetFloat(StateParameter::RenderingFov), (float) width / (float) height, 0.01f, 10000.0f);
 
-    camera->SetPosition(Application::State().camera.position);
-    camera->SetYawPitch(Application::State().camera.yaw, Application::State().camera.pitch);
+    camera->SetPosition(Application::State().GetCameraPosition());
+    camera->SetYawPitch(Application::State().GetFloat(StateParameter::CameraYaw), Application::State().GetFloat(StateParameter::CameraPitch));
 
     input = std::make_unique<Input>(window);
 
@@ -103,7 +103,7 @@ void Renderer::Shutdown() {
 }
 
 void Renderer::BeginFrame() {
-    int vsyncVal = Application::State().window.vsync ? 1 : 0;
+    int vsyncVal = Application::State().GetBool(StateParameter::WindowVSync) ? 1 : 0;
     if (vsyncVal != lastVsync) {
         glfwSwapInterval(vsyncVal);
         lastVsync = vsyncVal;
@@ -461,7 +461,7 @@ void Renderer::Render3DSimulation(Scene *scene) {
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
 
-    if (Application::State().rendering.debugMode == DebugMode::GravityGrid && gravityGridRenderer) {
+    if (static_cast<DebugMode>(Application::State().GetInt(StateParameter::RenderingDebugMode)) == DebugMode::GravityGrid && gravityGridRenderer) {
         gravityGridRenderer->Render(scene->blackHoles, *camera, currentTime);
     }
 
@@ -492,7 +492,7 @@ void Renderer::UpdateCamera(float deltaTime) {
     if (input->IsKeyDown(GLFW_KEY_E)) up += 1.0f;
     if (input->IsKeyDown(GLFW_KEY_Q)) up -= 1.0f;
 
-    float cameraSpeed = Application::State().app.cameraSpeed;
+    float cameraSpeed = Application::State().GetFloat(StateParameter::AppCameraSpeed);
     camera->ProcessKeyboard(forward, right, up, deltaTime, cameraSpeed);
 
     bool cameraChanged = false;
@@ -500,7 +500,7 @@ void Renderer::UpdateCamera(float deltaTime) {
         input->SetCursorEnabled(false);
         double dx, dy;
         input->GetMouseDelta(dx, dy);
-        float mouseSensitivity = Application::State().app.mouseSensitivity;
+        float mouseSensitivity = Application::State().GetFloat(StateParameter::AppMouseSensitivity);
         if (dx != 0.0 || dy != 0.0) {
             camera->ProcessMouse((float) dx, (float) dy, mouseSensitivity);
             cameraChanged = true;
@@ -519,8 +519,8 @@ void Renderer::UpdateCamera(float deltaTime) {
         );
     }
 
-    if (camera->GetFov() != Application::State().rendering.fov) {
-        camera->SetFov(Application::State().rendering.fov);
+    if (camera->GetFov() != Application::State().GetFloat(StateParameter::RenderingFov)) {
+        camera->SetFov(Application::State().GetFloat(StateParameter::RenderingFov));
     }
 }
 

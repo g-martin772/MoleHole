@@ -29,7 +29,7 @@ static void AddToRecentScenes(UI* ui, const std::string& path) {
         return;
     }
 
-    auto& recentScenes = Application::State().app.recentScenes;
+    auto recentScenes = Application::State().GetStringVector(StateParameter::AppRecentScenes);
 
     auto it = std::find(recentScenes.begin(), recentScenes.end(), path);
     if (it != recentScenes.end()) {
@@ -43,15 +43,17 @@ static void AddToRecentScenes(UI* ui, const std::string& path) {
         recentScenes.resize(MAX_RECENT_SCENES);
     }
 
+    Application::State().SetStringVector(StateParameter::AppRecentScenes, recentScenes);
     ui->MarkConfigDirty();
 }
 
 static void RemoveFromRecentScenes(UI* ui, const std::string& path) {
-    auto& recentScenes = Application::State().app.recentScenes;
+    auto recentScenes = Application::State().GetStringVector(StateParameter::AppRecentScenes);
 
     auto it = std::find(recentScenes.begin(), recentScenes.end(), path);
     if (it != recentScenes.end()) {
         recentScenes.erase(it);
+        Application::State().SetStringVector(StateParameter::AppRecentScenes, recentScenes);
         ui->MarkConfigDirty();
     }
 }
@@ -77,7 +79,7 @@ void LoadScene(Scene* scene, const std::string& path) {
 
         scene->Deserialize(fsPath);
 
-        Application::Instance().GetState().SetLastOpenScene(path);
+        Application::Instance().GetState().SetString(StateParameter::AppLastOpenScene, path);
         // Note: Can't call AddToRecentScenes here without UI* parameter
 
         spdlog::info("Scene loaded successfully: {}", path);
@@ -119,7 +121,7 @@ void Render(UI* ui, Scene* scene) {
 
     // Recent Scenes Section
     if (ImGui::CollapsingHeader("Recent Scenes", ImGuiTreeNodeFlags_DefaultOpen)) {
-        auto& recentScenes = Application::State().app.recentScenes;
+        auto recentScenes = Application::State().GetStringVector(StateParameter::AppRecentScenes);
 
         std::vector<size_t> indicesToRemove;
         std::set<std::string> uniquePaths;

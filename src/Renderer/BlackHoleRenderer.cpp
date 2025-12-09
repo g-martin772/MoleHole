@@ -260,7 +260,7 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const s
     auto& config = Application::State();
 
     if (!blackHoles.empty()) {
-        m_computeShader->SetInt("u_debugMode", static_cast<int>(config.rendering.debugMode));
+        m_computeShader->SetInt("u_debugMode", config.GetInt(StateParameter::RenderingDebugMode));
     }
 
     unsigned int groupsX = (m_width + 15) / 16;
@@ -280,7 +280,7 @@ void BlackHoleRenderer::ApplyBloom() {
     auto& config = Application::State();
     
     // Check if bloom is enabled
-    int bloomEnabled = config.GetProperty<int>("bloomEnabled", 1);
+    int bloomEnabled = config.GetInt(StateParameter::RenderingBloomEnabled);
     if (!bloomEnabled) {
         return;
     }
@@ -291,7 +291,7 @@ void BlackHoleRenderer::ApplyBloom() {
     // Step 1: Extract bright areas
     m_bloomExtractShader->Bind();
     
-    float bloomThreshold = config.GetProperty<float>("bloomThreshold", 1.0f);
+    float bloomThreshold = config.GetFloat(StateParameter::RenderingBloomThreshold);
     m_bloomExtractShader->SetFloat("u_bloomThreshold", bloomThreshold);
     
     glBindImageTexture(0, m_computeTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
@@ -305,8 +305,8 @@ void BlackHoleRenderer::ApplyBloom() {
     // Step 2: Apply Gaussian blur (ping-pong between two textures)
     m_bloomBlurShader->Bind();
     
-    int blurPasses = config.GetProperty<int>("bloomBlurPasses", 4);
-    
+    int blurPasses = config.GetInt(StateParameter::RenderingBloomBlurPasses);
+
     bool horizontal = true;
     unsigned int srcTexture = m_bloomBrightTexture;
     
@@ -351,16 +351,16 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     m_computeShader->SetFloat("u_time", time);
 
     // Rendering settings from AppState
-    m_computeShader->SetInt("u_gravitationalLensingEnabled", config.GetProperty<int>("gravitationalLensingEnabled", 1));
-    m_computeShader->SetInt("u_accretionDiskEnabled", config.GetProperty<int>("accretionDiskEnabled", 1));
-    m_computeShader->SetInt("u_renderBlackHoles", config.GetProperty<int>("renderBlackHoles", 1));
-    m_computeShader->SetFloat("u_accDiskHeight", config.GetProperty<float>("accDiskHeight", 0.2f));
-    m_computeShader->SetFloat("u_accDiskNoiseScale", config.GetProperty<float>("accDiskNoiseScale", 1.0f));
-    m_computeShader->SetFloat("u_accDiskNoiseLOD", config.GetProperty<float>("accDiskNoiseLOD", 5.0f));
-    m_computeShader->SetFloat("u_accDiskSpeed", config.GetProperty<float>("accDiskSpeed", 0.5f));
-    m_computeShader->SetFloat("u_dopplerBeamingEnabled", config.GetProperty<float>("dopplerBeamingEnabled", 1.0f));
-    m_computeShader->SetFloat("u_accDiskTemp", config.GetProperty<float>("accDiskTemp", 2000.0f));
-    m_computeShader->SetInt("u_gravitationalRedshiftEnabled", config.GetProperty<int>("gravitationalRedshiftEnabled", 1));
+    m_computeShader->SetInt("u_gravitationalLensingEnabled", config.GetInt(StateParameter::RenderingGravitationalLensingEnabled));
+    m_computeShader->SetInt("u_accretionDiskEnabled", config.GetInt(StateParameter::RenderingAccretionDiskEnabled));
+    m_computeShader->SetInt("u_renderBlackHoles", config.GetInt(StateParameter::RenderingBlackHolesEnabled));
+    m_computeShader->SetFloat("u_accDiskHeight", config.GetFloat(StateParameter::RenderingAccDiskHeight));
+    m_computeShader->SetFloat("u_accDiskNoiseScale", config.GetFloat(StateParameter::RenderingAccDiskNoiseScale));
+    m_computeShader->SetFloat("u_accDiskNoiseLOD", config.GetFloat(StateParameter::RenderingAccDiskNoiseLOD));
+    m_computeShader->SetFloat("u_accDiskSpeed", config.GetFloat(StateParameter::RenderingAccDiskSpeed));
+    m_computeShader->SetFloat("u_dopplerBeamingEnabled", static_cast<float>(config.GetInt(StateParameter::RenderingDopplerBeamingEnabled)));
+    m_computeShader->SetFloat("u_accDiskTemp", 2000.0f);
+    m_computeShader->SetInt("u_gravitationalRedshiftEnabled", config.GetInt(StateParameter::RenderingGravitationalRedshiftEnabled));
 
     // Black holes
     int numBlackHoles = std::min(static_cast<int>(blackHoles.size()), 8);
@@ -384,7 +384,7 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     }
     
     // Spheres
-    int renderSpheres = config.GetProperty<int>("renderSpheresInRayMarching", 1);
+    int renderSpheres = 1; // Default enabled
     m_computeShader->SetInt("u_renderSpheres", renderSpheres);
     
     int numSpheres = std::min(static_cast<int>(spheres.size()), 16); // MAX_SPHERES = 16
@@ -425,9 +425,9 @@ void BlackHoleRenderer::RenderToScreen() {
     m_displayShader->SetInt("u_bloomImage", 1);
     
     // Set bloom parameters
-    int bloomEnabled = config.GetProperty<int>("bloomEnabled", 1);
-    float bloomIntensity = config.GetProperty<float>("bloomIntensity", 1.0f);
-    int bloomDebug = config.GetProperty<int>("bloomDebug", 0);
+    int bloomEnabled = config.GetInt(StateParameter::RenderingBloomEnabled);
+    float bloomIntensity = config.GetFloat(StateParameter::RenderingBloomIntensity);
+    int bloomDebug = config.GetInt(StateParameter::RenderingBloomDebug);
     m_displayShader->SetInt("u_bloomEnabled", bloomEnabled);
     m_displayShader->SetFloat("u_bloomIntensity", bloomIntensity);
     m_displayShader->SetInt("u_bloomDebug", bloomDebug);

@@ -34,9 +34,9 @@ bool Application::Initialize() {
 
         m_ui.Initialize();
 
-        if (!m_state.GetLastOpenScene().empty() &&
-            std::filesystem::exists(m_state.GetLastOpenScene())) {
-            LoadScene(m_state.GetLastOpenScene());
+        const std::string& lastScene = m_state.GetString(StateParameter::AppLastOpenScene);
+        if (!lastScene.empty() && std::filesystem::exists(lastScene)) {
+            LoadScene(lastScene);
         }
 
         m_initialized = true;
@@ -155,7 +155,7 @@ void Application::LoadScene(const std::filesystem::path& scenePath) {
     try {
         if (auto scene = m_simulation.GetScene(); scene && std::filesystem::exists(scenePath)) {
             scene->Deserialize(scenePath);
-            m_state.SetLastOpenScene(scenePath.string());
+            m_state.SetString(StateParameter::AppLastOpenScene, scenePath.string());
             spdlog::info("Loaded scene: {}", scenePath.string());
         }
     } catch (const std::exception& e) {
@@ -167,7 +167,7 @@ void Application::SaveScene(const std::filesystem::path& scenePath) {
     try {
         if (auto scene = m_simulation.GetScene()) {
             scene->Serialize(scenePath);
-            m_state.SetLastOpenScene(scenePath.string());
+            m_state.SetString(StateParameter::AppLastOpenScene, scenePath.string());
             spdlog::info("Saved scene: {}", scenePath.string());
         }
     } catch (const std::exception& e) {
@@ -180,7 +180,7 @@ void Application::NewScene() {
         scene->blackHoles.clear();
         scene->name = "New Scene";
         scene->currentPath.clear();
-        m_state.SetLastOpenScene("");
+        m_state.SetString(StateParameter::AppLastOpenScene, "");
         spdlog::info("Created new scene");
     }
 }
@@ -216,18 +216,20 @@ void Application::InitializeRenderer() {
         glfwSetWindowMaximizeCallback(window, WindowMaximizeCallback);
         glfwSetWindowCloseCallback(window, WindowCloseCallback);
 
-        glfwSetWindowSize(window, m_state.window.width, m_state.window.height);
-        if (m_state.window.posX >= 0 && m_state.window.posY >= 0) {
-            glfwSetWindowPos(window, m_state.window.posX, m_state.window.posY);
+        glfwSetWindowSize(window, m_state.GetInt(StateParameter::WindowWidth), m_state.GetInt(StateParameter::WindowHeight));
+        int posX = m_state.GetInt(StateParameter::WindowPosX);
+        int posY = m_state.GetInt(StateParameter::WindowPosY);
+        if (posX >= 0 && posY >= 0) {
+            glfwSetWindowPos(window, posX, posY);
         }
-        if (m_state.window.maximized) {
+        if (m_state.GetBool(StateParameter::WindowMaximized)) {
             glfwMaximizeWindow(window);
         }
 
         glfwSetWindowTitle(window, "MoleHole");
     }
 
-    glfwSwapInterval(m_state.window.vsync ? 1 : 0);
+    glfwSwapInterval(m_state.GetBool(StateParameter::WindowVSync) ? 1 : 0);
 }
 
 void Application::InitializeSimulation() {
@@ -236,9 +238,9 @@ void Application::InitializeSimulation() {
 
     auto* physics = m_simulation.GetPhysics();
     if (physics) {
-        physics->SetVisualizationScale(m_state.rendering.physicsDebugScale);
+        physics->SetVisualizationScale(m_state.GetFloat(StateParameter::RenderingPhysicsDebugScale));
 
-        uint32_t flags = m_state.rendering.physicsDebugFlags;
+        uint32_t flags = static_cast<uint32_t>(m_state.GetInt(StateParameter::RenderingPhysicsDebugFlags));
         physics->SetVisualizationParameter(PxVisualizationParameter::eWORLD_AXES, (flags & (1 << 0)) ? 1.0f : 0.0f);
         physics->SetVisualizationParameter(PxVisualizationParameter::eBODY_AXES, (flags & (1 << 1)) ? 1.0f : 0.0f);
         physics->SetVisualizationParameter(PxVisualizationParameter::eBODY_MASS_AXES, (flags & (1 << 2)) ? 1.0f : 0.0f);

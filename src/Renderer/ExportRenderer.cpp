@@ -199,7 +199,7 @@ void ExportRenderer::ProcessImageExport() {
             m_progress = 0.1f;
 
             m_camera = std::make_unique<Camera>(
-                Application::State().rendering.fov,
+                Application::State().GetFloat(StateParameter::RenderingFov),
                 (float)m_imageConfig.width / (float)m_imageConfig.height,
                 0.01f, 10000.0f
             );
@@ -267,7 +267,7 @@ void ExportRenderer::ProcessVideoExport() {
         m_progress = 0.0f;
 
         m_camera = std::make_unique<Camera>(
-            Application::State().rendering.fov,
+            Application::State().GetFloat(StateParameter::RenderingFov),
             (float)m_videoConfig.width / (float)m_videoConfig.height,
             0.01f, 10000.0f
         );
