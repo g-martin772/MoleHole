@@ -2,6 +2,7 @@
 #include <spdlog/spdlog.h>
 #include "GraphExecutor.h"
 #include "Application/AnimationGraph.h"
+#include "Application/Application.h"
 
 Simulation::Simulation() : m_State(State::Stopped), m_SimulationTime(0.0f), m_AnimationGraph(nullptr), m_StartEventExecuted(false) {
     m_Scene = std::make_unique<Scene>();
@@ -51,6 +52,12 @@ void Simulation::Stop() {
         m_State = State::Stopped;
         m_StartEventExecuted = false;
         m_GraphExecutor.reset();
+        
+        auto& renderer = Application::GetRenderer();
+        if (auto* pathsRenderer = renderer.GetObjectPathsRenderer()) {
+            pathsRenderer->ClearHistories();
+        }
+        
         spdlog::info("Simulation stopped and reset to initial state");
     }
 }
@@ -69,6 +76,12 @@ void Simulation::Reset() {
         m_State = State::Stopped;
         m_StartEventExecuted = false;
         m_GraphExecutor.reset();
+        
+        auto& renderer = Application::GetRenderer();
+        if (auto* pathsRenderer = renderer.GetObjectPathsRenderer()) {
+            pathsRenderer->ClearHistories();
+        }
+        
         spdlog::info("Simulation reset to initial state");
     }
 }
@@ -104,4 +117,9 @@ void Simulation::UpdateSimulation(float deltaTime) const {
     }
     m_Physics->Update(deltaTime);
     m_Physics->Apply();
+    
+    auto& renderer = Application::GetRenderer();
+    if (auto* pathsRenderer = renderer.GetObjectPathsRenderer()) {
+        pathsRenderer->RecordCurrentPositions(m_Scene.get());
+    }
 }

@@ -4,6 +4,7 @@
 #include <filesystem>
 #include "LinuxGtkInit.h"
 #include "Renderer/PhysicsDebugRenderer.h"
+#include "imgui.h"
 
 #ifndef _DEBUG
 #define _DEBUG
@@ -33,6 +34,10 @@ bool Application::Initialize() {
         InitializeSimulation();
 
         m_ui.Initialize();
+
+        // Initialize intro animation (after UI and renderer are ready)
+        m_introAnimation = std::make_unique<IntroAnimation>();
+        m_introAnimation->Init();
 
         if (!m_state.GetLastOpenScene().empty() &&
             std::filesystem::exists(m_state.GetLastOpenScene())) {
@@ -95,6 +100,20 @@ void Application::Shutdown() {
 }
 
 void Application::Update(float deltaTime) {
+    // Update intro animation first
+    if (m_introAnimation && m_introAnimation->IsActive()) {
+        m_introAnimation->Update(deltaTime);
+        
+        // Allow skipping intro with Escape or Space
+        ImGuiIO& io = ImGui::GetIO();
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsKeyPressed(ImGuiKey_Space)) {
+            m_introAnimation->Skip();
+        }
+        
+        // Don't update simulation/UI during intro
+        return;
+    }
+    
     m_simulation.Update(deltaTime);
     m_ui.Update(deltaTime);
     m_exportRenderer.Update();
@@ -110,6 +129,15 @@ void Application::Update(float deltaTime) {
 
 void Application::Render() {
     m_renderer.BeginFrame();
+
+    // If intro animation is active, render only that
+    if (m_introAnimation && m_introAnimation->IsActive()) {
+        int width, height;
+        glfwGetFramebufferSize(GetWindow(), &width, &height);
+        m_introAnimation->Render(width, height);
+        m_renderer.EndFrame(false); // Don't clear screen - intro has already rendered everything
+        return;
+    }
 
     auto scene = m_simulation.GetScene();
 
@@ -128,7 +156,7 @@ void Application::Render() {
         }
     }
 
-    m_renderer.EndFrame();
+    m_renderer.EndFrame(true);
 }
 
 bool Application::ShouldClose() const {

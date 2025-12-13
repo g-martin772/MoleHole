@@ -27,7 +27,7 @@ public:
     void Init();
     void Shutdown();
     void BeginFrame();
-    void EndFrame();
+    void EndFrame(bool clearScreen = true);
     void RenderScene(Scene *scene);
 
     ~Renderer() = default;

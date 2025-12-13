@@ -218,14 +218,9 @@ void Render(UI* ui) {
                 ImGui::Separator();
                 ImGui::TextDisabled("Object Paths Settings");
 
-                float duration = paths->GetSimulationDuration();
-                if (ImGui::DragFloat("Simulation Duration (s)", &duration, 0.5f, 0.1f, 100.0f)) {
-                    paths->SetSimulationDuration(duration);
-                }
-                
-                float timeStep = paths->GetTimeStep();
-                if (ImGui::DragFloat("Time Step (s)", &timeStep, 0.01f, 0.001f, 1.0f)) {
-                    paths->SetTimeStep(timeStep);
+                int maxHistorySize = static_cast<int>(paths->GetMaxHistorySize());
+                if (ImGui::DragInt("Max History Size", &maxHistorySize, 10.0f, 100, 1000000)) {
+                    paths->SetMaxHistorySize(static_cast<size_t>(maxHistorySize));
                 }
                 
                 float lineThickness = paths->GetLineThickness();

@@ -340,7 +340,7 @@ void Render(UI* ui, Scene* scene) {
                         }
                     }
 
-                    if (ImGui::DragFloat("Mass", &mesh.massKg, 1000.0f)) {
+                    if (ImGui::DragFloat("Mass (kg)", &mesh.massKg, 100.0f, 0.1f, 1e10f)) {
                         meshChanged = true;
                     }
 
@@ -471,6 +471,10 @@ void Render(UI* ui, Scene* scene) {
                     }
 
                     if (ImGui::DragFloat3("Velocity", &sphere.velocity[0], 0.1f)) {
+                        sphereChanged = true;
+                    }
+
+                    if (ImGui::DragFloat("Mass (kg)", &sphere.massKg, 100.0f, 0.1f, 1e10f)) {
                         sphereChanged = true;
                     }
 
