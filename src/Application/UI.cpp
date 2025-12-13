@@ -169,15 +169,11 @@ void UI::RenderMainUI(float fps, Scene* scene) {
         RendererWindow::Render(this, fps);
     }
 
-    // New Camera Window
-    bool showCameraWindow = true; // TODO: Add this to UI state if needed
-    if (showCameraWindow) {
+    if (m_showCameraWindow) {
         CameraWindow::Render(this);
     }
 
-    // New Debug Window
-    bool showDebugWindow = true; // TODO: Add this to UI state if needed
-    if (showDebugWindow) {
+    if (m_showDebugWindow) {
         DebugWindow::Render(this);
     }
 

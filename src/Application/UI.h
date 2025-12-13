@@ -54,6 +54,8 @@ public:
     bool* GetShowSimulationWindowPtr() { return &m_showSimulationWindow; }
     bool* GetShowSceneWindowPtr() { return &m_showSceneWindow; }
     bool* GetShowSettingsWindowPtr() { return &m_showSettingsWindow; }
+    bool* GetShowCameraWindowPtr() { return &m_showCameraWindow; }
+    bool* GetShowDebugWindowPtr() { return &m_showDebugWindow; }
     bool* GetShowDemoWindowPtr() { return &m_showDemoWindow; }
     bool* GetShowHelpWindowPtr() { return &m_showHelpWindow; }
     bool* GetShowExportWindowPtr() { return &m_showExportWindow; }
@@ -75,6 +77,8 @@ private:
     bool m_showSceneWindow = true;
     bool m_showSimulationWindow = true;
     bool m_showSettingsWindow = false;
+    bool m_showCameraWindow = true;
+    bool m_showDebugWindow = true;
     bool m_initialized = false;
     bool m_configDirty = false;
     float m_saveTimer = 0.0f;
@@ -107,6 +111,6 @@ private:
     } m_videoConfig;
 
     // Sidebar animation
-    float m_sidebarHoverAnim[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    float m_sidebarHoverAnim[7] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     int m_hoveredSidebarItem = -1;
 };
