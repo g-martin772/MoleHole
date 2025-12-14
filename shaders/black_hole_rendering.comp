@@ -15,11 +15,12 @@ const float STEP_SIZE = 0.3;
 const float PI = 3.1415926535;
 
 // black holes
+const int MAX_BLACK_HOLES = 8;
 uniform int u_numBlackHoles;
-uniform vec3 u_blackHolePositions[8];
-uniform float u_blackHoleMasses[8];
-uniform float u_blackHoleSpins[8]; // 0.0 to 1.0
-uniform vec3 u_blackHoleSpinAxes[8]; // normalized spin axis
+uniform vec3 u_blackHolePositions[MAX_BLACK_HOLES];
+uniform float u_blackHoleMasses[MAX_BLACK_HOLES];
+uniform float u_blackHoleSpins[MAX_BLACK_HOLES];
+uniform vec3 u_blackHoleSpinAxes[MAX_BLACK_HOLES];
 
 // spheres
 const int MAX_SPHERES = 16;
@@ -27,8 +28,30 @@ uniform int u_numSpheres;
 uniform vec3 u_spherePositions[MAX_SPHERES];
 uniform float u_sphereRadii[MAX_SPHERES];
 uniform vec4 u_sphereColors[MAX_SPHERES];
-uniform float u_sphereMasses[MAX_SPHERES]; // In solar masses for HR diagram
-uniform int u_renderSpheres = 1;
+uniform float u_sphereMasses[MAX_SPHERES];
+
+// meshes
+const int MAX_MESHES = 8;
+const int MAX_TRIANGLES_PER_MESH = 1024;
+uniform int u_numMeshes;
+struct MeshData {
+    mat4 transform;
+    vec4 baseColor;
+    float metallic;
+    float roughness;
+    int triangleCount;
+    int triangleOffset;
+};
+struct Triangle {
+    vec3 v0, v1, v2;
+    vec3 n0, n1, n2;
+};
+layout(std430, binding = 1) buffer MeshBuffer {
+    MeshData meshData[MAX_MESHES];
+};
+layout(std430, binding = 2) buffer TriangleBuffer {
+    Triangle triangles[];
+};
 
 // debug
 uniform int u_debugMode = 0;
@@ -45,20 +68,21 @@ uniform float u_fov;
 uniform float u_aspect;
 
 // settings
-uniform int u_gravitationalLensingEnabled = 1;
+uniform int u_useAccelerationLUT = 1;
+uniform int u_useHRDiagramLUT = 1;
 uniform int u_accretionDiskEnabled = 1;
-uniform int u_renderBlackHoles = 1;
+uniform int u_gravitationalLensingEnabled = 1;
+uniform int u_gravitationalRedshiftEnabled = 1;
 uniform float u_accDiskHeight = 0.2;
 uniform float u_accDiskNoiseScale = 1.0;
 uniform float u_accDiskNoiseLOD = 5.0;
 uniform float u_accDiskSpeed = 0.5;
 uniform float u_dopplerBeamingEnabled = 1.0;
-uniform int u_useAccelerationLUT = 1;
-uniform int u_useHRDiagramLUT = 1;
 
-// new uniforms for disk temperature and GR redshift toggle
-uniform float u_accDiskTemp = 2000.0;
-uniform int u_gravitationalRedshiftEnabled = 1;
+// enable renderings
+uniform int u_renderBlackHoles = 1;
+uniform int u_renderSpheres = 1;
+uniform int u_renderMeshes = 1;
 
 // LUT parameters (must match the LUT texture generation)
 // Using uniforms instead of const to avoid GLSL type inference issues
@@ -141,7 +165,7 @@ float calculateEventHorizonRadius(float mass) {
 }
 
 float calculateInfluenceRadius(float r_s) {
-    return 5.0f * r_s;
+    return 7.0f * r_s;
 }
 
 vec3 calculateAngularMomentumFromSpin(float spin, vec3 spinAxis, float mass) {
@@ -149,22 +173,13 @@ vec3 calculateAngularMomentumFromSpin(float spin, vec3 spinAxis, float mass) {
     return h * normalize(spinAxis);
 }
 
-// Get temperature from black hole mass using HR diagram
+// User HR Diagram for temperature (TODO needs to be changed for correct temp formula)
 float getTemperatureFromMass(float mass) {
-    if (u_useHRDiagramLUT == 1) {
-        // Map mass to [0,1] using log scale (matching the generator)
-        float logMass = log(clamp(mass, HR_MASS_MIN, HR_MASS_MAX));
-        float massNorm = (logMass - HR_LOG_MASS_MIN) / (HR_LOG_MASS_MAX - HR_LOG_MASS_MIN);
-        massNorm = clamp(massNorm, 0.0, 1.0);
-        
-        // Sample the LUT (returns vec3: temperature, luminosity, radius)
-        // We only use the temperature (r channel)
-        vec3 hrData = texture(u_hrDiagramLUT, vec2(massNorm, 0.5)).rgb;
-        return hrData.r; // temperature
-    } else {
-        // Fallback: use the uniform temperature
-        return u_accDiskTemp;
-    }
+    float logMass = log(clamp(mass, HR_MASS_MIN, HR_MASS_MAX));
+    float massNorm = (logMass - HR_LOG_MASS_MIN) / (HR_LOG_MASS_MAX - HR_LOG_MASS_MIN);
+    massNorm = clamp(massNorm, 0.0, 1.0);
+    vec3 hrData = texture(u_hrDiagramLUT, vec2(massNorm, 0.5)).rgb;
+    return hrData.r;
 }
 
 vec3 calculateAccelerationLUT(float angMomentumSqrd, vec3 relPos) {
@@ -289,6 +304,115 @@ bool intersectSphere(vec3 rayOrigin, vec3 rayDir, vec3 sphereCenter, float radiu
     return false;
 }
 
+// Ray-triangle intersection using Möller-Trumbore algorithm
+bool intersectTriangle(vec3 rayOrigin, vec3 rayDir, vec3 v0, vec3 v1, vec3 v2, out float t, out vec2 baryCoord) {
+    vec3 edge1 = v1 - v0;
+    vec3 edge2 = v2 - v0;
+    vec3 h = cross(rayDir, edge2);
+    float a = dot(edge1, h);
+    
+    if (abs(a) < EPSILON) return false;
+    
+    float f = 1.0 / a;
+    vec3 s = rayOrigin - v0;
+    float u = f * dot(s, h);
+    
+    if (u < 0.0 || u > 1.0) return false;
+    
+    vec3 q = cross(s, edge1);
+    float v = f * dot(rayDir, q);
+    
+    if (v < 0.0 || u + v > 1.0) return false;
+    
+    t = f * dot(edge2, q);
+    
+    if (t > EPSILON) {
+        baryCoord = vec2(u, v);
+        return true;
+    }
+    
+    return false;
+}
+
+// PBR lighting functions for mesh rendering
+float DistributionGGX(vec3 N, vec3 H, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+    float num = a2;
+    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    denom = PI * denom * denom;
+    return num / denom;
+}
+
+float GeometrySchlickGGX(float NdotV, float roughness) {
+    float r = (roughness + 1.0);
+    float k = (r * r) / 8.0;
+    float num = NdotV;
+    float denom = NdotV * (1.0 - k) + k;
+    return num / denom;
+}
+
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float ggx2 = GeometrySchlickGGX(NdotV, roughness);
+    float ggx1 = GeometrySchlickGGX(NdotL, roughness);
+    return ggx1 * ggx2;
+}
+
+vec3 FresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+// Render mesh with PBR lighting
+vec3 renderMesh(vec3 hitPoint, vec3 rayDir, int meshIndex, int triangleIndex, vec2 baryCoord, vec3 lightDir) {
+    MeshData mesh = meshData[meshIndex];
+    Triangle tri = triangles[mesh.triangleOffset + triangleIndex];
+    
+    // Interpolate normal using barycentric coordinates
+    float w = 1.0 - baryCoord.x - baryCoord.y;
+    vec3 normal = normalize(w * tri.n0 + baryCoord.x * tri.n1 + baryCoord.y * tri.n2);
+    
+    vec3 N = normalize(normal);
+    vec3 V = normalize(-rayDir);
+    vec3 L = normalize(lightDir);
+    vec3 H = normalize(V + L);
+    
+    vec4 baseColor = mesh.baseColor;
+    float metallicFactor = mesh.metallic;
+    float roughnessFactor = mesh.roughness;
+    
+    vec3 F0 = vec3(0.04);
+    F0 = mix(F0, baseColor.rgb, metallicFactor);
+    
+    vec3 F = FresnelSchlick(max(dot(H, V), 0.0), F0);
+    float NDF = DistributionGGX(N, H, roughnessFactor);
+    float G = GeometrySmith(N, V, L, roughnessFactor);
+    
+    vec3 numerator = NDF * G * F;
+    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+    vec3 specular = numerator / denominator;
+    
+    vec3 kS = F;
+    vec3 kD = vec3(1.0) - kS;
+    kD *= 1.0 - metallicFactor;
+    
+    float NdotL = max(dot(N, L), 0.0);
+    vec3 radiance = vec3(1.0);
+    
+    vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL;
+    
+    vec3 ambient = vec3(0.03) * baseColor.rgb;
+    vec3 color = ambient + Lo;
+    
+    color = color / (color + vec3(1.0));
+    color = pow(color, vec3(1.0/2.2));
+    
+    return color;
+}
+
 // Render a sphere with lighting and HR diagram color
 vec3 renderSphere(vec3 hitPoint, vec3 rayDir, int sphereIndex, vec3 lightDir) {
     vec3 sphereCenter = u_spherePositions[sphereIndex];
@@ -315,13 +439,7 @@ vec3 renderSphere(vec3 hitPoint, vec3 rayDir, int sphereIndex, vec3 lightDir) {
         }
     }
     
-    // Simple diffuse + ambient lighting
-    float diffuse = max(dot(normal, lightDir), 0.0);
-    float ambient = 0.3;
-    
-    vec3 color = baseColor * (ambient + diffuse * 0.7);
-    
-    return color;
+    return baseColor;
 }
 
 void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin, float blackHoleMass) {    
@@ -376,109 +494,242 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
 }
 
 
-vec3 rayMarching(vec3 rayOrigin, vec3 rayDirection) {
- 
-    bool hitEventHorizon = false;
-    vec3 color = vec3(0.0f);
-    float alpha = 1.0f;
+// Check if ray is in any black hole influence zone
+bool isInInfluenceZone(vec3 pos, out int closestBHIndex, out float distanceToBH, out float influenceRadius) {
+    closestBHIndex = -1;
+    distanceToBH = 1e10;
+    influenceRadius = 0.0;
     
-    float stepSize = STEP_SIZE;
+    if (u_renderBlackHoles == 0) return false;
     
-    for (int i = 0; i < 500; i++) {
-        if (u_renderBlackHoles == 1) {
-            
-            // Reset step size to base value each iteration
-            float currentStepSize = stepSize;
-            
-            for (int j = 0; j < u_numBlackHoles; j++) {
-                vec3 relativePos = rayOrigin - u_blackHolePositions[j];
-                float distanceToBH = length(relativePos);
-                
-                // Calculate orbital angular momentum of the light ray
-                vec3 orbitalAngMomentum = cross(relativePos, rayDirection);
-                
-                // Get the black hole's intrinsic angular momentum from its spin
-                vec3 bhAngMomentum = calculateAngularMomentumFromSpin(
-                    u_blackHoleSpins[j], 
-                    u_blackHoleSpinAxes[j], 
-                    u_blackHoleMasses[j]
-                );
-                
-                // Total angular momentum: orbital + contribution from frame-dragging
-                // For simplicity, we use the orbital component's magnitude modified by spin
-                vec3 totalAngMomentum = orbitalAngMomentum + bhAngMomentum * 0.1; // Scale factor for frame-dragging effect
-                float angMomSqrd = dot(totalAngMomentum, totalAngMomentum);
-                
-                float r_s = calculateEventHorizonRadius(u_blackHoleMasses[j]);
-                float r_i = calculateInfluenceRadius(r_s);
-                
-                if (distanceToBH > r_i) {
-                    continue;
-                }
-                
-                // Adaptive step sizing based on distance to event horizon
-                currentStepSize *= min(1.0, distanceToBH / r_s);
-                
-                if (u_gravitationalLensingEnabled == 1) {
-                    vec3 acceleration = calculateAccelerationLUT(angMomSqrd, relativePos);
-                    
-                    rayDirection += acceleration * u_blackHoleMasses[j] * currentStepSize;
-                    rayDirection = normalize(rayDirection);
-                }
-                
-                // Add accretion disk color for current position (relative to this black hole)
-                if (u_accretionDiskEnabled == 1) {
-                    adiskColor(relativePos, color, alpha, r_s, rayOrigin, u_blackHoleMasses[j]);
-                }
-                
-                // Check for event horizon collision
-                if (distanceToBH < r_s) {
-                    hitEventHorizon = true;
-                    break;
-                }                
-            }
-            
-            if (hitEventHorizon) {
-                break;
-            }
-                    
-            rayOrigin += rayDirection * currentStepSize;
+    for (int j = 0; j < u_numBlackHoles; j++) {
+        vec3 relativePos = pos - u_blackHolePositions[j];
+        float dist = length(relativePos);
+        float r_s = calculateEventHorizonRadius(u_blackHoleMasses[j]);
+        float r_i = calculateInfluenceRadius(r_s);
+        
+        if (dist < r_i && dist < distanceToBH) {
+            closestBHIndex = j;
+            distanceToBH = dist;
+            influenceRadius = r_i;
         }
+    }
+    
+    return closestBHIndex >= 0;
+}
 
-        // Check for sphere intersections AFTER ray marching
-        // This is more efficient than checking every step
-        if (u_renderSpheres == 1 && u_numSpheres > 0 && !hitEventHorizon) {
-            float closestT = 1e10;
-            int closestSphere = -1;
+// Raytracing through normal space
+struct HitRecord {
+    bool hit;
+    float t;
+    vec3 color;
+    int type; // 0 = none, 1 = sphere, 2 = mesh, 3 = influence boundary
+    int objectIndex;
+};
 
-            // Find closest sphere intersection
-            for (int i = 0; i < u_numSpheres; i++) {
-                float t;
-                if (intersectSphere(rayOrigin, rayDirection, u_spherePositions[i], u_sphereRadii[i], t)) {
-                    if (t < closestT) {
-                        closestT = t;
-                        closestSphere = i;
-                    }
+HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
+    HitRecord record;
+    record.hit = false;
+    record.t = maxDistance;
+    record.type = 0;
+    
+    vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+    
+    // Check sphere intersections
+    if (u_renderSpheres == 1) {
+        for (int i = 0; i < u_numSpheres; i++) {
+            float t;
+            if (intersectSphere(rayOrigin, rayDir, u_spherePositions[i], u_sphereRadii[i], t)) {
+                if (t < record.t) {
+                    record.hit = true;
+                    record.t = t;
+                    record.type = 1;
+                    record.objectIndex = i;
+                    vec3 hitPoint = rayOrigin + rayDir * t;
+                    record.color = renderSphere(hitPoint, rayDir, i, lightDir);
                 }
-            }
-
-            // If we hit a sphere, render it and return early
-            if (closestSphere >= 0) {
-                vec3 hitPoint = rayOrigin + rayDirection * closestT;
-
-                // Simple directional light (can be made into a uniform later)
-                vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-
-                color = renderSphere(hitPoint, rayDirection, closestSphere, lightDir);
             }
         }
     }
     
-    // return bent light rays
-    if (!hitEventHorizon)
-        color += texture(u_skyboxTexture, directionToSpherical(rayDirection)).rgb * alpha;
-    if (length(color) < EPSILON)
-        return vec3(0.0f);
+    // Check mesh intersections
+    if (u_renderMeshes == 1) {
+        for (int m = 0; m < u_numMeshes; m++) {
+            MeshData mesh = meshData[m];
+            
+            for (int t = 0; t < mesh.triangleCount; t++) {
+                Triangle tri = triangles[mesh.triangleOffset + t];
+                
+                // Transform ray to mesh local space
+                mat4 invTransform = inverse(mesh.transform);
+                vec3 localOrigin = (invTransform * vec4(rayOrigin, 1.0)).xyz;
+                vec3 localDir = normalize((invTransform * vec4(rayDir, 0.0)).xyz);
+                
+                float tHit;
+                vec2 baryCoord;
+                if (intersectTriangle(localOrigin, localDir, tri.v0, tri.v1, tri.v2, tHit, baryCoord)) {
+                    // Transform back to world space
+                    vec3 localHit = localOrigin + localDir * tHit;
+                    vec3 worldHit = (mesh.transform * vec4(localHit, 1.0)).xyz;
+                    float worldT = length(worldHit - rayOrigin);
+                    
+                    if (worldT < record.t) {
+                        record.hit = true;
+                        record.t = worldT;
+                        record.type = 2;
+                        record.objectIndex = m * MAX_TRIANGLES_PER_MESH + t;
+                        record.color = renderMesh(worldHit, rayDir, m, t, baryCoord, lightDir);
+                    }
+                }
+            }
+        }
+    }
+    
+    return record;
+}
+
+// Raymarching through gravitational influence zone
+vec3 rayMarchInfluenceZone(vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection) {
+    hitEventHorizon = false;
+    exitedZone = false;
+    vec3 color = vec3(0.0);
+    float alpha = 1.0;
+    
+    newOrigin = rayOrigin;
+    newDirection = rayDirection;
+    
+    float stepSize = STEP_SIZE;
+    vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+    
+    for (int i = 0; i < 2000; i++) {
+        int closestBH;
+        float distToBH;
+        float influenceR;
+        bool inZone = isInInfluenceZone(newOrigin, closestBH, distToBH, influenceR);
+        
+        if (!inZone) {
+            exitedZone = true;
+            return color;
+        }
+        
+        vec3 relativePos = newOrigin - u_blackHolePositions[closestBH];
+        
+        // Calculate orbital angular momentum
+        vec3 orbitalAngMomentum = cross(relativePos, newDirection);
+        vec3 bhAngMomentum = calculateAngularMomentumFromSpin(
+            u_blackHoleSpins[closestBH], 
+            u_blackHoleSpinAxes[closestBH], 
+            u_blackHoleMasses[closestBH]
+        );
+        vec3 totalAngMomentum = orbitalAngMomentum + bhAngMomentum * 0.1;
+        float angMomSqrd = dot(totalAngMomentum, totalAngMomentum);
+        
+        float r_s = calculateEventHorizonRadius(u_blackHoleMasses[closestBH]);
+        
+        // Adaptive step size
+        float currentStepSize = stepSize * min(1.0, distToBH / r_s);
+        
+        // Apply gravitational lensing
+        if (u_gravitationalLensingEnabled == 1) {
+            vec3 acceleration = calculateAccelerationLUT(angMomSqrd, relativePos);
+            newDirection += acceleration * u_blackHoleMasses[closestBH] * currentStepSize;
+            newDirection = normalize(newDirection);
+        }
+        
+        // Accretion disk
+        if (u_accretionDiskEnabled == 1) {
+            adiskColor(relativePos, color, alpha, r_s, newOrigin, u_blackHoleMasses[closestBH]);
+        }
+        
+        // Check object intersections within marching step
+        HitRecord hit = rayTraceNormalSpace(newOrigin, newDirection, currentStepSize);
+        if (hit.hit) {
+            return color + hit.color;
+        }
+        
+        // Check event horizon
+        if (distToBH < r_s) {
+            hitEventHorizon = true;
+            return color;
+        }
+        
+        newOrigin += newDirection * currentStepSize;
+    }
+    
+    return color;
+}
+
+// Main hybrid raytracing/raymarching function
+vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
+    vec3 color = vec3(0.0);
+    vec3 currentOrigin = rayOrigin;
+    vec3 currentDir = rayDirection;
+    
+    vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+    
+    const int MAX_ITERATIONS = 1000;
+    
+    for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
+        int closestBH;
+        float distToBH;
+        float influenceR;
+        bool inZone = isInInfluenceZone(currentOrigin, closestBH, distToBH, influenceR);
+        
+        if (inZone) {
+            bool hitHorizon, exited;
+            vec3 newOrigin, newDir;
+            vec3 marchColor = rayMarchInfluenceZone(currentOrigin, currentDir, hitHorizon, exited, newOrigin, newDir);
+            color += marchColor;
+            
+            if (hitHorizon) {
+                return color;
+            }
+            
+            if (exited) {
+                currentOrigin = newOrigin;
+                currentDir = newDir;
+                continue;
+            }
+            
+            return color;
+        } else {
+            float minDistToInfluence = 1e10;
+            
+            if (u_renderBlackHoles == 1) {
+                for (int j = 0; j < u_numBlackHoles; j++) {
+                    vec3 toCenter = u_blackHolePositions[j] - currentOrigin;
+                    float distToCenter = length(toCenter);
+                    float r_s = calculateEventHorizonRadius(u_blackHoleMasses[j]);
+                    float r_i = calculateInfluenceRadius(r_s);
+                    
+                    float distToInfluence = abs(distToCenter - r_i);
+                    minDistToInfluence = min(minDistToInfluence, distToInfluence);
+                }
+            }
+            
+            HitRecord hit = rayTraceNormalSpace(currentOrigin, currentDir, 1e10);
+            
+            if (hit.hit) {
+                if (hit.t < minDistToInfluence) {
+                    color += hit.color;
+                    return color;
+                } else {
+                    currentOrigin += currentDir * (minDistToInfluence + EPSILON);
+                    continue;
+                }
+            }
+            
+            if (minDistToInfluence < 1e9) {
+                currentOrigin += currentDir * (minDistToInfluence + EPSILON);
+                continue;
+            }
+            
+            color += texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
+            return color;
+        }
+    }
+    
+    color += texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
     return color;
 }
 
@@ -501,8 +752,8 @@ void main() {
     vec3 rayDir = normalize(u_cameraFront + u_cameraRight * uv.x * tanHalfFov + u_cameraUp * uv.y * tanHalfFov);
     vec3 rayOrigin = u_cameraPos;
     
-    // Perform ray marching to get the color.
-    vec3 color = rayMarching(rayOrigin, rayDir);
+    // Perform hybrid raytracing/raymarching to get the color
+    vec3 color = hybridRayTrace(rayOrigin, rayDir);
     
     // Generate Output Image
     imageStore(l_outputImage, texCoords, vec4(color, 1.0f));   

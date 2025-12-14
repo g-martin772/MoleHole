@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <vector>
+#include <unordered_map>
 #include <glm/glm.hpp>
 
 #include "BlackbodyLUTGenerator.h"
@@ -10,13 +11,15 @@
 #include "Simulation/Scene.h"
 #include "Image.h"
 
+class GLTFMesh;
+
 class BlackHoleRenderer {
 public:
     BlackHoleRenderer();
     ~BlackHoleRenderer();
 
     void Init(int width, int height);
-    void Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const Camera& camera, float time);
+    void Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time);
     void Resize(int width, int height);
     void RenderToScreen();
 
@@ -37,6 +40,8 @@ private:
     void GenerateAccelerationLUT();
     void GenerateHRDiagramLUT();
     void UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const Camera& camera, float time);
+    void UpdateMeshBuffers(const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache);
+    void CreateMeshBuffers();
 
     std::unique_ptr<Shader> m_computeShader;
     std::unique_ptr<Shader> m_displayShader;
@@ -55,6 +60,10 @@ private:
     unsigned int m_accelerationLUT;
     unsigned int m_hrDiagramLUT;
     unsigned int m_quadVAO, m_quadVBO;
+    
+    // Mesh geometry SSBOs
+    unsigned int m_meshDataSSBO;
+    unsigned int m_triangleSSBO;
 
     int m_width, m_height;
 
