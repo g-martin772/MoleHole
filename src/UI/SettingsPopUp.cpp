@@ -22,7 +22,7 @@ void Render(UI* ui, bool* showSettingsWindow) {
     // Center the popup
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(500, 450), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(ImVec2(600, 700), ImGuiCond_Appearing);
 
     // Popup styling
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 20));
@@ -144,6 +144,80 @@ void Render(UI* ui, bool* showSettingsWindow) {
             }
             
             ImGui::TextDisabled("Choose a .ttf file to add to your font collection");
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Media Export Settings Section
+        if (ImGui::CollapsingHeader("Media Export Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+            std::string exportPath = Application::State().GetProperty<std::string>("defaultExportPath", ".");
+            
+            ImGui::Text("Default Export Path:");
+            ImGui::TextWrapped("%s", exportPath.c_str());
+            ImGui::Spacing();
+            
+            if (ImGui::Button("Change Export Path...", ImVec2(-1, 0))) {
+                nfdchar_t* outPath = nullptr;
+                nfdresult_t result = NFD_PickFolder(&outPath, exportPath.c_str());
+                
+                if (result == NFD_OKAY && outPath) {
+                    Application::State().SetProperty("defaultExportPath", std::string(outPath));
+                    ui->MarkConfigDirty();
+                    spdlog::info("Default export path set to: {}", outPath);
+                    free(outPath);
+                }
+            }
+            
+            ImGui::TextDisabled("Screenshots and videos will be saved here by default");
+            
+            ImGui::Spacing();
+            
+            if (ImGui::Button("Reset to Current Directory", ImVec2(-1, 0))) {
+                Application::State().SetProperty("defaultExportPath", std::string("."));
+                ui->MarkConfigDirty();
+            }
+        }
+
+        // Spacer
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        // Credits Section
+        if (ImGui::CollapsingHeader("Credits & About")) {
+            ImGui::TextWrapped("MoleHole - Black Hole Simulation");
+            ImGui::Spacing();
+            ImGui::Text("Version: 1.0.0");
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            
+            ImGui::TextWrapped("Developed using:");
+            ImGui::BulletText("OpenGL 4.6");
+            ImGui::BulletText("GLFW - Window and input");
+            ImGui::BulletText("ImGui - User interface");
+            ImGui::BulletText("GLM - Mathematics");
+            ImGui::BulletText("spdlog - Logging");
+            ImGui::BulletText("yaml-cpp - Configuration");
+            ImGui::BulletText("stb_image - Image loading");
+            ImGui::BulletText("FFmpeg - Video export (Linux)");
+            
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            
+            ImGui::TextWrapped("Special thanks to all open-source contributors!");
+            
+            ImGui::Spacing();
+            
+            if (ImGui::Button("View License (MIT)", ImVec2(-1, 0))) {
+                // Open LICENSE file or show in help window
+                spdlog::info("Opening license file...");
+                #ifdef __linux__
+                system("xdg-open ../LICENSE &");
+                #endif
+            }
         }
 
         // Spacer

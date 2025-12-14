@@ -88,6 +88,7 @@ void Scene::Deserialize(const std::filesystem::path &path, bool setCurrentPath) 
     }
     blackHoles.clear();
     meshes.clear();
+    spheres.clear();
     YAML::Node root = YAML::LoadFile(path.string());
     if (root["name"]) {
         name = root["name"].as<std::string>();

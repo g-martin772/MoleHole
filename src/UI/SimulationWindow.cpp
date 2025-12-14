@@ -16,6 +16,11 @@
 namespace SimulationWindow {
 
 void RenderSimulationControls(UI* ui) {
+    // Don't render controls when taking a screenshot
+    if (ui->IsTakingScreenshot()) {
+        return;
+    }
+    
     auto& simulation = Application::GetSimulation();
     auto& renderer = Application::GetRenderer();
 

@@ -107,6 +107,7 @@ void UI::RenderDockspace(Scene* scene) {
     bool ctrl = io.KeyCtrl;
     static bool prevCtrlS = false, prevCtrlO = false;
     static bool prevF12 = false, prevF11 = false, prevCtrlF11 = false, prevCtrlF12 = false;
+    static bool prevSpace = false, prevP = false, prevS = false, prevR = false;
 
     // define keys
     bool ctrlS = ctrl && ImGui::IsKeyPressed(ImGuiKey_S);
@@ -115,12 +116,19 @@ void UI::RenderDockspace(Scene* scene) {
     bool f11 = ImGui::IsKeyPressed(ImGuiKey_F11);
     bool ctrlf12 = ctrl && ImGui::IsKeyPressed(ImGuiKey_F12);
     bool ctrlf11 = ctrl && ImGui::IsKeyPressed(ImGuiKey_F11);
+    bool spaceKey = ImGui::IsKeyPressed(ImGuiKey_Space);
+    bool pKey = ImGui::IsKeyPressed(ImGuiKey_P);
+    bool sKey = ImGui::IsKeyPressed(ImGuiKey_S) && !ctrl;
+    bool rKey = ImGui::IsKeyPressed(ImGuiKey_R);
     
     // Screenshot shortcuts
     bool doTakeScreenshotDialog = false, doTakeScreenshotViewportDialog = false, doTakeScreenshot = false, doTakeScreenshotViewport = false;
 
     // other shortcuts
     bool doSave = false, doOpen = false;
+    
+    // Simulation control shortcuts
+    bool doSimStart = false, doSimPause = false, doSimStop = false, doSimResume = false;
     
     // set variables for pressed keys
     if (ctrlS && !prevCtrlS) doSave = true;
@@ -129,6 +137,21 @@ void UI::RenderDockspace(Scene* scene) {
     if (ctrlf12 && !prevCtrlF12) doTakeScreenshotViewport = true;
     if (f11 && !prevF11 && !ctrlf11) doTakeScreenshotDialog = true;
     if (ctrlf11 && !prevCtrlF11) doTakeScreenshot = true;
+    
+    // Simulation shortcuts (Space for Start/Resume, P for Pause, S for Stop, R for Resume)
+    if (spaceKey && !prevSpace) {
+        auto& simulation = Application::GetSimulation();
+        if (simulation.IsStopped()) {
+            doSimStart = true;
+        } else if (simulation.IsPaused()) {
+            doSimResume = true;
+        } else if (simulation.IsRunning()) {
+            doSimPause = true;
+        }
+    }
+    if (pKey && !prevP) doSimPause = true;
+    if (sKey && !prevS) doSimStop = true;
+    if (rKey && !prevR) doSimResume = true;
 
     prevCtrlS = ctrlS;
     prevCtrlO = ctrlO;
@@ -136,10 +159,21 @@ void UI::RenderDockspace(Scene* scene) {
     prevF11 = f11;
     prevCtrlF12 = ctrlf12;
     prevCtrlF11 = ctrlf11;
+    prevSpace = spaceKey;
+    prevP = pKey;
+    prevS = sKey;
+    prevR = rKey;
 
     TopBar::RenderMainMenuBar(this, scene, doSave, doOpen, doTakeScreenshotDialog, doTakeScreenshotViewportDialog, doTakeScreenshot, doTakeScreenshotViewport);
     TopBar::HandleFileOperations(this, scene, doSave, doOpen);
     TopBar::HandleImageShortcuts(scene, doTakeScreenshotViewport, doTakeScreenshot, doTakeScreenshotViewportDialog, doTakeScreenshotDialog);
+    
+    // Handle simulation control shortcuts
+    auto& simulation = Application::GetSimulation();
+    if (doSimStart) simulation.Start();
+    if (doSimPause) simulation.Pause();
+    if (doSimStop) simulation.Stop();
+    if (doSimResume) simulation.Start(); // Resume is just calling Start() when paused
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     const float sidebarWidth = 60.0f; // Match the sidebar width from RenderSidebar()
@@ -646,6 +680,26 @@ void UI::RenderVideoExportSettings() {
     ImGui::Separator();
     ImGui::Spacing();
 
+    ImGui::Text("Ray Marching Quality:");
+    ImGui::Checkbox("Use Custom Ray Settings", &m_videoConfig.useCustomRaySettings);
+    
+    if (m_videoConfig.useCustomRaySettings) {
+        ImGui::Indent();
+        ImGui::DragFloat("Ray Step Size", &m_videoConfig.customRayStepSize, 
+                        0.001f, 0.001f, 1.0f, "%.4f");
+        ImGui::DragInt("Max Ray Steps", &m_videoConfig.customMaxRaySteps, 
+                      10, 100, 5000);
+        ImGui::TextDisabled("Lower step size = better quality, slower export");
+        ImGui::TextDisabled("Higher max steps = more detail, slower export");
+        ImGui::Unindent();
+    } else {
+        ImGui::TextDisabled("Using current application ray marching settings");
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
     ImGui::Text("Preview:");
     ImGui::Text("Resolution: %dx%d", m_videoConfig.width, m_videoConfig.height);
     ImGui::Text("Duration: %.1f seconds", m_videoConfig.length);
@@ -675,6 +729,9 @@ void UI::RenderVideoExportSettings() {
             config.length = m_videoConfig.length;
             config.framerate = m_videoConfig.framerate;
             config.tickrate = m_videoConfig.tickrate;
+            config.useCustomRaySettings = m_videoConfig.useCustomRaySettings;
+            config.customRayStepSize = m_videoConfig.customRayStepSize;
+            config.customMaxRaySteps = m_videoConfig.customMaxRaySteps;
 
             exportRenderer.StartVideoExport(config, std::string(outPath), app.GetSimulation().GetScene());
 

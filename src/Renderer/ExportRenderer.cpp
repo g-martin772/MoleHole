@@ -329,6 +329,18 @@ void ExportRenderer::ProcessVideoExport() {
         m_pixelBuffer.resize(m_videoConfig.width * m_videoConfig.height * 4);
         m_rgbBuffer.resize(m_videoConfig.width * m_videoConfig.height * 3);
 
+        // Store original ray marching settings and apply custom settings if requested
+        if (m_videoConfig.useCustomRaySettings) {
+            m_savedRayStepSize = Application::State().rendering.rayStepSize;
+            m_savedMaxRaySteps = Application::State().rendering.maxRaySteps;
+            
+            Application::State().rendering.rayStepSize = m_videoConfig.customRayStepSize;
+            Application::State().rendering.maxRaySteps = m_videoConfig.customMaxRaySteps;
+            
+            spdlog::info("Using custom ray marching settings for export: step size = {}, max steps = {}", 
+                        m_videoConfig.customRayStepSize, m_videoConfig.customMaxRaySteps);
+        }
+
         simulation.Stop();
         simulation.Start();
 
@@ -338,7 +350,9 @@ void ExportRenderer::ProcessVideoExport() {
         m_currentTask = "Rendering frame " + std::to_string(m_currentFrame) + "/" + std::to_string(m_totalFrames);
         m_progress = static_cast<float>(m_currentFrame - 1) / m_totalFrames;
 
-        float simulationTimePerFrame = 1.0f / m_videoConfig.tickrate;
+        // Fixed: use framerate instead of tickrate to ensure proper video playback speed
+        // Each frame should advance simulation by 1/framerate seconds
+        float simulationTimePerFrame = 1.0f / m_videoConfig.framerate;
         simulation.Update(simulationTimePerFrame);
 
         RenderFrame(m_scene, m_videoConfig.width, m_videoConfig.height);
@@ -417,6 +431,13 @@ void ExportRenderer::ProcessVideoExport() {
         m_avFrame = nullptr;
         m_formatContext = nullptr;
         m_codecContext = nullptr;
+
+        // Restore original ray marching settings if custom settings were used
+        if (m_videoConfig.useCustomRaySettings) {
+            Application::State().rendering.rayStepSize = m_savedRayStepSize;
+            Application::State().rendering.maxRaySteps = m_savedMaxRaySteps;
+            spdlog::info("Restored original ray marching settings");
+        }
 
         m_currentTask = "Complete";
         m_progress = 1.0f;

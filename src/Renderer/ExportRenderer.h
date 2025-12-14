@@ -25,6 +25,9 @@ public:
         float length = 10.0f;
         int framerate = 60;
         float tickrate = 60.0f;
+        bool useCustomRaySettings = false;
+        float customRayStepSize = 0.01f;
+        int customMaxRaySteps = 1000;
     };
 
     ExportRenderer();
@@ -82,5 +85,9 @@ private:
 
     std::vector<unsigned char> m_pixelBuffer;
     std::vector<unsigned char> m_rgbBuffer;
+    
+    // Store original settings for restoration after export
+    float m_savedRayStepSize = 0.01f;
+    int m_savedMaxRaySteps = 1000;
 };
 

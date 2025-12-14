@@ -43,6 +43,10 @@ public:
     
     void ReloadFonts();
     std::vector<std::string> GetAvailableFonts() const;
+    
+    // Screenshot state
+    bool IsTakingScreenshot() const { return m_takingScreenshot; }
+    void SetTakingScreenshot(bool taking) { m_takingScreenshot = taking; }
 
     // Sidebar accessors
     float* GetSidebarHoverAnim() { return m_sidebarHoverAnim; }
@@ -83,6 +87,7 @@ private:
     bool m_configDirty = false;
     float m_saveTimer = 0.0f;
     static constexpr float SAVE_INTERVAL = 5.0f;
+    bool m_takingScreenshot = false;
 
     GizmoOperation m_currentGizmoOperation = GizmoOperation::Translate;
     bool m_useSnap = false;
@@ -108,6 +113,9 @@ private:
         float length = 10.0f;
         int framerate = 60;
         float tickrate = 60.0f;
+        bool useCustomRaySettings = false;
+        float customRayStepSize = 0.01f;
+        int customMaxRaySteps = 1000;
     } m_videoConfig;
 
     // Sidebar animation
