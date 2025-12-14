@@ -471,7 +471,7 @@ void Renderer::Render3DSimulation(Scene *scene) {
     glEnable(GL_DEPTH_TEST);
 
     if (Application::State().rendering.debugMode == DebugMode::GravityGrid && gravityGridRenderer) {
-        gravityGridRenderer->Render(scene->blackHoles, *camera, currentTime);
+        gravityGridRenderer->Render(scene->blackHoles, scene->spheres, scene->meshes, *camera, currentTime);
     }
 
     if (Application::State().rendering.debugMode == DebugMode::ObjectPaths && objectPathsRenderer) {

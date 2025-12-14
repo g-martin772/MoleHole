@@ -189,7 +189,7 @@ void Render(UI* ui) {
                     grid->SetPlaneSize(size);
                 }
                 int res = grid->GetResolution();
-                if (ImGui::SliderInt("Resolution", &res, 8, 512)) {
+                if (ImGui::SliderInt("Resolution", &res, 8, 2048)) {
                     grid->SetResolution(res);
                 }
                 float cellSize = grid->GetCellSize();

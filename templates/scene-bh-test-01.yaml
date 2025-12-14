@@ -55,24 +55,17 @@ black_holes:
     spin: 0.5
     spin_axis: [0, 1, 0]
 meshes:
-  - name: scene
-    path: /home/leo/01-Coding/MoleHole2/assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
-    mass: 1000
-    position: [0, 0, 0]
-    velocity: [0, 0, 0]
-    com_offset: [0, 0, 0]
-    rotation: [1, 0, 0, 0]
-    scale: [1, 1, 1]
+  []
 spheres:
   - name: New Sphere
-    mass: 1000
+    mass: 9e+26
     texture_path: ""
     velocity: [0, 0, 0]
     position: [-54, 56.9, -1131.1]
     rotation: [1, 0, 0, 0]
     color: [0, 0.5, 1, 1]
     spin: 0
-    radius: 9.5
+    radius: 6.3
 animation_graph:
   variables:
     []
