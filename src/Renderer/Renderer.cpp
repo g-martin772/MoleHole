@@ -154,7 +154,10 @@ void Renderer::RenderScene(Scene *scene) {
             break;
     }
 
+    // Push style to remove padding and make viewport flush with window edges
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::Begin(title);
+    ImGui::PopStyleVar();
 
     ImVec2 viewport_pos = ImGui::GetWindowPos();
     ImVec2 viewport_size = ImGui::GetWindowSize();

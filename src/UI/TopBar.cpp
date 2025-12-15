@@ -267,7 +267,6 @@ void TakeScreenshot() {
 
 void TakeViewportScreenshot() {
     auto& renderer = Application::GetRenderer();
-    auto& ui = Application::Instance().GetUI();
 
     // Get current viewport dimensions
     int x = static_cast<int>(renderer.m_viewportX);
@@ -278,19 +277,11 @@ void TakeViewportScreenshot() {
     std::string exportPath = Application::State().GetProperty<std::string>("defaultExportPath", ".");
     std::string filename = exportPath + "/" + Screenshot::GenerateTimestampedFilename("molehole_viewport");
 
-    // Set flag to hide UI controls, render one frame, then capture
-    ui.SetTakingScreenshot(true);
-    glfwPollEvents(); // Process events
-    Application::Instance().Render(); // Render without controls
-    glfwSwapBuffers(renderer.GetWindow()); // Present
-    
     if (Screenshot::CaptureViewport(x, y, width, height, filename)) {
         spdlog::info("Viewport screenshot saved: {}", filename);
     } else {
         spdlog::error("Failed to take viewport screenshot");
     }
-    
-    ui.SetTakingScreenshot(false);
 }
 
 void TakeScreenshotWithDialog() {
@@ -317,7 +308,6 @@ void TakeScreenshotWithDialog() {
 
 void TakeViewportScreenshotWithDialog() {
     auto& renderer = Application::GetRenderer();
-    auto& ui = Application::Instance().GetUI();
 
     // Get current viewport dimensions
     int x = static_cast<int>(renderer.m_viewportX);
@@ -337,20 +327,14 @@ void TakeViewportScreenshotWithDialog() {
     nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, exportPath.c_str(), defaultName.c_str());
 
     if (result == NFD_OKAY && outPath) {
-        // Set flag to hide UI controls, render one frame, then capture
-        ui.SetTakingScreenshot(true);
-        glfwPollEvents(); // Process events
-        Application::Instance().Render(); // Render without controls
-        glfwSwapBuffers(renderer.GetWindow()); // Present
         
         if (Screenshot::CaptureViewport(x, y, width, height, outPath)) {
             spdlog::info("Viewport screenshot saved: {}", outPath);
         } else {
             spdlog::error("Failed to take viewport screenshot");
         }
-        
-        ui.SetTakingScreenshot(false);
         free(outPath);
+        
     }
 }
 
