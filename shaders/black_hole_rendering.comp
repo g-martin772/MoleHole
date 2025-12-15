@@ -11,8 +11,11 @@ uniform sampler2D u_hrDiagramLUT; // 1D LUT: mass -> temperature, luminosity, ra
 
 // constants
 const float EPSILON = 0.01;
-const float STEP_SIZE = 0.3;
 const float PI = 3.1415926535;
+
+// ray marching quality settings (can be overridden via uniforms)
+uniform float u_rayStepSize = 0.3;
+uniform int u_maxRaySteps = 1000;
 
 // black holes
 const int MAX_BLACK_HOLES = 8;
@@ -457,14 +460,28 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
     vec3 sphericalCoord = toSpherical(pos);
 
     // compute noise-driven pattern
+    // Use cylindrical coordinates mapped to Cartesian to avoid theta discontinuity
+    float r = length(pos.xz);  // radial distance in XZ plane
+    float theta = atan(pos.z, pos.x);
+    
     float noise = 1.0;
     for (int i = 0; i < int(u_accDiskNoiseLOD); i++) {
-        noise *= 0.5 * snoise(sphericalCoord * pow(max(1, i), 2) * u_accDiskNoiseScale) + 0.5;
+        // Map theta to continuous circular coordinates using sin/cos to avoid wrap
+        float animatedTheta = theta;
         if (i % 2 == 0) {
-            sphericalCoord.y += u_time * u_accDiskSpeed;
+            animatedTheta += u_time * u_accDiskSpeed;
         } else {
-            sphericalCoord.y -= u_time * u_accDiskSpeed;
+            animatedTheta -= u_time * u_accDiskSpeed;
         }
+        
+        // Convert to Cartesian-like coordinates that wrap smoothly
+        vec3 noiseCoord = vec3(
+            r * cos(animatedTheta),
+            pos.y,
+            r * sin(animatedTheta)
+        ) * pow(max(1, i), 2) * u_accDiskNoiseScale;
+        
+        noise *= 0.5 * snoise(noiseCoord) + 0.5;
     }
     
     // Temperature-based blackbody with doppler + gravitational redshift
@@ -598,10 +615,10 @@ vec3 rayMarchInfluenceZone(vec3 rayOrigin, vec3 rayDirection, out bool hitEventH
     newOrigin = rayOrigin;
     newDirection = rayDirection;
     
-    float stepSize = STEP_SIZE;
+    float stepSize = u_rayStepSize;
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
     
-    for (int i = 0; i < 2000; i++) {
+    for (int i = 0; i < u_maxRaySteps; i++) {
         int closestBH;
         float distToBH;
         float influenceR;
@@ -667,9 +684,10 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
     
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
     
-    const int MAX_ITERATIONS = 1000;
+    // Use a fraction of max steps for outer loop to allow for multiple influence zone passes
+    int maxOuterIterations = max(100, u_maxRaySteps / 2);
     
-    for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
+    for (int iter = 0; iter < maxOuterIterations; iter++) {
         int closestBH;
         float distToBH;
         float influenceR;

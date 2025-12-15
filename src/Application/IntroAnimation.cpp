@@ -249,6 +249,12 @@ void IntroAnimation::RenderText(int windowWidth, int windowHeight) {
     int charsToShow = glm::min(m_visibleLetterCount, TOTAL_LETTERS);
     strncpy(visibleText, fullText, charsToShow);
     
+    // Global alpha that increases as more letters appear
+    // Maps from 0 letters (alpha=0) to all letters (alpha=1)
+    float globalAlpha = static_cast<float>(charsToShow) / static_cast<float>(TOTAL_LETTERS);
+    // Use smoothstep for smoother fade
+    globalAlpha = globalAlpha * globalAlpha * (3.0f - 2.0f * globalAlpha);
+    
     float currentX = textX;
     
     for (int i = 0; i < charsToShow; i++) {
@@ -256,11 +262,11 @@ void IntroAnimation::RenderText(int windowWidth, int windowHeight) {
         ImVec2 charSize = ImGui::CalcTextSize(singleChar);
         
         bool isMole = (i < 4);
-        ImVec4 charColorVec = isMole ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
+        ImVec4 charColorVec = isMole ? ImVec4(1.0f, 1.0f, 1.0f, globalAlpha) : ImVec4(0.0f, 0.0f, 0.0f, globalAlpha);
         ImU32 charColor = ImGui::ColorConvertFloat4ToU32(charColorVec);
         
         if (isMole) {
-            float glowAlpha = 0.3f;
+            float glowAlpha = 0.3f * globalAlpha;
             for (int j = 1; j <= 3; j++) {
                 ImU32 glowColor = ImGui::ColorConvertFloat4ToU32(ImVec4(0.7f, 0.9f, 1.0f, glowAlpha / j));
                 drawList->AddText(m_titleFont, m_titleFont->LegacySize, 
@@ -268,7 +274,7 @@ void IntroAnimation::RenderText(int windowWidth, int windowHeight) {
             }
         }
         else {
-            float glowAlpha = 0.3f;
+            float glowAlpha = 0.3f * globalAlpha;
             for (int j = 1; j <= 3; j++) {
                 ImU32 glowColor = ImGui::ColorConvertFloat4ToU32(ImVec4(0.7f, 0.9f, 1.0f, glowAlpha / j));
                 drawList->AddText(m_titleFont, m_titleFont->LegacySize, 
