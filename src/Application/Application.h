@@ -7,6 +7,7 @@
 #include "Simulation/Simulation.h"
 #include "FpsCounter.h"
 #include "IntroAnimation.h"
+#include "CommandLineArgs.h"
 #include <functional>
 #include <memory>
 
@@ -26,8 +27,10 @@ public:
     static ParameterRegistry& Params() { return AppState::Params(); }
     static Renderer& GetRenderer() { return Instance().m_renderer; }
     static Simulation& GetSimulation() { return Instance().m_simulation; }
+    static const CommandLineArgs& Args() { return Instance().m_args; }
 
     bool Initialize();
+    bool Initialize(int argc, char* argv[]);
     void Run();
     void Shutdown();
 
@@ -66,6 +69,7 @@ private:
     Application() = default;
     ~Application() = default;
 
+    CommandLineArgs m_args;
     AppState m_state;
     UI m_ui;
     Renderer m_renderer;

@@ -19,6 +19,11 @@ Application& Application::Instance() {
     return instance;
 }
 
+bool Application::Initialize(int argc, char* argv[]) {
+    m_args.Parse(argc, argv);
+    return Initialize();
+}
+
 bool Application::Initialize() {
     if (m_initialized) {
         spdlog::warn("Application already initialized");
@@ -39,8 +44,13 @@ bool Application::Initialize() {
         m_ui.Initialize();
 
 
-        m_introAnimation = std::make_unique<IntroAnimation>();
-        m_introAnimation->Init();
+        if (m_args.ShouldShowIntro()) {
+            m_introAnimation = std::make_unique<IntroAnimation>();
+            m_introAnimation->Init();
+            spdlog::info("Intro animation enabled");
+        } else {
+            spdlog::info("Intro animation disabled via command line");
+        }
 
         const std::string lastScene = Params().Get(Params::AppLastOpenScene, std::string());
         if (!lastScene.empty() && std::filesystem::exists(lastScene)) {
