@@ -89,6 +89,9 @@ void Renderer::Init() {
     gravityGridRenderer = std::make_unique<GravityGridRenderer>();
     gravityGridRenderer->Init();
 
+    objectPathsRenderer = std::make_unique<ObjectPathsRenderer>();
+    objectPathsRenderer->Init();
+
     m_physicsDebugRenderer = std::make_unique<PhysicsDebugRenderer>();
     m_physicsDebugRenderer->Init();
 
@@ -117,12 +120,16 @@ void Renderer::BeginFrame() {
     ImGuizmo::BeginFrame();
 }
 
-void Renderer::EndFrame() {
+void Renderer::EndFrame(bool clearScreen) {
     int display_w, display_h;
     glfwGetFramebufferSize(window, &display_w, &display_h);
     glViewport(0, 0, display_w, display_h);
-    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (clearScreen) {
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
+
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     glfwSwapBuffers(window);
@@ -149,7 +156,10 @@ void Renderer::RenderScene(Scene *scene) {
             break;
     }
 
+    // Push style to remove padding and make viewport flush with window edges
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::Begin(title);
+    ImGui::PopStyleVar();
 
     ImVec2 viewport_pos = ImGui::GetWindowPos();
     ImVec2 viewport_size = ImGui::GetWindowSize();
@@ -440,9 +450,11 @@ void Renderer::Render2DRays(Scene *scene) {
     for (const auto &bh: scene->blackHoles) {
         DrawCircle(glm::vec2(bh.position.x, bh.position.y), 0.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
     }
-    // 2D rays don't use spheres, pass empty vector
+
     std::vector<Sphere> emptySpheres;
-    blackHoleRenderer->Render(scene->blackHoles, emptySpheres, *camera, currentTime);
+    std::vector<MeshObject> emptyMeshes;
+    std::unordered_map<std::string, std::shared_ptr<GLTFMesh>> emptyMeshCache;
+    blackHoleRenderer->Render(scene->blackHoles, emptySpheres, emptyMeshes, emptyMeshCache, *camera, currentTime);
 }
 
 void Renderer::Render3DSimulation(Scene *scene) {
@@ -457,15 +469,18 @@ void Renderer::Render3DSimulation(Scene *scene) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    blackHoleRenderer->Render(scene->blackHoles, scene->spheres, *camera, currentTime);
+    blackHoleRenderer->Render(scene->blackHoles, scene->spheres, scene->meshes, m_meshCache, *camera, currentTime);
     blackHoleRenderer->RenderToScreen();
 
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
 
-    if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::GravityGrid && gravityGridRenderer) {
+       if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::GravityGrid && gravityGridRenderer) {
         gravityGridRenderer->Render(scene->blackHoles, *camera, currentTime);
     }
+        if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::ObjectPaths && objectPathsRenderer) {
+            objectPathsRenderer->Render(scene->blackHoles, *camera, currentTime);
+        }
 
     if (m_physicsDebugRenderer && m_physicsDebugRenderer->IsEnabled()) {
         auto& simulation = Application::GetSimulation();
@@ -475,7 +490,7 @@ void Renderer::Render3DSimulation(Scene *scene) {
         }
     }
 
-    RenderMeshes(scene);
+    //RenderMeshes(scene);
     //RenderSpheres(scene);
 
     glDisable(GL_DEPTH_TEST);

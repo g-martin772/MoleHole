@@ -35,11 +35,9 @@ void main() {
     float effect = clamp(vDispplacement / 10.0, 0.0, 1.0);
     vec3 base = u_color;
     vec3 highlight = vec3(1.0);
-    vec3 color = mix(base, highlight, effect);
+    vec3 color = mix(base, highlight, 1.0f);
 
-    // Fade out lines as displacement increases
-    float fadeMax = 80.0; //arbitraty vizual cosntant
-    float fade = 1.0 - clamp(vDispplacement / fadeMax, 0.0, 1.0);
+    float fade = 1.0f - clamp(vDispplacement / 80.0f, 0.0, 1.0);
 
-    FragColor = vec4(color, u_opacity * line * fade);
+    FragColor = vec4(u_color, u_opacity * line * 1.0f);
 }

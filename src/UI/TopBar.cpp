@@ -12,6 +12,7 @@
 #include "imgui.h"
 #include "spdlog/spdlog.h"
 #include <nfd.h>
+#include <GLFW/glfw3.h>
 #include <filesystem>
 #include <algorithm>
 
@@ -257,7 +258,8 @@ void HandleImageShortcuts(Scene* scene, bool takeViewportScreenshot, bool takeFu
 }
 
 void TakeScreenshot() {
-    std::string filename = Screenshot::GenerateTimestampedFilename("molehole_screenshot");
+    std::string exportPath = Application::State().GetProperty<std::string>("defaultExportPath", ".");
+    std::string filename = exportPath + "/" + Screenshot::GenerateTimestampedFilename("molehole_screenshot");
 
     if (Screenshot::CaptureWindow(filename)) {
         spdlog::info("Screenshot saved: {}", filename);
@@ -275,7 +277,8 @@ void TakeViewportScreenshot() {
     int width = static_cast<int>(renderer.m_viewportWidth);
     int height = static_cast<int>(renderer.m_viewportHeight);
 
-    std::string filename = Screenshot::GenerateTimestampedFilename("molehole_viewport");
+    std::string exportPath = Application::State().GetProperty<std::string>("defaultExportPath", ".");
+    std::string filename = exportPath + "/" + Screenshot::GenerateTimestampedFilename("molehole_viewport");
 
     if (Screenshot::CaptureViewport(x, y, width, height, filename)) {
         spdlog::info("Viewport screenshot saved: {}", filename);
@@ -292,8 +295,9 @@ void TakeScreenshotWithDialog() {
 
     // Generate a default filename with timestamp
     std::string defaultName = Screenshot::GenerateTimestampedFilename("molehole_screenshot", ".png");
+    std::string exportPath = Application::State().GetProperty<std::string>("defaultExportPath", ".");
 
-    nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, nullptr, defaultName.c_str());
+    nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, exportPath.c_str(), defaultName.c_str());
 
     if (result == NFD_OKAY && outPath) {
         if (Screenshot::CaptureWindow(outPath)) {
@@ -321,16 +325,19 @@ void TakeViewportScreenshotWithDialog() {
 
     // Generate a default filename with timestamp
     std::string defaultName = Screenshot::GenerateTimestampedFilename("molehole_viewport", ".png");
+    std::string exportPath = Application::State().GetProperty<std::string>("defaultExportPath", ".");
 
-    nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, nullptr, defaultName.c_str());
+    nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, exportPath.c_str(), defaultName.c_str());
 
     if (result == NFD_OKAY && outPath) {
+        
         if (Screenshot::CaptureViewport(x, y, width, height, outPath)) {
             spdlog::info("Viewport screenshot saved: {}", outPath);
         } else {
             spdlog::error("Failed to take viewport screenshot");
         }
         free(outPath);
+        
     }
 }
 

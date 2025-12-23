@@ -26,7 +26,8 @@ void RenderDebugModeCombo(UI* ui) {
         "Gravitational Field",
         "Spherical Shape",
         "LUT Visualization",
-        "Gravity Grid"
+        "Gravity Grid",
+        "Object Paths"
     };
 
     int debugMode = Application::Params().Get(Params::RenderingDebugMode, 0);
@@ -65,6 +66,9 @@ void RenderDebugModeTooltip(int debugMode) {
             break;
         case 6:
             tooltip = "Gravity Grid overlay on ground plane\nColor shows dominant black hole per cell (by mass/distance^2)\nGrid helps visualize regions of influence";
+            break;
+        case 7:
+            tooltip = "Visualize object trajectories and paths\nShows the motion paths of objects in the scene\nHelps track object movement over time";
             break;
         default:
             tooltip = "Unknown debug mode";
@@ -184,7 +188,7 @@ void Render(UI* ui) {
                     grid->SetPlaneSize(size);
                 }
                 int res = grid->GetResolution();
-                if (ImGui::SliderInt("Resolution", &res, 8, 512)) {
+                if (ImGui::SliderInt("Resolution", &res, 8, 2048)) {
                     grid->SetResolution(res);
                 }
                 float cellSize = grid->GetCellSize();
@@ -203,6 +207,39 @@ void Render(UI* ui) {
                 glm::vec3 color = grid->GetColor();
                 if (ImGui::ColorEdit3("Grid Color", &color[0])) {
                     grid->SetColor(color);
+                }
+            }
+        }
+        
+        if (Application::State().rendering.debugMode == DebugMode::ObjectPaths) {
+            auto& renderer = Application::GetRenderer();
+            if (auto* paths = renderer.GetObjectPathsRenderer()) {
+                ImGui::Separator();
+                ImGui::TextDisabled("Object Paths Settings");
+
+                int maxHistorySize = static_cast<int>(paths->GetMaxHistorySize());
+                if (ImGui::DragInt("Max History Size", &maxHistorySize, 10.0f, 100, 1000000)) {
+                    paths->SetMaxHistorySize(static_cast<size_t>(maxHistorySize));
+                }
+                
+                float lineThickness = paths->GetLineThickness();
+                if (ImGui::DragFloat("Line Thickness (px)", &lineThickness, 0.1f, 0.5f, 10.0f)) {
+                    paths->SetLineThickness(lineThickness);
+                }
+                
+                float opacity = paths->GetOpacity();
+                if (ImGui::SliderFloat("Opacity", &opacity, 0.05f, 1.0f)) {
+                    paths->SetOpacity(opacity);
+                }
+
+                glm::vec3 meshColor = paths->GetMeshColor();
+                if (ImGui::ColorEdit3("Mesh Path Color", &meshColor[0])) {
+                    paths->SetMeshColor(meshColor);
+                }
+                
+                glm::vec3 sphereColor = paths->GetSphereColor();
+                if (ImGui::ColorEdit3("Sphere Path Color", &sphereColor[0])) {
+                    paths->SetSphereColor(sphereColor);
                 }
             }
         }

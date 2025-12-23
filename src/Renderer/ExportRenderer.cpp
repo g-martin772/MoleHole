@@ -162,12 +162,28 @@ void ExportRenderer::StartVideoExport(const VideoConfig& config, const std::stri
     m_progress = 0.0f;
     m_currentTask = "Starting video export...";
     m_videoConfig = config;
+    
+    // Ensure dimensions are even numbers (required for H264 encoding)
+    m_videoConfig.width = (m_videoConfig.width / 2) * 2;
+    m_videoConfig.height = (m_videoConfig.height / 2) * 2;
+    
+    if (m_videoConfig.width != config.width || m_videoConfig.height != config.height) {
+        spdlog::warn("Video resolution adjusted from {}x{} to {}x{} (H264 requires even dimensions)", 
+                    config.width, config.height, m_videoConfig.width, m_videoConfig.height);
+    }
+    
     m_outputPath = outputPath;
     m_scene = scene;
     m_currentFrame = 0;
-    m_totalFrames = static_cast<int>(config.length * config.framerate);
+    m_totalFrames = static_cast<int>(m_videoConfig.length * m_videoConfig.framerate);
 
-    spdlog::info("Starting video export: {}x{} {} frames to {}", config.width, config.height, m_totalFrames, outputPath);
+    // Enable export mode on renderer if custom ray settings are used
+    auto& renderer = Application::GetRenderer();
+    if (m_videoConfig.useCustomRaySettings) {
+        renderer.blackHoleRenderer->SetExportMode(true);
+    }
+
+    spdlog::info("Starting video export: {}x{} {} frames to {}", m_videoConfig.width, m_videoConfig.height, m_totalFrames, outputPath);
 }
 
 void ExportRenderer::Update() {
@@ -275,6 +291,7 @@ void ExportRenderer::ProcessVideoExport() {
         m_camera->SetPosition(renderer.camera->GetPosition());
         m_camera->SetYawPitch(renderer.camera->GetYaw(), renderer.camera->GetPitch());
 
+        spdlog::info("Initializing offscreen framebuffer at {}x{}", m_videoConfig.width, m_videoConfig.height);
         InitializeOffscreenBuffers(m_videoConfig.width, m_videoConfig.height);
 
         const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
@@ -292,9 +309,15 @@ void ExportRenderer::ProcessVideoExport() {
         m_codecContext->max_b_frames = 1;
         m_codecContext->pix_fmt = AV_PIX_FMT_YUV420P;
 
+        spdlog::info("Codec context initialized: {}x{} @ {} fps", 
+                    m_codecContext->width, m_codecContext->height, m_codecContext->framerate.num);
+
         if (avcodec_open2(m_codecContext, codec, nullptr) < 0) {
             throw std::runtime_error("Could not open codec");
         }
+        
+        spdlog::info("Codec opened successfully with dimensions: {}x{}", 
+                    m_codecContext->width, m_codecContext->height);
 
         avformat_alloc_output_context2(&m_formatContext, nullptr, nullptr, m_outputPath.c_str());
         if (!m_formatContext) {
@@ -304,6 +327,15 @@ void ExportRenderer::ProcessVideoExport() {
         AVStream* stream = avformat_new_stream(m_formatContext, nullptr);
         stream->time_base = m_codecContext->time_base;
         avcodec_parameters_from_context(stream->codecpar, m_codecContext);
+        
+        // Set sample aspect ratio to 1:1 (square pixels) to ensure correct display dimensions
+        stream->sample_aspect_ratio = AVRational{1, 1};
+        m_codecContext->sample_aspect_ratio = AVRational{1, 1};
+        
+        spdlog::info("Stream configured: {}x{}, time_base={}/{}, SAR={}/{}", 
+                    stream->codecpar->width, stream->codecpar->height,
+                    stream->time_base.num, stream->time_base.den,
+                    stream->sample_aspect_ratio.num, stream->sample_aspect_ratio.den);
 
         if (!(m_formatContext->oformat->flags & AVFMT_NOFILE)) {
             if (avio_open(&m_formatContext->pb, m_outputPath.c_str(), AVIO_FLAG_WRITE) < 0) {
@@ -330,6 +362,18 @@ void ExportRenderer::ProcessVideoExport() {
         m_pixelBuffer.resize(m_videoConfig.width * m_videoConfig.height * 4);
         m_rgbBuffer.resize(m_videoConfig.width * m_videoConfig.height * 3);
 
+        // Store original ray marching settings and apply custom settings if requested
+        if (m_videoConfig.useCustomRaySettings) {
+            m_savedRayStepSize = Application::State().rendering.rayStepSize;
+            m_savedMaxRaySteps = Application::State().rendering.maxRaySteps;
+            
+            Application::State().rendering.rayStepSize = m_videoConfig.customRayStepSize;
+            Application::State().rendering.maxRaySteps = m_videoConfig.customMaxRaySteps;
+            
+            spdlog::info("Using custom ray marching settings for export: step size = {}, max steps = {}", 
+                        m_videoConfig.customRayStepSize, m_videoConfig.customMaxRaySteps);
+        }
+
         simulation.Stop();
         simulation.Start();
 
@@ -339,7 +383,14 @@ void ExportRenderer::ProcessVideoExport() {
         m_currentTask = "Rendering frame " + std::to_string(m_currentFrame) + "/" + std::to_string(m_totalFrames);
         m_progress = static_cast<float>(m_currentFrame - 1) / m_totalFrames;
 
-        float simulationTimePerFrame = 1.0f / m_videoConfig.tickrate;
+        // Log first frame rendering dimensions
+        if (m_currentFrame == 1) {
+            spdlog::info("Rendering first frame at {}x{}", m_videoConfig.width, m_videoConfig.height);
+        }
+
+        // Fixed: use framerate instead of tickrate to ensure proper video playback speed
+        // Each frame should advance simulation by 1/framerate seconds
+        float simulationTimePerFrame = 1.0f / m_videoConfig.framerate;
         simulation.Update(simulationTimePerFrame);
 
         RenderFrame(m_scene, m_videoConfig.width, m_videoConfig.height);
@@ -419,6 +470,13 @@ void ExportRenderer::ProcessVideoExport() {
         m_formatContext = nullptr;
         m_codecContext = nullptr;
 
+        // Restore original ray marching settings if custom settings were used
+        if (m_videoConfig.useCustomRaySettings) {
+            Application::State().rendering.rayStepSize = m_savedRayStepSize;
+            Application::State().rendering.maxRaySteps = m_savedMaxRaySteps;
+            spdlog::info("Restored original ray marching settings");
+        }
+
         m_currentTask = "Complete";
         m_progress = 1.0f;
 
@@ -428,6 +486,10 @@ void ExportRenderer::ProcessVideoExport() {
 }
 
 void ExportRenderer::FinishExport() {
+    // Disable export mode on renderer
+    auto& renderer = Application::GetRenderer();
+    renderer.blackHoleRenderer->SetExportMode(false);
+    
     m_camera.reset();
     CleanupOffscreenBuffers();
     m_pixelBuffer.clear();

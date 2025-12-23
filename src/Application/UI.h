@@ -40,6 +40,13 @@ public:
     void ShowExportWindow(Scene* scene);
 
     void MarkConfigDirty() { m_configDirty = true; }
+    
+    void ReloadFonts();
+    std::vector<std::string> GetAvailableFonts() const;
+    
+    // Screenshot state
+    bool IsTakingScreenshot() const { return m_takingScreenshot; }
+    void SetTakingScreenshot(bool taking) { m_takingScreenshot = taking; }
 
     // Sidebar accessors
     float* GetSidebarHoverAnim() { return m_sidebarHoverAnim; }
@@ -51,6 +58,8 @@ public:
     bool* GetShowSimulationWindowPtr() { return &m_showSimulationWindow; }
     bool* GetShowSceneWindowPtr() { return &m_showSceneWindow; }
     bool* GetShowSettingsWindowPtr() { return &m_showSettingsWindow; }
+    bool* GetShowCameraWindowPtr() { return &m_showCameraWindow; }
+    bool* GetShowDebugWindowPtr() { return &m_showDebugWindow; }
     bool* GetShowDemoWindowPtr() { return &m_showDemoWindow; }
     bool* GetShowHelpWindowPtr() { return &m_showHelpWindow; }
     bool* GetShowExportWindowPtr() { return &m_showExportWindow; }
@@ -72,10 +81,13 @@ private:
     bool m_showSceneWindow = true;
     bool m_showSimulationWindow = true;
     bool m_showSettingsWindow = false;
+    bool m_showCameraWindow = true;
+    bool m_showDebugWindow = true;
     bool m_initialized = false;
     bool m_configDirty = false;
     float m_saveTimer = 0.0f;
     static constexpr float SAVE_INTERVAL = 5.0f;
+    bool m_takingScreenshot = false;
 
     GizmoOperation m_currentGizmoOperation = GizmoOperation::Translate;
     bool m_useSnap = false;
@@ -86,6 +98,8 @@ private:
     std::unique_ptr<AnimationGraph> m_AnimationGraph;
 
     struct ImFont* m_iconFont = nullptr;
+    struct ImFont* m_mainFont = nullptr;
+    std::unordered_map<std::string, struct ImFont*> m_loadedFonts; // Map of font name to ImFont*
 
     bool m_showExportWindow = false;
     struct {
@@ -99,9 +113,12 @@ private:
         float length = 10.0f;
         int framerate = 60;
         float tickrate = 60.0f;
+        bool useCustomRaySettings = false;
+        float customRayStepSize = 0.01f;
+        int customMaxRaySteps = 1000;
     } m_videoConfig;
 
     // Sidebar animation
-    float m_sidebarHoverAnim[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    float m_sidebarHoverAnim[7] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     int m_hoveredSidebarItem = -1;
 };

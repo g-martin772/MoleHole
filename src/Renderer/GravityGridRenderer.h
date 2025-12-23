@@ -9,7 +9,7 @@
 class GravityGridRenderer {
 public:
     void Init();
-    void Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time);
+    void Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const Camera& camera, float time);
 
     void SetPlaneY(float y) { m_planeY = y; }
     void SetPlaneSize(float size);
@@ -41,7 +41,7 @@ private:
     float m_cellSize = 2.0f;
     float m_opacity = 0.7f;
 
-    int m_resolution = 1028;
+    int m_resolution = 1024;
     float m_lineThickness = 0.03f;
     glm::vec3 m_color = glm::vec3(0.1f, 0.1f, 0.8f);
 };

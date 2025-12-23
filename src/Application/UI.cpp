@@ -107,6 +107,7 @@ void UI::RenderDockspace(Scene* scene) {
     bool ctrl = io.KeyCtrl;
     static bool prevCtrlS = false, prevCtrlO = false;
     static bool prevF12 = false, prevF11 = false, prevCtrlF11 = false, prevCtrlF12 = false;
+    static bool prevSpace = false, prevP = false, prevS = false, prevR = false;
 
     // define keys
     bool ctrlS = ctrl && ImGui::IsKeyPressed(ImGuiKey_S);
@@ -115,12 +116,19 @@ void UI::RenderDockspace(Scene* scene) {
     bool f11 = ImGui::IsKeyPressed(ImGuiKey_F11);
     bool ctrlf12 = ctrl && ImGui::IsKeyPressed(ImGuiKey_F12);
     bool ctrlf11 = ctrl && ImGui::IsKeyPressed(ImGuiKey_F11);
+    bool spaceKey = ImGui::IsKeyPressed(ImGuiKey_Space);
+    bool pKey = ImGui::IsKeyPressed(ImGuiKey_P);
+    bool sKey = ImGui::IsKeyPressed(ImGuiKey_S) && !ctrl;
+    bool rKey = ImGui::IsKeyPressed(ImGuiKey_R);
     
     // Screenshot shortcuts
     bool doTakeScreenshotDialog = false, doTakeScreenshotViewportDialog = false, doTakeScreenshot = false, doTakeScreenshotViewport = false;
 
     // other shortcuts
     bool doSave = false, doOpen = false;
+    
+    // Simulation control shortcuts
+    bool doSimStart = false, doSimPause = false, doSimStop = false, doSimResume = false;
     
     // set variables for pressed keys
     if (ctrlS && !prevCtrlS) doSave = true;
@@ -129,6 +137,21 @@ void UI::RenderDockspace(Scene* scene) {
     if (ctrlf12 && !prevCtrlF12) doTakeScreenshotViewport = true;
     if (f11 && !prevF11 && !ctrlf11) doTakeScreenshotDialog = true;
     if (ctrlf11 && !prevCtrlF11) doTakeScreenshot = true;
+    
+    // Simulation shortcuts (Space for Start/Resume, P for Pause, S for Stop, R for Resume)
+    if (spaceKey && !prevSpace) {
+        auto& simulation = Application::GetSimulation();
+        if (simulation.IsStopped()) {
+            doSimStart = true;
+        } else if (simulation.IsPaused()) {
+            doSimResume = true;
+        } else if (simulation.IsRunning()) {
+            doSimPause = true;
+        }
+    }
+    if (pKey && !prevP) doSimPause = true;
+    if (sKey && !prevS) doSimStop = true;
+    if (rKey && !prevR) doSimResume = true;
 
     prevCtrlS = ctrlS;
     prevCtrlO = ctrlO;
@@ -136,13 +159,24 @@ void UI::RenderDockspace(Scene* scene) {
     prevF11 = f11;
     prevCtrlF12 = ctrlf12;
     prevCtrlF11 = ctrlf11;
+    prevSpace = spaceKey;
+    prevP = pKey;
+    prevS = sKey;
+    prevR = rKey;
 
     TopBar::RenderMainMenuBar(this, scene, doSave, doOpen, doTakeScreenshotDialog, doTakeScreenshotViewportDialog, doTakeScreenshot, doTakeScreenshotViewport);
     TopBar::HandleFileOperations(this, scene, doSave, doOpen);
     TopBar::HandleImageShortcuts(scene, doTakeScreenshotViewport, doTakeScreenshot, doTakeScreenshotViewportDialog, doTakeScreenshotDialog);
+    
+    // Handle simulation control shortcuts
+    auto& simulation = Application::GetSimulation();
+    if (doSimStart) simulation.Start();
+    if (doSimPause) simulation.Pause();
+    if (doSimStop) simulation.Stop();
+    if (doSimResume) simulation.Start(); // Resume is just calling Start() when paused
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const float sidebarWidth = 80.0f; // Match the sidebar width from RenderSidebar()
+    const float sidebarWidth = 60.0f; // Match the sidebar width from RenderSidebar()
     
     // Position dockspace to the right of the sidebar
     ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + sidebarWidth, viewport->Pos.y + ImGui::GetFrameHeight()));
@@ -169,15 +203,11 @@ void UI::RenderMainUI(float fps, Scene* scene) {
         RendererWindow::Render(this, fps);
     }
 
-    // New Camera Window
-    bool showCameraWindow = true; // TODO: Add this to UI state if needed
-    if (showCameraWindow) {
+    if (m_showCameraWindow) {
         CameraWindow::Render(this);
     }
 
-    // New Debug Window
-    bool showDebugWindow = true; // TODO: Add this to UI state if needed
-    if (showDebugWindow) {
+    if (m_showDebugWindow) {
         DebugWindow::Render(this);
     }
 
@@ -223,11 +253,41 @@ void UI::RenderMainUI(float fps, Scene* scene) {
 void UI::Style() {
 
     ImGuiIO &io = ImGui::GetIO();
-    ImFont *customFont = io.Fonts->AddFontFromFileTTF("../font/DidotLTPro-Bold.ttf", 16.0f);
-    if (customFont) {
-        spdlog::info("Custom font loaded successfully");
+    
+    // Get all available fonts and load them at the configured size
+    float fontSize = Application::State().GetProperty<float>("fontSize", 16.0f);
+    std::vector<std::string> availableFonts = GetAvailableFonts();
+    
+    // Load all available fonts into the atlas
+    for (const auto& fontFile : availableFonts) {
+        std::string fontPath = "../font/" + fontFile;
+        ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), fontSize);
+        if (font) {
+            m_loadedFonts[fontFile] = font;
+            spdlog::info("Loaded font: {} ({}pt)", fontFile, fontSize);
+        } else {
+            spdlog::warn("Failed to load font: {}", fontFile);
+        }
+    }
+    
+    // Get configured font from settings, default to Roboto-Regular.ttf
+    std::string fontName = Application::State().GetProperty<std::string>("mainFont", "Roboto-Regular.ttf");
+    
+    // Set the configured font as main font
+    if (m_loadedFonts.count(fontName) > 0) {
+        m_mainFont = m_loadedFonts[fontName];
+        io.FontDefault = m_mainFont;
+        spdlog::info("Set main font to: {}", fontName);
+    } else if (!m_loadedFonts.empty()) {
+        // Fallback to first loaded font
+        m_mainFont = m_loadedFonts.begin()->second;
+        io.FontDefault = m_mainFont;
+        spdlog::warn("Font '{}' not found, using fallback: {}", fontName, m_loadedFonts.begin()->first);
     } else {
-        spdlog::warn("Failed to load custom font, using default font");
+        // Last resort: ImGui default font
+        m_mainFont = io.Fonts->AddFontDefault();
+        io.FontDefault = m_mainFont;
+        spdlog::warn("No fonts loaded, using ImGui default font");
     }
     
     // Load Font Awesome icon font
@@ -620,6 +680,26 @@ void UI::RenderVideoExportSettings() {
     ImGui::Separator();
     ImGui::Spacing();
 
+    ImGui::Text("Ray Marching Quality:");
+    ImGui::Checkbox("Use Custom Ray Settings", &m_videoConfig.useCustomRaySettings);
+    
+    if (m_videoConfig.useCustomRaySettings) {
+        ImGui::Indent();
+        ImGui::DragFloat("Ray Step Size", &m_videoConfig.customRayStepSize, 
+                        0.001f, 0.001f, 1.0f, "%.4f");
+        ImGui::DragInt("Max Ray Steps", &m_videoConfig.customMaxRaySteps, 
+                      10, 100, 5000);
+        ImGui::TextDisabled("Lower step size = better quality, slower export");
+        ImGui::TextDisabled("Higher max steps = more detail, slower export");
+        ImGui::Unindent();
+    } else {
+        ImGui::TextDisabled("Using current application ray marching settings");
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
     ImGui::Text("Preview:");
     ImGui::Text("Resolution: %dx%d", m_videoConfig.width, m_videoConfig.height);
     ImGui::Text("Duration: %.1f seconds", m_videoConfig.length);
@@ -649,6 +729,9 @@ void UI::RenderVideoExportSettings() {
             config.length = m_videoConfig.length;
             config.framerate = m_videoConfig.framerate;
             config.tickrate = m_videoConfig.tickrate;
+            config.useCustomRaySettings = m_videoConfig.useCustomRaySettings;
+            config.customRayStepSize = m_videoConfig.customRayStepSize;
+            config.customMaxRaySteps = m_videoConfig.customMaxRaySteps;
 
             exportRenderer.StartVideoExport(config, std::string(outPath), app.GetSimulation().GetScene());
 
@@ -670,4 +753,51 @@ void UI::RenderExportProgress() {
     } else {
         ImGui::TextDisabled("No export in progress");
     }
+}
+
+void UI::ReloadFonts() {
+    // Switch to the selected font without rebuilding the atlas
+    std::string fontName = Application::State().GetProperty<std::string>("mainFont", "Roboto-Regular.ttf");
+    
+    // Check if the font is already loaded
+    if (m_loadedFonts.count(fontName) > 0) {
+        ImGuiIO& io = ImGui::GetIO();
+        m_mainFont = m_loadedFonts[fontName];
+        io.FontDefault = m_mainFont;
+        spdlog::info("Switched to font: {}", fontName);
+    } else {
+        spdlog::warn("Font '{}' not found in loaded fonts. Available fonts must be added via 'Add Custom Font'.", fontName);
+    }
+}
+
+std::vector<std::string> UI::GetAvailableFonts() const {
+    std::vector<std::string> fonts;
+    
+    try {
+        std::filesystem::path fontDir = "../font";
+        if (std::filesystem::exists(fontDir) && std::filesystem::is_directory(fontDir)) {
+            for (const auto& entry : std::filesystem::directory_iterator(fontDir)) {
+                if (entry.is_regular_file()) {
+                    std::string filename = entry.path().filename().string();
+                    std::string ext = entry.path().extension().string();
+                    
+                    // Convert extension to lowercase for comparison
+                    std::transform(ext.begin(), ext.end(), ext.begin(), 
+                                 [](unsigned char c){ return std::tolower(c); });
+                    
+                    // Only include .ttf files, exclude Font Awesome
+                    if (ext == ".ttf" && filename != "fa-solid-900.ttf") {
+                        fonts.push_back(filename);
+                    }
+                }
+            }
+        }
+    } catch (const std::exception& e) {
+        spdlog::error("Failed to scan font directory: {}", e.what());
+    }
+    
+    // Sort alphabetically
+    std::sort(fonts.begin(), fonts.end());
+    
+    return fonts;
 }

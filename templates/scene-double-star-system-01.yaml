@@ -1,0 +1,40 @@
+name: ""
+black_holes:
+  []
+meshes:
+  []
+spheres:
+  - name: New Sphere
+    mass: 1e+15
+    texture_path: ""
+    velocity: [0, 0, -20]
+    position: [29.812284, 0, 7.298925]
+    rotation: [1, 0, 0, 0]
+    color: [0, 0.5, 1, 1]
+    spin: 0
+    radius: 5
+  - name: New Sphere
+    mass: 1e+15
+    texture_path: ""
+    velocity: [0, 0, 20]
+    position: [20.187822, 0, -17.298935]
+    rotation: [1, 0, 0, 0]
+    color: [0, 0.5, 1, 1]
+    spin: 0
+    radius: 5
+  - name: New Sphere
+    mass: 1000
+    texture_path: ""
+    velocity: [0, 0, 10]
+    position: [604.2604, 0, 641.5634]
+    rotation: [1, 0, 0, 0]
+    color: [0, 0.5, 1, 1]
+    spin: 0
+    radius: 0.1
+animation_graph:
+  variables:
+    []
+  nodes:
+    []
+  links:
+    []

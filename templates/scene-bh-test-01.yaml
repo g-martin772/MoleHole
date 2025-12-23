@@ -1,0 +1,75 @@
+name: ""
+black_holes:
+  - mass: 1
+    position: [0, 0, 0]
+    velocity: [60, 32, 9.348633e+25]
+    show_accretion_disk: true
+    accretion_disk_density: 1
+    accretion_disk_size: 15
+    accretion_disk_color: [1, 0.5, 0]
+    spin: 0
+    spin_axis: [0, 1, 0]
+  - mass: 1
+    position: [0, 0, -20]
+    velocity: [60, 32, 9.348633e+25]
+    show_accretion_disk: true
+    accretion_disk_density: 1
+    accretion_disk_size: 15
+    accretion_disk_color: [1, 0.5, 0]
+    spin: 0
+    spin_axis: [0, 1, 0]
+  - mass: 1
+    position: [0, 0, -40]
+    velocity: [60, 32, 9.348633e+25]
+    show_accretion_disk: true
+    accretion_disk_density: 1
+    accretion_disk_size: 15
+    accretion_disk_color: [1, 0.5, 0]
+    spin: 0
+    spin_axis: [0, 1, 0]
+  - mass: 1
+    position: [0, 0, -60]
+    velocity: [60, 32, 9.348633e+25]
+    show_accretion_disk: true
+    accretion_disk_density: 1
+    accretion_disk_size: 15
+    accretion_disk_color: [1, 0.5, 0]
+    spin: 0
+    spin_axis: [0, 1, 0]
+  - mass: 5
+    position: [0, 100, -1000]
+    velocity: [60, 32, 9.348633e+25]
+    show_accretion_disk: true
+    accretion_disk_density: 1
+    accretion_disk_size: 15
+    accretion_disk_color: [1, 0.5, 0]
+    spin: 0.5
+    spin_axis: [0, 1, 0]
+  - mass: 7
+    position: [-1000, 700, -1000]
+    velocity: [60, 32, 9.348633e+25]
+    show_accretion_disk: true
+    accretion_disk_density: 1
+    accretion_disk_size: 15
+    accretion_disk_color: [1, 0.5, 0]
+    spin: 0.5
+    spin_axis: [0, 1, 0]
+meshes:
+  []
+spheres:
+  - name: New Sphere
+    mass: 9e+26
+    texture_path: ""
+    velocity: [0, 0, 0]
+    position: [-54, 56.9, -1131.1]
+    rotation: [1, 0, 0, 0]
+    color: [0, 0.5, 1, 1]
+    spin: 0
+    radius: 6.3
+animation_graph:
+  variables:
+    []
+  nodes:
+    []
+  links:
+    []

@@ -8,12 +8,14 @@
 #include "BlackbodyLUTGenerator.h"
 #include "AccelerationLUTGenerator.h"
 #include "HRDiagramLUTGenerator.h"
+#include "GLTFMesh.h"
 
 BlackHoleRenderer::BlackHoleRenderer()
     : m_computeTexture(0), m_bloomBrightTexture(0), m_bloomBlurTexture{0, 0}, 
       m_bloomFinalTextureIndex(0),
       m_blackbodyLUT(0), m_accelerationLUT(0), m_hrDiagramLUT(0), 
-      m_quadVAO(0), m_quadVBO(0), m_width(800), m_height(600) {
+      m_quadVAO(0), m_quadVBO(0), m_meshDataSSBO(0), m_triangleSSBO(0),
+      m_width(800), m_height(600) {
 }
 
 BlackHoleRenderer::~BlackHoleRenderer() {
@@ -25,6 +27,8 @@ BlackHoleRenderer::~BlackHoleRenderer() {
     if (m_hrDiagramLUT) glDeleteTextures(1, &m_hrDiagramLUT);
     if (m_quadVAO) glDeleteVertexArrays(1, &m_quadVAO);
     if (m_quadVBO) glDeleteBuffers(1, &m_quadVBO);
+    if (m_meshDataSSBO) glDeleteBuffers(1, &m_meshDataSSBO);
+    if (m_triangleSSBO) glDeleteBuffers(1, &m_triangleSSBO);
 }
 
 void BlackHoleRenderer::Init(int width, int height) {
@@ -43,6 +47,7 @@ void BlackHoleRenderer::Init(int width, int height) {
     CreateComputeTexture();
     CreateBloomTextures();
     CreateFullscreenQuad();
+    CreateMeshBuffers();
     LoadSkybox();
     GenerateBlackbodyLUT();
     GenerateAccelerationLUT();
@@ -214,8 +219,9 @@ void BlackHoleRenderer::CreateFullscreenQuad() {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
 }
 
-void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const Camera& camera, float time) {
+void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time) {
     UpdateUniforms(blackHoles, spheres, camera, time);
+    UpdateMeshBuffers(meshes, meshCache);
 
     m_computeShader->Bind();
 
@@ -357,6 +363,13 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     m_computeShader->SetFloat("u_accDiskTemp", 2000.0f);
     m_computeShader->SetInt("u_gravitationalRedshiftEnabled", Application::Params().Get(Params::RenderingGravitationalRedshiftEnabled, 1));
 
+    // Ray marching quality settings - only set during export mode
+    // In real-time mode, use shader defaults for better performance
+    if (m_isExportMode) {
+        m_computeShader->SetFloat("u_rayStepSize", config.rendering.rayStepSize);
+        m_computeShader->SetInt("u_maxRaySteps", config.rendering.maxRaySteps);
+    }
+
     // Black holes
     int numBlackHoles = std::min(static_cast<int>(blackHoles.size()), 8);
     m_computeShader->SetInt("u_numBlackHoles", numBlackHoles);
@@ -437,4 +450,133 @@ void BlackHoleRenderer::Resize(int width, int height) {
     m_height = height;
     CreateComputeTexture();
     CreateBloomTextures();
+}
+
+void BlackHoleRenderer::CreateMeshBuffers() {
+    glGenBuffers(1, &m_meshDataSSBO);
+    glGenBuffers(1, &m_triangleSSBO);
+    
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_meshDataSSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_meshDataSSBO);
+    
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_triangleSSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_triangleSSBO);
+    
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+}
+
+void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache) {
+    struct MeshData {
+        glm::mat4 transform;
+        glm::vec4 baseColor;
+        float metallic;
+        float roughness;
+        int triangleCount;
+        int triangleOffset;
+    };
+    
+    struct Triangle {
+        glm::vec3 v0, v1, v2;
+        glm::vec3 n0, n1, n2;
+    };
+    
+    std::vector<MeshData> meshDataArray;
+    std::vector<Triangle> triangleArray;
+    
+    int triangleOffset = 0;
+    const int MAX_MESHES = 8;
+    const int MAX_TRIANGLES_PER_MESH = 1024;
+    int totalTriangles = 0;
+    
+    for (size_t i = 0; i < meshes.size() && i < MAX_MESHES; ++i) {
+        const auto& meshObj = meshes[i];
+        
+        auto it = meshCache.find(meshObj.path);
+        if (it == meshCache.end() || !it->second || !it->second->IsLoaded()) {
+            continue;
+        }
+        
+        auto gltfMesh = it->second;
+        auto geometry = gltfMesh->GetPhysicsGeometry();
+        
+        if (geometry.vertices.empty() || geometry.indices.empty()) {
+            continue;
+        }
+        
+        MeshData data;
+        data.transform = glm::translate(glm::mat4(1.0f), meshObj.position);
+        data.transform = data.transform * glm::mat4_cast(meshObj.rotation);
+        data.transform = glm::scale(data.transform, meshObj.scale);
+        data.baseColor = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
+        data.metallic = 0.5f;
+        data.roughness = 0.5f;
+        data.triangleOffset = triangleOffset;
+        
+        int meshTriangleCount = 0;
+        
+        for (size_t idx = 0; idx < geometry.indices.size() && idx + 2 < geometry.indices.size(); idx += 3) {
+            if (totalTriangles >= MAX_MESHES * MAX_TRIANGLES_PER_MESH) {
+                spdlog::warn("Exceeded maximum triangle count, skipping remaining triangles");
+                break;
+            }
+            
+            if (meshTriangleCount >= MAX_TRIANGLES_PER_MESH) {
+                spdlog::warn("Mesh {} exceeded MAX_TRIANGLES_PER_MESH, skipping remaining triangles", meshObj.path);
+                break;
+            }
+            
+            unsigned int i0 = geometry.indices[idx + 0];
+            unsigned int i1 = geometry.indices[idx + 1];
+            unsigned int i2 = geometry.indices[idx + 2];
+            
+            if (i0 >= geometry.vertices.size() || i1 >= geometry.vertices.size() || i2 >= geometry.vertices.size()) {
+                continue;
+            }
+            
+            Triangle tri;
+            tri.v0 = geometry.vertices[i0];
+            tri.v1 = geometry.vertices[i1];
+            tri.v2 = geometry.vertices[i2];
+            
+            glm::vec3 edge1 = tri.v1 - tri.v0;
+            glm::vec3 edge2 = tri.v2 - tri.v0;
+            glm::vec3 normal = glm::normalize(glm::cross(edge1, edge2));
+            
+            tri.n0 = normal;
+            tri.n1 = normal;
+            tri.n2 = normal;
+            
+            triangleArray.push_back(tri);
+            meshTriangleCount++;
+            totalTriangles++;
+        }
+        
+        data.triangleCount = meshTriangleCount;
+        triangleOffset += meshTriangleCount;
+        
+        meshDataArray.push_back(data);
+    }
+    
+    m_computeShader->Bind();
+    m_computeShader->SetInt("u_numMeshes", static_cast<int>(meshDataArray.size()));
+    m_computeShader->SetInt("u_renderMeshes", meshDataArray.empty() ? 0 : 1);
+    m_computeShader->Unbind();
+    
+    if (!meshDataArray.empty()) {
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_meshDataSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, meshDataArray.size() * sizeof(MeshData), 
+                     meshDataArray.data(), GL_DYNAMIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_meshDataSSBO);
+    }
+    
+    if (!triangleArray.empty()) {
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_triangleSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, triangleArray.size() * sizeof(Triangle), 
+                     triangleArray.data(), GL_DYNAMIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_triangleSSBO);
+    }
+    
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 }

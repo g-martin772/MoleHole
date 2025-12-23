@@ -6,7 +6,9 @@
 #include "Renderer/ExportRenderer.h"
 #include "Simulation/Simulation.h"
 #include "FpsCounter.h"
+#include "IntroAnimation.h"
 #include <functional>
+#include <memory>
 
 struct GLFWwindow;
 
@@ -58,6 +60,7 @@ public:
 
     UI& GetUI() { return m_ui; };
     ExportRenderer& GetExportRenderer() { return m_exportRenderer; }
+    IntroAnimation* GetIntroAnimation() { return m_introAnimation.get(); }
 
 private:
     Application() = default;
@@ -69,6 +72,7 @@ private:
     Simulation m_simulation;
     FpsCounter m_fpsCounter;
     ExportRenderer m_exportRenderer;
+    std::unique_ptr<IntroAnimation> m_introAnimation;
 
     bool m_initialized = false;
     bool m_running = false;

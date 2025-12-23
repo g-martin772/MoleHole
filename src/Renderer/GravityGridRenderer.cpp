@@ -20,7 +20,7 @@ void GravityGridRenderer::SetPlaneSize(float size) {
 }
 
 void GravityGridRenderer::SetResolution(int r) {
-    r = std::max(4, std::min(1024, r));
+    r = std::max(8, r);
     if (m_resolution != r) {
         m_resolution = r;
         CreatePlane();
@@ -77,7 +77,7 @@ void GravityGridRenderer::CreatePlane() {
     m_vao->Unbind();
 }
 
-void GravityGridRenderer::Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float /*time*/) {
+void GravityGridRenderer::Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const Camera& camera, float /*time*/) {
     if (!m_shader || m_indexCount == 0) return;
 
     glDisable(GL_DEPTH_TEST);
@@ -90,12 +90,31 @@ void GravityGridRenderer::Render(const std::vector<BlackHole>& blackHoles, const
     m_shader->SetMat4("uVP", vp);
     m_shader->SetFloat("u_planeY", m_planeY);
 
-    int num = static_cast<int>(std::min<size_t>(blackHoles.size(), 8));
-    m_shader->SetInt("u_numBlackHoles", num);
-    for (int i = 0; i < num; ++i) {
+    // Black holes
+    int numBH = static_cast<int>(std::min<size_t>(blackHoles.size(), 8));
+    m_shader->SetInt("u_numBlackHoles", numBH);
+    for (int i = 0; i < numBH; ++i) {
         const BlackHole& bh = blackHoles[i];
         m_shader->SetVec3("u_blackHolePositions[" + std::to_string(i) + "]", bh.position);
         m_shader->SetFloat("u_blackHoleMasses[" + std::to_string(i) + "]", bh.mass);
+    }
+
+    // Spheres
+    int numSpheres = static_cast<int>(std::min<size_t>(spheres.size(), 16));
+    m_shader->SetInt("u_numSpheres", numSpheres);
+    for (int i = 0; i < numSpheres; ++i) {
+        const Sphere& sphere = spheres[i];
+        m_shader->SetVec3("u_spherePositions[" + std::to_string(i) + "]", sphere.position);
+        m_shader->SetFloat("u_sphereMasses[" + std::to_string(i) + "]", sphere.massKg);
+    }
+
+    // Meshes
+    int numMeshes = static_cast<int>(std::min<size_t>(meshes.size(), 8));
+    m_shader->SetInt("u_numMeshes", numMeshes);
+    for (int i = 0; i < numMeshes; ++i) {
+        const MeshObject& mesh = meshes[i];
+        m_shader->SetVec3("u_meshPositions[" + std::to_string(i) + "]", mesh.position);
+        m_shader->SetFloat("u_meshMasses[" + std::to_string(i) + "]", mesh.massKg);
     }
 
     m_shader->SetFloat("u_cellSize", m_cellSize);
