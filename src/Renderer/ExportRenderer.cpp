@@ -3,6 +3,7 @@
 #include "Simulation/Scene.h"
 #include "Camera.h"
 #include "Application/Application.h"
+#include "Application/Parameters.h"
 #include <spdlog/spdlog.h>
 #include <stb_image_write.h>
 #include <glm/glm.hpp>
@@ -199,7 +200,7 @@ void ExportRenderer::ProcessImageExport() {
             m_progress = 0.1f;
 
             m_camera = std::make_unique<Camera>(
-                Application::State().GetFloat(StateParameter::RenderingFov),
+                Application::Params().Get(Params::RenderingFOV, 45.0f),
                 (float)m_imageConfig.width / (float)m_imageConfig.height,
                 0.01f, 10000.0f
             );
@@ -267,7 +268,7 @@ void ExportRenderer::ProcessVideoExport() {
         m_progress = 0.0f;
 
         m_camera = std::make_unique<Camera>(
-            Application::State().GetFloat(StateParameter::RenderingFov),
+            Application::Params().Get(Params::RenderingFOV, 45.0f),
             (float)m_videoConfig.width / (float)m_videoConfig.height,
             0.01f, 10000.0f
         );

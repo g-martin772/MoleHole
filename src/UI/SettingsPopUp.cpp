@@ -5,6 +5,7 @@
 #include "SettingsPopUp.h"
 #include "../Application/UI.h"
 #include "../Application/Application.h"
+#include "../Application/Parameters.h"
 #include "imgui.h"
 
 namespace SettingsPopUp {
@@ -33,9 +34,9 @@ void Render(UI* ui, bool* showSettingsWindow) {
         ImGui::Text("Display Settings");
         ImGui::Spacing();
 
-        bool vsync = Application::State().GetBool(StateParameter::WindowVSync);
+        bool vsync = Application::Params().Get(Params::WindowVSync, true);
         if (ImGui::Checkbox("Enable VSync", &vsync)) {
-            Application::State().SetBool(StateParameter::WindowVSync, vsync);
+            Application::Params().Set(Params::WindowVSync, vsync);
             ui->MarkConfigDirty();
         }
 
@@ -44,7 +45,7 @@ void Render(UI* ui, bool* showSettingsWindow) {
         }
 
         ImGui::Spacing();
-        ImGui::TextDisabled("Current state: %s", Application::State().GetBool(StateParameter::WindowVSync) ? "Enabled" : "Disabled");
+        ImGui::TextDisabled("Current state: %s", Application::Params().Get(Params::WindowVSync, true) ? "Enabled" : "Disabled");
 
         // Spacer
         ImGui::Spacing();

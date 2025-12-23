@@ -5,6 +5,7 @@
 #include "CameraWindow.h"
 #include "../Application/UI.h"
 #include "../Application/Application.h"
+#include "../Application/Parameters.h"
 #include "imgui.h"
 
 namespace CameraWindow {
@@ -19,15 +20,15 @@ void Render(UI* ui) {
     auto& camera = renderer.camera;
 
     if (ImGui::CollapsingHeader("Camera Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
-        float cameraSpeed = Application::State().GetFloat(StateParameter::AppCameraSpeed);
+        float cameraSpeed = Application::Params().Get(Params::CameraSpeed, 5.0f);
         if (ImGui::DragFloat("Movement Speed", &cameraSpeed, 0.1f, 0.1f, 50.0f)) {
-            Application::State().SetFloat(StateParameter::AppCameraSpeed, cameraSpeed);
+            Application::Params().Set(Params::CameraSpeed, cameraSpeed);
             ui->MarkConfigDirty();
         }
 
-        float mouseSensitivity = Application::State().GetFloat(StateParameter::AppMouseSensitivity);
+        float mouseSensitivity = Application::Params().Get(Params::CameraMouseSensitivity, 0.1f);
         if (ImGui::DragFloat("Mouse Sensitivity", &mouseSensitivity, 0.01f, 0.01f, 5.0f)) {
-            Application::State().SetFloat(StateParameter::AppMouseSensitivity, mouseSensitivity);
+            Application::Params().Set(Params::CameraMouseSensitivity, mouseSensitivity);
             ui->MarkConfigDirty();
         }
 
@@ -37,7 +38,11 @@ void Render(UI* ui) {
             glm::vec3 position = camera->GetPosition();
             if (ImGui::DragFloat3("Camera Position", &position[0], 0.1f)) {
                 camera->SetPosition(position);
-                Application::State().UpdateCameraState(position, camera->GetFront(), camera->GetUp(), camera->GetPitch(), camera->GetYaw());
+                Application::Params().Set(Params::CameraPosition, position);
+                Application::Params().Set(Params::CameraFront, camera->GetFront());
+                Application::Params().Set(Params::CameraUp, camera->GetUp());
+                Application::Params().Set(Params::CameraPitch, camera->GetPitch());
+                Application::Params().Set(Params::CameraYaw, camera->GetYaw());
                 ui->MarkConfigDirty();
             }
 
@@ -55,13 +60,17 @@ void Render(UI* ui) {
 
             if (angleChanged) {
                 camera->SetYawPitch(yaw, pitch);
-                Application::State().UpdateCameraState(camera->GetPosition(), camera->GetFront(), camera->GetUp(), pitch, yaw);
+                Application::Params().Set(Params::CameraPosition, camera->GetPosition());
+                Application::Params().Set(Params::CameraFront, camera->GetFront());
+                Application::Params().Set(Params::CameraUp, camera->GetUp());
+                Application::Params().Set(Params::CameraPitch, pitch);
+                Application::Params().Set(Params::CameraYaw, yaw);
                 ui->MarkConfigDirty();
             }
 
-            float fov = Application::State().GetFloat(StateParameter::RenderingFov);
+            float fov = Application::Params().Get(Params::RenderingFOV, 45.0f);
             if (ImGui::DragFloat("Field of View", &fov, 0.5f, 10.0f, 120.0f)) {
-                Application::State().SetFloat(StateParameter::RenderingFov, fov);
+                Application::Params().Set(Params::RenderingFOV, fov);
                 camera->SetFov(fov);
                 ui->MarkConfigDirty();
             }
@@ -70,7 +79,11 @@ void Render(UI* ui) {
                 glm::vec3 resetPos(0.0f, 20.0f, 100.0f);
                 camera->SetPosition(resetPos);
                 camera->SetYawPitch(-90.0f, 0.0f);
-                Application::State().UpdateCameraState(resetPos, camera->GetFront(), camera->GetUp(), 0.0f, -90.0f);
+                Application::Params().Set(Params::CameraPosition, resetPos);
+                Application::Params().Set(Params::CameraFront, camera->GetFront());
+                Application::Params().Set(Params::CameraUp, camera->GetUp());
+                Application::Params().Set(Params::CameraPitch, 0.0f);
+                Application::Params().Set(Params::CameraYaw, -90.0f);
                 ui->MarkConfigDirty();
             }
         }

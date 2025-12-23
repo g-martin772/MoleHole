@@ -5,6 +5,7 @@
 #include "RendererWindow.h"
 #include "../Application/UI.h"
 #include "../Application/Application.h"
+#include "../Application/Parameters.h"
 #include "imgui.h"
 
 namespace RendererWindow {
@@ -23,12 +24,12 @@ void Render(UI* ui, float fps) {
 
     // Display Settings Section
     if (ImGui::CollapsingHeader("Display Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-        bool vsync = Application::State().GetBool(StateParameter::WindowVSync);
+        bool vsync = Application::Params().Get(Params::WindowVSync, true);
         if (ImGui::Checkbox("VSync", &vsync)) {
-            Application::State().SetBool(StateParameter::WindowVSync, vsync);
+            Application::Params().Set(Params::WindowVSync, vsync);
             ui->MarkConfigDirty();
         }
-        ImGui::Text("VSync State: %s", Application::State().GetBool(StateParameter::WindowVSync) ? "Enabled" : "Disabled");
+        ImGui::Text("VSync State: %s", Application::Params().Get(Params::WindowVSync, true) ? "Enabled" : "Disabled");
     }
 
     ImGui::End();

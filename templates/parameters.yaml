@@ -1,0 +1,373 @@
+# MoleHole Parameter Definitions
+# This file defines all application parameters with their metadata
+# The system automatically loads these and handles serialization/UI generation
+
+parameters:
+  # Window Parameters
+  - name: "Window.Width"
+    displayName: "Window Width"
+    tooltip: "Width of the application window"
+    type: int
+    group: Window
+    defaultValue: 800
+    minValue: 640
+    maxValue: 7680
+    showInUI: false
+    isReadOnly: false
+
+  - name: "Window.Height"
+    displayName: "Window Height"
+    tooltip: "Height of the application window"
+    type: int
+    group: Window
+    defaultValue: 600
+    minValue: 480
+    maxValue: 4320
+    showInUI: false
+
+  - name: "Window.PosX"
+    displayName: "Window X Position"
+    tooltip: "X position of the application window"
+    type: int
+    group: Window
+    defaultValue: -1
+    showInUI: false
+
+  - name: "Window.PosY"
+    displayName: "Window Y Position"
+    tooltip: "Y position of the application window"
+    type: int
+    group: Window
+    defaultValue: -1
+    showInUI: false
+
+  - name: "Window.Maximized"
+    displayName: "Window Maximized"
+    tooltip: "Whether the window is maximized"
+    type: bool
+    group: Window
+    defaultValue: false
+    showInUI: false
+
+  - name: "Window.VSync"
+    displayName: "VSync"
+    tooltip: "Enable vertical synchronization"
+    type: bool
+    group: Window
+    defaultValue: true
+    showInUI: true
+
+  # Camera Parameters
+  - name: "Camera.Position"
+    displayName: "Camera Position"
+    tooltip: "Camera position in world space"
+    type: vec3
+    group: Camera
+    defaultValue: [0.0, 0.0, 5.0]
+    showInUI: false
+
+  - name: "Camera.Front"
+    displayName: "Camera Front"
+    tooltip: "Camera forward direction vector"
+    type: vec3
+    group: Camera
+    defaultValue: [0.0, 0.0, -1.0]
+    showInUI: false
+
+  - name: "Camera.Up"
+    displayName: "Camera Up"
+    tooltip: "Camera up direction vector"
+    type: vec3
+    group: Camera
+    defaultValue: [0.0, 1.0, 0.0]
+    showInUI: false
+
+  - name: "Camera.Pitch"
+    displayName: "Camera Pitch"
+    tooltip: "Camera pitch angle in degrees"
+    type: float
+    group: Camera
+    defaultValue: 0.0
+    minValue: -89.0
+    maxValue: 89.0
+    showInUI: false
+
+  - name: "Camera.Yaw"
+    displayName: "Camera Yaw"
+    tooltip: "Camera yaw angle in degrees"
+    type: float
+    group: Camera
+    defaultValue: -90.0
+    showInUI: false
+
+  - name: "Camera.Speed"
+    displayName: "Camera Speed"
+    tooltip: "Camera movement speed"
+    type: float
+    group: Camera
+    defaultValue: 5.0
+    minValue: 0.1
+    maxValue: 100.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Camera.MouseSensitivity"
+    displayName: "Mouse Sensitivity"
+    tooltip: "Mouse look sensitivity"
+    type: float
+    group: Camera
+    defaultValue: 0.1
+    minValue: 0.01
+    maxValue: 1.0
+    dragSpeed: 0.01
+    showInUI: true
+
+  # Rendering Parameters
+  - name: "Rendering.FOV"
+    displayName: "Field of View"
+    tooltip: "Camera field of view in degrees"
+    type: float
+    group: Rendering
+    defaultValue: 45.0
+    minValue: 1.0
+    maxValue: 120.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Rendering.MaxRaySteps"
+    displayName: "Max Ray Steps"
+    tooltip: "Maximum number of raytracing steps"
+    type: int
+    group: Rendering
+    defaultValue: 1000
+    minValue: 100
+    maxValue: 10000
+    showInUI: true
+
+  - name: "Rendering.RayStepSize"
+    displayName: "Ray Step Size"
+    tooltip: "Size of each raytracing step"
+    type: float
+    group: Rendering
+    defaultValue: 0.01
+    minValue: 0.001
+    maxValue: 1.0
+    dragSpeed: 0.001
+    showInUI: true
+
+  - name: "Rendering.DebugMode"
+    displayName: "Debug Mode"
+    tooltip: "Rendering debug visualization mode"
+    type: int
+    group: Debug
+    defaultValue: 0
+    showInUI: true
+
+  - name: "Rendering.PhysicsDebugEnabled"
+    displayName: "Physics Debug"
+    tooltip: "Enable physics debug visualization"
+    type: bool
+    group: Debug
+    defaultValue: false
+    showInUI: true
+
+  - name: "Rendering.PhysicsDebugDepthTest"
+    displayName: "Physics Debug Depth Test"
+    tooltip: "Enable depth testing for physics debug rendering"
+    type: bool
+    group: Debug
+    defaultValue: true
+    showInUI: true
+
+  - name: "Rendering.PhysicsDebugScale"
+    displayName: "Physics Debug Scale"
+    tooltip: "Scale of physics debug visualization"
+    type: float
+    group: Debug
+    defaultValue: 1.0
+    minValue: 0.1
+    maxValue: 10.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Rendering.PhysicsDebugFlags"
+    displayName: "Physics Debug Flags"
+    tooltip: "Flags for physics debug rendering"
+    type: int
+    group: Debug
+    defaultValue: 0
+    showInUI: false
+
+  - name: "Rendering.BlackHolesEnabled"
+    displayName: "Render Black Holes"
+    tooltip: "Enable black hole rendering"
+    type: bool
+    group: Rendering
+    defaultValue: true
+    showInUI: true
+
+  - name: "Rendering.GravitationalLensingEnabled"
+    displayName: "Gravitational Lensing"
+    tooltip: "Enable gravitational lensing effect"
+    type: bool
+    group: Rendering
+    defaultValue: true
+    showInUI: true
+
+  - name: "Rendering.GravitationalRedshiftEnabled"
+    displayName: "Gravitational Redshift"
+    tooltip: "Enable gravitational redshift effect"
+    type: bool
+    group: Rendering
+    defaultValue: true
+    showInUI: true
+
+  - name: "Rendering.AccretionDiskEnabled"
+    displayName: "Accretion Disk"
+    tooltip: "Enable accretion disk rendering"
+    type: bool
+    group: Rendering
+    defaultValue: true
+    showInUI: true
+
+  - name: "Rendering.AccDiskHeight"
+    displayName: "Accretion Disk Height"
+    tooltip: "Height of the accretion disk"
+    type: float
+    group: Rendering
+    defaultValue: 0.2
+    minValue: 0.01
+    maxValue: 5.0
+    dragSpeed: 0.01
+    showInUI: true
+
+  - name: "Rendering.AccDiskNoiseScale"
+    displayName: "Disk Noise Scale"
+    tooltip: "Scale of noise texture on accretion disk"
+    type: float
+    group: Rendering
+    defaultValue: 1.0
+    minValue: 0.1
+    maxValue: 10.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Rendering.AccDiskNoiseLOD"
+    displayName: "Disk Noise LOD"
+    tooltip: "Level of detail for accretion disk noise"
+    type: float
+    group: Rendering
+    defaultValue: 5.0
+    minValue: 1.0
+    maxValue: 10.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Rendering.AccDiskSpeed"
+    displayName: "Disk Rotation Speed"
+    tooltip: "Rotation speed of the accretion disk"
+    type: float
+    group: Rendering
+    defaultValue: 0.5
+    minValue: 0.0
+    maxValue: 5.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Rendering.DopplerBeamingEnabled"
+    displayName: "Doppler Beaming"
+    tooltip: "Enable relativistic Doppler beaming effect"
+    type: bool
+    group: Rendering
+    defaultValue: true
+    showInUI: true
+
+  - name: "Rendering.BloomEnabled"
+    displayName: "Bloom Effect"
+    tooltip: "Enable bloom post-processing"
+    type: bool
+    group: Rendering
+    defaultValue: true
+    showInUI: true
+
+  - name: "Rendering.BloomThreshold"
+    displayName: "Bloom Threshold"
+    tooltip: "Brightness threshold for bloom effect"
+    type: float
+    group: Rendering
+    defaultValue: 1.0
+    minValue: 0.0
+    maxValue: 5.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Rendering.BloomBlurPasses"
+    displayName: "Bloom Blur Passes"
+    tooltip: "Number of blur passes for bloom"
+    type: int
+    group: Rendering
+    defaultValue: 4
+    minValue: 1
+    maxValue: 10
+    showInUI: true
+
+  - name: "Rendering.BloomIntensity"
+    displayName: "Bloom Intensity"
+    tooltip: "Intensity of the bloom effect"
+    type: float
+    group: Rendering
+    defaultValue: 1.0
+    minValue: 0.0
+    maxValue: 5.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Rendering.BloomDebug"
+    displayName: "Bloom Debug"
+    tooltip: "Debug bloom rendering"
+    type: bool
+    group: Debug
+    defaultValue: false
+    showInUI: true
+
+  # Application Parameters
+  - name: "App.LastOpenScene"
+    displayName: "Last Opened Scene"
+    tooltip: "Path to the last opened scene file"
+    type: string
+    group: Application
+    defaultValue: ""
+    showInUI: false
+
+  - name: "App.RecentScenes"
+    displayName: "Recent Scenes"
+    tooltip: "List of recently opened scene files"
+    type: string_vector
+    group: Application
+    defaultValue: []
+    showInUI: false
+
+  - name: "App.ShowDemoWindow"
+    displayName: "Show ImGui Demo"
+    tooltip: "Show the ImGui demo window"
+    type: bool
+    group: Application
+    defaultValue: false
+    showInUI: true
+
+  - name: "App.DebugMode"
+    displayName: "Application Debug Mode"
+    tooltip: "Application-level debug mode"
+    type: int
+    group: Debug
+    defaultValue: 0
+    showInUI: true
+
+  - name: "App.UseKerrDistortion"
+    displayName: "Use Kerr Metric"
+    tooltip: "Use Kerr metric for rotating black holes"
+    type: bool
+    group: Application
+    defaultValue: true
+    showInUI: true
+

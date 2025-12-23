@@ -22,6 +22,8 @@
 #include <cmath>
 
 #include "Application/Application.h"
+#include "Application/Parameters.h"
+#include "Application/ParameterRegistry.h"
 #include "GravityGridRenderer.h"
 
 #ifndef M_PI
@@ -77,10 +79,10 @@ void Renderer::Init() {
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
     // Set a much larger far plane for the camera to avoid grid clipping
-    camera = std::make_unique<Camera>(Application::State().GetFloat(StateParameter::RenderingFov), (float) width / (float) height, 0.01f, 10000.0f);
+    camera = std::make_unique<Camera>(Application::Params().Get(Params::RenderingFOV, 45.0f), (float) width / (float) height, 0.01f, 10000.0f);
 
-    camera->SetPosition(Application::State().GetCameraPosition());
-    camera->SetYawPitch(Application::State().GetFloat(StateParameter::CameraYaw), Application::State().GetFloat(StateParameter::CameraPitch));
+    camera->SetPosition(Application::Params().Get(Params::CameraPosition, glm::vec3(0.0f, 0.0f, 10.0f)));
+    camera->SetYawPitch(Application::Params().Get(Params::CameraYaw, -90.0f), Application::Params().Get(Params::CameraPitch, 0.0f));
 
     input = std::make_unique<Input>(window);
 
@@ -103,7 +105,7 @@ void Renderer::Shutdown() {
 }
 
 void Renderer::BeginFrame() {
-    int vsyncVal = Application::State().GetBool(StateParameter::WindowVSync) ? 1 : 0;
+    int vsyncVal = Application::Params().Get(Params::WindowVSync, true) ? 1 : 0;
     if (vsyncVal != lastVsync) {
         glfwSwapInterval(vsyncVal);
         lastVsync = vsyncVal;
@@ -461,7 +463,7 @@ void Renderer::Render3DSimulation(Scene *scene) {
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
 
-    if (static_cast<DebugMode>(Application::State().GetInt(StateParameter::RenderingDebugMode)) == DebugMode::GravityGrid && gravityGridRenderer) {
+    if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::GravityGrid && gravityGridRenderer) {
         gravityGridRenderer->Render(scene->blackHoles, *camera, currentTime);
     }
 
@@ -492,7 +494,7 @@ void Renderer::UpdateCamera(float deltaTime) {
     if (input->IsKeyDown(GLFW_KEY_E)) up += 1.0f;
     if (input->IsKeyDown(GLFW_KEY_Q)) up -= 1.0f;
 
-    float cameraSpeed = Application::State().GetFloat(StateParameter::AppCameraSpeed);
+    float cameraSpeed = Application::Params().Get(Params::CameraSpeed, 5.0f);
     camera->ProcessKeyboard(forward, right, up, deltaTime, cameraSpeed);
 
     bool cameraChanged = false;
@@ -500,7 +502,7 @@ void Renderer::UpdateCamera(float deltaTime) {
         input->SetCursorEnabled(false);
         double dx, dy;
         input->GetMouseDelta(dx, dy);
-        float mouseSensitivity = Application::State().GetFloat(StateParameter::AppMouseSensitivity);
+        float mouseSensitivity = Application::Params().Get(Params::CameraMouseSensitivity, 0.1f);
         if (dx != 0.0 || dy != 0.0) {
             camera->ProcessMouse((float) dx, (float) dy, mouseSensitivity);
             cameraChanged = true;
@@ -510,17 +512,15 @@ void Renderer::UpdateCamera(float deltaTime) {
     }
 
     if (forward != 0.0f || right != 0.0f || up != 0.0f || cameraChanged) {
-        Application::State().UpdateCameraState(
-            camera->GetPosition(),
-            camera->GetFront(),
-            camera->GetUp(),
-            camera->GetPitch(),
-            camera->GetYaw()
-        );
+        Application::Params().Set(Params::CameraPosition, camera->GetPosition());
+        Application::Params().Set(Params::CameraFront, camera->GetFront());
+        Application::Params().Set(Params::CameraUp, camera->GetUp());
+        Application::Params().Set(Params::CameraPitch, camera->GetPitch());
+        Application::Params().Set(Params::CameraYaw, camera->GetYaw());
     }
 
-    if (camera->GetFov() != Application::State().GetFloat(StateParameter::RenderingFov)) {
-        camera->SetFov(Application::State().GetFloat(StateParameter::RenderingFov));
+    if (camera->GetFov() != Application::Params().Get(Params::RenderingFOV, 45.0f)) {
+        camera->SetFov(Application::Params().Get(Params::RenderingFOV, 45.0f));
     }
 }
 

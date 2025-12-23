@@ -1,6 +1,7 @@
 #include "ParameterRegistry.h"
 #include <spdlog/spdlog.h>
 #include <stdexcept>
+#include <fstream>
 
 ParameterRegistry &ParameterRegistry::Instance() noexcept {
     static ParameterRegistry s_Instance;

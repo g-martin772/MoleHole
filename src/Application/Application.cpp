@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 #include <filesystem>
 #include "LinuxGtkInit.h"
+#include "Parameters.h"
 #include "Renderer/PhysicsDebugRenderer.h"
 
 #ifndef _DEBUG
@@ -26,7 +27,9 @@ bool Application::Initialize() {
     spdlog::info("Initializing MoleHole Application");
 
     TryInitializeGtk();
-    m_state.LoadFromFile("config.yaml");
+
+    AppState::Params().LoadDefinitionsFromYaml("templates/parameters.yaml");
+    m_state.LoadState("config.yaml");
 
     try {
         InitializeRenderer();
@@ -34,7 +37,7 @@ bool Application::Initialize() {
 
         m_ui.Initialize();
 
-        const std::string& lastScene = m_state.GetString(StateParameter::AppLastOpenScene);
+        const std::string lastScene = Params().Get(Params::AppLastOpenScene, std::string());
         if (!lastScene.empty() && std::filesystem::exists(lastScene)) {
             LoadScene(lastScene);
         }
@@ -84,7 +87,7 @@ void Application::Shutdown() {
 
     UpdateWindowState();
 
-    m_state.SaveToFile();
+    m_state.SaveState();
 
     m_renderer.Shutdown();
 
@@ -155,7 +158,7 @@ void Application::LoadScene(const std::filesystem::path& scenePath) {
     try {
         if (auto scene = m_simulation.GetScene(); scene && std::filesystem::exists(scenePath)) {
             scene->Deserialize(scenePath);
-            m_state.SetString(StateParameter::AppLastOpenScene, scenePath.string());
+            Application::Params().Set(Params::AppLastOpenScene, scenePath.string());
             spdlog::info("Loaded scene: {}", scenePath.string());
         }
     } catch (const std::exception& e) {
@@ -167,7 +170,7 @@ void Application::SaveScene(const std::filesystem::path& scenePath) {
     try {
         if (auto scene = m_simulation.GetScene()) {
             scene->Serialize(scenePath);
-            m_state.SetString(StateParameter::AppLastOpenScene, scenePath.string());
+            Application::Params().Set(Params::AppLastOpenScene, scenePath.string());
             spdlog::info("Saved scene: {}", scenePath.string());
         }
     } catch (const std::exception& e) {
@@ -180,14 +183,14 @@ void Application::NewScene() {
         scene->blackHoles.clear();
         scene->name = "New Scene";
         scene->currentPath.clear();
-        m_state.SetString(StateParameter::AppLastOpenScene, "");
+        Application::Params().Set(Params::AppLastOpenScene, std::string(""));
         spdlog::info("Created new scene");
     }
 }
 
 void Application::SaveState() {
     UpdateWindowState();
-    m_state.SaveToFile();
+    m_state.SaveState();
 }
 
 void Application::RegisterUpdateCallback(const std::string& name, UpdateCallback callback) {
@@ -216,20 +219,20 @@ void Application::InitializeRenderer() {
         glfwSetWindowMaximizeCallback(window, WindowMaximizeCallback);
         glfwSetWindowCloseCallback(window, WindowCloseCallback);
 
-        glfwSetWindowSize(window, m_state.GetInt(StateParameter::WindowWidth), m_state.GetInt(StateParameter::WindowHeight));
-        int posX = m_state.GetInt(StateParameter::WindowPosX);
-        int posY = m_state.GetInt(StateParameter::WindowPosY);
+        glfwSetWindowSize(window, Application::Params().Get(Params::WindowWidth, 1280), Application::Params().Get(Params::WindowHeight, 720));
+        int posX = Application::Params().Get(Params::WindowPosX, -1);
+        int posY = Application::Params().Get(Params::WindowPosY, -1);
         if (posX >= 0 && posY >= 0) {
             glfwSetWindowPos(window, posX, posY);
         }
-        if (m_state.GetBool(StateParameter::WindowMaximized)) {
+        if (Application::Params().Get(Params::WindowMaximized, false)) {
             glfwMaximizeWindow(window);
         }
 
         glfwSetWindowTitle(window, "MoleHole");
     }
 
-    glfwSwapInterval(m_state.GetBool(StateParameter::WindowVSync) ? 1 : 0);
+    glfwSwapInterval(Application::Params().Get(Params::WindowVSync, true) ? 1 : 0);
 }
 
 void Application::InitializeSimulation() {
@@ -238,9 +241,9 @@ void Application::InitializeSimulation() {
 
     auto* physics = m_simulation.GetPhysics();
     if (physics) {
-        physics->SetVisualizationScale(m_state.GetFloat(StateParameter::RenderingPhysicsDebugScale));
+        physics->SetVisualizationScale(Application::Params().Get(Params::RenderingPhysicsDebugScale, 1.0f));
 
-        uint32_t flags = static_cast<uint32_t>(m_state.GetInt(StateParameter::RenderingPhysicsDebugFlags));
+        uint32_t flags = static_cast<uint32_t>(Application::Params().Get(Params::RenderingPhysicsDebugFlags, 0));
         physics->SetVisualizationParameter(PxVisualizationParameter::eWORLD_AXES, (flags & (1 << 0)) ? 1.0f : 0.0f);
         physics->SetVisualizationParameter(PxVisualizationParameter::eBODY_AXES, (flags & (1 << 1)) ? 1.0f : 0.0f);
         physics->SetVisualizationParameter(PxVisualizationParameter::eBODY_MASS_AXES, (flags & (1 << 2)) ? 1.0f : 0.0f);
@@ -263,8 +266,8 @@ void Application::InitializeSimulation() {
 
     auto* physicsDebugRenderer = m_renderer.GetPhysicsDebugRenderer();
     if (physicsDebugRenderer) {
-        physicsDebugRenderer->SetEnabled(m_state.rendering.physicsDebugEnabled);
-        physicsDebugRenderer->SetDepthTestEnabled(m_state.rendering.physicsDebugDepthTest);
+        physicsDebugRenderer->SetEnabled(Application::Params().Get(Params::RenderingPhysicsDebugEnabled, false));
+        physicsDebugRenderer->SetDepthTestEnabled(Application::Params().Get(Params::RenderingPhysicsDebugDepthTest, true));
     }
 }
 
@@ -280,7 +283,11 @@ void Application::UpdateWindowState() {
 
     int maximized = glfwGetWindowAttrib(window, GLFW_MAXIMIZED);
 
-    m_state.UpdateWindowState(width, height, posX, posY, maximized == GLFW_TRUE);
+    Params().Set(Params::WindowWidth, width);
+    Params().Set(Params::WindowHeight, height);
+    Params().Set(Params::WindowPosX, posX);
+    Params().Set(Params::WindowPosY, posY);
+    Params().Set(Params::WindowMaximized, maximized == GLFW_TRUE);
 }
 
 void Application::HandleWindowEvents() {
@@ -290,21 +297,21 @@ void Application::HandleWindowEvents() {
 void Application::WindowSizeCallback(GLFWwindow* window, int width, int height) {
     auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
     if (app) {
-        app->m_state.window.width = width;
-        app->m_state.window.height = height;
+        app->Params().Set(Params::WindowWidth, width);
+        app->Params().Set(Params::WindowHeight, height);
     }
 }
 
 void Application::WindowPosCallback(GLFWwindow* window, int xpos, int ypos) {
     if (auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window))) {
-        app->m_state.window.posX = xpos;
-        app->m_state.window.posY = ypos;
+        app->Params().Set(Params::WindowPosX, xpos);
+        app->Params().Set(Params::WindowPosY, ypos);
     }
 }
 
 void Application::WindowMaximizeCallback(GLFWwindow* window, int maximized) {
     if (auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window))) {
-        app->m_state.window.maximized = (maximized == GLFW_TRUE);
+        Application::Params().Set(Params::WindowMaximized, maximized == GLFW_TRUE);
     }
 }
 

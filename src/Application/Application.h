@@ -21,6 +21,7 @@ public:
 
     static Application& Instance();
     static AppState& State() { return Instance().GetState(); }
+    static ParameterRegistry& Params() { return AppState::Params(); }
     static Renderer& GetRenderer() { return Instance().m_renderer; }
     static Simulation& GetSimulation() { return Instance().m_simulation; }
 

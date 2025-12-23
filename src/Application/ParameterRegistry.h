@@ -53,6 +53,16 @@ struct ParameterHandle {
     constexpr bool operator==(const ParameterHandle &o) const noexcept { return m_Id == o.m_Id; }
 };
 
+enum class DebugMode {
+    Normal = 0,
+    InfluenceZones = 1,
+    DeflectionMagnitude = 2,
+    GravitationalField = 3,
+    SphericalShape = 4,
+    DebugLUT = 5,
+    GravityGrid = 6
+};
+
 enum class ParameterGroup {
     Window,
     Camera,

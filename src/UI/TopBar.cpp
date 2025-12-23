@@ -5,6 +5,7 @@
 #include "TopBar.h"
 #include "../Application/UI.h"
 #include "../Application/Application.h"
+#include "../Application/Parameters.h"
 #include "../Simulation/Scene.h"
 #include "../Renderer/Renderer.h"
 #include "../Renderer/Screenshot.h"
@@ -29,7 +30,7 @@ static void AddToRecentScenes(UI* ui, const std::string& path) {
         return;
     }
 
-    auto recentScenes = Application::State().GetStringVector(StateParameter::AppRecentScenes);
+    auto recentScenes = Application::Params().Get(Params::AppRecentScenes, std::vector<std::string>());
 
     auto it = std::find(recentScenes.begin(), recentScenes.end(), path);
     if (it != recentScenes.end()) {
@@ -43,17 +44,17 @@ static void AddToRecentScenes(UI* ui, const std::string& path) {
         recentScenes.resize(MAX_RECENT_SCENES);
     }
 
-    Application::State().SetStringVector(StateParameter::AppRecentScenes, recentScenes);
+    Application::Params().Set(Params::AppRecentScenes, recentScenes);
     ui->MarkConfigDirty();
 }
 
 static void RemoveFromRecentScenes(UI* ui, const std::string& path) {
-    auto recentScenes = Application::State().GetStringVector(StateParameter::AppRecentScenes);
+    auto recentScenes = Application::Params().Get(Params::AppRecentScenes, std::vector<std::string>());
 
     auto it = std::find(recentScenes.begin(), recentScenes.end(), path);
     if (it != recentScenes.end()) {
         recentScenes.erase(it);
-        Application::State().SetStringVector(StateParameter::AppRecentScenes, recentScenes);
+        Application::Params().Set(Params::AppRecentScenes, recentScenes);
         ui->MarkConfigDirty();
     }
 }
@@ -79,7 +80,7 @@ void LoadScene(UI* ui, Scene* scene, const std::string& path) {
 
         scene->Deserialize(fsPath);
 
-        Application::Instance().GetState().SetString(StateParameter::AppLastOpenScene, path);
+        Application::Params().Set(Params::AppLastOpenScene, path);
         AddToRecentScenes(ui, path);
 
         spdlog::info("Scene loaded successfully: {}", path);
@@ -110,7 +111,7 @@ void RenderMainMenuBar(UI* ui, Scene* scene, bool& doSave, bool& doOpen,
                     auto path = Scene::ShowFileDialog(true);
                     if (!path.empty()) {
                         scene->Serialize(path);
-                        Application::Instance().GetState().SetString(StateParameter::AppLastOpenScene, path.string());
+                        Application::Params().Set(Params::AppLastOpenScene, path.string());
                         AddToRecentScenes(ui, path.string());
                     }
                 }
@@ -147,7 +148,7 @@ void RenderMainMenuBar(UI* ui, Scene* scene, bool& doSave, bool& doOpen,
                                 try {
                                     scene->Deserialize(t, false);
                                     scene->currentPath.clear();
-                                    Application::Instance().GetState().SetString(StateParameter::AppLastOpenScene, "");
+                                    Application::Params().Set(Params::AppLastOpenScene, std::string(""));
                                     spdlog::info("Loaded template: {}", t.string());
                                 } catch (const std::exception& e) {
                                     spdlog::error("Failed to load template '{}': {}", t.string(), e.what());
