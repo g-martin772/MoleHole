@@ -3,6 +3,7 @@
 //
 
 #include "DebugWindow.h"
+#include "ParameterWidgets.h"
 #include "../Application/UI.h"
 #include "../Application/Application.h"
 #include "../Application/Parameters.h"
@@ -83,90 +84,42 @@ void Render(UI* ui) {
         return;
     }
 
-    // Rendering Flags Section
-    if (ImGui::CollapsingHeader("Rendering Flags", ImGuiTreeNodeFlags_DefaultOpen)) {
+    // Rendering Settings Section
+    if (ImGui::CollapsingHeader("Rendering Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+        ImGui::TextWrapped("Configure black hole rendering and visual effects");
+        ImGui::PopStyleColor();
+        ImGui::Separator();
+        ImGui::Spacing();
+
         // General rendering flags
         ImGui::Text("General Settings");
         ImGui::Separator();
         
-        bool renderBlackHoles = Application::Params().Get(Params::RenderingBlackHolesEnabled, true);
-        if (ImGui::Checkbox("Render Black Holes", &renderBlackHoles)) {
-            Application::Params().Set(Params::RenderingBlackHolesEnabled, renderBlackHoles);
-            ui->MarkConfigDirty();
-        }
-        
-        bool gravitationalLensing = Application::Params().Get(Params::RenderingGravitationalLensingEnabled, true);
-        if (ImGui::Checkbox("Gravitational Lensing", &gravitationalLensing)) {
-            Application::Params().Set(Params::RenderingGravitationalLensingEnabled, gravitationalLensing);
-            ui->MarkConfigDirty();
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Enable/disable gravitational light bending effects");
-        }
-        
-        bool gravitationalRedshift = Application::Params().Get(Params::RenderingGravitationalRedshiftEnabled, true);
-        if (ImGui::Checkbox("Gravitational Redshift", &gravitationalRedshift)) {
-            Application::Params().Set(Params::RenderingGravitationalRedshiftEnabled, gravitationalRedshift);
-            ui->MarkConfigDirty();
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Enable/disable gravitational redshift in accretion disk");
-        }
-        
+        ParameterWidgets::RenderParameter(Params::RenderingBlackHolesEnabled, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingGravitationalLensingEnabled, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingGravitationalRedshiftEnabled, ui);
+
         ImGui::Spacing();
         ImGui::Text("Accretion Disk Settings");
         ImGui::Separator();
         
-        bool accretionDisk = Application::Params().Get(Params::RenderingAccretionDiskEnabled, true);
-        if (ImGui::Checkbox("Accretion Disk", &accretionDisk)) {
-            Application::Params().Set(Params::RenderingAccretionDiskEnabled, accretionDisk);
-            ui->MarkConfigDirty();
-        }
-        
-        float accDiskHeight = Application::Params().Get(Params::RenderingAccDiskHeight, 0.1f);
-        if (ImGui::SliderFloat("Disk Height", &accDiskHeight, 0.01f, 2.0f)) {
-            Application::Params().Set(Params::RenderingAccDiskHeight, accDiskHeight);
-            ui->MarkConfigDirty();
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Vertical thickness of the accretion disk");
-        }
-        
-        float accDiskNoiseScale = Application::Params().Get(Params::RenderingAccDiskNoiseScale, 1.0f);
-        if (ImGui::SliderFloat("Noise Scale", &accDiskNoiseScale, 0.1f, 10.0f)) {
-            Application::Params().Set(Params::RenderingAccDiskNoiseScale, accDiskNoiseScale);
-            ui->MarkConfigDirty();
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Scale of the noise pattern in the accretion disk");
-        }
-        
-        float accDiskNoiseLOD = Application::Params().Get(Params::RenderingAccDiskNoiseLOD, 3.0f);
-        if (ImGui::SliderFloat("Noise LOD", &accDiskNoiseLOD, 1.0f, 10.0f)) {
-            Application::Params().Set(Params::RenderingAccDiskNoiseLOD, accDiskNoiseLOD);
-            ui->MarkConfigDirty();
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Level of detail for noise (more octaves = more detail)");
-        }
-        
-        float accDiskSpeed = Application::Params().Get(Params::RenderingAccDiskSpeed, 1.0f);
-        if (ImGui::SliderFloat("Disk Rotation Speed", &accDiskSpeed, 0.0f, 5.0f)) {
-            Application::Params().Set(Params::RenderingAccDiskSpeed, accDiskSpeed);
-            ui->MarkConfigDirty();
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Rotation speed of the accretion disk animation");
-        }
-        
-        bool dopplerBeaming = Application::Params().Get(Params::RenderingDopplerBeamingEnabled, true);
-        if (ImGui::Checkbox("Doppler Beaming", &dopplerBeaming)) {
-            Application::Params().Set(Params::RenderingDopplerBeamingEnabled, dopplerBeaming);
-            ui->MarkConfigDirty();
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Enable relativistic Doppler shift and beaming effects");
-        }
+        ParameterWidgets::RenderParameter(Params::RenderingAccretionDiskEnabled, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingAccDiskHeight, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingAccDiskNoiseScale, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingAccDiskNoiseLOD, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingAccDiskSpeed, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingDopplerBeamingEnabled, ui);
+
+        ImGui::Spacing();
+        ImGui::Text("Post-Processing");
+        ImGui::Separator();
+
+        ParameterWidgets::RenderParameter(Params::RenderingBloomEnabled, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingBloomThreshold, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingBloomBlurPasses, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingBloomIntensity, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingBloomDebug, ui);
     }
 
     // Debug Visualization Section
