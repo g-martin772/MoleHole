@@ -283,7 +283,7 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const s
 
 void BlackHoleRenderer::ApplyBloom() {
     // Check if bloom is enabled
-    int bloomEnabled = Application::Params().Get(Params::RenderingBloomEnabled, 1);
+    bool bloomEnabled = Application::Params().Get(Params::RenderingBloomEnabled, true);
     if (!bloomEnabled) {
         return;
     }
@@ -352,22 +352,22 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     m_computeShader->SetFloat("u_time", time);
 
     // Rendering settings from AppState
-    m_computeShader->SetInt("u_gravitationalLensingEnabled", Application::Params().Get(Params::RenderingGravitationalLensingEnabled, 1));
-    m_computeShader->SetInt("u_accretionDiskEnabled", Application::Params().Get(Params::RenderingAccretionDiskEnabled, 1));
-    m_computeShader->SetInt("u_renderBlackHoles", Application::Params().Get(Params::RenderingBlackHolesEnabled, 1));
+    m_computeShader->SetInt("u_gravitationalLensingEnabled", Application::Params().Get(Params::RenderingGravitationalLensingEnabled, true) ? 1 : 0);
+    m_computeShader->SetInt("u_accretionDiskEnabled", Application::Params().Get(Params::RenderingAccretionDiskEnabled, true) ? 1 : 0);
+    m_computeShader->SetInt("u_renderBlackHoles", Application::Params().Get(Params::RenderingBlackHolesEnabled, true) ? 1 : 0);
     m_computeShader->SetFloat("u_accDiskHeight", Application::Params().Get(Params::RenderingAccDiskHeight, 0.1f));
     m_computeShader->SetFloat("u_accDiskNoiseScale", Application::Params().Get(Params::RenderingAccDiskNoiseScale, 1.0f));
     m_computeShader->SetFloat("u_accDiskNoiseLOD", Application::Params().Get(Params::RenderingAccDiskNoiseLOD, 3.0f));
     m_computeShader->SetFloat("u_accDiskSpeed", Application::Params().Get(Params::RenderingAccDiskSpeed, 1.0f));
-    m_computeShader->SetFloat("u_dopplerBeamingEnabled", static_cast<float>(Application::Params().Get(Params::RenderingDopplerBeamingEnabled, 1)));
+    m_computeShader->SetFloat("u_dopplerBeamingEnabled", Application::Params().Get(Params::RenderingDopplerBeamingEnabled, true) ? 1.0f : 0.0f);
     m_computeShader->SetFloat("u_accDiskTemp", 2000.0f);
-    m_computeShader->SetInt("u_gravitationalRedshiftEnabled", Application::Params().Get(Params::RenderingGravitationalRedshiftEnabled, 1));
+    m_computeShader->SetInt("u_gravitationalRedshiftEnabled", Application::Params().Get(Params::RenderingGravitationalRedshiftEnabled, true) ? 1 : 0);
 
     // Ray marching quality settings - only set during export mode
     // In real-time mode, use shader defaults for better performance
     if (m_isExportMode) {
-        m_computeShader->SetFloat("u_rayStepSize", config.rendering.rayStepSize);
-        m_computeShader->SetInt("u_maxRaySteps", config.rendering.maxRaySteps);
+        m_computeShader->SetFloat("u_rayStepSize", Application::Params().Get(Params::RenderingRayStepSize, 0.1f));
+        m_computeShader->SetInt("u_maxRaySteps", Application::Params().Get(Params::RenderingMaxRaySteps, 128));
     }
 
     // Black holes
@@ -431,12 +431,12 @@ void BlackHoleRenderer::RenderToScreen() {
     m_displayShader->SetInt("u_bloomImage", 1);
     
     // Set bloom parameters
-    int bloomEnabled = Application::Params().Get(Params::RenderingBloomEnabled, 1);
+    bool bloomEnabled = Application::Params().Get(Params::RenderingBloomEnabled, true);
     float bloomIntensity = Application::Params().Get(Params::RenderingBloomIntensity, 1.0f);
-    int bloomDebug = Application::Params().Get(Params::RenderingBloomDebug, 0);
-    m_displayShader->SetInt("u_bloomEnabled", bloomEnabled);
+    bool bloomDebug = Application::Params().Get(Params::RenderingBloomDebug, false);
+    m_displayShader->SetInt("u_bloomEnabled", bloomEnabled ? 1 : 0);
     m_displayShader->SetFloat("u_bloomIntensity", bloomIntensity);
-    m_displayShader->SetInt("u_bloomDebug", bloomDebug);
+    m_displayShader->SetInt("u_bloomDebug", bloomDebug ? 1 : 0);
 
     glBindVertexArray(m_quadVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);

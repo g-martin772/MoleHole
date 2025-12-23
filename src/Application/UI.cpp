@@ -32,6 +32,7 @@
 #include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtx/quaternion.hpp>
 
+#include "Parameters.h"
 #include "Renderer/PhysicsDebugRenderer.h"
 
 #ifndef _DEBUG
@@ -255,7 +256,7 @@ void UI::Style() {
     ImGuiIO &io = ImGui::GetIO();
     
     // Get all available fonts and load them at the configured size
-    float fontSize = Application::State().GetProperty<float>("fontSize", 16.0f);
+    float fontSize = Application::Params().Get(Params::UIFontSize, 16.0f);
     std::vector<std::string> availableFonts = GetAvailableFonts();
     
     // Load all available fonts into the atlas
@@ -271,8 +272,9 @@ void UI::Style() {
     }
     
     // Get configured font from settings, default to Roboto-Regular.ttf
-    std::string fontName = Application::State().GetProperty<std::string>("mainFont", "Roboto-Regular.ttf");
-    
+    const std::string defaultFont = "Roboto-Regular.ttf";
+    std::string fontName = Application::Params().Get(Params::UIMainFont, defaultFont);
+
     // Set the configured font as main font
     if (m_loadedFonts.count(fontName) > 0) {
         m_mainFont = m_loadedFonts[fontName];
@@ -757,8 +759,9 @@ void UI::RenderExportProgress() {
 
 void UI::ReloadFonts() {
     // Switch to the selected font without rebuilding the atlas
-    std::string fontName = Application::State().GetProperty<std::string>("mainFont", "Roboto-Regular.ttf");
-    
+    const std::string defaultFont = "Roboto-Regular.ttf";
+    std::string fontName = Application::Params().Get(Params::UIMainFont, defaultFont);
+
     // Check if the font is already loaded
     if (m_loadedFonts.count(fontName) > 0) {
         ImGuiIO& io = ImGui::GetIO();

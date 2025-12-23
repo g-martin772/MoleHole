@@ -60,7 +60,8 @@ enum class DebugMode {
     GravitationalField = 3,
     SphericalShape = 4,
     DebugLUT = 5,
-    GravityGrid = 6
+    GravityGrid = 6,
+    ObjectPaths = 7
 };
 
 enum class ParameterGroup {

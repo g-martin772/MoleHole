@@ -60,8 +60,9 @@ void Render(UI* ui, bool* showSettingsWindow) {
         static bool fontsLoaded = false;
 
         if (ImGui::CollapsingHeader("Font Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-            std::string currentFont = Application::State().GetProperty<std::string>("mainFont", "Roboto-Regular.ttf");
-            float fontSize = Application::State().GetProperty<float>("fontSize", 16.0f);
+            const std::string defaultFont = "Roboto-Regular.ttf";
+            std::string currentFont = Application::Params().Get(Params::UIMainFont, defaultFont);
+            float fontSize = Application::Params().Get(Params::UIFontSize, 16.0f);
 
             ImGui::Text("Current Font: %s", currentFont.c_str());
             ImGui::Spacing();
@@ -84,7 +85,7 @@ void Render(UI* ui, bool* showSettingsWindow) {
                     bool isSelected = (selectedFontIndex == static_cast<int>(i));
                     if (ImGui::Selectable(availableFonts[i].c_str(), isSelected)) {
                         selectedFontIndex = static_cast<int>(i);
-                        Application::State().SetProperty("mainFont", availableFonts[i]);
+                        Application::Params().Set(Params::UIMainFont, availableFonts[i]);
                         ui->MarkConfigDirty();
                         ui->ReloadFonts();
                     }
@@ -99,7 +100,7 @@ void Render(UI* ui, bool* showSettingsWindow) {
 
             // Font size slider
             if (ImGui::SliderFloat("Font Size", &fontSize, 10.0f, 32.0f, "%.0f")) {
-                Application::State().SetProperty("fontSize", fontSize);
+                Application::Params().Set(Params::UIFontSize, fontSize);
                 ImGui::GetIO().FontGlobalScale = fontSize / 16.0f; // For 16.0f base size
                 ui->MarkConfigDirty();
             }
@@ -127,7 +128,7 @@ void Render(UI* ui, bool* showSettingsWindow) {
                                                    std::filesystem::copy_options::overwrite_existing);
 
                         // Set as current font
-                        Application::State().SetProperty("mainFont", sourcePath.filename().string());
+                        Application::Params().Set(Params::UIMainFont, sourcePath.filename().string());
                         ui->MarkConfigDirty();
 
                         // Reload available fonts and reload font atlas
@@ -153,7 +154,8 @@ void Render(UI* ui, bool* showSettingsWindow) {
 
         // Media Export Settings Section
         if (ImGui::CollapsingHeader("Media Export Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-            std::string exportPath = Application::State().GetProperty<std::string>("defaultExportPath", ".");
+            const std::string defaultPath = ".";
+            std::string exportPath = Application::Params().Get(Params::UIDefaultExportPath, defaultPath);
 
             ImGui::Text("Default Export Path:");
             ImGui::TextWrapped("%s", exportPath.c_str());
@@ -164,7 +166,7 @@ void Render(UI* ui, bool* showSettingsWindow) {
                 nfdresult_t result = NFD_PickFolder(&outPath, exportPath.c_str());
 
                 if (result == NFD_OKAY && outPath) {
-                    Application::State().SetProperty("defaultExportPath", std::string(outPath));
+                    Application::Params().Set(Params::UIDefaultExportPath, std::string(outPath));
                     ui->MarkConfigDirty();
                     spdlog::info("Default export path set to: {}", outPath);
                     free(outPath);
@@ -176,7 +178,7 @@ void Render(UI* ui, bool* showSettingsWindow) {
             ImGui::Spacing();
 
             if (ImGui::Button("Reset to Current Directory", ImVec2(-1, 0))) {
-                Application::State().SetProperty("defaultExportPath", std::string("."));
+                Application::Params().Set(Params::UIDefaultExportPath, std::string("."));
                 ui->MarkConfigDirty();
             }
         }

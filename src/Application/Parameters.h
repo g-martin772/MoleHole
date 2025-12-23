@@ -53,5 +53,10 @@ namespace Params {
     inline constexpr ParameterHandle AppShowDemoWindow("App.ShowDemoWindow");
     inline constexpr ParameterHandle AppDebugMode("App.DebugMode");
     inline constexpr ParameterHandle AppUseKerrDistortion("App.UseKerrDistortion");
+
+    // UI Parameters
+    inline constexpr ParameterHandle UIFontSize("UI.FontSize");
+    inline constexpr ParameterHandle UIMainFont("UI.MainFont");
+    inline constexpr ParameterHandle UIDefaultExportPath("UI.DefaultExportPath");
 }
 

@@ -364,12 +364,12 @@ void ExportRenderer::ProcessVideoExport() {
 
         // Store original ray marching settings and apply custom settings if requested
         if (m_videoConfig.useCustomRaySettings) {
-            m_savedRayStepSize = Application::State().rendering.rayStepSize;
-            m_savedMaxRaySteps = Application::State().rendering.maxRaySteps;
-            
-            Application::State().rendering.rayStepSize = m_videoConfig.customRayStepSize;
-            Application::State().rendering.maxRaySteps = m_videoConfig.customMaxRaySteps;
-            
+            m_savedRayStepSize = Application::Params().Get(Params::RenderingRayStepSize, 0.1f);
+            m_savedMaxRaySteps = Application::Params().Get(Params::RenderingMaxRaySteps, 128);
+
+            Application::Params().Set(Params::RenderingRayStepSize, m_videoConfig.customRayStepSize);
+            Application::Params().Set(Params::RenderingMaxRaySteps, m_videoConfig.customMaxRaySteps);
+
             spdlog::info("Using custom ray marching settings for export: step size = {}, max steps = {}", 
                         m_videoConfig.customRayStepSize, m_videoConfig.customMaxRaySteps);
         }
@@ -472,8 +472,8 @@ void ExportRenderer::ProcessVideoExport() {
 
         // Restore original ray marching settings if custom settings were used
         if (m_videoConfig.useCustomRaySettings) {
-            Application::State().rendering.rayStepSize = m_savedRayStepSize;
-            Application::State().rendering.maxRaySteps = m_savedMaxRaySteps;
+            Application::Params().Set(Params::RenderingRayStepSize, m_savedRayStepSize);
+            Application::Params().Set(Params::RenderingMaxRaySteps, m_savedMaxRaySteps);
             spdlog::info("Restored original ray marching settings");
         }
 

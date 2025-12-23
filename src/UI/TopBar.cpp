@@ -258,7 +258,8 @@ void HandleImageShortcuts(Scene* scene, bool takeViewportScreenshot, bool takeFu
 }
 
 void TakeScreenshot() {
-    std::string exportPath = Application::State().GetProperty<std::string>("defaultExportPath", ".");
+    const std::string defaultPath = ".";
+    std::string exportPath = Application::Params().Get(Params::UIDefaultExportPath, defaultPath);
     std::string filename = exportPath + "/" + Screenshot::GenerateTimestampedFilename("molehole_screenshot");
 
     if (Screenshot::CaptureWindow(filename)) {
@@ -277,7 +278,8 @@ void TakeViewportScreenshot() {
     int width = static_cast<int>(renderer.m_viewportWidth);
     int height = static_cast<int>(renderer.m_viewportHeight);
 
-    std::string exportPath = Application::State().GetProperty<std::string>("defaultExportPath", ".");
+    const std::string defaultPath = ".";
+    std::string exportPath = Application::Params().Get(Params::UIDefaultExportPath, defaultPath);
     std::string filename = exportPath + "/" + Screenshot::GenerateTimestampedFilename("molehole_viewport");
 
     if (Screenshot::CaptureViewport(x, y, width, height, filename)) {
@@ -295,7 +297,8 @@ void TakeScreenshotWithDialog() {
 
     // Generate a default filename with timestamp
     std::string defaultName = Screenshot::GenerateTimestampedFilename("molehole_screenshot", ".png");
-    std::string exportPath = Application::State().GetProperty<std::string>("defaultExportPath", ".");
+    const std::string defaultPath = ".";
+    std::string exportPath = Application::Params().Get(Params::UIDefaultExportPath, defaultPath);
 
     nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, exportPath.c_str(), defaultName.c_str());
 
@@ -325,7 +328,8 @@ void TakeViewportScreenshotWithDialog() {
 
     // Generate a default filename with timestamp
     std::string defaultName = Screenshot::GenerateTimestampedFilename("molehole_viewport", ".png");
-    std::string exportPath = Application::State().GetProperty<std::string>("defaultExportPath", ".");
+    const std::string defaultPath = ".";
+    std::string exportPath = Application::Params().Get(Params::UIDefaultExportPath, defaultPath);
 
     nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, exportPath.c_str(), defaultName.c_str());
 

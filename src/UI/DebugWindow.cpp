@@ -211,7 +211,7 @@ void Render(UI* ui) {
             }
         }
         
-        if (Application::State().rendering.debugMode == DebugMode::ObjectPaths) {
+        if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::ObjectPaths) {
             auto& renderer = Application::GetRenderer();
             if (auto* paths = renderer.GetObjectPathsRenderer()) {
                 ImGui::Separator();

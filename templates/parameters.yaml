@@ -371,3 +371,31 @@ parameters:
     defaultValue: true
     showInUI: true
 
+  # UI Parameters
+  - name: "UI.FontSize"
+    displayName: "Font Size"
+    tooltip: "Application UI font size"
+    type: float
+    group: Application
+    defaultValue: 16.0
+    minValue: 10.0
+    maxValue: 32.0
+    dragSpeed: 1.0
+    showInUI: true
+
+  - name: "UI.MainFont"
+    displayName: "Main Font"
+    tooltip: "Main application font"
+    type: string
+    group: Application
+    defaultValue: "Roboto-Regular.ttf"
+    showInUI: true
+
+  - name: "UI.DefaultExportPath"
+    displayName: "Default Export Path"
+    tooltip: "Default path for exporting screenshots and videos"
+    type: string
+    group: Application
+    defaultValue: "."
+    showInUI: true
+

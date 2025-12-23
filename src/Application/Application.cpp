@@ -29,7 +29,7 @@ bool Application::Initialize() {
 
     TryInitializeGtk();
 
-    AppState::Params().LoadDefinitionsFromYaml("templates/parameters.yaml");
+    AppState::Params().LoadDefinitionsFromYaml("../templates/parameters.yaml");
     m_state.LoadState("config.yaml");
 
     try {
@@ -45,6 +45,7 @@ bool Application::Initialize() {
         const std::string lastScene = Params().Get(Params::AppLastOpenScene, std::string());
         if (!lastScene.empty() && std::filesystem::exists(lastScene)) {
             LoadScene(lastScene);
+        }
 
         m_initialized = true;
         m_lastFrameTime = glfwGetTime();
