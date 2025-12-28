@@ -45,7 +45,7 @@ void Render(UI* ui) {
         SidebarButton buttons[] = {
             { ICON_FA_CHART_LINE, "Animation Graph", ui->GetShowAnimationGraphPtr(), 0 },
             { ICON_FA_MICROCHIP, "System", ui->GetShowSystemWindowPtr(), 1 },
-            { ICON_FA_CUBES, "Simulation", ui->GetShowSimulationWindowPtr(), 2 },
+            { ICON_FA_SIM, "Simulation", ui->GetShowSimulationWindowPtr(), 2 },
             { ICON_FA_IMAGE, "Scene", ui->GetShowSceneWindowPtr(), 3 },
             { ICON_FA_CAMERA, "Camera", ui->GetShowCameraWindowPtr(), 4 },
             { ICON_FA_BUG, "Debug", ui->GetShowDebugWindowPtr(), 5 },

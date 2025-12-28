@@ -264,8 +264,10 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const s
         m_computeShader->SetInt("u_useHRDiagramLUT", 1);
     }
 
+    auto& config = Application::State();
+
     if (!blackHoles.empty()) {
-        m_computeShader->SetInt("u_debugMode", Application::Params().Get(Params::RenderingDebugMode, 0));
+        m_computeShader->SetInt("u_debugMode", static_cast<int>(config.rendering.debugMode));
     }
 
     unsigned int groupsX = (m_width + 15) / 16;
@@ -432,7 +434,7 @@ void BlackHoleRenderer::RenderToScreen() {
     
     // Set bloom parameters
     bool bloomEnabled = Application::Params().Get(Params::RenderingBloomEnabled, true);
-    float bloomIntensity = Application::Params().Get(Params::RenderingBloomIntensity, 1.0f);
+    float bloomIntensity = Application::Params().Get(Params::RenderingBloomIntensity, 5.0f);
     bool bloomDebug = Application::Params().Get(Params::RenderingBloomDebug, false);
     m_displayShader->SetInt("u_bloomEnabled", bloomEnabled ? 1 : 0);
     m_displayShader->SetFloat("u_bloomIntensity", bloomIntensity);

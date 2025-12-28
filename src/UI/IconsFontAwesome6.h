@@ -11,7 +11,7 @@
 #define ICON_FA_STOP "\xef\x81\x8d"           // U+F04D
 #define ICON_FA_CHART_LINE "\xef\x88\x81"     // U+F201
 #define ICON_FA_MICROCHIP "\xef\x8b\x9b"      // U+F2DB
-#define ICON_FA_CUBES "\xef\x87\xb2"          // U+F1B2
+#define ICON_FA_SIM "\xef\x95\xbd"            // U+F57D
 #define ICON_FA_IMAGE "\xef\x80\xbe"          // U+F03E
 #define ICON_FA_GEAR "\xef\x80\x93"           // U+F013
 #define ICON_FA_CIRCLE_DOT "\xef\x86\x92"     // U+F192 (used for app icon - black hole)
