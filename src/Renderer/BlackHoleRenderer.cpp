@@ -264,10 +264,8 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const s
         m_computeShader->SetInt("u_useHRDiagramLUT", 1);
     }
 
-    auto& config = Application::State();
-
     if (!blackHoles.empty()) {
-        m_computeShader->SetInt("u_debugMode", static_cast<int>(config.rendering.debugMode));
+        m_computeShader->SetInt("u_debugMode", Application::Params().Get(Params::RenderingDebugMode, 0));
     }
 
     unsigned int groupsX = (m_width + 15) / 16;
