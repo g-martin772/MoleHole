@@ -26,6 +26,7 @@ namespace Params {
     inline constexpr ParameterHandle RenderingFOV("Rendering.FOV");
     inline constexpr ParameterHandle RenderingMaxRaySteps("Rendering.MaxRaySteps");
     inline constexpr ParameterHandle RenderingRayStepSize("Rendering.RayStepSize");
+    inline constexpr ParameterHandle RenderingAdaptiveStepRate("Rendering.AdaptiveStepRate");
     inline constexpr ParameterHandle RenderingDebugMode("Rendering.DebugMode");
     inline constexpr ParameterHandle RenderingPhysicsDebugEnabled("Rendering.PhysicsDebugEnabled");
     inline constexpr ParameterHandle RenderingPhysicsDebugDepthTest("Rendering.PhysicsDebugDepthTest");

@@ -18,10 +18,12 @@ uniform sampler2D u_kerrISCOLUT; // 1D LUT: spin -> ISCO radius (Page-Thorne for
 // constants
 const float EPSILON = 0.01;
 const float PI = 3.1415926535;
+const float BOLTZMANN = 5.670374419e-8; // W·m−2·K−4
 
 // ray marching quality settings (can be overridden via uniforms)
-uniform float u_rayStepSize = 0.3;
+uniform float u_rayStepSize = 0.3f;
 uniform int u_maxRaySteps = 1000;
+uniform float u_adaptiveStepRate = 0.1f;
 
 // black holes
 const int MAX_BLACK_HOLES = 8;
@@ -286,6 +288,12 @@ float getTemperatureFromMass(float mass) {
     massNorm = clamp(massNorm, 0.0, 1.0);
     vec3 hrData = texture(u_hrDiagramLUT, vec2(massNorm, 0.5)).rgb;
     return hrData.r;
+}
+
+float getAccretionDiskTemperature(float mass, float radius, float inner_radius) {
+    float constant = (3.0f * mass) / (8 * PI * BOLTZMANN);
+    float innerTerm = constant * pow(radius, -3.0f) * (1.0f - sqrt(inner_radius / radius));
+    return pow(innerTerm, 0.25f);
 }
 
 vec3 calculateAccelerationLUT(float angMomentumSqrd, vec3 relPos) {
@@ -642,9 +650,7 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
         temp = temp_base * radialFactor * (1.0 + 2.0 * eta);
         temp = clamp(temp, 1000.0, 40000.0);
     } else {
-        // Fall back to simple HR diagram lookup
-        temp = getTemperatureFromMass(blackHoleMass);
-        temp = max(100.0, temp);
+        temp = getAccretionDiskTemperature(blackHoleMass, distanceFromCenter, iscoRadius);
     }
 
     vec3 bbColor = getBlackbodyColorLUT(temp, dopplerRedshift);
@@ -755,7 +761,7 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
 }
 
 // Raymarching through gravitational influence zone
-vec3 rayMarchInfluenceZone(vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection) {
+vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection) {
     hitEventHorizon = false;
     exitedZone = false;
     vec3 color = vec3(0.0);
@@ -763,16 +769,25 @@ vec3 rayMarchInfluenceZone(vec3 rayOrigin, vec3 rayDirection, out bool hitEventH
     
     newOrigin = rayOrigin;
     newDirection = rayDirection;
-    
+
+
+
     float stepSize = u_rayStepSize;
+    float maxSteps = u_maxRaySteps;
+    float adaptiveStepRate = u_adaptiveStepRate;
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+
+    float mass = u_blackHoleMasses[closestHole];
+    stepSize *= 0.1f * mass;
+    maxSteps *= 10.0f * mass;
+    adaptiveStepRate *= 10.0f * mass;
     
-    for (int i = 0; i < u_maxRaySteps; i++) {
+    for (int i = 0; i < maxSteps; i++) {
         int closestBH;
         float distToBH;
         float influenceR;
         bool inZone = isInInfluenceZone(newOrigin, closestBH, distToBH, influenceR);
-        
+
         if (!inZone) {
             exitedZone = true;
             return color;
@@ -793,7 +808,7 @@ vec3 rayMarchInfluenceZone(vec3 rayOrigin, vec3 rayDirection, out bool hitEventH
         float r_s = calculateEventHorizonRadius(u_blackHoleMasses[closestBH]);
         
         // Adaptive step size
-        float currentStepSize = stepSize * min(1.0, distToBH / r_s);
+        float currentStepSize = stepSize * min(adaptiveStepRate, distToBH / r_s);
         
         // Apply gravitational lensing
         if (u_gravitationalLensingEnabled == 1) {
@@ -891,7 +906,7 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
         if (inZone) {
             bool hitHorizon, exited;
             vec3 newOrigin, newDir;
-            vec3 marchColor = rayMarchInfluenceZone(currentOrigin, currentDir, hitHorizon, exited, newOrigin, newDir);
+            vec3 marchColor = rayMarchInfluenceZone(closestBH, currentOrigin, currentDir, hitHorizon, exited, newOrigin, newDir);
             color += marchColor;
             
             if (hitHorizon) {

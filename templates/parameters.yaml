@@ -155,6 +155,17 @@ parameters:
     dragSpeed: 0.001
     showInUI: true
 
+  - name: "Rendering.AdaptiveStepRate"
+    displayName: "Minimal Value for Adaptive Step Rate"
+    tooltip: "Minimal Value for Adaptive Step Rate in raytracing"
+    type: float
+    group: Rendering
+    defaultValue: 0.1
+    minValue: 0.000000000001
+    maxValue: 10.0
+    dragSpeed: 0.001
+    showInUI: true
+
   - name: "Rendering.DebugMode"
     displayName: "Debug Mode"
     tooltip: "Rendering debug visualization mode"

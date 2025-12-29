@@ -599,6 +599,7 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     if (m_isExportMode) {
         m_computeShader->SetFloat("u_rayStepSize", Application::Params().Get(Params::RenderingRayStepSize, 0.1f));
         m_computeShader->SetInt("u_maxRaySteps", Application::Params().Get(Params::RenderingMaxRaySteps, 128));
+        m_computeShader->SetFloat("u_adaptiveStepRate", Application::Params().Get(Params::RenderingAdaptiveStepRate, 0.1f));
     }
 
     // Black holes
