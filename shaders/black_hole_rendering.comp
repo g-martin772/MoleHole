@@ -9,6 +9,12 @@ uniform sampler2D u_blackbodyLUT; // 2D LUT: x=temperature, y=redshift factor
 uniform sampler2D u_accelerationLUT; // 2D LUT: x=angular momentum squared, y=radius
 uniform sampler2D u_hrDiagramLUT; // 1D LUT: mass -> temperature, luminosity, radius
 
+// Kerr geodesic LUTs for Interstellar-quality rendering
+uniform sampler3D u_kerrDeflectionLUT; // 3D LUT: x=impact, y=inclination, z=spin -> deflection angle
+uniform sampler3D u_kerrRedshiftLUT; // 3D LUT: x=impact, y=inclination, z=spin -> redshift factor
+uniform sampler2D u_kerrPhotonSphereLUT; // 2D LUT: x=inclination, y=spin -> photon sphere radius
+uniform sampler2D u_kerrISCOLUT; // 1D LUT: spin -> ISCO radius (Page-Thorne formula)
+
 // constants
 const float EPSILON = 0.01;
 const float PI = 3.1415926535;
@@ -73,6 +79,7 @@ uniform float u_aspect;
 // settings
 uniform int u_useAccelerationLUT = 1;
 uniform int u_useHRDiagramLUT = 1;
+uniform int u_useKerrPhysics = 0; // Enable full Kerr metric geodesics
 uniform int u_accretionDiskEnabled = 1;
 uniform int u_gravitationalLensingEnabled = 1;
 uniform int u_gravitationalRedshiftEnabled = 1;
@@ -174,6 +181,102 @@ float calculateInfluenceRadius(float r_s) {
 vec3 calculateAngularMomentumFromSpin(float spin, vec3 spinAxis, float mass) {
     float h = spin * mass;
     return h * normalize(spinAxis);
+}
+
+// Kerr-specific functions for Interstellar-quality rendering
+
+float getKerrISCORadius(float spin) {
+    float spinNorm = clamp(spin, 0.0, 0.998);
+    float t = (spinNorm - 0.0) / (0.998 - 0.0);
+    return texture(u_kerrISCOLUT, vec2(t, 0.5)).r;
+}
+
+float getKerrPhotonSphereRadius(float spin, float inclination) {
+    float spinNorm = clamp(spin, 0.0, 0.998);
+    float t_spin = (spinNorm - 0.0) / (0.998 - 0.0);
+
+    float inclNorm = clamp(inclination, 0.0, 3.14159);
+    float t_incl = inclNorm / 3.14159;
+
+    return texture(u_kerrPhotonSphereLUT, vec2(t_incl, t_spin)).r;
+}
+
+// Calculate ray deflection using Kerr geodesic LUT
+float getKerrDeflection(float spin, float inclination, float impactParameter) {
+    float spinNorm = clamp(spin, 0.0, 0.998);
+    float t_spin = (spinNorm - 0.0) / (0.998 - 0.0);
+
+    float inclNorm = clamp(inclination, 0.0, 3.14159);
+    float t_incl = inclNorm / 3.14159;
+
+    float impactNorm = clamp(impactParameter, 0.0, 20.0);
+    float t_impact = impactNorm / 20.0;
+
+    return texture(u_kerrDeflectionLUT, vec3(t_impact, t_incl, t_spin)).r;
+}
+
+// Calculate redshift using Kerr geodesic LUT
+float getKerrRedshift(float spin, float inclination, float impactParameter) {
+    float spinNorm = clamp(spin, 0.0, 0.998);
+    float t_spin = (spinNorm - 0.0) / (0.998 - 0.0);
+
+    float inclNorm = clamp(inclination, 0.0, 3.14159);
+    float t_incl = inclNorm / 3.14159;
+
+    float impactNorm = clamp(impactParameter, 0.0, 20.0);
+    float t_impact = impactNorm / 20.0;
+
+    return texture(u_kerrRedshiftLUT, vec3(t_impact, t_incl, t_spin)).r;
+}
+
+// Calculate impact parameter from ray position and direction
+float calculateImpactParameter(vec3 rayPos, vec3 rayDir, vec3 bhPos) {
+    vec3 relPos = rayPos - bhPos;
+    vec3 perpDir = normalize(cross(rayDir, relPos));
+    vec3 closestApproach = cross(perpDir, rayDir);
+    return length(cross(relPos, rayDir));
+}
+
+// Calculate inclination angle relative to spin axis
+float calculateInclination(vec3 rayDir, vec3 spinAxis) {
+    float cosTheta = dot(normalize(rayDir), normalize(spinAxis));
+    return acos(clamp(cosTheta, -1.0, 1.0));
+}
+
+// Check if ray is near photon sphere (Einstein ring region)
+bool isNearPhotonSphere(vec3 pos, vec3 bhPos, float spin, vec3 spinAxis) {
+    vec3 relPos = pos - bhPos;
+    float r = length(relPos);
+
+    // Calculate inclination
+    float incl = calculateInclination(relPos, spinAxis);
+
+    // Get photon sphere radius for this configuration
+    float r_photon = getKerrPhotonSphereRadius(spin, incl);
+
+    // Check if within photon sphere ± tolerance
+    float tolerance = 0.3; // Allow 0.3 r_s tolerance
+    return abs(r - r_photon) < tolerance;
+}
+
+// Detect potential secondary images from strong lensing
+// Returns weight for secondary image brightness
+float detectSecondaryImage(vec3 rayOrigin, vec3 rayDir, vec3 bhPos, float spin, vec3 spinAxis, float eventHorizonRadius) {
+    float b = calculateImpactParameter(rayOrigin, rayDir, bhPos);
+    float incl = calculateInclination(rayDir, spinAxis);
+
+    // Get photon sphere radius
+    float r_photon = getKerrPhotonSphereRadius(spin, incl);
+
+    // Secondary images occur when impact parameter is near critical value
+    // Critical impact parameter ≈ photon sphere radius
+    float b_crit = r_photon * eventHorizonRadius;
+
+    // Weight falls off rapidly away from critical value
+    float delta = abs(b - b_crit) / eventHorizonRadius;
+    float weight = exp(-delta * delta / 0.5);
+
+    return weight;
 }
 
 // User HR Diagram for temperature (TODO needs to be changed for correct temp formula)
@@ -447,7 +550,24 @@ vec3 renderSphere(vec3 hitPoint, vec3 rayDir, int sphereIndex, vec3 lightDir) {
 
 void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin, float blackHoleMass) {    
     
-    float iscoRadius = 2.0f * eventHorizonRadius;
+    // Use Kerr ISCO if enabled, otherwise fall back to simplified calculation
+    float iscoRadius;
+    if (u_useKerrPhysics == 1) {
+        // Get spin from the closest black hole (we're inside its influence zone)
+        float spin = 0.0;
+        for (int i = 0; i < u_numBlackHoles; i++) {
+            vec3 toBH = pos - u_blackHolePositions[i];
+            if (length(toBH) < eventHorizonRadius * 10.0) {
+                spin = u_blackHoleSpins[i];
+                break;
+            }
+        }
+        float iscoInM = getKerrISCORadius(spin);
+        iscoRadius = iscoInM * eventHorizonRadius / 2.0; // Convert from M units to r_s units (r_s = 2M)
+    } else {
+        iscoRadius = 2.0f * eventHorizonRadius; // Simplified
+    }
+
     float outerRadius = 5.0f * eventHorizonRadius;
     float distanceFromCenter = length(pos);
 
@@ -501,13 +621,42 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
 
     float dopplerRedshift = 1.0 / mix(1.0, doppler * grFactor, float(u_dopplerBeamingEnabled > 0.5));
 
-    // Use HR diagram to get temperature from black hole mass
-    float temp = getTemperatureFromMass(blackHoleMass);
-    temp = max(100.0, temp);
-    
+    // Calculate temperature using Page-Thorne disk model for Kerr black holes
+    float temp;
+    if (u_useKerrPhysics == 1) {
+        // Page-Thorne temperature profile: T ∝ r^(-3/4) with efficiency factor η(r)
+        // More realistic than constant temperature
+        float r_norm = distanceFromCenter / iscoRadius; // Normalized radius
+
+        // Temperature peaks near ISCO and falls off as r^(-3/4)
+        float temp_base = getTemperatureFromMass(blackHoleMass);
+
+        // Radial temperature gradient
+        float radialFactor = pow(max(1.0, r_norm), -0.75);
+
+        // Efficiency factor η(r) - energy extraction efficiency
+        // Higher near ISCO due to frame-dragging
+        float eta_ISCO = 0.42; // For maximally rotating Kerr (~42% efficiency)
+        float eta = eta_ISCO * exp(-0.5 * (r_norm - 1.0));
+
+        temp = temp_base * radialFactor * (1.0 + 2.0 * eta);
+        temp = clamp(temp, 1000.0, 40000.0);
+    } else {
+        // Fall back to simple HR diagram lookup
+        temp = getTemperatureFromMass(blackHoleMass);
+        temp = max(100.0, temp);
+    }
+
     vec3 bbColor = getBlackbodyColorLUT(temp, dopplerRedshift);
     
-    color += bbColor * alpha * abs(noise);
+    // Apply relativistic beaming - disk appears brighter on approaching side
+    float beamingFactor = 1.0;
+    if (u_dopplerBeamingEnabled > 0.5) {
+        // Beaming boosts brightness by Doppler factor^3 for optically thin emission
+        beamingFactor = pow(max(0.1, doppler), 3.0);
+    }
+
+    color += bbColor * alpha * abs(noise) * beamingFactor;
 }
 
 
@@ -648,7 +797,35 @@ vec3 rayMarchInfluenceZone(vec3 rayOrigin, vec3 rayDirection, out bool hitEventH
         
         // Apply gravitational lensing
         if (u_gravitationalLensingEnabled == 1) {
-            vec3 acceleration = calculateAccelerationLUT(angMomSqrd, relativePos);
+            vec3 acceleration;
+
+            if (u_useKerrPhysics == 1) {
+                // Use Kerr geodesic deflection from LUT
+                float spin = u_blackHoleSpins[closestBH];
+                vec3 spinAxis = u_blackHoleSpinAxes[closestBH];
+
+                // Calculate impact parameter and inclination
+                float b = calculateImpactParameter(newOrigin, newDirection, u_blackHolePositions[closestBH]);
+                float incl = calculateInclination(newDirection, spinAxis);
+
+                // Get deflection angle from LUT
+                float deflectionAngle = getKerrDeflection(spin, incl, b);
+
+                // Apply deflection as correction to ray direction
+                // Deflect towards black hole in plane perpendicular to ray
+                vec3 toBH = normalize(relativePos);
+                vec3 perpDir = normalize(cross(newDirection, toBH));
+                vec3 deflectionDir = cross(perpDir, newDirection);
+
+                // Small-angle deflection approximation
+                float deflectionMagnitude = deflectionAngle * currentStepSize * u_blackHoleMasses[closestBH];
+                acceleration = deflectionDir * deflectionMagnitude / max(0.1, distToBH);
+
+            } else {
+                // Fall back to simplified acceleration LUT
+                acceleration = calculateAccelerationLUT(angMomSqrd, relativePos);
+            }
+
             newDirection += acceleration * u_blackHoleMasses[closestBH] * currentStepSize;
             newDirection = normalize(newDirection);
         }
@@ -684,8 +861,26 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
     
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
     
+    // Track secondary image contribution
+    float secondaryImageWeight = 0.0;
+    vec3 secondaryImageColor = vec3(0.0);
+
+    // Check for potential Einstein ring / secondary image before main loop
+    if (u_useKerrPhysics == 1 && u_renderBlackHoles == 1) {
+        for (int j = 0; j < u_numBlackHoles; j++) {
+            float r_s = calculateEventHorizonRadius(u_blackHoleMasses[j]);
+            float weight = detectSecondaryImage(currentOrigin, currentDir, u_blackHolePositions[j],
+                                               u_blackHoleSpins[j], u_blackHoleSpinAxes[j], r_s);
+            if (weight > 0.01) {
+                secondaryImageWeight = weight;
+                // Sample skybox for secondary image (appears as bright ring)
+                secondaryImageColor = texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
+            }
+        }
+    }
+
     // Use a fraction of max steps for outer loop to allow for multiple influence zone passes
-    int maxOuterIterations = max(100, u_maxRaySteps / 2);
+    int maxOuterIterations = max(1000, u_maxRaySteps / 2);
     
     for (int iter = 0; iter < maxOuterIterations; iter++) {
         int closestBH;
@@ -747,6 +942,11 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
         }
     }
     
+    // Add secondary image contribution (Einstein ring effect)
+    if (secondaryImageWeight > 0.01) {
+        color += secondaryImageColor * secondaryImageWeight * 0.3; // Dim secondary images as in Interstellar
+    }
+
     color += texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
     return color;
 }

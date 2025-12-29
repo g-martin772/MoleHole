@@ -17,6 +17,7 @@
 #define ICON_FA_CIRCLE_DOT "\xef\x86\x92"     // U+F192 (used for app icon - black hole)
 #define ICON_FA_CAMERA "\xef\x80\xb0"         // U+F030
 #define ICON_FA_BUG "\xef\x86\x88"            // U+F188
+#define ICON_FA_ATOM "\xef\x97\x92"           // U+F5D2 (atomic structure - for General Relativity)
 
 // Font Awesome 6 Unicode range for ImGui font loading
 #define ICON_MIN_FA 0xe000

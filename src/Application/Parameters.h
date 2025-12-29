@@ -46,6 +46,20 @@ namespace Params {
     inline constexpr ParameterHandle RenderingBloomBlurPasses("Rendering.BloomBlurPasses");
     inline constexpr ParameterHandle RenderingBloomIntensity("Rendering.BloomIntensity");
     inline constexpr ParameterHandle RenderingBloomDebug("Rendering.BloomDebug");
+    inline constexpr ParameterHandle RenderingLensFlareEnabled("Rendering.LensFlareEnabled");
+    inline constexpr ParameterHandle RenderingLensFlareIntensity("Rendering.LensFlareIntensity");
+    inline constexpr ParameterHandle RenderingLensFlareThreshold("Rendering.LensFlareThreshold");
+    inline constexpr ParameterHandle RenderingAntiAliasingEnabled("Rendering.AntiAliasingEnabled");
+
+    // General Relativity Parameters
+    inline constexpr ParameterHandle GRKerrPhysicsEnabled("GeneralRelativity.KerrPhysicsEnabled");
+    inline constexpr ParameterHandle GRUseKerrDeflectionLUT("GeneralRelativity.UseKerrDeflectionLUT");
+    inline constexpr ParameterHandle GRUseKerrRedshiftLUT("GeneralRelativity.UseKerrRedshiftLUT");
+    inline constexpr ParameterHandle GRUsePhotonSphereLUT("GeneralRelativity.UsePhotonSphereLUT");
+    inline constexpr ParameterHandle GRUseISCOLUT("GeneralRelativity.UseISCOLUT");
+    inline constexpr ParameterHandle GRShowEinsteinRings("GeneralRelativity.ShowEinsteinRings");
+    inline constexpr ParameterHandle GRShowSecondaryImages("GeneralRelativity.ShowSecondaryImages");
+    inline constexpr ParameterHandle GRSecondaryImageBrightness("GeneralRelativity.SecondaryImageBrightness");
 
     // Application Parameters
     inline constexpr ParameterHandle AppLastOpenScene("App.LastOpenScene");
@@ -53,6 +67,7 @@ namespace Params {
     inline constexpr ParameterHandle AppShowDemoWindow("App.ShowDemoWindow");
     inline constexpr ParameterHandle AppDebugMode("App.DebugMode");
     inline constexpr ParameterHandle AppUseKerrDistortion("App.UseKerrDistortion");
+    inline constexpr ParameterHandle AppIntroAnimationEnabled("App.IntroAnimationEnabled");
 
     // UI Parameters
     inline constexpr ParameterHandle UIFontSize("UI.FontSize");

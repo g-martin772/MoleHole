@@ -48,14 +48,15 @@ void Render(UI* ui) {
             { ICON_FA_SIM, "Simulation", ui->GetShowSimulationWindowPtr(), 2 },
             { ICON_FA_IMAGE, "Scene", ui->GetShowSceneWindowPtr(), 3 },
             { ICON_FA_CAMERA, "Camera", ui->GetShowCameraWindowPtr(), 4 },
-            { ICON_FA_BUG, "Debug", ui->GetShowDebugWindowPtr(), 5 },
-            { ICON_FA_GEAR, "Settings", ui->GetShowSettingsWindowPtr(), 6 }
+            { ICON_FA_ATOM, "General Relativity", ui->GetShowGeneralRelativityWindowPtr(), 5 },
+            { ICON_FA_BUG, "Debug", ui->GetShowDebugWindowPtr(), 6 },
+            { ICON_FA_GEAR, "Settings", ui->GetShowSettingsWindowPtr(), 7 }
         };
 
         int hoveredItem = -1;
         float* sidebarHoverAnim = ui->GetSidebarHoverAnim();
 
-        for (int i = 0; i < 7; ++i) {
+        for (int i = 0; i < 8; ++i) {
             ImGui::PushID(i);
 
             bool isActive = *buttons[i].activePtr;

@@ -120,6 +120,12 @@ void Render(UI* ui) {
         ParameterWidgets::RenderParameter(Params::RenderingBloomBlurPasses, ui);
         ParameterWidgets::RenderParameter(Params::RenderingBloomIntensity, ui);
         ParameterWidgets::RenderParameter(Params::RenderingBloomDebug, ui);
+        ImGui::Separator();
+        ParameterWidgets::RenderParameter(Params::RenderingAntiAliasingEnabled, ui);
+        ImGui::Separator();
+        ParameterWidgets::RenderParameter(Params::RenderingLensFlareEnabled, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingLensFlareThreshold, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingLensFlareIntensity, ui);
     }
 
     // Debug Visualization Section

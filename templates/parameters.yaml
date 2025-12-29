@@ -306,9 +306,9 @@ parameters:
     tooltip: "Number of blur passes for bloom"
     type: int
     group: Rendering
-    defaultValue: 4
+    defaultValue: 7
     minValue: 1
-    maxValue: 10
+    maxValue: 20
     showInUI: true
 
   - name: "Rendering.BloomIntensity"
@@ -318,7 +318,7 @@ parameters:
     group: Rendering
     defaultValue: 1.0
     minValue: 0.0
-    maxValue: 5.0
+    maxValue: 100.0
     dragSpeed: 0.1
     showInUI: true
 
@@ -328,6 +328,112 @@ parameters:
     type: bool
     group: Debug
     defaultValue: false
+    showInUI: true
+
+  - name: "Rendering.LensFlareEnabled"
+    displayName: "Lens Flare"
+    tooltip: "Enable lens flare post-processing"
+    type: bool
+    group: Rendering
+    defaultValue: true
+    showInUI: true
+
+  - name: "Rendering.LensFlareIntensity"
+    displayName: "Lens Flare Intensity"
+    tooltip: "Intensity of the lens flare effect"
+    type: float
+    group: Rendering
+    defaultValue: 1.0
+    minValue: 0.0
+    maxValue: 100.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Rendering.LensFlareThreshold"
+    displayName: "Lens Flare Threshold"
+    tooltip: "Brightness threshold for lens flare effect"
+    type: float
+    group: Rendering
+    defaultValue: 1.0
+    minValue: 0.0
+    maxValue: 5.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Rendering.AntiAliasingEnabled"
+    displayName: "Anti-Aliasing (FXAA)"
+    tooltip: "Enable FXAA anti-aliasing post-processing"
+    type: bool
+    group: Rendering
+    defaultValue: true
+    showInUI: true
+
+  # General Relativity Parameters
+  - name: "GeneralRelativity.KerrPhysicsEnabled"
+    displayName: "Kerr Physics"
+    tooltip: "Enable Kerr metric physics for rotating black holes"
+    type: bool
+    group: GeneralRelativity
+    defaultValue: true
+    showInUI: true
+
+  - name: "GeneralRelativity.UseKerrDeflectionLUT"
+    displayName: "Use Kerr Deflection LUT"
+    tooltip: "Use lookup table for Kerr metric light deflection"
+    type: bool
+    group: GeneralRelativity
+    defaultValue: true
+    showInUI: true
+
+  - name: "GeneralRelativity.UseKerrRedshiftLUT"
+    displayName: "Use Kerr Redshift LUT"
+    tooltip: "Use lookup table for Kerr metric gravitational redshift"
+    type: bool
+    group: GeneralRelativity
+    defaultValue: true
+    showInUI: true
+
+  - name: "GeneralRelativity.UsePhotonSphereLUT"
+    displayName: "Use Photon Sphere LUT"
+    tooltip: "Use lookup table for photon sphere calculations"
+    type: bool
+    group: GeneralRelativity
+    defaultValue: true
+    showInUI: true
+
+  - name: "GeneralRelativity.UseISCOLUT"
+    displayName: "Use ISCO LUT"
+    tooltip: "Use lookup table for Innermost Stable Circular Orbit calculations"
+    type: bool
+    group: GeneralRelativity
+    defaultValue: true
+    showInUI: true
+
+  - name: "GeneralRelativity.ShowEinsteinRings"
+    displayName: "Show Einstein Rings"
+    tooltip: "Visualize Einstein ring formations"
+    type: bool
+    group: GeneralRelativity
+    defaultValue: true
+    showInUI: true
+
+  - name: "GeneralRelativity.ShowSecondaryImages"
+    displayName: "Show Secondary Images"
+    tooltip: "Enable rendering of secondary gravitational lensing images"
+    type: bool
+    group: GeneralRelativity
+    defaultValue: true
+    showInUI: true
+
+  - name: "GeneralRelativity.SecondaryImageBrightness"
+    displayName: "Secondary Image Brightness"
+    tooltip: "Brightness multiplier for secondary gravitational lensing images"
+    type: float
+    group: GeneralRelativity
+    defaultValue: 0.5
+    minValue: 0.0
+    maxValue: 2.0
+    dragSpeed: 0.1
     showInUI: true
 
   # Application Parameters
@@ -366,6 +472,14 @@ parameters:
   - name: "App.UseKerrDistortion"
     displayName: "Use Kerr Metric"
     tooltip: "Use Kerr metric for rotating black holes"
+    type: bool
+    group: Application
+    defaultValue: true
+    showInUI: true
+
+  - name: "App.IntroAnimationEnabled"
+    displayName: "Enable Intro Animation"
+    tooltip: "Show Intro Animation on Startup"
     type: bool
     group: Application
     defaultValue: true

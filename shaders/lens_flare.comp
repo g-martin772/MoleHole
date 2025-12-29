@@ -1,0 +1,79 @@
+#version 460 core
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(rgba32f, binding = 0) readonly uniform image2D u_inputImage;
+layout(rgba32f, binding = 1) writeonly uniform image2D u_outputImage;
+
+uniform float u_flareIntensity = 0.3;
+uniform float u_flareThreshold = 2.0;
+uniform int u_flareEnabled = 1;
+
+// Ghost patterns for lens flare (simulate internal camera reflections)
+const int NUM_GHOSTS = 5;
+const float GHOST_DISPERSAL = 0.3;
+const float GHOST_THRESHOLD = 2.0;
+
+vec3 sampleImage(ivec2 coord, ivec2 imageSize) {
+    if (coord.x < 0 || coord.x >= imageSize.x || coord.y < 0 || coord.y >= imageSize.y) {
+        return vec3(0.0);
+    }
+    return imageLoad(u_inputImage, coord).rgb;
+}
+
+vec3 calculateLensFlare(ivec2 texCoords, ivec2 imageSize) {
+    vec2 uv = vec2(texCoords) / vec2(imageSize);
+    vec2 centerOffset = uv - 0.5;
+
+    vec3 flareColor = vec3(0.0);
+
+    // Find bright spots in the image
+    vec3 currentPixel = sampleImage(texCoords, imageSize);
+    float brightness = dot(currentPixel, vec3(0.2126, 0.7152, 0.0722));
+
+    if (brightness > u_flareThreshold) {
+        // Generate ghost reflections
+        for (int i = 0; i < NUM_GHOSTS; i++) {
+            float scale = 1.0 - float(i) * GHOST_DISPERSAL;
+            vec2 ghostOffset = -centerOffset * scale;
+
+            ivec2 ghostCoord = ivec2((0.5 + ghostOffset) * vec2(imageSize));
+            vec3 ghostSample = sampleImage(ghostCoord, imageSize);
+
+            // Chromatic aberration for ghosts
+            float chromatic = float(i) * 0.01;
+            vec3 colorShift = vec3(1.0 + chromatic, 1.0, 1.0 - chromatic);
+
+            float ghostWeight = pow(1.0 - float(i) / float(NUM_GHOSTS), 2.0);
+            flareColor += ghostSample * colorShift * ghostWeight * 0.2;
+        }
+
+        // Add halo effect around bright spots
+        float distFromCenter = length(centerOffset);
+        float halo = exp(-distFromCenter * 3.0) * brightness * 0.1;
+        flareColor += vec3(halo);
+    }
+
+    return flareColor * u_flareIntensity;
+}
+
+void main() {
+    ivec2 texCoords = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imageSize = imageSize(u_outputImage);
+
+    if (texCoords.x >= imageSize.x || texCoords.y >= imageSize.y) {
+        return;
+    }
+
+    vec3 originalColor = imageLoad(u_inputImage, texCoords).rgb;
+    vec3 flareColor = vec3(0.0);
+
+    if (u_flareEnabled == 1) {
+        flareColor = calculateLensFlare(texCoords, imageSize);
+    }
+
+    vec3 finalColor = originalColor + flareColor;
+
+    imageStore(u_outputImage, texCoords, vec4(finalColor, 1.0));
+}
+

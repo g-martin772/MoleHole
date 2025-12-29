@@ -72,7 +72,8 @@ enum class ParameterGroup {
     Debug,
     Simulation,
     Application,
-    Export
+    Export,
+    GeneralRelativity
 };
 
 enum class ParameterType {

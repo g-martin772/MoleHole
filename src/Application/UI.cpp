@@ -10,19 +10,16 @@
 #include "../UI/SceneWindow.h"
 #include "../UI/SimulationWindow.h"
 #include "../UI/AnimationGraphWindow.h"
+#include "../UI/GeneralRelativityWindow.h"
 #include "imgui.h"
-#include "ImGuizmo.h"
 #include "spdlog/spdlog.h"
 #include <nfd.h>
 #include <cstring>
 #include <filesystem>
 #include <algorithm>
-#include <set>
-#include <thread>
 #include <imgui_node_editor.h>
 #include <vector>
 #include <memory>
-#include "../Renderer/Screenshot.h"
 #include "../Renderer/ExportRenderer.h"
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -238,6 +235,12 @@ void UI::RenderMainUI(float fps, Scene* scene) {
 
     if (m_showSettingsWindow) {
         SettingsPopUp::Render(this, &m_showSettingsWindow);
+    }
+
+    if (m_showGeneralRelativityWindow)
+    {
+        bool* p_open = nullptr;
+        GeneralRelativityWindow::Render(p_open);
     }
 }
 

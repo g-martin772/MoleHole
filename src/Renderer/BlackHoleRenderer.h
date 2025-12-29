@@ -7,6 +7,7 @@
 #include "BlackbodyLUTGenerator.h"
 #include "AccelerationLUTGenerator.h"
 #include "HRDiagramLUTGenerator.h"
+#include "KerrGeodesicLUTGenerator.h"
 #include "Shader.h"
 #include "Simulation/Scene.h"
 #include "Image.h"
@@ -39,11 +40,14 @@ private:
     void CreateComputeTexture();
     void CreateBloomTextures();
     void ApplyBloom();
+    void ApplyLensFlare();
+    void ApplyFXAA();
     void CreateFullscreenQuad();
     void LoadSkybox();
     void GenerateBlackbodyLUT();
     void GenerateAccelerationLUT();
     void GenerateHRDiagramLUT();
+    void GenerateKerrGeodesicLUTs();
     void UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const Camera& camera, float time);
     void UpdateMeshBuffers(const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache);
     void CreateMeshBuffers();
@@ -52,18 +56,27 @@ private:
     std::unique_ptr<Shader> m_displayShader;
     std::unique_ptr<Shader> m_bloomExtractShader;
     std::unique_ptr<Shader> m_bloomBlurShader;
+    std::unique_ptr<Shader> m_lensFlareShader;
+    std::unique_ptr<Shader> m_fxaaShader;
     std::unique_ptr<Image> m_skyboxTexture;
     std::unique_ptr<MoleHole::BlackbodyLUTGenerator> m_blackbodyLUTGenerator;
     std::unique_ptr<MoleHole::AccelerationLUTGenerator> m_accelerationLUTGenerator;
     std::unique_ptr<MoleHole::HRDiagramLUTGenerator> m_hrDiagramLUTGenerator;
+    std::unique_ptr<MoleHole::KerrGeodesicLUTGenerator> m_kerrGeodesicLUTGenerator;
 
     unsigned int m_computeTexture;
     unsigned int m_bloomBrightTexture;
     unsigned int m_bloomBlurTexture[2]; // Ping-pong textures for blur passes
     int m_bloomFinalTextureIndex; // Tracks which blur texture (0 or 1) has the final result
+    unsigned int m_lensFlareTexture; // Output texture for lens flare effect
+    unsigned int m_fxaaTexture; // Output texture for FXAA anti-aliasing
     unsigned int m_blackbodyLUT;
     unsigned int m_accelerationLUT;
     unsigned int m_hrDiagramLUT;
+    unsigned int m_kerrDeflectionLUT;    // 3D LUT for geodesic deflection
+    unsigned int m_kerrRedshiftLUT;      // 3D LUT for redshift factors
+    unsigned int m_kerrPhotonSphereLUT;  // 2D LUT for photon sphere radius
+    unsigned int m_kerrISCOLUT;          // 1D LUT for ISCO radius
     unsigned int m_quadVAO, m_quadVBO;
     
     // Mesh geometry SSBOs

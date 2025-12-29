@@ -144,7 +144,7 @@ void Application::Render() {
     m_renderer.BeginFrame();
 
     // If intro animation is active, render only that
-    if (m_introAnimation && m_introAnimation->IsActive()) {
+    if (Params().Get(Params::AppIntroAnimationEnabled, true) && m_introAnimation && m_introAnimation->IsActive()) {
         int width, height;
         glfwGetFramebufferSize(GetWindow(), &width, &height);
         m_introAnimation->Render(width, height);

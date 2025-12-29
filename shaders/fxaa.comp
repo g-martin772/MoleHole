@@ -1,0 +1,176 @@
+#version 460 core
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(rgba32f, binding = 0) uniform image2D u_inputImage;
+layout(rgba32f, binding = 1) uniform image2D u_outputImage;
+
+uniform vec2 u_resolution;
+
+// FXAA quality presets
+const float FXAA_EDGE_THRESHOLD = 0.166;      // Minimum local contrast required to apply algorithm
+const float FXAA_EDGE_THRESHOLD_MIN = 0.0833; // Trims the algorithm from processing darks
+const float FXAA_SUBPIX_QUALITY = 0.75;       // Amount of sub-pixel aliasing removal
+
+// Luminance calculation
+float rgb2luma(vec3 rgb) {
+    return dot(rgb, vec3(0.299, 0.587, 0.114));
+}
+
+void main() {
+    ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
+
+    // Check bounds
+    if (pixelCoords.x >= int(u_resolution.x) || pixelCoords.y >= int(u_resolution.y)) {
+        return;
+    }
+
+    vec2 inverseScreenSize = 1.0 / u_resolution;
+
+    // Sample center and neighbors
+    vec3 rgbCenter = imageLoad(u_inputImage, pixelCoords).rgb;
+    vec3 rgbN = imageLoad(u_inputImage, pixelCoords + ivec2(0, 1)).rgb;
+    vec3 rgbS = imageLoad(u_inputImage, pixelCoords + ivec2(0, -1)).rgb;
+    vec3 rgbE = imageLoad(u_inputImage, pixelCoords + ivec2(1, 0)).rgb;
+    vec3 rgbW = imageLoad(u_inputImage, pixelCoords + ivec2(-1, 0)).rgb;
+
+    // Convert to luminance
+    float lumaCenter = rgb2luma(rgbCenter);
+    float lumaN = rgb2luma(rgbN);
+    float lumaS = rgb2luma(rgbS);
+    float lumaE = rgb2luma(rgbE);
+    float lumaW = rgb2luma(rgbW);
+
+    // Find min and max luma around center
+    float lumaMin = min(lumaCenter, min(min(lumaN, lumaS), min(lumaE, lumaW)));
+    float lumaMax = max(lumaCenter, max(max(lumaN, lumaS), max(lumaE, lumaW)));
+
+    // Calculate contrast (local)
+    float lumaRange = lumaMax - lumaMin;
+
+    // If the contrast is lower than a threshold, skip processing (early exit)
+    if (lumaRange < max(FXAA_EDGE_THRESHOLD_MIN, lumaMax * FXAA_EDGE_THRESHOLD)) {
+        imageStore(u_outputImage, pixelCoords, vec4(rgbCenter, 1.0));
+        return;
+    }
+
+    // Sample diagonal neighbors
+    vec3 rgbNE = imageLoad(u_inputImage, pixelCoords + ivec2(1, 1)).rgb;
+    vec3 rgbNW = imageLoad(u_inputImage, pixelCoords + ivec2(-1, 1)).rgb;
+    vec3 rgbSE = imageLoad(u_inputImage, pixelCoords + ivec2(1, -1)).rgb;
+    vec3 rgbSW = imageLoad(u_inputImage, pixelCoords + ivec2(-1, -1)).rgb;
+
+    float lumaNE = rgb2luma(rgbNE);
+    float lumaNW = rgb2luma(rgbNW);
+    float lumaSE = rgb2luma(rgbSE);
+    float lumaSW = rgb2luma(rgbSW);
+
+    // Compute edge direction
+    float lumaDownUp = lumaN + lumaS;
+    float lumaLeftRight = lumaE + lumaW;
+
+    float lumaLeftCorners = lumaNW + lumaSW;
+    float lumaDownCorners = lumaSW + lumaSE;
+    float lumaRightCorners = lumaNE + lumaSE;
+    float lumaUpCorners = lumaNE + lumaNW;
+
+    // Compute edge gradients
+    float edgeHorizontal =
+        abs(-2.0 * lumaW + lumaLeftCorners) +
+        abs(-2.0 * lumaCenter + lumaDownUp) * 2.0 +
+        abs(-2.0 * lumaE + lumaRightCorners);
+
+    float edgeVertical =
+        abs(-2.0 * lumaS + lumaDownCorners) +
+        abs(-2.0 * lumaCenter + lumaLeftRight) * 2.0 +
+        abs(-2.0 * lumaN + lumaUpCorners);
+
+    // Determine edge direction
+    bool isHorizontal = (edgeHorizontal >= edgeVertical);
+
+    // Select the two neighboring samples in the edge direction
+    float luma1 = isHorizontal ? lumaS : lumaW;
+    float luma2 = isHorizontal ? lumaN : lumaE;
+
+    // Compute gradients in edge direction
+    float gradient1 = luma1 - lumaCenter;
+    float gradient2 = luma2 - lumaCenter;
+
+    // Which direction is the steepest?
+    bool is1Steepest = abs(gradient1) >= abs(gradient2);
+
+    // Gradient in the chosen direction, normalized
+    float gradientScaled = 0.25 * max(abs(gradient1), abs(gradient2));
+
+    // Average luma in the edge direction
+    float lumaLocalAverage = 0.0;
+    if (is1Steepest) {
+        luma1 = luma1;
+        lumaLocalAverage = 0.5 * (luma1 + lumaCenter);
+    } else {
+        luma1 = luma2;
+        lumaLocalAverage = 0.5 * (luma2 + lumaCenter);
+    }
+
+    // Shift UV in the edge direction
+    vec2 currentUv = vec2(pixelCoords) * inverseScreenSize;
+    vec2 offset = vec2(0.0);
+    if (isHorizontal) {
+        offset.y = inverseScreenSize.y;
+    } else {
+        offset.x = inverseScreenSize.x;
+    }
+
+    // UV offset in the direction of gradient
+    vec2 uv1 = currentUv;
+    vec2 uv2 = currentUv;
+
+    if (is1Steepest) {
+        uv1 -= offset;
+        uv2 += offset;
+    } else {
+        uv1 += offset;
+        uv2 -= offset;
+    }
+
+    // Read the luma at both sides of edge
+    ivec2 coords1 = ivec2(uv1 * u_resolution);
+    ivec2 coords2 = ivec2(uv2 * u_resolution);
+
+    float lumaEnd1 = rgb2luma(imageLoad(u_inputImage, coords1).rgb);
+    float lumaEnd2 = rgb2luma(imageLoad(u_inputImage, coords2).rgb);
+
+    lumaEnd1 -= lumaLocalAverage;
+    lumaEnd2 -= lumaLocalAverage;
+
+    // Check if we've reached the end of the edge
+    bool reached1 = abs(lumaEnd1) >= gradientScaled;
+    bool reached2 = abs(lumaEnd2) >= gradientScaled;
+    bool reachedBoth = reached1 && reached2;
+
+    // Subpixel shifting
+    float subPixelOffset = 0.5;
+    if (!reachedBoth) {
+        subPixelOffset = max(abs(lumaEnd1), abs(lumaEnd2)) / lumaRange;
+        subPixelOffset = subPixelOffset * subPixelOffset * FXAA_SUBPIX_QUALITY;
+    }
+
+    // Final position offset
+    vec2 finalOffset = vec2(0.0);
+    if (isHorizontal) {
+        finalOffset.x = subPixelOffset * (is1Steepest ? -1.0 : 1.0) * inverseScreenSize.x;
+    } else {
+        finalOffset.y = subPixelOffset * (is1Steepest ? -1.0 : 1.0) * inverseScreenSize.y;
+    }
+
+    vec2 finalUv = currentUv + finalOffset;
+    ivec2 finalCoords = ivec2(finalUv * u_resolution);
+
+    // Clamp coordinates to valid range
+    finalCoords = clamp(finalCoords, ivec2(0), ivec2(u_resolution) - ivec2(1));
+
+    vec3 finalColor = imageLoad(u_inputImage, finalCoords).rgb;
+
+    imageStore(u_outputImage, pixelCoords, vec4(finalColor, 1.0));
+}
+

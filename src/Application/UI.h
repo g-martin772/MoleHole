@@ -63,6 +63,7 @@ public:
     bool* GetShowDemoWindowPtr() { return &m_showDemoWindow; }
     bool* GetShowHelpWindowPtr() { return &m_showHelpWindow; }
     bool* GetShowExportWindowPtr() { return &m_showExportWindow; }
+    bool* GetShowGeneralRelativityWindowPtr() { return &m_showGeneralRelativityWindow; }
 
 private:
     // Window rendering (kept for special cases like HelpWindow and export)
@@ -83,6 +84,7 @@ private:
     bool m_showSettingsWindow = false;
     bool m_showCameraWindow = true;
     bool m_showDebugWindow = true;
+    bool m_showGeneralRelativityWindow = false;
     bool m_initialized = false;
     bool m_configDirty = false;
     float m_saveTimer = 0.0f;

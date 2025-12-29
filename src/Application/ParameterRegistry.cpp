@@ -30,6 +30,7 @@ ParameterGroup ParameterRegistry::ParseGroup(const std::string &groupStr) {
     if (groupStr == "Simulation") return ParameterGroup::Simulation;
     if (groupStr == "Application") return ParameterGroup::Application;
     if (groupStr == "Export") return ParameterGroup::Export;
+    if (groupStr == "GeneralRelativity") return ParameterGroup::GeneralRelativity;
     throw std::runtime_error("Unknown parameter group: " + groupStr);
 }
 

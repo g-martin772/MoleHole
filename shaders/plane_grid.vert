@@ -29,21 +29,31 @@ uniform float u_meshMasses[MAX_MESHES];
 out vec3 vWorldPos;
 out float vDispplacement;
 
-// Calculate spacetime curvature using Schwarzschild metric
-// The Schwarzschild metric describes spacetime curvature around a spherical mass
-// ds^2 = -(1 - r_s/r)dt^2 + (1 - r_s/r)^-1 dr^2 + r^2 dΩ^2
-float calculateSpacetimeCurvature(vec3 position, float mass) {
+float calculateSpacetimeCurvatureBlackHole(vec3 position, float mass) {
     float r_s = 2.0f * mass;
     float r = length(position.xz);
     r = max(r, r_s * EPSILON);
-    
-    // Schwarzschild metric component: the radial curvature factor
-    // The proper radial distance is stretched by the metric tensor g_rr = 1/(1 - r_s/r)
-    // For embedding diagram visualization, we integrate this to get the "depth"
-    // The embedding function is: z(r) = 2*sqrt(r_s) * sqrt(r - r_s) for r > r_s
+
     float curvature = 0.0f;
     curvature = 2.0f * sqrt(r_s) * sqrt(r - r_s);
-    
+
+    return curvature;
+}
+
+float calculateSpacetimeCurvatureSphere(vec3 position, float mass) {
+    float r_s = 2.0f * mass;
+    float r = length(position.xz);
+    r = max(r, r_s * EPSILON);
+
+    float curvature = 0.0f;
+    if (r > r_s) {
+        curvature = 2.0f * sqrt(r_s) * sqrt(r - r_s);
+    } else {
+        float depth_at_rs = 2.0f * sqrt(r_s) * sqrt(EPSILON * r_s);
+        float normalized_r = r / r_s;
+        curvature = depth_at_rs + (normalized_r * normalized_r - 1.0f) * r_s * 0.5f;
+    }
+
     return curvature;
 }
 
@@ -54,24 +64,21 @@ void main() {
 
     float displacement = 0.0f;
 
-    // Accumulate curvature from all black holes
     for (int i = 0; i < u_numBlackHoles; ++i) {
         vec3 relPos = p - u_blackHolePositions[i];
-        displacement += calculateSpacetimeCurvature(relPos, u_blackHoleMasses[i]);
-    }    
+        displacement += calculateSpacetimeCurvatureBlackHole(relPos, u_blackHoleMasses[i]);
+    }
 
-    // Accumulate curvature from all spheres
     for (int i = 0; i < u_numSpheres; ++i) {
         vec3 relPos = p - u_spherePositions[i];
         float geometricMass = u_sphereMasses[i] * 1.0f / SOLAR_MASS;
-        displacement += calculateSpacetimeCurvature(relPos, geometricMass);
+        displacement += calculateSpacetimeCurvatureSphere(relPos, geometricMass);
     }
 
-    // Accumulate curvature from all meshes
     for (int i = 0; i < u_numMeshes; ++i) {
         vec3 relPos = p - u_meshPositions[i];
         float geometricMass = u_meshMasses[i] * 1.0f / SOLAR_MASS;
-        displacement += calculateSpacetimeCurvature(relPos, geometricMass);
+        displacement += calculateSpacetimeCurvatureSphere(relPos, geometricMass);
     }
     
     p.y += displacement;

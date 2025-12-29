@@ -12,8 +12,9 @@
 
 BlackHoleRenderer::BlackHoleRenderer()
     : m_computeTexture(0), m_bloomBrightTexture(0), m_bloomBlurTexture{0, 0}, 
-      m_bloomFinalTextureIndex(0),
-      m_blackbodyLUT(0), m_accelerationLUT(0), m_hrDiagramLUT(0), 
+      m_bloomFinalTextureIndex(0), m_lensFlareTexture(0), m_fxaaTexture(0),
+      m_blackbodyLUT(0), m_accelerationLUT(0), m_hrDiagramLUT(0),
+      m_kerrDeflectionLUT(0), m_kerrRedshiftLUT(0), m_kerrPhotonSphereLUT(0), m_kerrISCOLUT(0),
       m_quadVAO(0), m_quadVBO(0), m_meshDataSSBO(0), m_triangleSSBO(0),
       m_width(800), m_height(600) {
 }
@@ -22,9 +23,15 @@ BlackHoleRenderer::~BlackHoleRenderer() {
     if (m_computeTexture) glDeleteTextures(1, &m_computeTexture);
     if (m_bloomBrightTexture) glDeleteTextures(1, &m_bloomBrightTexture);
     if (m_bloomBlurTexture[0]) glDeleteTextures(2, m_bloomBlurTexture);
+    if (m_lensFlareTexture) glDeleteTextures(1, &m_lensFlareTexture);
+    if (m_fxaaTexture) glDeleteTextures(1, &m_fxaaTexture);
     if (m_blackbodyLUT) glDeleteTextures(1, &m_blackbodyLUT);
     if (m_accelerationLUT) glDeleteTextures(1, &m_accelerationLUT);
     if (m_hrDiagramLUT) glDeleteTextures(1, &m_hrDiagramLUT);
+    if (m_kerrDeflectionLUT) glDeleteTextures(1, &m_kerrDeflectionLUT);
+    if (m_kerrRedshiftLUT) glDeleteTextures(1, &m_kerrRedshiftLUT);
+    if (m_kerrPhotonSphereLUT) glDeleteTextures(1, &m_kerrPhotonSphereLUT);
+    if (m_kerrISCOLUT) glDeleteTextures(1, &m_kerrISCOLUT);
     if (m_quadVAO) glDeleteVertexArrays(1, &m_quadVAO);
     if (m_quadVBO) glDeleteBuffers(1, &m_quadVBO);
     if (m_meshDataSSBO) glDeleteBuffers(1, &m_meshDataSSBO);
@@ -39,11 +46,14 @@ void BlackHoleRenderer::Init(int width, int height) {
     m_displayShader = std::make_unique<Shader>("../shaders/blackhole_display.vert", "../shaders/blackhole_display.frag");
     m_bloomExtractShader = std::make_unique<Shader>("../shaders/bloom_extract.comp", true);
     m_bloomBlurShader = std::make_unique<Shader>("../shaders/bloom_blur.comp", true);
+    m_lensFlareShader = std::make_unique<Shader>("../shaders/lens_flare.comp", true);
+    m_fxaaShader = std::make_unique<Shader>("../shaders/fxaa.comp", true);
 
     m_blackbodyLUTGenerator = std::make_unique<MoleHole::BlackbodyLUTGenerator>();
     m_accelerationLUTGenerator = std::make_unique<MoleHole::AccelerationLUTGenerator>();
     m_hrDiagramLUTGenerator = std::make_unique<MoleHole::HRDiagramLUTGenerator>();
-    
+    m_kerrGeodesicLUTGenerator = std::make_unique<MoleHole::KerrGeodesicLUTGenerator>();
+
     CreateComputeTexture();
     CreateBloomTextures();
     CreateFullscreenQuad();
@@ -52,6 +62,7 @@ void BlackHoleRenderer::Init(int width, int height) {
     GenerateBlackbodyLUT();
     GenerateAccelerationLUT();
     GenerateHRDiagramLUT();
+    // GenerateKerrGeodesicLUTs();
 
     spdlog::info("BlackHoleRenderer initialized with {}x{} resolution", width, height);
 }
@@ -148,6 +159,97 @@ void BlackHoleRenderer::GenerateHRDiagramLUT() {
     spdlog::info("HR diagram LUT generated successfully");
 }
 
+void BlackHoleRenderer::GenerateKerrGeodesicLUTs() {
+    using namespace MoleHole;
+
+    spdlog::info("Generating Kerr geodesic LUTs...");
+
+    // Generate deflection LUT (3D: spin x inclination x impact parameter)
+    auto deflectionData = KerrGeodesicLUTGenerator::generateDeflectionLUT();
+
+    if (m_kerrDeflectionLUT) {
+        glDeleteTextures(1, &m_kerrDeflectionLUT);
+    }
+
+    glGenTextures(1, &m_kerrDeflectionLUT);
+    glBindTexture(GL_TEXTURE_3D, m_kerrDeflectionLUT);
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_R32F,
+                 KerrGeodesicLUTGenerator::LUT_IMPACT_PARAM_SAMPLES,
+                 KerrGeodesicLUTGenerator::LUT_INCLINATION_SAMPLES,
+                 KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES,
+                 0, GL_RED, GL_FLOAT, deflectionData.data());
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    spdlog::info("Kerr deflection LUT uploaded to GPU");
+
+    // Generate redshift LUT (3D)
+    auto redshiftData = KerrGeodesicLUTGenerator::generateRedshiftLUT();
+
+    if (m_kerrRedshiftLUT) {
+        glDeleteTextures(1, &m_kerrRedshiftLUT);
+    }
+
+    glGenTextures(1, &m_kerrRedshiftLUT);
+    glBindTexture(GL_TEXTURE_3D, m_kerrRedshiftLUT);
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_R32F,
+                 KerrGeodesicLUTGenerator::LUT_IMPACT_PARAM_SAMPLES,
+                 KerrGeodesicLUTGenerator::LUT_INCLINATION_SAMPLES,
+                 KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES,
+                 0, GL_RED, GL_FLOAT, redshiftData.data());
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    spdlog::info("Kerr redshift LUT uploaded to GPU");
+
+    // Generate photon sphere LUT (2D)
+    auto photonSphereData = KerrGeodesicLUTGenerator::generatePhotonSphereLUT();
+
+    if (m_kerrPhotonSphereLUT) {
+        glDeleteTextures(1, &m_kerrPhotonSphereLUT);
+    }
+
+    glGenTextures(1, &m_kerrPhotonSphereLUT);
+    glBindTexture(GL_TEXTURE_2D, m_kerrPhotonSphereLUT);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F,
+                 KerrGeodesicLUTGenerator::LUT_INCLINATION_SAMPLES,
+                 KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES,
+                 0, GL_RED, GL_FLOAT, photonSphereData.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    spdlog::info("Kerr photon sphere LUT uploaded to GPU");
+
+    // Generate ISCO LUT (1D, stored as 2D texture with height=1)
+    auto iscoData = KerrGeodesicLUTGenerator::generateISCOLUT();
+
+    if (m_kerrISCOLUT) {
+        glDeleteTextures(1, &m_kerrISCOLUT);
+    }
+
+    glGenTextures(1, &m_kerrISCOLUT);
+    glBindTexture(GL_TEXTURE_2D, m_kerrISCOLUT);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F,
+                 KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES,
+                 1,
+                 0, GL_RED, GL_FLOAT, iscoData.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    spdlog::info("Kerr ISCO LUT uploaded to GPU");
+    spdlog::info("All Kerr geodesic LUTs generated successfully");
+}
+
 void BlackHoleRenderer::CreateComputeTexture() {
     if (m_computeTexture) {
         glDeleteTextures(1, &m_computeTexture);
@@ -172,6 +274,12 @@ void BlackHoleRenderer::CreateBloomTextures() {
     if (m_bloomBlurTexture[0]) {
         glDeleteTextures(2, m_bloomBlurTexture);
     }
+    if (m_lensFlareTexture) {
+        glDeleteTextures(1, &m_lensFlareTexture);
+    }
+    if (m_fxaaTexture) {
+        glDeleteTextures(1, &m_fxaaTexture);
+    }
 
     // Create bright extraction texture
     glGenTextures(1, &m_bloomBrightTexture);
@@ -192,6 +300,24 @@ void BlackHoleRenderer::CreateBloomTextures() {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
+
+    // Create lens flare texture
+    glGenTextures(1, &m_lensFlareTexture);
+    glBindTexture(GL_TEXTURE_2D, m_lensFlareTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_width, m_height, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Create FXAA texture
+    glGenTextures(1, &m_fxaaTexture);
+    glBindTexture(GL_TEXTURE_2D, m_fxaaTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_width, m_height, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }
 
 void BlackHoleRenderer::CreateFullscreenQuad() {
@@ -264,6 +390,41 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const s
         m_computeShader->SetInt("u_useHRDiagramLUT", 1);
     }
 
+    // Bind Kerr deflection LUT to unit 5
+    if (m_kerrDeflectionLUT) {
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_3D, m_kerrDeflectionLUT);
+        m_computeShader->SetInt("u_kerrDeflectionLUT", 5);
+    }
+
+    // Bind Kerr redshift LUT to unit 6
+    if (m_kerrRedshiftLUT) {
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_3D, m_kerrRedshiftLUT);
+        m_computeShader->SetInt("u_kerrRedshiftLUT", 6);
+    }
+
+    // Bind Kerr photon sphere LUT to unit 7
+    if (m_kerrPhotonSphereLUT) {
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, m_kerrPhotonSphereLUT);
+        m_computeShader->SetInt("u_kerrPhotonSphereLUT", 7);
+    }
+
+    // Bind Kerr ISCO LUT to unit 8
+    if (m_kerrISCOLUT) {
+        glActiveTexture(GL_TEXTURE8);
+        glBindTexture(GL_TEXTURE_2D, m_kerrISCOLUT);
+        m_computeShader->SetInt("u_kerrISCOLUT", 8);
+    }
+
+    // Enable Kerr physics if all LUTs are loaded AND user has enabled it
+    bool kerrPhysicsEnabled = Application::Params().Get(Params::GRKerrPhysicsEnabled, true);
+    bool useKerrPhysics = kerrPhysicsEnabled &&
+                          (m_kerrDeflectionLUT && m_kerrRedshiftLUT &&
+                           m_kerrPhotonSphereLUT && m_kerrISCOLUT);
+    m_computeShader->SetInt("u_useKerrPhysics", useKerrPhysics ? 1 : 0);
+
     if (!blackHoles.empty()) {
         m_computeShader->SetInt("u_debugMode", Application::Params().Get(Params::RenderingDebugMode, 0));
     }
@@ -279,6 +440,12 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const s
     
     // Apply bloom effect
     ApplyBloom();
+
+    // Apply lens flare effect (uses bloom output)
+    ApplyLensFlare();
+
+    // Apply FXAA anti-aliasing
+    ApplyFXAA();
 }
 
 void BlackHoleRenderer::ApplyBloom() {
@@ -332,6 +499,70 @@ void BlackHoleRenderer::ApplyBloom() {
     m_bloomBlurShader->Unbind();
     
     // Ensure bloom texture writes are visible to texture fetches in fragment shader
+    glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
+}
+
+void BlackHoleRenderer::ApplyLensFlare() {
+    // Check if lens flare is enabled
+    bool lensFlareEnabled = Application::Params().Get(Params::RenderingLensFlareEnabled, true);
+    if (!lensFlareEnabled || !m_lensFlareShader) {
+        return;
+    }
+
+    unsigned int groupsX = (m_width + 15) / 16;
+    unsigned int groupsY = (m_height + 15) / 16;
+
+    m_lensFlareShader->Bind();
+
+    float flareIntensity = Application::Params().Get(Params::RenderingLensFlareIntensity, 0.3f);
+    float flareThreshold = Application::Params().Get(Params::RenderingLensFlareThreshold, 2.0f);
+
+    m_lensFlareShader->SetFloat("u_flareIntensity", flareIntensity);
+    m_lensFlareShader->SetFloat("u_flareThreshold", flareThreshold);
+    m_lensFlareShader->SetInt("u_flareEnabled", 1);
+
+    // Use bloom result as input (bright areas already extracted)
+    glBindImageTexture(0, m_bloomBlurTexture[m_bloomFinalTextureIndex], 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(1, m_lensFlareTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
+    glDispatchCompute(groupsX, groupsY, 1);
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+
+    m_lensFlareShader->Unbind();
+}
+
+void BlackHoleRenderer::ApplyFXAA() {
+    // Check if anti-aliasing is enabled
+    bool fxaaEnabled = Application::Params().Get(Params::RenderingAntiAliasingEnabled, false);
+    if (!fxaaEnabled || !m_fxaaShader) {
+        return;
+    }
+
+    unsigned int groupsX = (m_width + 15) / 16;
+    unsigned int groupsY = (m_height + 15) / 16;
+
+    m_fxaaShader->Bind();
+
+    // Set resolution uniform
+    m_fxaaShader->SetVec2("u_resolution", glm::vec2(static_cast<float>(m_width), static_cast<float>(m_height)));
+
+    // Bind input (compute texture) and output (FXAA texture)
+    glBindImageTexture(0, m_computeTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(1, m_fxaaTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
+    glDispatchCompute(groupsX, groupsY, 1);
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+
+    m_fxaaShader->Unbind();
+
+    // Copy FXAA result back to compute texture for display
+    // This ensures the display shader uses the anti-aliased version
+    glCopyImageSubData(
+        m_fxaaTexture, GL_TEXTURE_2D, 0, 0, 0, 0,
+        m_computeTexture, GL_TEXTURE_2D, 0, 0, 0, 0,
+        m_width, m_height, 1
+    );
+
     glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
 }
 
@@ -430,6 +661,11 @@ void BlackHoleRenderer::RenderToScreen() {
     glBindTexture(GL_TEXTURE_2D, m_bloomBlurTexture[m_bloomFinalTextureIndex]); // Use final blur result
     m_displayShader->SetInt("u_bloomImage", 1);
     
+    // Bind lens flare texture
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_lensFlareTexture);
+    m_displayShader->SetInt("u_lensFlareImage", 2);
+
     // Set bloom parameters
     bool bloomEnabled = Application::Params().Get(Params::RenderingBloomEnabled, true);
     float bloomIntensity = Application::Params().Get(Params::RenderingBloomIntensity, 5.0f);
@@ -437,6 +673,12 @@ void BlackHoleRenderer::RenderToScreen() {
     m_displayShader->SetInt("u_bloomEnabled", bloomEnabled ? 1 : 0);
     m_displayShader->SetFloat("u_bloomIntensity", bloomIntensity);
     m_displayShader->SetInt("u_bloomDebug", bloomDebug ? 1 : 0);
+
+    // Set lens flare parameters
+    bool lensFlareEnabled = Application::Params().Get(Params::RenderingLensFlareEnabled, true);
+    float lensFlareIntensity = Application::Params().Get(Params::RenderingLensFlareIntensity, 1.0f);
+    m_displayShader->SetInt("u_lensFlareEnabled", lensFlareEnabled ? 1 : 0);
+    m_displayShader->SetFloat("u_lensFlareIntensity", lensFlareIntensity);
 
     glBindVertexArray(m_quadVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
