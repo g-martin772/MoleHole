@@ -12,7 +12,7 @@
 
 BlackHoleRenderer::BlackHoleRenderer()
     : m_computeTexture(0), m_bloomBrightTexture(0), m_bloomBlurTexture{0, 0}, 
-      m_bloomFinalTextureIndex(0), m_lensFlareTexture(0), m_fxaaTexture(0),
+      m_bloomFinalTextureIndex(0), m_lensFlareTexture(0),
       m_blackbodyLUT(0), m_accelerationLUT(0), m_hrDiagramLUT(0),
       m_kerrDeflectionLUT(0), m_kerrRedshiftLUT(0), m_kerrPhotonSphereLUT(0), m_kerrISCOLUT(0),
       m_quadVAO(0), m_quadVBO(0), m_meshDataSSBO(0), m_triangleSSBO(0),
@@ -24,7 +24,6 @@ BlackHoleRenderer::~BlackHoleRenderer() {
     if (m_bloomBrightTexture) glDeleteTextures(1, &m_bloomBrightTexture);
     if (m_bloomBlurTexture[0]) glDeleteTextures(2, m_bloomBlurTexture);
     if (m_lensFlareTexture) glDeleteTextures(1, &m_lensFlareTexture);
-    if (m_fxaaTexture) glDeleteTextures(1, &m_fxaaTexture);
     if (m_blackbodyLUT) glDeleteTextures(1, &m_blackbodyLUT);
     if (m_accelerationLUT) glDeleteTextures(1, &m_accelerationLUT);
     if (m_hrDiagramLUT) glDeleteTextures(1, &m_hrDiagramLUT);
@@ -47,7 +46,6 @@ void BlackHoleRenderer::Init(int width, int height) {
     m_bloomExtractShader = std::make_unique<Shader>("../shaders/bloom_extract.comp", true);
     m_bloomBlurShader = std::make_unique<Shader>("../shaders/bloom_blur.comp", true);
     m_lensFlareShader = std::make_unique<Shader>("../shaders/lens_flare.comp", true);
-    m_fxaaShader = std::make_unique<Shader>("../shaders/fxaa.comp", true);
 
     m_blackbodyLUTGenerator = std::make_unique<MoleHole::BlackbodyLUTGenerator>();
     m_accelerationLUTGenerator = std::make_unique<MoleHole::AccelerationLUTGenerator>();
@@ -277,9 +275,6 @@ void BlackHoleRenderer::CreateBloomTextures() {
     if (m_lensFlareTexture) {
         glDeleteTextures(1, &m_lensFlareTexture);
     }
-    if (m_fxaaTexture) {
-        glDeleteTextures(1, &m_fxaaTexture);
-    }
 
     // Create bright extraction texture
     glGenTextures(1, &m_bloomBrightTexture);
@@ -304,15 +299,6 @@ void BlackHoleRenderer::CreateBloomTextures() {
     // Create lens flare texture
     glGenTextures(1, &m_lensFlareTexture);
     glBindTexture(GL_TEXTURE_2D, m_lensFlareTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_width, m_height, 0, GL_RGBA, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    // Create FXAA texture
-    glGenTextures(1, &m_fxaaTexture);
-    glBindTexture(GL_TEXTURE_2D, m_fxaaTexture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_width, m_height, 0, GL_RGBA, GL_FLOAT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -442,10 +428,7 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const s
     ApplyBloom();
 
     // Apply lens flare effect (uses bloom output)
-    ApplyLensFlare();
-
-    // Apply FXAA anti-aliasing
-    ApplyFXAA();
+    // ApplyLensFlare();
 }
 
 void BlackHoleRenderer::ApplyBloom() {
@@ -529,41 +512,6 @@ void BlackHoleRenderer::ApplyLensFlare() {
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
 
     m_lensFlareShader->Unbind();
-}
-
-void BlackHoleRenderer::ApplyFXAA() {
-    // Check if anti-aliasing is enabled
-    bool fxaaEnabled = Application::Params().Get(Params::RenderingAntiAliasingEnabled, false);
-    if (!fxaaEnabled || !m_fxaaShader) {
-        return;
-    }
-
-    unsigned int groupsX = (m_width + 15) / 16;
-    unsigned int groupsY = (m_height + 15) / 16;
-
-    m_fxaaShader->Bind();
-
-    // Set resolution uniform
-    m_fxaaShader->SetVec2("u_resolution", glm::vec2(static_cast<float>(m_width), static_cast<float>(m_height)));
-
-    // Bind input (compute texture) and output (FXAA texture)
-    glBindImageTexture(0, m_computeTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-    glBindImageTexture(1, m_fxaaTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-
-    glDispatchCompute(groupsX, groupsY, 1);
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
-
-    m_fxaaShader->Unbind();
-
-    // Copy FXAA result back to compute texture for display
-    // This ensures the display shader uses the anti-aliased version
-    glCopyImageSubData(
-        m_fxaaTexture, GL_TEXTURE_2D, 0, 0, 0, 0,
-        m_computeTexture, GL_TEXTURE_2D, 0, 0, 0, 0,
-        m_width, m_height, 1
-    );
-
-    glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
 }
 
 void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const Camera& camera, float time) {
@@ -680,6 +628,12 @@ void BlackHoleRenderer::RenderToScreen() {
     float lensFlareIntensity = Application::Params().Get(Params::RenderingLensFlareIntensity, 1.0f);
     m_displayShader->SetInt("u_lensFlareEnabled", lensFlareEnabled ? 1 : 0);
     m_displayShader->SetFloat("u_lensFlareIntensity", lensFlareIntensity);
+
+    // Set FXAA parameters
+    bool fxaaEnabled = Application::Params().Get(Params::RenderingAntiAliasingEnabled, false);
+    m_displayShader->SetInt("u_fxaaEnabled", fxaaEnabled ? 1 : 0);
+    m_displayShader->SetFloat("rt_w", static_cast<float>(m_width));
+    m_displayShader->SetFloat("rt_h", static_cast<float>(m_height));
 
     glBindVertexArray(m_quadVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
