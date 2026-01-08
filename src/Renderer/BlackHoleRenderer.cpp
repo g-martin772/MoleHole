@@ -527,6 +527,7 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     m_computeShader->SetVec3("u_cameraUp", cameraUp);
     m_computeShader->SetVec3("u_cameraRight", cameraRight);
     m_computeShader->SetFloat("u_fov", camera.GetFov());
+    m_computeShader->SetInt("u_enableThirdPerson", Application::Params().Get(Params::RenderingThirdPerson, false) ? 1 : 0);
     m_computeShader->SetFloat("u_aspect", static_cast<float>(m_width) / static_cast<float>(m_height));
     m_computeShader->SetFloat("u_time", time);
 

@@ -86,6 +86,10 @@ void Render(UI* ui) {
         ImGui::BulletText("Right Mouse - Look around");
     }
 
+    if (ImGui::CollapsingHeader("Camera Utilities", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ParameterWidgets::RenderParameter(Params::RenderingThirdPerson, ui, ParameterWidgets::WidgetStyle::Standard);
+    }
+
     ImGui::End();
 }
 

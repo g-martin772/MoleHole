@@ -24,6 +24,7 @@ namespace Params {
 
     // Rendering Parameters
     inline constexpr ParameterHandle RenderingFOV("Rendering.FOV");
+    inline constexpr ParameterHandle RenderingThirdPerson("Rendering.ThirdPerson");
     inline constexpr ParameterHandle RenderingMaxRaySteps("Rendering.MaxRaySteps");
     inline constexpr ParameterHandle RenderingRayStepSize("Rendering.RayStepSize");
     inline constexpr ParameterHandle RenderingAdaptiveStepRate("Rendering.AdaptiveStepRate");

@@ -134,6 +134,14 @@ parameters:
     dragSpeed: 0.1
     showInUI: true
 
+  - name: "Rendering.ThirdPerson"
+    displayName: "Toggle Third Person Perspective"
+    tooltip: "Toggle third person perspective mode"
+    type: bool
+    group: Rendering
+    defaultValue: false
+    showInUI: true
+
   - name: "Rendering.MaxRaySteps"
     displayName: "Max Ray Steps"
     tooltip: "Maximum number of raytracing steps"

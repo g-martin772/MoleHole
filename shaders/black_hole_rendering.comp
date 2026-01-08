@@ -71,12 +71,20 @@ uniform int u_debugMode = 0;
 uniform float u_time;
 
 // camera
+uniform int u_enableThirdPerson = 0;
 uniform vec3 u_cameraPos;
 uniform vec3 u_cameraFront;
 uniform vec3 u_cameraUp;
 uniform vec3 u_cameraRight;
 uniform float u_fov;
 uniform float u_aspect;
+
+// third-person cube object
+uniform vec3 u_cubeForward = vec3(0.0, 0.0, -1.0);
+uniform vec3 u_cubeUp = vec3(0.0, 1.0, 0.0);
+uniform float u_cubeSize = 1.0;
+uniform float u_thirdPersonDistance = 5.0;
+uniform float u_thirdPersonHeight = 2.0;
 
 // settings
 uniform int u_useAccelerationLUT = 1;
@@ -444,6 +452,42 @@ bool intersectTriangle(vec3 rayOrigin, vec3 rayDir, vec3 v0, vec3 v1, vec3 v2, o
     return false;
 }
 
+// Ray-cube (AABB) intersection
+bool intersectCube(vec3 rayOrigin, vec3 rayDir, vec3 cubeCenter, float cubeSize, out float t) {
+    vec3 boxMin = cubeCenter - vec3(cubeSize * 0.5);
+    vec3 boxMax = cubeCenter + vec3(cubeSize * 0.5);
+
+    vec3 tMin = (boxMin - rayOrigin) / rayDir;
+    vec3 tMax = (boxMax - rayOrigin) / rayDir;
+
+    vec3 t1 = min(tMin, tMax);
+    vec3 t2 = max(tMin, tMax);
+
+    float tNear = max(max(t1.x, t1.y), t1.z);
+    float tFar = min(min(t2.x, t2.y), t2.z);
+
+    if (tNear > tFar || tFar < EPSILON) return false;
+
+    t = (tNear > EPSILON) ? tNear : tFar;
+    return t > EPSILON;
+}
+
+// Get cube normal at hit point
+vec3 getCubeNormal(vec3 hitPoint, vec3 cubeCenter, float cubeSize) {
+    vec3 localPos = hitPoint - cubeCenter;
+    vec3 absPos = abs(localPos);
+    float halfSize = cubeSize * 0.5;
+
+    // Determine which face was hit
+    if (absPos.x > absPos.y && absPos.x > absPos.z) {
+        return vec3(sign(localPos.x), 0.0, 0.0);
+    } else if (absPos.y > absPos.z) {
+        return vec3(0.0, sign(localPos.y), 0.0);
+    } else {
+        return vec3(0.0, 0.0, sign(localPos.z));
+    }
+}
+
 // PBR lighting functions for mesh rendering
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
     float a = roughness * roughness;
@@ -753,6 +797,28 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
         }
     }
     
+    // Check cube intersection (for third-person view)
+    if (u_enableThirdPerson == 1) {
+        float t;
+        if (intersectCube(rayOrigin, rayDir, u_cameraPos, u_cubeSize, t)) {
+            if (t < record.t) {
+                record.hit = true;
+                record.t = t;
+                record.type = 3; // cube type
+                record.objectIndex = 0;
+
+                vec3 hitPoint = rayOrigin + rayDir * t;
+                vec3 normal = getCubeNormal(hitPoint, u_cameraPos, u_cubeSize);
+
+                // Simple Lambertian shading for the cube
+                vec3 cubeColor = vec3(0.7, 0.3, 0.2); // Orange-ish color
+                float diffuse = max(dot(normal, lightDir), 0.0);
+                vec3 ambient = vec3(0.1);
+                record.color = cubeColor * (ambient + diffuse * 0.9);
+            }
+        }
+    }
+
     return record;
 }
 
@@ -977,13 +1043,43 @@ void main() {
     uv = uv * 2.0f - 1.0f;
     uv.x *= u_aspect;
     
+    // Calculate ray direction and origin
+    vec3 rayOrigin;
+    vec3 cameraFront;
+    vec3 cameraUp;
+    vec3 cameraRight;
+
+    if (u_enableThirdPerson == 1) {
+
+        // Third-person camera: position behind and above the cube
+        vec3 cubeRight = normalize(cross(u_cameraFront, u_cameraUp));
+        vec3 actualCubeUp = normalize(cross(cubeRight, u_cameraFront));
+
+        // Calculate camera position: behind the cube by u_thirdPersonDistance, above by u_thirdPersonHeight
+        vec3 offsetBack = -u_cameraFront * u_thirdPersonDistance;
+        vec3 offsetUp = actualCubeUp * u_thirdPersonHeight;
+        rayOrigin = u_cameraPos + offsetBack + offsetUp;
+
+        // Camera looks at the cube (slightly ahead of cube center)
+        vec3 lookAtPoint = u_cameraPos + u_cameraFront * 1.0;
+        cameraFront = normalize(lookAtPoint - rayOrigin);
+        cameraUp = actualCubeUp;
+        cameraRight = normalize(cross(cameraFront, cameraUp));
+        cameraUp = normalize(cross(cameraRight, cameraFront)); // Recalculate to ensure orthogonality
+    } else {
+        // First-person camera: use provided camera vectors
+        rayOrigin = u_cameraPos;
+        cameraFront = u_cameraFront;
+        cameraUp = u_cameraUp;
+        cameraRight = u_cameraRight;
+    }
+
     float tanHalfFov = tan(radians(u_fov) * 0.5);
-    vec3 rayDir = normalize(u_cameraFront + u_cameraRight * uv.x * tanHalfFov + u_cameraUp * uv.y * tanHalfFov);
-    vec3 rayOrigin = u_cameraPos;
-    
+    vec3 rayDir = normalize(cameraFront + cameraRight * uv.x * tanHalfFov + cameraUp * uv.y * tanHalfFov);
+
     // Perform hybrid raytracing/raymarching to get the color
     vec3 color = hybridRayTrace(rayOrigin, rayDir);
     
     // Generate Output Image
-    imageStore(l_outputImage, texCoords, vec4(color, 1.0f));   
+    imageStore(l_outputImage, texCoords, vec4(color, 1.0f));
 }
