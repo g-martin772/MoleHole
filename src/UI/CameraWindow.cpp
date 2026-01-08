@@ -11,7 +11,7 @@
 
 namespace CameraWindow {
 
-void Render(UI* ui) {
+void Render(UI* ui, Scene* scene) {
     if (!ImGui::Begin("Camera")) {
         ImGui::End();
         return;
@@ -88,6 +88,39 @@ void Render(UI* ui) {
 
     if (ImGui::CollapsingHeader("Camera Utilities", ImGuiTreeNodeFlags_DefaultOpen)) {
         ParameterWidgets::RenderParameter(Params::RenderingThirdPerson, ui, ParameterWidgets::WidgetStyle::Standard);
+
+        if (Application::Params().Get(Params::RenderingThirdPerson, false)) {
+            ImGui::Indent();
+
+            static int selectedCameraIndex = -1;
+            std::string currentObjectName = Application::Params().Get(Params::CameraObject, std::string("None"));
+
+            if (ImGui::BeginCombo("Camera Object", currentObjectName.c_str())) {
+                for (size_t i = 0; i < scene->meshes.size(); ++i) {
+                    bool isSelected = (scene->meshes[i].name == currentObjectName);
+                    if (ImGui::Selectable(scene->meshes[i].name.c_str(), isSelected)) {
+                        selectedCameraIndex = static_cast<int>(i);
+                        Application::Params().Set(Params::CameraObject, scene->meshes[i].name);
+                        ui->MarkConfigDirty();
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            ImGui::Separator();
+            ImGui::Text("Third-Person Settings:");
+
+            // Third-person distance control
+            ParameterWidgets::RenderParameter(Params::ThirdPersonDistance, ui, ParameterWidgets::WidgetStyle::Standard);
+
+            // Third-person height control
+            ParameterWidgets::RenderParameter(Params::ThirdPersonHeight, ui, ParameterWidgets::WidgetStyle::Standard);
+
+            ImGui::Unindent();
+        }
     }
 
     ImGui::End();

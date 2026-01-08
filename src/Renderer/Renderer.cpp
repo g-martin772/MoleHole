@@ -17,6 +17,7 @@
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/matrix_decompose.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 #include "Buffer.h"
 #include <cmath>
@@ -700,6 +701,62 @@ void Renderer::RenderMeshes(Scene* scene) {
 
     if (scene->meshes.empty()) {
         return;
+    }
+
+    if (Application::Params().Get(Params::RenderingThirdPerson, false))
+    {
+        std::string defaultMeshName = "";
+        std::string meshName = Application::Params().Get(Params::CameraObject, defaultMeshName);
+
+        // Find and update the mesh object in the scene
+        for (size_t i = 0; i < scene->meshes.size(); ++i)
+        {
+            if (scene->meshes[i].name == meshName)
+            {
+                auto mesh = GetOrLoadMesh(scene->meshes[i].path);
+                if (mesh && mesh->IsLoaded()) {
+                    // Convert Euler angles (yaw, pitch, roll) to quaternion
+                    // Yaw and pitch from camera, roll = 0
+                    float yawRad = glm::radians(camera->GetYaw() + 90);
+                    float pitchRad = glm::radians(camera->GetPitch());
+                    float rollRad = 0.0f;
+
+                    // Create quaternion from Euler angles (using GLM's built-in function)
+                    // GLM expects angles in the order: pitch (x), yaw (y), roll (z)
+                    glm::quat q = glm::quat(glm::vec3(pitchRad, -yawRad, rollRad));
+
+                    // In third-person mode, the shader offsets the rendering camera backward
+                    // so the mesh needs to be positioned forward from the camera
+                    // These values should match u_thirdPersonDistance and u_thirdPersonHeight in the shader
+                    float thirdPersonDistance = Application::Params().Get(Params::ThirdPersonDistance, 10.0f);
+                    float thirdPersonHeight = Application::Params().Get(Params::ThirdPersonHeight, 3.0f);
+
+                    glm::vec3 cameraFront = camera->GetFront();
+                    glm::vec3 cameraUp = camera->GetUp();
+                    glm::vec3 cameraRight = glm::normalize(glm::cross(cameraFront, cameraUp));
+                    glm::vec3 actualCameraUp = glm::normalize(glm::cross(cameraRight, cameraFront));
+
+                    // Calculate mesh position: forward from camera and down by the height offset
+                    glm::vec3 offsetForward = cameraFront * thirdPersonDistance;
+                    glm::vec3 offsetDown = -actualCameraUp * thirdPersonHeight;
+                    glm::vec3 meshPosition = camera->GetPosition() + offsetForward + offsetDown;
+
+                    // Update the mesh object in the scene
+                    scene->meshes[i].position = meshPosition;
+                    scene->meshes[i].rotation = q;
+
+                    // Update the loaded mesh for rendering
+                    mesh->SetPosition(scene->meshes[i].position);
+                    mesh->SetRotation(scene->meshes[i].rotation);
+
+                    // Save the updated scene
+                    scene->Serialize(scene->currentPath);
+                } else {
+                    spdlog::warn("Failed to load or render mesh: {}", scene->meshes[i].path);
+                }
+                break; // Found the mesh, no need to continue
+            }
+        }
     }
 
     for (const auto& meshObj : scene->meshes) {

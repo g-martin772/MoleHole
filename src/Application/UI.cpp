@@ -203,7 +203,7 @@ void UI::RenderMainUI(float fps, Scene* scene) {
     }
 
     if (m_showCameraWindow) {
-        CameraWindow::Render(this);
+        CameraWindow::Render(this, scene);
     }
 
     if (m_showDebugWindow) {

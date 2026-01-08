@@ -80,8 +80,6 @@ uniform float u_fov;
 uniform float u_aspect;
 
 // third-person cube object
-uniform vec3 u_cubeForward = vec3(0.0, 0.0, -1.0);
-uniform vec3 u_cubeUp = vec3(0.0, 1.0, 0.0);
 uniform float u_cubeSize = 1.0;
 uniform float u_thirdPersonDistance = 5.0;
 uniform float u_thirdPersonHeight = 2.0;
@@ -91,6 +89,7 @@ uniform int u_useAccelerationLUT = 1;
 uniform int u_useHRDiagramLUT = 1;
 uniform int u_useKerrPhysics = 0; // Enable full Kerr metric geodesics
 uniform int u_accretionDiskEnabled = 1;
+uniform int u_accretionDiskVolumetric = 0; // Toggle volumetric rendering
 uniform int u_gravitationalLensingEnabled = 1;
 uniform int u_gravitationalRedshiftEnabled = 1;
 uniform float u_accDiskHeight = 0.2;
@@ -601,7 +600,6 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
     // Use Kerr ISCO if enabled, otherwise fall back to simplified calculation
     float iscoRadius;
     if (u_useKerrPhysics == 1) {
-        // Get spin from the closest black hole (we're inside its influence zone)
         float spin = 0.0;
         for (int i = 0; i < u_numBlackHoles; i++) {
             vec3 toBH = pos - u_blackHolePositions[i];
@@ -611,9 +609,9 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
             }
         }
         float iscoInM = getKerrISCORadius(spin);
-        iscoRadius = iscoInM * eventHorizonRadius / 2.0; // Convert from M units to r_s units (r_s = 2M)
+        iscoRadius = iscoInM * eventHorizonRadius / 2.0;
     } else {
-        iscoRadius = 2.0f * eventHorizonRadius; // Simplified
+        iscoRadius = 2.0f * eventHorizonRadius;
     }
 
     float outerRadius = 5.0f * eventHorizonRadius;
@@ -625,16 +623,11 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
     
     if (density < EPSILON) return;  
     
-    vec3 sphericalCoord = toSpherical(pos);
-
-    // compute noise-driven pattern
-    // Use cylindrical coordinates mapped to Cartesian to avoid theta discontinuity
-    float r = length(pos.xz);  // radial distance in XZ plane
+    float r = length(pos.xz);
     float theta = atan(pos.z, pos.x);
     
     float noise = 1.0;
     for (int i = 0; i < int(u_accDiskNoiseLOD); i++) {
-        // Map theta to continuous circular coordinates using sin/cos to avoid wrap
         float animatedTheta = theta;
         if (i % 2 == 0) {
             animatedTheta += u_time * u_accDiskSpeed;
@@ -642,7 +635,6 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
             animatedTheta -= u_time * u_accDiskSpeed;
         }
         
-        // Convert to Cartesian-like coordinates that wrap smoothly
         vec3 noiseCoord = vec3(
             r * cos(animatedTheta),
             pos.y,
@@ -652,10 +644,8 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
         noise *= 0.5 * snoise(noiseCoord) + 0.5;
     }
     
-    // Temperature-based blackbody with doppler + gravitational redshift
     float grFactor = 1.0;
     if (u_gravitationalRedshiftEnabled == 1) {
-        // scale the position by the event horizon radius so calculateRedShift expects r~1 at horizon
         grFactor = calculateRedShift(pos / max(1e-6, eventHorizonRadius));
         grFactor = max(grFactor, 1e-6);
     }
@@ -663,30 +653,18 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
     float doppler = 1.0;
     if (u_dopplerBeamingEnabled > 0.5) {
         vec3 viewDir = normalize(rayOrigin - (pos + u_cameraPos));
-        // pos is relative to BH center; calculateDopplerEffect expects pos in same units as calculateRedShift
         doppler = calculateDopplerEffect(pos / max(1e-6, eventHorizonRadius), viewDir);
     }
 
     float dopplerRedshift = 1.0 / mix(1.0, doppler * grFactor, float(u_dopplerBeamingEnabled > 0.5));
 
-    // Calculate temperature using Page-Thorne disk model for Kerr black holes
     float temp;
     if (u_useKerrPhysics == 1) {
-        // Page-Thorne temperature profile: T ∝ r^(-3/4) with efficiency factor η(r)
-        // More realistic than constant temperature
-        float r_norm = distanceFromCenter / iscoRadius; // Normalized radius
-
-        // Temperature peaks near ISCO and falls off as r^(-3/4)
+        float r_norm = distanceFromCenter / iscoRadius;
         float temp_base = getTemperatureFromMass(blackHoleMass);
-
-        // Radial temperature gradient
         float radialFactor = pow(max(1.0, r_norm), -0.75);
-
-        // Efficiency factor η(r) - energy extraction efficiency
-        // Higher near ISCO due to frame-dragging
-        float eta_ISCO = 0.42; // For maximally rotating Kerr (~42% efficiency)
+        float eta_ISCO = 0.42;
         float eta = eta_ISCO * exp(-0.5 * (r_norm - 1.0));
-
         temp = temp_base * radialFactor * (1.0 + 2.0 * eta);
         temp = clamp(temp, 1000.0, 40000.0);
     } else {
@@ -695,10 +673,8 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHorizo
 
     vec3 bbColor = getBlackbodyColorLUT(temp, dopplerRedshift);
     
-    // Apply relativistic beaming - disk appears brighter on approaching side
     float beamingFactor = 1.0;
     if (u_dopplerBeamingEnabled > 0.5) {
-        // Beaming boosts brightness by Doppler factor^3 for optically thin emission
         beamingFactor = pow(max(0.1, doppler), 3.0);
     }
 
@@ -832,8 +808,6 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
     newOrigin = rayOrigin;
     newDirection = rayDirection;
 
-
-
     float stepSize = u_rayStepSize;
     float maxSteps = u_maxRaySteps;
     float adaptiveStepRate = u_adaptiveStepRate;
@@ -854,7 +828,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
             exitedZone = true;
             return color;
         }
-        
+
         vec3 relativePos = newOrigin - u_blackHolePositions[closestBH];
         
         // Calculate orbital angular momentum
@@ -868,7 +842,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         float angMomSqrd = dot(totalAngMomentum, totalAngMomentum);
         
         float r_s = calculateEventHorizonRadius(u_blackHoleMasses[closestBH]);
-        
+
         // Adaptive step size
         float currentStepSize = stepSize * min(adaptiveStepRate, distToBH / r_s);
         
@@ -926,7 +900,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         
         newOrigin += newDirection * currentStepSize;
     }
-    
+
     return color;
 }
 

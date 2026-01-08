@@ -2,6 +2,9 @@
 #include <glad/gl.h>
 #include <spdlog/spdlog.h>
 #include <glm/gtc/type_ptr.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 #include "Application/Application.h"
 #include "Application/Parameters.h"
@@ -9,6 +12,8 @@
 #include "AccelerationLUTGenerator.h"
 #include "HRDiagramLUTGenerator.h"
 #include "GLTFMesh.h"
+
+
 
 BlackHoleRenderer::BlackHoleRenderer()
     : m_computeTexture(0), m_bloomBrightTexture(0), m_bloomBlurTexture{0, 0}, 
@@ -332,7 +337,7 @@ void BlackHoleRenderer::CreateFullscreenQuad() {
 }
 
 void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time) {
-    UpdateUniforms(blackHoles, spheres, camera, time);
+    UpdateUniforms(blackHoles, spheres, meshes, meshCache, camera, time);
     // UpdateMeshBuffers(meshes, meshCache);
 
     m_computeShader->Bind();
@@ -514,7 +519,7 @@ void BlackHoleRenderer::ApplyLensFlare() {
     m_lensFlareShader->Unbind();
 }
 
-void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const Camera& camera, float time) {
+void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time) {
     m_computeShader->Bind();
 
     glm::vec3 cameraPos = camera.GetPosition();
@@ -531,9 +536,35 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     m_computeShader->SetFloat("u_aspect", static_cast<float>(m_width) / static_cast<float>(m_height));
     m_computeShader->SetFloat("u_time", time);
 
+    // Third-person camera object uniforms
+    if (Application::Params().Get(Params::RenderingThirdPerson, false)) {
+        std::string selectedObjectName = Application::Params().Get(Params::CameraObject, std::string(""));
+
+        // Find the selected mesh object
+        bool foundObject = false;
+        for (const auto& meshObj : meshes) {
+            if (meshObj.name == selectedObjectName) {
+                // Third-person camera distance and height (can be made configurable via params)
+                m_computeShader->SetFloat("u_thirdPersonDistance", Application::Params().Get(Params::ThirdPersonDistance, 10.0f));
+                m_computeShader->SetFloat("u_thirdPersonHeight", Application::Params().Get(Params::ThirdPersonHeight, 3.0f));
+
+                foundObject = true;
+                break;
+            }
+        }
+
+        // Fallback if object not found - use default cube values
+        if (!foundObject) {
+            m_computeShader->SetFloat("u_cubeSize", 1.0f);
+            m_computeShader->SetFloat("u_thirdPersonDistance", 10.0f);
+            m_computeShader->SetFloat("u_thirdPersonHeight", 3.0f);
+        }
+    }
+
     // Rendering settings from AppState
     m_computeShader->SetInt("u_gravitationalLensingEnabled", Application::Params().Get(Params::RenderingGravitationalLensingEnabled, true) ? 1 : 0);
     m_computeShader->SetInt("u_accretionDiskEnabled", Application::Params().Get(Params::RenderingAccretionDiskEnabled, true) ? 1 : 0);
+    m_computeShader->SetInt("u_accretionDiskVolumetric", Application::Params().Get(Params::RenderingAccretionDiskVolumetric, false) ? 1 : 0);
     m_computeShader->SetInt("u_renderBlackHoles", Application::Params().Get(Params::RenderingBlackHolesEnabled, true) ? 1 : 0);
     m_computeShader->SetFloat("u_accDiskHeight", Application::Params().Get(Params::RenderingAccDiskHeight, 0.1f));
     m_computeShader->SetFloat("u_accDiskNoiseScale", Application::Params().Get(Params::RenderingAccDiskNoiseScale, 1.0f));

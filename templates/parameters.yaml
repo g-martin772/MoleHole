@@ -122,6 +122,14 @@ parameters:
     dragSpeed: 0.01
     showInUI: true
 
+  - name: "Camera.Object"
+    displayName: "Camera Object"
+    tooltip: "Select a mesh as the camera object"
+    type: string
+    group: Camera
+    defaultValue: ""
+    showInUI: false
+
   # Rendering Parameters
   - name: "Rendering.FOV"
     displayName: "Field of View"
@@ -140,6 +148,28 @@ parameters:
     type: bool
     group: Rendering
     defaultValue: false
+    showInUI: true
+
+  - name: "Rendering.ThirdPersonDistance"
+    displayName: "Third Person Distance"
+    tooltip: "Distance of camera behind the object in third-person mode"
+    type: float
+    group: Rendering
+    defaultValue: 10.0
+    minValue: 1.0
+    maxValue: 100.0
+    dragSpeed: 0.5
+    showInUI: true
+
+  - name: "Rendering.ThirdPersonHeight"
+    displayName: "Third Person Height"
+    tooltip: "Height of camera above the object in third-person mode"
+    type: float
+    group: Rendering
+    defaultValue: 3.0
+    minValue: 0.0
+    maxValue: 50.0
+    dragSpeed: 0.2
     showInUI: true
 
   - name: "Rendering.MaxRaySteps"
@@ -247,6 +277,14 @@ parameters:
     type: bool
     group: Rendering
     defaultValue: true
+    showInUI: true
+
+  - name: "Rendering.AccretionDiskVolumetric"
+    displayName: "Volumetric Disk"
+    tooltip: "Use volumetric rendering for accretion disk (cloud-like with proper density, scattering, and self-shadowing)"
+    type: bool
+    group: Rendering
+    defaultValue: false
     showInUI: true
 
   - name: "Rendering.AccDiskHeight"
