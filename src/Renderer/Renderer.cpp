@@ -465,6 +465,13 @@ void Renderer::Render3DSimulation(Scene *scene) {
 
     float currentTime = static_cast<float>(glfwGetTime());
 
+        // Pre-load meshes into cache before rendering
+    for (const auto& meshObj : scene->meshes) {
+        if (m_meshCache.find(meshObj.path) == m_meshCache.end()) {
+            GetOrLoadMesh(meshObj.path);
+        }
+    }
+
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -490,7 +497,8 @@ void Renderer::Render3DSimulation(Scene *scene) {
         }
     }
 
-    //RenderMeshes(scene);
+    // Render meshes using traditional rasterization on top of raytraced background
+    RenderMeshes(scene);
     //RenderSpheres(scene);
 
     glDisable(GL_DEPTH_TEST);

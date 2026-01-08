@@ -42,7 +42,7 @@ uniform vec4 u_sphereColors[MAX_SPHERES];
 uniform float u_sphereMasses[MAX_SPHERES];
 
 // meshes
-const int MAX_MESHES = 8;
+const int MAX_MESHES = 3;
 const int MAX_TRIANGLES_PER_MESH = 1024;
 uniform int u_numMeshes;
 struct MeshData {
@@ -175,24 +175,20 @@ float calculateDopplerEffect(vec3 pos, vec3 viewDir)
 float calculateEventHorizonRadius(float mass) {
     return 2.0f * mass;
 }
-
 float calculateInfluenceRadius(float r_s) {
     return 7.0f * r_s;
 }
-
 vec3 calculateAngularMomentumFromSpin(float spin, vec3 spinAxis, float mass) {
     float h = spin * mass;
     return h * normalize(spinAxis);
 }
 
-// Kerr-specific functions for Interstellar-quality rendering
 
 float getKerrISCORadius(float spin) {
     float spinNorm = clamp(spin, 0.0, 0.998);
     float t = (spinNorm - 0.0) / (0.998 - 0.0);
     return texture(u_kerrISCOLUT, vec2(t, 0.5)).r;
 }
-
 float getKerrPhotonSphereRadius(float spin, float inclination) {
     float spinNorm = clamp(spin, 0.0, 0.998);
     float t_spin = (spinNorm - 0.0) / (0.998 - 0.0);

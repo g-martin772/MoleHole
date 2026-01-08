@@ -333,7 +333,7 @@ void BlackHoleRenderer::CreateFullscreenQuad() {
 
 void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time) {
     UpdateUniforms(blackHoles, spheres, camera, time);
-    UpdateMeshBuffers(meshes, meshCache);
+    // UpdateMeshBuffers(meshes, meshCache);
 
     m_computeShader->Bind();
 
@@ -683,8 +683,7 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
     std::vector<Triangle> triangleArray;
     
     int triangleOffset = 0;
-    const int MAX_MESHES = 8;
-    const int MAX_TRIANGLES_PER_MESH = 1024;
+    constexpr int MAX_MESHES = 3;
     int totalTriangles = 0;
     
     for (size_t i = 0; i < meshes.size() && i < MAX_MESHES; ++i) {
@@ -702,7 +701,7 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
             continue;
         }
         
-        MeshData data;
+        MeshData data{};
         data.transform = glm::translate(glm::mat4(1.0f), meshObj.position);
         data.transform = data.transform * glm::mat4_cast(meshObj.rotation);
         data.transform = glm::scale(data.transform, meshObj.scale);
@@ -712,8 +711,9 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
         data.triangleOffset = triangleOffset;
         
         int meshTriangleCount = 0;
-        
+
         for (size_t idx = 0; idx < geometry.indices.size() && idx + 2 < geometry.indices.size(); idx += 3) {
+            constexpr int MAX_TRIANGLES_PER_MESH = 50000;
             if (totalTriangles >= MAX_MESHES * MAX_TRIANGLES_PER_MESH) {
                 spdlog::warn("Exceeded maximum triangle count, skipping remaining triangles");
                 break;
@@ -732,7 +732,7 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
                 continue;
             }
             
-            Triangle tri;
+            Triangle tri{};
             tri.v0 = geometry.vertices[i0];
             tri.v1 = geometry.vertices[i1];
             tri.v2 = geometry.vertices[i2];
@@ -755,12 +755,16 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
         
         meshDataArray.push_back(data);
     }
+
+    if (!meshDataArray.empty()) {
+        spdlog::info("Updated mesh buffers: {} meshes, {} triangles", meshDataArray.size(), triangleArray.size());
+    }
     
     m_computeShader->Bind();
     m_computeShader->SetInt("u_numMeshes", static_cast<int>(meshDataArray.size()));
     m_computeShader->SetInt("u_renderMeshes", meshDataArray.empty() ? 0 : 1);
     m_computeShader->Unbind();
-    
+
     if (!meshDataArray.empty()) {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_meshDataSSBO);
         glBufferData(GL_SHADER_STORAGE_BUFFER, meshDataArray.size() * sizeof(MeshData), 
