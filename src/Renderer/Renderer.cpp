@@ -717,13 +717,13 @@ void Renderer::RenderMeshes(Scene* scene) {
                 if (mesh && mesh->IsLoaded()) {
                     // Convert Euler angles (yaw, pitch, roll) to quaternion
                     // Yaw and pitch from camera, roll = 0
-                    float yawRad = glm::radians(camera->GetYaw() + 90);
+                    float yawRad = glm::radians(camera->GetYaw() - 90);
                     float pitchRad = glm::radians(camera->GetPitch());
                     float rollRad = 0.0f;
 
                     // Create quaternion from Euler angles (using GLM's built-in function)
                     // GLM expects angles in the order: pitch (x), yaw (y), roll (z)
-                    glm::quat q = glm::quat(glm::vec3(pitchRad, -yawRad, rollRad));
+                    glm::quat q = glm::quat(glm::vec3(-pitchRad, -yawRad, rollRad));
 
                     // In third-person mode, the shader offsets the rendering camera backward
                     // so the mesh needs to be positioned forward from the camera
