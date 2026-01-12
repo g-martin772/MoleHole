@@ -21,9 +21,13 @@ namespace Params {
     inline constexpr ParameterHandle CameraYaw("Camera.Yaw");
     inline constexpr ParameterHandle CameraSpeed("Camera.Speed");
     inline constexpr ParameterHandle CameraMouseSensitivity("Camera.MouseSensitivity");
+    inline constexpr ParameterHandle CameraObject("Camera.Object");
 
     // Rendering Parameters
     inline constexpr ParameterHandle RenderingFOV("Rendering.FOV");
+    inline constexpr ParameterHandle RenderingThirdPerson("Rendering.ThirdPerson");
+    inline constexpr ParameterHandle ThirdPersonDistance("Rendering.ThirdPersonDistance");
+    inline constexpr ParameterHandle ThirdPersonHeight("Rendering.ThirdPersonHeight");
     inline constexpr ParameterHandle RenderingMaxRaySteps("Rendering.MaxRaySteps");
     inline constexpr ParameterHandle RenderingRayStepSize("Rendering.RayStepSize");
     inline constexpr ParameterHandle RenderingAdaptiveStepRate("Rendering.AdaptiveStepRate");
@@ -37,6 +41,7 @@ namespace Params {
     inline constexpr ParameterHandle RenderingGravitationalLensingEnabled("Rendering.GravitationalLensingEnabled");
     inline constexpr ParameterHandle RenderingGravitationalRedshiftEnabled("Rendering.GravitationalRedshiftEnabled");
     inline constexpr ParameterHandle RenderingAccretionDiskEnabled("Rendering.AccretionDiskEnabled");
+    inline constexpr ParameterHandle RenderingAccretionDiskVolumetric("Rendering.AccretionDiskVolumetric");
     inline constexpr ParameterHandle RenderingAccDiskHeight("Rendering.AccDiskHeight");
     inline constexpr ParameterHandle RenderingAccDiskNoiseScale("Rendering.AccDiskNoiseScale");
     inline constexpr ParameterHandle RenderingAccDiskNoiseLOD("Rendering.AccDiskNoiseLOD");

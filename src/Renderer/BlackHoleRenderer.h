@@ -2,7 +2,6 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
-#include <glm/glm.hpp>
 
 #include "BlackbodyLUTGenerator.h"
 #include "AccelerationLUTGenerator.h"
@@ -23,9 +22,6 @@ public:
     void Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time);
     void Resize(int width, int height);
     void RenderToScreen();
-
-    static float CalculateSchwarzschildRadius(float mass);
-    static float GetEventHorizonRadius(float mass);
     
     // Getter methods for LUT textures
     unsigned int GetBlackbodyLUT() const { return m_blackbodyLUT; }
@@ -41,14 +37,13 @@ private:
     void CreateBloomTextures();
     void ApplyBloom();
     void ApplyLensFlare();
-    void ApplyFXAA();
     void CreateFullscreenQuad();
     void LoadSkybox();
     void GenerateBlackbodyLUT();
     void GenerateAccelerationLUT();
     void GenerateHRDiagramLUT();
     void GenerateKerrGeodesicLUTs();
-    void UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const Camera& camera, float time);
+    void UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time);
     void UpdateMeshBuffers(const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache);
     void CreateMeshBuffers();
 
@@ -57,7 +52,6 @@ private:
     std::unique_ptr<Shader> m_bloomExtractShader;
     std::unique_ptr<Shader> m_bloomBlurShader;
     std::unique_ptr<Shader> m_lensFlareShader;
-    std::unique_ptr<Shader> m_fxaaShader;
     std::unique_ptr<Image> m_skyboxTexture;
     std::unique_ptr<MoleHole::BlackbodyLUTGenerator> m_blackbodyLUTGenerator;
     std::unique_ptr<MoleHole::AccelerationLUTGenerator> m_accelerationLUTGenerator;
@@ -69,7 +63,6 @@ private:
     unsigned int m_bloomBlurTexture[2]; // Ping-pong textures for blur passes
     int m_bloomFinalTextureIndex; // Tracks which blur texture (0 or 1) has the final result
     unsigned int m_lensFlareTexture; // Output texture for lens flare effect
-    unsigned int m_fxaaTexture; // Output texture for FXAA anti-aliasing
     unsigned int m_blackbodyLUT;
     unsigned int m_accelerationLUT;
     unsigned int m_hrDiagramLUT;

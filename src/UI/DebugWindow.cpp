@@ -105,6 +105,7 @@ void Render(UI* ui) {
         ImGui::Separator();
         
         ParameterWidgets::RenderParameter(Params::RenderingAccretionDiskEnabled, ui);
+        ParameterWidgets::RenderParameter(Params::RenderingAccretionDiskVolumetric, ui);
         ParameterWidgets::RenderParameter(Params::RenderingAccDiskHeight, ui);
         ParameterWidgets::RenderParameter(Params::RenderingAccDiskNoiseScale, ui);
         ParameterWidgets::RenderParameter(Params::RenderingAccDiskNoiseLOD, ui);

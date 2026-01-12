@@ -2,6 +2,9 @@
 #include <glad/gl.h>
 #include <spdlog/spdlog.h>
 #include <glm/gtc/type_ptr.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 #include "Application/Application.h"
 #include "Application/Parameters.h"
@@ -10,9 +13,11 @@
 #include "HRDiagramLUTGenerator.h"
 #include "GLTFMesh.h"
 
+
+
 BlackHoleRenderer::BlackHoleRenderer()
     : m_computeTexture(0), m_bloomBrightTexture(0), m_bloomBlurTexture{0, 0}, 
-      m_bloomFinalTextureIndex(0), m_lensFlareTexture(0), m_fxaaTexture(0),
+      m_bloomFinalTextureIndex(0), m_lensFlareTexture(0),
       m_blackbodyLUT(0), m_accelerationLUT(0), m_hrDiagramLUT(0),
       m_kerrDeflectionLUT(0), m_kerrRedshiftLUT(0), m_kerrPhotonSphereLUT(0), m_kerrISCOLUT(0),
       m_quadVAO(0), m_quadVBO(0), m_meshDataSSBO(0), m_triangleSSBO(0),
@@ -24,7 +29,6 @@ BlackHoleRenderer::~BlackHoleRenderer() {
     if (m_bloomBrightTexture) glDeleteTextures(1, &m_bloomBrightTexture);
     if (m_bloomBlurTexture[0]) glDeleteTextures(2, m_bloomBlurTexture);
     if (m_lensFlareTexture) glDeleteTextures(1, &m_lensFlareTexture);
-    if (m_fxaaTexture) glDeleteTextures(1, &m_fxaaTexture);
     if (m_blackbodyLUT) glDeleteTextures(1, &m_blackbodyLUT);
     if (m_accelerationLUT) glDeleteTextures(1, &m_accelerationLUT);
     if (m_hrDiagramLUT) glDeleteTextures(1, &m_hrDiagramLUT);
@@ -47,7 +51,6 @@ void BlackHoleRenderer::Init(int width, int height) {
     m_bloomExtractShader = std::make_unique<Shader>("../shaders/bloom_extract.comp", true);
     m_bloomBlurShader = std::make_unique<Shader>("../shaders/bloom_blur.comp", true);
     m_lensFlareShader = std::make_unique<Shader>("../shaders/lens_flare.comp", true);
-    m_fxaaShader = std::make_unique<Shader>("../shaders/fxaa.comp", true);
 
     m_blackbodyLUTGenerator = std::make_unique<MoleHole::BlackbodyLUTGenerator>();
     m_accelerationLUTGenerator = std::make_unique<MoleHole::AccelerationLUTGenerator>();
@@ -277,9 +280,6 @@ void BlackHoleRenderer::CreateBloomTextures() {
     if (m_lensFlareTexture) {
         glDeleteTextures(1, &m_lensFlareTexture);
     }
-    if (m_fxaaTexture) {
-        glDeleteTextures(1, &m_fxaaTexture);
-    }
 
     // Create bright extraction texture
     glGenTextures(1, &m_bloomBrightTexture);
@@ -304,15 +304,6 @@ void BlackHoleRenderer::CreateBloomTextures() {
     // Create lens flare texture
     glGenTextures(1, &m_lensFlareTexture);
     glBindTexture(GL_TEXTURE_2D, m_lensFlareTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_width, m_height, 0, GL_RGBA, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    // Create FXAA texture
-    glGenTextures(1, &m_fxaaTexture);
-    glBindTexture(GL_TEXTURE_2D, m_fxaaTexture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_width, m_height, 0, GL_RGBA, GL_FLOAT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -346,8 +337,8 @@ void BlackHoleRenderer::CreateFullscreenQuad() {
 }
 
 void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time) {
-    UpdateUniforms(blackHoles, spheres, camera, time);
-    UpdateMeshBuffers(meshes, meshCache);
+    UpdateUniforms(blackHoles, spheres, meshes, meshCache, camera, time);
+    // UpdateMeshBuffers(meshes, meshCache);
 
     m_computeShader->Bind();
 
@@ -442,10 +433,7 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const s
     ApplyBloom();
 
     // Apply lens flare effect (uses bloom output)
-    ApplyLensFlare();
-
-    // Apply FXAA anti-aliasing
-    ApplyFXAA();
+    // ApplyLensFlare();
 }
 
 void BlackHoleRenderer::ApplyBloom() {
@@ -531,42 +519,7 @@ void BlackHoleRenderer::ApplyLensFlare() {
     m_lensFlareShader->Unbind();
 }
 
-void BlackHoleRenderer::ApplyFXAA() {
-    // Check if anti-aliasing is enabled
-    bool fxaaEnabled = Application::Params().Get(Params::RenderingAntiAliasingEnabled, false);
-    if (!fxaaEnabled || !m_fxaaShader) {
-        return;
-    }
-
-    unsigned int groupsX = (m_width + 15) / 16;
-    unsigned int groupsY = (m_height + 15) / 16;
-
-    m_fxaaShader->Bind();
-
-    // Set resolution uniform
-    m_fxaaShader->SetVec2("u_resolution", glm::vec2(static_cast<float>(m_width), static_cast<float>(m_height)));
-
-    // Bind input (compute texture) and output (FXAA texture)
-    glBindImageTexture(0, m_computeTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-    glBindImageTexture(1, m_fxaaTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-
-    glDispatchCompute(groupsX, groupsY, 1);
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
-
-    m_fxaaShader->Unbind();
-
-    // Copy FXAA result back to compute texture for display
-    // This ensures the display shader uses the anti-aliased version
-    glCopyImageSubData(
-        m_fxaaTexture, GL_TEXTURE_2D, 0, 0, 0, 0,
-        m_computeTexture, GL_TEXTURE_2D, 0, 0, 0, 0,
-        m_width, m_height, 1
-    );
-
-    glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
-}
-
-void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const Camera& camera, float time) {
+void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time) {
     m_computeShader->Bind();
 
     glm::vec3 cameraPos = camera.GetPosition();
@@ -579,12 +532,39 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     m_computeShader->SetVec3("u_cameraUp", cameraUp);
     m_computeShader->SetVec3("u_cameraRight", cameraRight);
     m_computeShader->SetFloat("u_fov", camera.GetFov());
+    m_computeShader->SetInt("u_enableThirdPerson", Application::Params().Get(Params::RenderingThirdPerson, false) ? 1 : 0);
     m_computeShader->SetFloat("u_aspect", static_cast<float>(m_width) / static_cast<float>(m_height));
     m_computeShader->SetFloat("u_time", time);
+
+    // Third-person camera object uniforms
+    if (Application::Params().Get(Params::RenderingThirdPerson, false)) {
+        std::string selectedObjectName = Application::Params().Get(Params::CameraObject, std::string(""));
+
+        // Find the selected mesh object
+        bool foundObject = false;
+        for (const auto& meshObj : meshes) {
+            if (meshObj.name == selectedObjectName) {
+                // Third-person camera distance and height (can be made configurable via params)
+                m_computeShader->SetFloat("u_thirdPersonDistance", Application::Params().Get(Params::ThirdPersonDistance, 10.0f));
+                m_computeShader->SetFloat("u_thirdPersonHeight", Application::Params().Get(Params::ThirdPersonHeight, 3.0f));
+
+                foundObject = true;
+                break;
+            }
+        }
+
+        // Fallback if object not found - use default cube values
+        if (!foundObject) {
+            m_computeShader->SetFloat("u_cubeSize", 1.0f);
+            m_computeShader->SetFloat("u_thirdPersonDistance", 10.0f);
+            m_computeShader->SetFloat("u_thirdPersonHeight", 3.0f);
+        }
+    }
 
     // Rendering settings from AppState
     m_computeShader->SetInt("u_gravitationalLensingEnabled", Application::Params().Get(Params::RenderingGravitationalLensingEnabled, true) ? 1 : 0);
     m_computeShader->SetInt("u_accretionDiskEnabled", Application::Params().Get(Params::RenderingAccretionDiskEnabled, true) ? 1 : 0);
+    m_computeShader->SetInt("u_accretionDiskVolumetric", Application::Params().Get(Params::RenderingAccretionDiskVolumetric, false) ? 1 : 0);
     m_computeShader->SetInt("u_renderBlackHoles", Application::Params().Get(Params::RenderingBlackHolesEnabled, true) ? 1 : 0);
     m_computeShader->SetFloat("u_accDiskHeight", Application::Params().Get(Params::RenderingAccDiskHeight, 0.1f));
     m_computeShader->SetFloat("u_accDiskNoiseScale", Application::Params().Get(Params::RenderingAccDiskNoiseScale, 1.0f));
@@ -681,6 +661,12 @@ void BlackHoleRenderer::RenderToScreen() {
     m_displayShader->SetInt("u_lensFlareEnabled", lensFlareEnabled ? 1 : 0);
     m_displayShader->SetFloat("u_lensFlareIntensity", lensFlareIntensity);
 
+    // Set FXAA parameters
+    bool fxaaEnabled = Application::Params().Get(Params::RenderingAntiAliasingEnabled, false);
+    m_displayShader->SetInt("u_fxaaEnabled", fxaaEnabled ? 1 : 0);
+    m_displayShader->SetFloat("rt_w", static_cast<float>(m_width));
+    m_displayShader->SetFloat("rt_h", static_cast<float>(m_height));
+
     glBindVertexArray(m_quadVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
@@ -729,8 +715,7 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
     std::vector<Triangle> triangleArray;
     
     int triangleOffset = 0;
-    const int MAX_MESHES = 8;
-    const int MAX_TRIANGLES_PER_MESH = 1024;
+    constexpr int MAX_MESHES = 3;
     int totalTriangles = 0;
     
     for (size_t i = 0; i < meshes.size() && i < MAX_MESHES; ++i) {
@@ -748,7 +733,7 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
             continue;
         }
         
-        MeshData data;
+        MeshData data{};
         data.transform = glm::translate(glm::mat4(1.0f), meshObj.position);
         data.transform = data.transform * glm::mat4_cast(meshObj.rotation);
         data.transform = glm::scale(data.transform, meshObj.scale);
@@ -758,8 +743,9 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
         data.triangleOffset = triangleOffset;
         
         int meshTriangleCount = 0;
-        
+
         for (size_t idx = 0; idx < geometry.indices.size() && idx + 2 < geometry.indices.size(); idx += 3) {
+            constexpr int MAX_TRIANGLES_PER_MESH = 50000;
             if (totalTriangles >= MAX_MESHES * MAX_TRIANGLES_PER_MESH) {
                 spdlog::warn("Exceeded maximum triangle count, skipping remaining triangles");
                 break;
@@ -778,7 +764,7 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
                 continue;
             }
             
-            Triangle tri;
+            Triangle tri{};
             tri.v0 = geometry.vertices[i0];
             tri.v1 = geometry.vertices[i1];
             tri.v2 = geometry.vertices[i2];
@@ -801,12 +787,16 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
         
         meshDataArray.push_back(data);
     }
+
+    if (!meshDataArray.empty()) {
+        spdlog::info("Updated mesh buffers: {} meshes, {} triangles", meshDataArray.size(), triangleArray.size());
+    }
     
     m_computeShader->Bind();
     m_computeShader->SetInt("u_numMeshes", static_cast<int>(meshDataArray.size()));
     m_computeShader->SetInt("u_renderMeshes", meshDataArray.empty() ? 0 : 1);
     m_computeShader->Unbind();
-    
+
     if (!meshDataArray.empty()) {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_meshDataSSBO);
         glBufferData(GL_SHADER_STORAGE_BUFFER, meshDataArray.size() * sizeof(MeshData), 

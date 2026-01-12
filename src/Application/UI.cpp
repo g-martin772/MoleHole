@@ -203,7 +203,7 @@ void UI::RenderMainUI(float fps, Scene* scene) {
     }
 
     if (m_showCameraWindow) {
-        CameraWindow::Render(this);
+        CameraWindow::Render(this, scene);
     }
 
     if (m_showDebugWindow) {
@@ -640,7 +640,9 @@ void UI::RenderImageExportSettings() {
             { "PNG Image", "png" }
         };
 
-        nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, nullptr, "export.png");
+        const std::string fallbackPath = ".";
+        std::string defaultPath = Application::Params().Get(Params::UIDefaultExportPath, fallbackPath);
+        nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, defaultPath.c_str(), "export.png");
 
         if (result == NFD_OKAY && outPath) {
             auto& app = Application::Instance();
@@ -729,7 +731,9 @@ void UI::RenderVideoExportSettings() {
             { "MP4 Video", "mp4" }
         };
 
-        nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, nullptr, "export.mp4");
+        const std::string fallbackPath = ".";
+        std::string defaultPath = Application::Params().Get(Params::UIDefaultExportPath, fallbackPath);
+        nfdresult_t result = NFD_SaveDialog(&outPath, filterItems, 1, defaultPath.c_str(), "export.mp4");
 
         if (result == NFD_OKAY && outPath) {
             auto& app = Application::Instance();
