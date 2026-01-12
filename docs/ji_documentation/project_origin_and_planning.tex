@@ -1,0 +1,101 @@
+﻿%! Author = leonh
+%! Date = 31.12.2025
+
+\subsection{Projektentstehung und -planung} \label{subsec:project_origin_and_planning}
+
+\begin{figure}[b]
+    \centering
+    \includegraphics[width=0.4\textwidth]{}
+    \caption{Originale Notizen bei der Aufstellung der Projektziele}
+    \label{fig:original_notes_project_goals}
+\end{figure}
+
+\textbf{Projektidee} \\
+
+Die Projektidee entstammt einem spontanen Einfall.
+Die beiden Mitglieder des Projektteams waren frustriert mit dem Verlauf deren früherer Projekte
+und wollten etwas Neuartiges entwickeln.
+Daraus entsprang die Idee, schwarze Löcher virtuell darzustellen und in Echtzeit zu simulieren.
+Im Zuge der Einigung auf ein Gesamtziel versuchte das Projektteam, diese Vorstellung in einzelne
+Teile zu gliedern.
+In Abbildung~\ref{fig:original_notes_project_goals} sind die originalen Notizen des Projektteams zu
+sehen, die bei der Überlegung der Projektziele entstanden sind.
+Diese Ziele stellen die übergeordneten Gesamtausmaße des Projektes dar, welche das Team erreichen
+möchte.
+Im Zuge der besseren Lesbarkeit und genaueren Dokumentation werden diese sogenannten funktionalen
+Anforderungen nochmals in höherer Genauigkeit aufgelistet:
+\begin{itemize}
+    \item   \textbf{Basis mit Dear ImGui:} Als Basis wird eine C++ Applikation aufgesetzt, welche die
+            Library Dear ImGui nutzt, um dem Endnutzer die Möglichkeit zu bieten, verschiedenste Parameter
+            einzustellen, als auch sich im drei dimensionalen Raum zu bewegen.
+    \item   \textbf{Visualisierung:} Zum besseren Verständnis schwarzer Löcher trägt vor allem die Visualisierung
+            bei.
+            Deshalb sollen der Ereignishorizont, die Photonensphäre, die Akkretionsscheibe und die
+            Raumzeitkrümmung dargestellt werden.
+            Zudem sollen auch noch verschiedenste Parameter eines schwarzen Loches angepasst werden können.
+            Das sind die Masse $m$, Position $x^i$, Geschwindigkeit $v^i$ sowie der Spin-Parameter $a$.
+            Diese Punkte sollen mithilfe des Shader-Frameworks OpenGL erfüllt werden.
+    \item   \textbf{Simulation:} Um über die reine Darstellung hinaus auch die unvorstellbaren Kräfte
+            schwarzer Löcher zu erkennen, soll es auch die Möglichkeit geben, eine Simulation zu konfigurieren
+            und danach anzusehen.
+            Dabei soll es möglich sein, andere Objekte wie z.B.\ Sterne, Planeten und Raumschiffe einzufügen und
+            mit dem schwarzen Loch interagieren zu lassen.
+    \item   \textbf{Physikalische Korrektheit:} Damit ein Endnutzer auch lernen kann, wie schwarze Löcher in der
+            realen Welt funktionieren, sollen möglichst genaue Theorien über schwarze Löcher angewendet werden.
+            Zu diesen gehören z.B.\ die Kerr Metrik zur Berechnung der Raumzeitkrümmung in der Nähe rotierender
+            schwarzer Löcher oder der Dopplereffekt zur Veränderung des ausgesandten Lichts.
+\end{itemize} \\
+
+\textbf{Allgemeines Ziel} \\
+
+Weiters bildete sich über diese formulierten funktionalen Anforderungen auch ein allgemeines Ziel, das
+lautet:
+\begin{center}
+    \textbf{Die komplizierte Physik unseres Kosmos sollte jedem Menschen so einfach und gut verständlich
+    wie möglich präsentiert werden!}
+\end{center}
+Um den Worten des Astronomen Florian Freistetter gerecht zu werden~\autocite{Video:Podcast_Science_Communication},
+soll den Menschen Wissenschaft beigebracht werden, indem man sie auf eine Reise einlädt, die Komplexität
+verschiedenster Theorien weglässt und vor allem ein Vertrauen aufbaut.
+Dieses Projekt soll das umsetzen und damit eine Hilfe in der Kommunikation von Wissenschaft mit der allgemeinen
+Bevölkerung darstellen. \\
+
+\textbf{These} \\
+
+Es war nicht nötig, für dieses Projekt eine These zu formulieren, da es sich nicht um eine herkömmliche
+wissenschaftliche Arbeit handelt, bei der eine Hypothese formuliert wird und im weiteren Verlauf der Arbeit
+mithilfe wissenschaftlicher Methoden bestätigt oder wieder verworfen wird.
+Dieses Projekt soll vielmehr ein Produkt hervorbringen, dass es den Menschen ermöglicht, auf einfache Art und
+Weise Wissenschaft zu erfahren.
+In diesem Projekt werden bei Erfüllung der Projektziele große Teile der Errungenschaften der Astronomie und
+Kosmologie der letzten 150 Jahre umgesetzt und versucht, dem Endnutzer möglichst verständlich zu präsentieren. \\
+
+\textbf{Informationsgewinn} \\
+
+Die Quellen für die Recherche und den Informationsgewinn sind so zahlreich, dass sie nicht in einer Liste aufgeführt
+werden können, ohne den Rahmen dieses Dokumentes zu sprengen oder die Lesbarkeit zu beeinträchtigen.
+Deshalb werden hier nur einige Beispiele aufgeführt werden.
+Als wichtigste Ressourcen zählen einige Projekte, die als Inspiration für die Arbeit dienen.
+Sie sind in~\autocite{Project:Black_Hole_Sim_eliot, Project:Black_Hole_Sim_rossning, Project:Black_Hole_Sim_hdeu,
+    Project:Black_Hole_Sim_Kamminga, Reddit:Black_Hole_Sim_Burgao} zu sehen.
+Viele dieser Projekte können auf GitHub betrachtet werden, während auch auf Reddit einiges zu finden war.
+Auch Bücher waren eine ordentliche Hilfestellung bei der Implementierung, wie~\autocite{Book:General_Relativity,
+    Book:Black_Holes_bc} \\
+
+\textbf{Planung des Projektablaufes} \\
+
+Die Planung des Projektes erfolgt agil und es wurden dementsprechend keine Meilensteine vordefiniert.
+Die untergeordneten Projektziele werden im Laufe des Projektes angepasst und hinzugefügt oder gelöscht.
+Es wird eine Mischung der agilen Projektplanungsframeworks Scrum~\autocite{Wikipedia:Scrum} und Kanban~\autocite{
+    Wikipedia:Kanban} - Scrumban~\autocite{Wikipedia:Scrumban} - ausgeführt.
+Dies wird insofern eingehalten, als das Rollen für die Mitglieder des Projektteams festgelegt wurden,
+wöchentliche Meetings abgehalten werden, alle drei Wochen ein Product Increment erfolgt und alles über ein
+Kanban-Board verwaltet wird.
+Zudem werden mittels einer Knowledge Base alle Meetings dokumentiert und andere wichtige Informationen
+festgehalten.
+Diese Art, ein Projekt zu planen und führen, ermöglicht eine flexible Arbeitsweise und macht besonders im Falle dieses
+Projektes Sinn, da am Anfang den Mitgliedern des Projektteams nicht klar, wohin die Reise gehen soll.
+Eigentlich war die Idee hinter dem Projekt eine Abwechslung in Bezug auf die restlichen Unterrichtsfächer an
+der HTL Krems~\autocite{Website:HTL_Krems}.
+Da alle Beteiligten des Projektes großes Engagement zeigen, wird auch außerhalb des Unterrichts gearbeitet und
+versucht, die aktuellen Ziele zu erfüllen. \\

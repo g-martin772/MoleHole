@@ -1,0 +1,88 @@
+
+
+
+
+
+\documentclass[
+	fontsize=12pt,
+	paper=a4,
+	twoside=false,
+	titlepage=true,
+]{article}
+
+\include{packages}
+
+\addbibresource{references.bib}
+
+\title{
+	Projektbericht MoleHole
+\\}
+\author{
+	Gabriel Martin\textsuperscript{1} and Leonhard Neuhold\textsuperscript{1}
+\\}
+\date{
+	\footnotesize\textsuperscript{\textbf{1}}IT-Abteilung, HTL Krems%
+}
+
+\begin{document}
+
+
+	% #########################################################################################
+	%
+	%		Title Page
+	%
+	% #########################################################################################
+
+	\maketitle
+
+	\begin{abstract}
+		Dies ist die Projektdokumentation zum MoleHole Projekt im Rahmen der IT-Abteilung an der HTL Krems.
+	\end{abstract}
+
+	\tableofcontents
+
+
+	% #########################################################################################
+	%
+	%		Section Introduction
+	%
+	% #########################################################################################
+
+	\section{Einleitung} \label{sec:introduction}
+
+	\ldots
+
+
+	% #########################################################################################
+	%
+	%		Section Projektdokumentation
+	%
+	% #########################################################################################
+
+	\section{Projektdokumentation} \label{sec:project_documentation}
+
+	\ldots
+	
+	\include{project_origin_and_planning}
+
+	\subsection{Projektumsetzung und Ausblick} \label{subsec:project_implementation_and_outlook}
+
+	\ldots
+
+	\subsection{Bericht des Projektkoordinators} \label{subsec:report_of_project_coordinator}
+
+	\ldots
+
+
+
+
+
+	\section{Beispiel} \label{sec:example}
+
+	Das ist ein Beispiel für eine Referenz~\autocite{Book:General_Relativity}.
+
+
+
+	\printbibliography[heading=bibintoc]
+
+\end{document}
