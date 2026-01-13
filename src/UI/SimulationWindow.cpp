@@ -285,7 +285,7 @@ void Render(UI* ui, Scene* scene) {
                     label += " (Selected)";
                 }
 
-                bool open = ImGui::TreeNode(label.c_str());
+                bool open = ImGui::TreeNode((label + "###NodeHeader").c_str());
 
                 if (isSelected) {
                     ImGui::PopStyleColor(3);
@@ -428,7 +428,7 @@ void Render(UI* ui, Scene* scene) {
                     label += " (Selected)";
                 }
 
-                bool open = ImGui::TreeNode(label.c_str());
+                bool open = ImGui::TreeNode((label + "###NodeHeader").c_str());
 
                 if (isSelected) {
                     ImGui::PopStyleColor(3);
