@@ -53,18 +53,6 @@ Schwarzkörperstrahlung;
 Hertzsprung-Russell-Diagramm;
 
 
-Geplant:
-
-Kerr-Metrik;
-Frame Dragging;
-Zeitdilatation;
-Längenkontraktion;
-Gravitation (Einstein);
-Volumetric Cloud Rendering;
-Partikel-Simulation;
-Gezeitenkräfte;
-
-
 
 \textbf{Forschungsmethoden}
 
@@ -76,18 +64,82 @@ Gezeitenkräfte;
 
 \textbf{Erreichung der Ziele}
 
-
+Das Projektteam setzt sich alle Ziele am Anfang eines sogenannten Sprints~\cite{Website:Scrum} und schreibt
+diese in der Projektmanagement-Software YouTrack~\cite{Website:YouTrack} nieder.
+Dort werden allgemein die Ziele formuliert, mit einer Priorität versehen, der Arbeitsaufwand anhand von Story Points
+geschätzt und ein Verantwortlicher festgelegt.
+Um zu überprüfen, ob das Projektteam die Ziele erfüllt, werden diese in der Applikation von den Mitgliedern des
+Projektteams ausprobiert.
+Da dies keine besonders zuverlässige Methode zur Bestimmung der erfüllten Ziele ist, gibt es am Ende eines jeden
+Sprints ein Sprint-Review Meeting, bei dem das Team ihre Ergebnisse dem Projektbetreuer sowie einem ausgewählten Kunden
+(ein Mitschüler) vorstellt und den Sprint somit abschließt~\cite{Website:Scrum}.
+Danach werden erneut Ziele für die nächste Iteration überlegt.
 
 \textbf{Gesellschaftliche Auswirkungen}
 
-
+Wie bereits in~\ref{subsec:project_origin_and_planning} erwähnt ist das Gesamtziel des Projektes eine verbesserte
+Wissenschaftskommunikation durch eine Applikation mit der man experimentell und spielerisch komplexe Vorgänge
+unseres Universums erleben und erlernen kann.
+Das Produkt ist so konzipiert, dass es die Möglichkeit gibt, eigene Simulationen zu erstellen und in diesen zu experimentieren,
+aber auch über Tooltips und Dokumentation Genaueres über die simulierten physikalischen Effekte zu erfahren.
+Weiters ist die Applikation als OpenSource-Software frei auf GitHub verfügbar und wird dies in Zukunft auch bleiben, was
+den gesellschaftlichen Nutzen erheblich verbessert, weil es jeder, der einen PC besitzt, ausprobieren kann.
+Insgesamt lässt sich feststellen, dass es dem Projektteam ein Anliegen ist, mit dieser Applikation die
+Wissenschaftskommunikation zu verbessern und damit mehr Menschen den Zugang zur Wissenschaft zu erleichtern.
 
 \textbf{Kooperationen}
 
+Aktuell gibt es bei diesem Projekt keine bestehenden Kooperationen, jedoch würde das Projektteam in Zukunft welche anstreben.
+Allerdings ist das Projekt noch sehr jung und das Team möchte zuerst wissen, wie sich die Ziele und das Produkt entwickeln.
 
+\subsubsection{Entwicklungspotenzial} \label{subsubsec:potential}
 
-\textbf{Entwicklungspotenzial}
+Es steckt noch einiges an Potenzial in diesem Projekt und das Team plant nicht, dieses einfach wegzuwerfen und
+nicht zu nutzen.
+Demnach werden in dieser Sektion alle potenziellen Erweiterungen des Projektes aufgezählt.
 
+\textbf{Releases}
 
+Wenn die Entwicklung des Projektes weiterhin große Fortschritte erzielt, ist eine Veröffentlichung des Projektes
+zum Beispiel auf Steam anzuvisieren.
+Aktuell kann man das Projekt zwar schon benutzen, da es ein öffentliches GitHub Repository mit dem Code gibt, aber
+es ist ein wenig technisches Wissen notwendig, um dieses zu verwenden.
+Wenn die Applikation auf einer Vertriebsplattform wie Steam veröffentlicht werden kann, würde das den Zugang
+zu der Software erleichtern.
+
+\textbf{Technische Potenziale}
+
+Das mit Abstand wichtigste physikalische Phänomen, das in der Applikation noch umgesetzt werden muss, ist die
+\textit{Kerr-Metrik}, welche im Jahre 1963 vom neuseeländischen Physiker Roy Kerr als Lösung der Feldgleichungen aus der
+\textit{allgemeinen Relativitätstheorie (ART)} aufgestellt worden ist~\cite{Book:General_Relativity}.
+Hierfür wird allerdings Wissen aus der ART benötigt, das sich das Projektteam noch nicht angeeignet hat.
+Deshalb wird es noch einige Zeit dauern, bis dieses Feature verwirklicht werden kann.
+Nichtsdestotrotz beschäftigt sich das Team mit diesem Effekt, da dieser extrem relevant für eine akkurate Darstellung
+eines schwarzen Loches ist.
+Mit der Kerr-Metrik folgen einige andere wichtige Phänomene aus der ART, die als mögliche Ziele des Projektes
+im Hinterkopf behalten werden sollen, jedoch erst nach Umsetzung der Kerr-Metrik implementiert werden können.
+Diese Effekte sind das Frame-Dragging, die Zeitdilatation, die Längenkontraktion sowie die Gravitation im Allgemeinen.
+Vor allem Zeitdilatation und Längenkontraktion sind wichtig für eine genaue Simulation schwarzer Löcher, da für Beobachter
+außerhalb der unmittelbaren Umgebung eines schwarzen Loches Objekte nahe dem Ereignishorizont sich immer langsamer
+bewegen und letztendlich verblassen~\cite{Book:Gravitation}.
+Hierbei muss natürlich auch die Gravitation implementiert werden, die der wichtigste Bestandteil der zukünftigen Ziele
+sein wird.
+Es soll dabei die aktuell verwendete Simulation der Gravitation nach der Gravitationstheorie von Isaac
+Newton~\cite{Book:Principia_Mathematica} durch die Gravitationstheorie von Albert Einstein, die ART, ersetzt werden.
+Mit dieser Theorie wäre es möglich, Objekte, die sich sehr nahe an großen Massen befinden, genauestens zu simulieren.
+Generell lässt sich sagen, dass die Theorie der Gravitation von Isaac Newton in der Nähe von schwarzen Löchern nicht
+funktionieren wird, da die Raumzeit hier besonders stark gekrümmt ist~\cite{Book:Gravitation,Book:General_Relativity}.
+Aus der Gravitationstheorie lässt sich ein weiterer Effekt ableiten, der für eine genaue Simulation von Objekten in der
+Nähe großer Massen von Relevanz ist: die Gezeitenkraft~\cite{Paper:Tidal_forces}.
+Mit der Implementierung dieser Kraft wäre es möglich, Himmelskörper wie zum Beispiel Millers Planet aus dem Film
+Interstellar~\cite{Film:Interstellar,Book:Science_of_Interstellar} physikalisch möglichst genau zu simulieren.
+Aus technischer Perspektive soll die visuelle Darstellung der Objekte auch noch verbessert werden.
+Hierfür wird das \textit{Volumetric Cloud Rendering} verwendet werden, um die Akkretionsscheibe eines schwarzen Loches
+detailreicher darzustellen.
+Diese Rendering-Technik kümmert sich um die Belichtung wolkenartiger Gebilde, da Licht in Wolken gestreut und abgelenkt wird,
+sodass nicht genau das Licht den Beobachter erreicht, das ursprünglich in seine Richtung ausgesandt worden
+ist~\cite{Video:Coding_Adventure_Clouds,Paper:Volumetric_Cloud_Rendering}.
+Außerdem wird eine Partikel Simulation angestrebt, sodass man sehen kann, wie sich über die Zeit eine Akkretionsscheibe um
+ein schwarzes Loch bildet.
 
 \textbf{Wirtschaftliches Potenzial}
