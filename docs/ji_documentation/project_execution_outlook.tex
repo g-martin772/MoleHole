@@ -48,16 +48,16 @@ Die Programmiersprachen sind also sehr einfach gehalten.
 Im Gegensatz dazu werden einige Bibliotheken verwendet, um nicht alles selbst entwickeln zu müssen.
 Alle verwendeten Bibliotheken sind:
 \begin{itemize}
-    \item OpenGL Libraries: GLAD, GLFW, GLM
-    \item Dear ImGui
-    \item spdlog
-    \item PhysX
-    \item stb\_image
-    \item ImGuizmo
-    \item tinygltf
-    \item nodes
-    \item yaml-cpp
-    \item nativefiledialog-extended
+    \item OpenGL Libraries: GLAD, GLFW, GLM~\autocite{GitHub:Glad,GitHub:Glfw,GitHub:Glm}
+    \item Dear ImGui~\autocite{GitHub:ImGui}
+    \item spdlog~\autocite{GitHub:Spdlog}
+    \item PhysX~\autocite{GitHub:PhysX}
+    \item stb\_image~\autocite{GitHub:Stb}
+    \item ImGuizmo~\autocite{GitHub:ImGuizmo}
+    \item tinygltf~\autocite{GitHub:Tinygltf}
+    \item ImGui-Node-Editor~\autocite{GitHub:ImGuiNodeEditor}
+    \item yaml-cpp~\autocite{GitHub:Yaml-cpp}
+    \item nativefiledialog-extended~\autocite{GitHub:Nativefiledialog}
 \end{itemize}
 
 Zusätzlich zu diesen Technologien, gibt es auch einige Tools und Programme, die für die Entwicklung
@@ -66,11 +66,26 @@ Dabei wurden CLion und YouTrack von JetBrains und Git als Versionskontrolle eing
 
 \textbf{Rendering Techniken} \\
 
-Rendering Techniken:
+Die wichtigsten Rendering Techniken, die in der Applikation verwendet werden, sind Ray Tracing und
+Ray Marching.
+Beim Ray Tracing geht von der Kamera aus bis zu einem Schnittpunkt mit einem Objekt ein Lichtstrahl
+aus und wird dort reflektiert und zur Lichtquelle zurückverfolgt.
+Dies wird für eine große Anzahl an Schnittpunkten durchgeführt, bis schlussendlich das ganze Objekt sichtbar ist.
+Dies wird dann am Bildschirm dargestellt.
+Beim Ray Marching nutzt man auch Lichtstrahlen, die von der Kamera ausgehen, aber man geht hier Schritt für
+Schritt und rechnet nicht sofort den Schnittpunkt mit einem Objekt aus.
+Grundsätzlich ist diese Methode also rechenintensiver, aber sie ermöglicht es, gekrümmte Lichtstrahlen abzubilden.
+Diese gekrümmten Lichtstrahlen sind dafür verantwortlich, dass ein schwarzes Loch aussieht, wie es aussieht.
+Die Lichtstrahlen werden durch die Gravitation abgelenkt und dieser sogenannte Gravitationslinseneffekt
+wird durch das Ray Marching in der Applikation simuliert.
+Da die Rechenleistung eines normalen Computers für das Ray Marching nicht ausreicht, muss man einen Kompromiss eingehen.
+Man verzichtet auf die exakte Darstellung der Objekte und beschäftigt sich nur mit der Simulation von Lichtstrahlen,
+die sehr nahe an einer großen Masse vorbeigehen.
+Dadurch wird gewährleistet, dass die gewünschten optischen Effekte zu sehen sind, jedoch auch nicht zu viel Genauigkeit
+verloren geht, da die Lichtstrahlen in größerer Entfernung nicht mehr wirklich sichtbar abgelenkt werden.
+Für die Software werden also beide Rendering Techniken eingesetzt: Ray Tracing um Lichtstrahlen bis zu einer gewissen
+Entfernung zu schwarzen Löchern zu simulieren und Ray Marching um die Lichtstrahlen in der Nähe von schwarzen Löchern zu berechnen.
 
-Ray Tracing;
-Ray Marching;
-Kombination aus Ray Marching und Ray Tracing;
 Antialiasing (FXAA);
 Bloom Effekt;
 Third-Person-Kamera;
@@ -78,15 +93,46 @@ First-Person-Kamera; \\
 
 \textbf{Physikalische Effekte} \\
 
+Die physikalischen Effekte, die bis zum jetzigen Stand in der Software realisiert worden sind,
+bilden die Grundlage für die Simulation schwarzer Löcher.
+
+Der wichtigste Effekt betrifft den \textit{Gravitationslinseneffekt}, der sich durch die starke
+Raumzeitkrümmung in der Nähe eines schwarzen Loches ergibt.
+Hierbei werden Lichtstrahlen in der Nähe einer großen Masse stärker abgelenkt als in größerer Entfernung.
+Dies entspricht dann einem ähnlichen Effekt wie bei einer herkömmlichen Konvexlinse.
+
+Die Theorie, die vorerst zur Simulation der Gravitation verwendet wird, ist die Gravitationstheorie
+von Isaac Newton.
+Diese Theorie ist schon sehr alt, funktioniert aber immer gut für die Berechnung der Anziehungskräfte
+zwischen Objekten mit geringen Massen.
+$G$ sei die Gravitationskonstante, $M$ und $m$ die Massen zweier Objekte und $\vec{r}$ der Abstand
+zwischen den Zentren der beiden Objekte.
+Die Gravitationskraft $\vec{F}_G$ berechnet sich dann durch~\autocite{Book:Principia_Mathematica}
+
+\begin{equation}
+    \vec{F}_G = \frac{GMm}{\vec{r}^2}.
+    \label{eq:gravitational_force}
+\end{equation}
+
+Für die Visualisierung der Raumzeitkrümmung wird die Schwarzschildmetrik verwendet.
+Diese wird zur Berechnung der Krümmung in der Nähe einer Punktmasse verwendet.
+Es seien die Distanz zwischen zwei Ereignissen $ds$, der Schwarzschildradius $R_S$, die Entfernung
+vom Zentrum der Masse $R$ sowie die Dimensionen der Raumzeit $dt$, $dr$ und $d\Omega$ gegeben.
+Dann beschreibt
+
+\begin{equation}
+    ds^2 = -\Bigg(1 - \frac{R_S}{R}\Bigg)dt^2 + \frac{1}{(1 - \frac{R_S}{R})}dr^2 + d\Omega^2
+    \label{eq:schwarzschild_metric}
+\end{equation}
+
+die Raumzeitkrümmung in der Nähe einer
+Punktmasse~\autocite{Book:Gravitation,Book:General_Relativity,Book:Black_Holes_bc}.
+
 Physikalische Effekte:
 
-Gravitation (Newton);
-Gravitational Lensing;
 Dopplereffekt;
 Gravitative Rotverschiebung;
 Akkretionsscheibe;
-Temperaturverteilung der Akkretionsscheibe;
-Schwarzschild-Metrik;
 ISCO;
 Photonensphäre;
 Schwarzkörperstrahlung;
@@ -107,10 +153,6 @@ Dabei werden einige Bilder zu sehen sein und anhand einiger Zahlen der Umfang be
 
 \textbf{Ergebnisse in visueller Darstellung} \\
 
-Black Hole Rendering:
-
-Die Ergebnisse des Renderings kann man in Abbildung~\ref{fig:black_hole_rendering} betrachten.
-
 \begin{figure}[b]
     \centering
     \begin{subfigure}{0.4\textwidth}
@@ -121,7 +163,7 @@ Die Ergebnisse des Renderings kann man in Abbildung~\ref{fig:black_hole_renderin
     \end{subfigure}
     \begin{subfigure}{0.4\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{img/03_Black_Hole_Rendering_Orange}
+        \includegraphics[width=\linewidth]{img/Export-JI-07}
         \caption{Rendering eines schwarzen Loches mit Akkretionsscheibe und Gravitationslinseneffekt.}
         \label{fig:black_hole_rendering_black}
     \end{subfigure}
@@ -129,7 +171,54 @@ Die Ergebnisse des Renderings kann man in Abbildung~\ref{fig:black_hole_renderin
     \label{fig:black_hole_rendering}
 \end{figure}
 
-Kameraperspektiven:
+Die beiden Rendering-Ergebnisse in Abbildung~\ref{fig:black_hole_rendering} zeigen jeweils ein
+einziges schwarzes Loch.
+Bei dem linken Bild in Abbildung~\ref{fig:black_hole_rendering_white} ist die Akkretionsscheibe als weiß zu
+erkennen.
+Das kommt daher, da dieses Rendering in einem früheren Stadium des Projektes aufgenommen worden ist und
+die Temperaturskalierung nicht den realen Verhältnissen entsprochen hat.
+Im rechten Bild in Abbildung~\ref{fig:black_hole_rendering_black} kann man eine genauere Verteilung der
+Temperatur in der Akkretionsscheibe erkennen, welche sich in Abhängigkeit der Entfernung zum Zentrum
+des schwarzen Loches ändert.
+
+Man nehme an, dass $G$ die Gravitationskonstante, $\sigma$ die Stefan-Boltzmann-Konstante,
+$M$ die Masse des schwarzen Loches, $\dot{M}$ die Akkretionsrate, $R_i$ der innere Radius der Akkretionsscheibe
+und $R$ der aktuelle Radius in der Akkretionsscheibe ist.
+Die Temperaturverteilung $T(R)$ in der Akkretionsscheibe lässt sich dann durch
+
+\begin{equation}
+    T(R) = \Bigg[ \frac{3GM\dot{M}}{8\pi \sigma R^3} \Bigg( 1 - \sqrt{\frac{R_i}{R}}\Bigg) \Bigg]^{\frac{1}{4}}\label
+    {eq:temp_scaling_accretion_disk}
+\end{equation}
+
+beschreiben~\autocite{Article:Temp_Accretion_Disk}.
+
+\begin{figure}[b]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/Export-JI-03}
+        \caption{First-Person-Perspektive}
+        \label{fig:first_person_perspective}
+    \end{subfigure}
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/Export-JI-04}
+        \caption{Third-Person-Perspektive}
+        \label{fig:third_person_perspective}
+    \end{subfigure}
+    \caption{Vergleich der First-Person- und Third-Person-Perspektive.}
+    \label{fig:camera_perspectives}
+\end{figure}
+
+In der Software wurden zwei verschiedene Kameraperspektiven umgesetzt: die First-Person-Perspektive und
+die Third-Person-Perspektive.
+In Abbildung~\ref{fig:camera_perspectives} kann man die beiden im Vergleich betrachten.
+Für die Third-Person-Perspektive kann man ein Objekt auswählen, das man dann steuern kann.
+Dieses Objekt wird mit einem zusätzlichen Würfel, welcher eine Art Crosshair darstellen soll, in der
+Applikation gerendert.
+
+
 
 Dreifachsternsystem:
 
