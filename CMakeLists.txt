@@ -211,6 +211,32 @@ if (WIN32)
     endif()
 endif()
 
+# Copy FFmpeg DLLs to output directory
+if (WIN32 AND FFMPEG_INCLUDE_DIR)
+    # Find DLL directory from lib path
+    get_filename_component(FFMPEG_LIB_DIR "${AVCODEC_LIB}" DIRECTORY)
+    get_filename_component(FFMPEG_ROOT "${FFMPEG_LIB_DIR}" DIRECTORY)
+
+    set(FFMPEG_DLL_DIR "${FFMPEG_ROOT}/bin")
+
+    if(EXISTS "${FFMPEG_DLL_DIR}")
+        file(GLOB FFMPEG_DLLS "${FFMPEG_DLL_DIR}/*.dll")
+
+        foreach(DLL_FILE ${FFMPEG_DLLS})
+            add_custom_command(TARGET MoleHole POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${DLL_FILE}"
+                    "$<TARGET_FILE_DIR:MoleHole>"
+                    COMMENT "Copying ${DLL_FILE}"
+            )
+        endforeach()
+
+        message(STATUS "FFmpeg DLLs will be copied from: ${FFMPEG_DLL_DIR}")
+    else()
+        message(WARNING "FFmpeg DLL directory not found: ${FFMPEG_DLL_DIR}")
+    endif()
+endif()
+
 if (UNIX)
     set(OpenGL_GL_PREFERENCE GLVND)
     find_package(OpenGL REQUIRED)
