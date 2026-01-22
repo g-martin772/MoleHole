@@ -123,7 +123,7 @@ Die Kraft $\vec{F}(r)$ ergibt sich aus
 \end{equation}
 mit einer Konstante $h$, dem Radius $r$ und der Basis $\hat{r}$.
 
-Die Theorie, die vorerst zur Simulation der Gravitation verwendet wird, ist die Gravitationstheorie
+Die Theorie, die vorerst zur Simulation der Gravitation verwendet wird, ist die \textit{Gravitationstheorie}
 von Isaac Newton.
 Diese Theorie ist schon sehr alt, funktioniert aber immer gut für die Berechnung der Anziehungskräfte
 zwischen Objekten mit geringen Massen.
@@ -159,13 +159,28 @@ Punktmasse~\autocite{Book:Gravitation,Book:General_Relativity,Book:Black_Holes_b
 
 \textbf{Forschungsmethoden} \\
 
-Als Forschungsmethode wurde sich auf die Empirie gestützt, um die Applikation zu verbessern.
+Die verwendete Methodik, um Erkenntnisse zu gewinnen, ist die Empirie.
+Sie dient der Verbesserung der Applikation.
 Es wurde ein Problem identifiziert und danach an einer vermeintlichen Lösung gearbeitet.
 Nachdem man eine Lösung auf dem Papier entwickelt hatte, wurde diese in der Applikation implementiert und ausprobiert.
 Durch die Überprüfung der neuen Implementierung konnte eine Entscheidung getroffen werden, ob die Lösung
 zielführend war oder nicht.
+Genau so musste das Projektteam die Performance verbessern.
+Es wurde festgestellt, das die Software die gewünschte Leistung nicht lieferte, also musste sich etwas überlegt werden.
+Deswegen wurde mithilfe einiger Zeichnungen an der Tafel eine mögliche Lösung erarbeitet.
+Diese bezieht sich auf die oben genannte Kombination aus Ray Tracing und Ray Marching.
+Nach der Implementierung dieser Lösung konnte festgestellt werden, dass die Performance
+signifikant verbessert wurde.
 
-Außerdem war die Recherche ein wichtiges Mittel, um an nötige Informationen zu gelangen.
+Ein weiteres Mittel für die Gewinnung wichtiger Erkenntnisse ist die Arbeitsweise mit Sprints wie
+in~\ref{subsubsec:planning} erklärt.
+Sie ermöglicht die Reflexion über die vergangene Arbeit und eine kontinuierliche Verbesserung
+des Projektes.
+Außerdem sind in diesem Format regelmäßige Erweiterungen der Software geplant - sogenannte
+\textit{Product Increments} - die vom agilen Projektmanagement vorgegeben sind und andauernd für
+eine verbesserte Version des Produktes sorgen.
+
+Weiters war die Recherche ein wichtiges Mittel, um an nötige Informationen zu gelangen.
 Hierfür wurden wissenschaftliche Artikel, Bücher und Videos wie zum
 Beispiel~\autocite{Book:General_Relativity,Book:Black_Holes_bc,Video:Coding_Adventure_Clouds}
 verwendet. \\
@@ -209,12 +224,10 @@ Man nehme an, dass $G$ die Gravitationskonstante, $\sigma$ die Stefan-Boltzmann-
 $M$ die Masse des schwarzen Loches, $\dot{M}$ die Akkretionsrate, $R_i$ der innere Radius der Akkretionsscheibe
 und $R$ der aktuelle Radius in der Akkretionsscheibe ist.
 Die Temperaturverteilung $T(R)$ in der Akkretionsscheibe lässt sich dann durch
-
 \begin{equation}
     T(R) = \Bigg[ \frac{3GM\dot{M}}{8\pi \sigma R^3} \Bigg( 1 - \sqrt{\frac{R_i}{R}}\Bigg) \Bigg]^{\frac{1}{4}}\label
     {eq:temp_scaling_accretion_disk}
 \end{equation}
-
 beschreiben~\autocite{Article:Temp_Accretion_Disk}.
 
 \begin{figure}[b]
@@ -263,8 +276,8 @@ Danach werden erneut Ziele für die nächste Iteration überlegt. \\
 
 \subsubsection{Entwicklungspotenzial} \label{subsubsec:potential} \\
 
-Es steckt noch einiges an Potenzial in diesem Projekt und das Team plant nicht, dieses einfach wegzuwerfen und
-nicht zu nutzen.
+Es steckt noch einiges an Potenzial in diesem Projekt und das Team plant eine regelmäßige Erweiterung
+der Software, um diesem Potenzial gerecht zu werden.
 Demnach werden in dieser Sektion alle potenziellen Erweiterungen des Projektes aufgezählt. \\
 
 \textbf{Gesellschaftliche Auswirkungen} \\
@@ -282,25 +295,29 @@ Wissenschaftskommunikation zu verbessern und damit mehr Menschen den Zugang zur 
 \textbf{Kooperationen} \\
 
 Aktuell gibt es bei diesem Projekt keine bestehenden Kooperationen, jedoch würde das Projektteam in Zukunft welche anstreben.
-Allerdings ist das Projekt noch sehr jung und das Team möchte zuerst wissen, wie sich die Ziele und das Produkt entwickeln. \\
+Vor allem in der Zukunft möchte das Projektteam die Applikation weiter verbessern, indem im zukünftigen Studium
+wichtige Erkenntnisse gesammelt werden und mit professionellen Wissenschaftlern zusammengearbeitet wird.
+Zusätzlich wird mit Kooperationen auch die Entwicklung weiterer Forschungsarbeiten angestrebt. \\
 
 \textbf{Releases} \\
 
 Wenn die Entwicklung des Projektes weiterhin große Fortschritte erzielt, ist eine Veröffentlichung des Projektes
 zum Beispiel auf Steam anzuvisieren.
-Aktuell kann man das Projekt zwar schon benutzen, da es ein öffentliches GitHub Repository mit dem Code gibt, aber
-es ist ein wenig technisches Wissen notwendig, um dieses zu verwenden.
+Aktuell kann das Projekt zwar schon benutzt werden, da es ein öffentliches GitHub Repository mit dem Code gibt, aber
+es ist ein wenig technisches Wissen notwendig, um die Applikation zu verwenden.
 Wenn die Applikation auf einer Vertriebsplattform wie Steam veröffentlicht werden kann, würde das den Zugang
 zu der Software erleichtern.
-Vorausschauend ist zu sagen, dass der Plan eines offiziellen Releases besteht, aber noch einige Zeit in der Zukunft liegt.
-Das bedeutet, dass sich das Projektteam derzeit darum kümmert, die notwendigen Features hinzuzufügen, die dem Team noch wichtig sind
-und danach die nötigen Schritte in Richtung eines Releases gehen wird. \\
+Insgesamt kann die Aussage getroffen werden, dass das Projekt in Zukunft offiziell veröffentlicht werden soll, aber
+noch viel Arbeit notwendig ist, um dieses Ziel zu erreichen.
+Hierfür muss vor allem noch eine umfangreiche Dokumentation angefertigt werden und die technischen Potenzial sollten
+möglichst gut ausgeschöpft sein.
+Hinzu kommt die Entfernung aller Fehler und Unannehmlichkeiten aus der Software. \\
 
 \textbf{Technische Potenziale} \\
 
 Das mit Abstand wichtigste physikalische Phänomen, das in der Applikation noch umgesetzt werden muss, ist die
-\textit{Kerr-Metrik}, welche im Jahre 1963 vom neuseeländischen Physiker Roy Kerr als Lösung der Feldgleichungen aus der
-\textit{allgemeinen Relativitätstheorie (ART)} aufgestellt worden ist~\autocite{Book:General_Relativity}.
+Kerr-Metrik, welche im Jahre 1963 vom neuseeländischen Physiker Roy Kerr als Lösung der Feldgleichungen aus der
+ART aufgestellt worden ist~\autocite{Book:General_Relativity}.
 Hierfür wird allerdings Wissen aus der ART benötigt, das sich das Projektteam noch nicht angeeignet hat.
 Deshalb wird es noch einige Zeit dauern, bis dieses Feature verwirklicht werden kann.
 Nichtsdestotrotz beschäftigt sich das Team mit diesem Effekt, da dieser extrem relevant für eine akkurate Darstellung
@@ -339,10 +356,12 @@ komplexe physikalische Konzepte zu verstehen. \\
 
 \textbf{Wirtschaftliches Potenzial} \\
 
-Das Projektteam plant nicht, aus dem Projekt Gewinne auszuschöpfen.
-Dies kommt daher, da Wissenschaft für alle zugänglich sein sollte und man den Zugang zu der Applikation mit einem Kaufpreis
-einschränken würde.
-Jedoch handelt es sich immer noch um eine einzigartige Software, welche theoretisch auch ein Premium-Abonnement erhalten könnte, um
-für wissenschaftliche Zwecke an Hochschulen verwendet werden zu können.
-Dieses würde Features wie zum Beispiel detaillierte Erklärungen zu physikalischen Phänomenen oder extrem rechenintensive Simulationen über einen
-externen Server beinhalten. \\
+Der \textit{Entrepreneurship-Charakter} besteht aus der Möglichkeit, durch das Projekt
+Erfahrungen und Erkenntnisse zu sammeln und diese in zukünftigen Projekten anzuwenden.
+Der wirtschaftliche Nutzen dieses Projektes besteht also indirekt, indem dieses Projekt als
+Chance angesehen wird, um Wissen zu erlangen und dieses in zukünftigen Projekten wirtschaftlich
+erfolgreich anzuwenden.
+Deshalb wird auch genauestens auf ein sorgfältiges Projektmanagement geachtet, um diese Erfahrung
+später professionell nutzen zu können.
+Es ist dem Projektteam wichtig, Wissenschaft für alle kostenlos zugänglich zu machen, weshalb dieses
+Projekt rein dem Erkenntnisgewinn und der Wissenschaftskommunikation dient. \\
