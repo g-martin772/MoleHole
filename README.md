@@ -1,6 +1,6 @@
 # This is the MOLEHOLE Project!
 
-![[docs/home_picture.png]]
+![Rendering of a black hole](docs/home_picture.png)
 
 Welcome to the GitHub page of the MoleHole project!
 This project is all about the simulation of cosmic objects and
