@@ -1,26 +1,25 @@
-# MoleHole
-Black Hole Simulation using OpenGL and RayTracing
+# This is the MOLEHOLE Project!
 
-## Submodule Management 
+![[docs/home_picture.png]]
 
-This project uses git submodules for dependencies.
+Welcome to the GitHub page of the MoleHole project!
+This project is all about the simulation of cosmic objects and
+especially the visualisation of black holes.
+For the rendering of these objects ray tracing and ray marching is used
+in an OpenGL environment developed with C++.
 
-To clone the repository with all submodules:
+## Scientific Accuracy
 
-    git clone --recurse-submodules <repo-url>
+This project mainly aims to develop scientific skills, so scientific accuracy
+is obviously very important to the team.
+The most important theories for this project are the theory of general relativity,
+the doppler effect, blackbody radiation, accretion disks and their temperature as well as
+Newton's theory of gravitation.
+Other theories and effects the project aims to implement in future are tidal forces and 
+particle simulations for the formation of accretion disks.
 
-If you already cloned the repository, initialize and update submodules with:
+## Rendering
 
-    git submodule update --init --recursive
 
-To fetch the latest updates for all submodules:
 
-    git submodule update --remote --recursive
-
-To switch a submodule to a different branch:
-
-    git config -f .gitmodules submodule.dependencies/imgui.branch docking
-    git submodule sync --recursive
-    git submodule update --remote dependencies/imgui
-
-For more information, see the official git submodule documentation: https://git-scm.com/book/en/v2/Git-Tools-Submodules
+## Examples
