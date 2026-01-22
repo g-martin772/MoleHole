@@ -28,10 +28,9 @@ Vorgänge in der Nähe eines schwarzen Loches zu erleben. \\
 
 \textbf{Einzigartigkeit} \\
 
-Es gibt ohnehin wenige Projekte, die als Ziel die Visualisierung schwarzer Löcher verfolgen.
-Man könnte diese an einer Hand abzählen.
-Jedoch ist bei diesen Projekten nie eine Benutzerinteraktion vorgesehen, was die Komplexität der technischen Umsetzung
-nicht schmälert, aber auch keine Endanwendung finden wird.
+Es gibt ohnehin wenig frei zugängliche Projekte, die als Ziel die Visualisierung schwarzer Löcher verfolgen.
+Jedoch ist bei diesen Projekten nie eine Benutzerinteraktion vorgesehen, was der größte Unterschied zu
+diesem Projekt ist.
 Genau in dieser Lücke findet sich das MoleHole Projekt wieder, indem es die Echtzeitsimulation schwarzer Löcher mit einer
 interaktiven Benutzeroberfläche kombiniert. \\
 
@@ -42,27 +41,30 @@ diese Schritt für Schritt beschreiben. \\
 
 \textbf{Technologiestack} \\
 
-Die gesamte Applikation wurde in C++ entwickelt.
+Der Großteil der Applikation wurde in C++ entwickelt.
 Die einzige Programmiersprache, die zusätzlich verwendet wurde, ist GLSL für die Shader-Programmierung.
 Die Programmiersprachen sind also sehr einfach gehalten.
 Im Gegensatz dazu werden einige Bibliotheken verwendet, um nicht alles selbst entwickeln zu müssen.
 Alle verwendeten Bibliotheken sind:
 \begin{itemize}
-    \item OpenGL Libraries: GLAD, GLFW, GLM~\autocite{GitHub:Glad,GitHub:Glfw,GitHub:Glm}
-    \item Dear ImGui~\autocite{GitHub:ImGui}
-    \item spdlog~\autocite{GitHub:Spdlog}
-    \item PhysX~\autocite{GitHub:PhysX}
-    \item stb\_image~\autocite{GitHub:Stb}
-    \item ImGuizmo~\autocite{GitHub:ImGuizmo}
-    \item tinygltf~\autocite{GitHub:Tinygltf}
-    \item ImGui-Node-Editor~\autocite{GitHub:ImGuiNodeEditor}
-    \item yaml-cpp~\autocite{GitHub:Yaml-cpp}
-    \item nativefiledialog-extended~\autocite{GitHub:Nativefiledialog}
+    \item   \textbf{OpenGL Libraries:} GLAD, GLFW und GLM für Parameter in GLSL und andere
+            Utilities~\autocite{GitHub:Glad,GitHub:Glfw,GitHub:Glm}
+    \item   \textbf{Dear ImGui:} Standardisierte Library für das \textit{User Interface}~\autocite{GitHub:ImGui}
+    \item   \textbf{Spdlog:} Library für das Logging~\autocite{GitHub:Spdlog}
+    \item   \textbf{PhysX:} Physiksimulationen verschiedenster Art~\autocite{GitHub:PhysX}
+    \item   \textbf{Stb\_image:} Verarbeiten von Bildern~\autocite{GitHub:Stb}
+    \item   \textbf{ImGuizmo:} Utility-Library für die Selektion von Objekten~\autocite{GitHub:ImGuizmo}
+    \item   \textbf{Tinygltf:} Für das \textit{File-Processing} von .gltf-Dateien~\autocite{GitHub:Tinygltf}
+    \item   \textbf{ImGui-Node-Editor:} Framework für einen \textit{Node Editor}~\autocite{GitHub:ImGuiNodeEditor}
+    \item   \textbf{Yaml-cpp:} Verarbeitung von .yaml-Dateien~\autocite{GitHub:Yaml-cpp}
+    \item   \textbf{Nativefiledialog-extended:} \textit{File-Dialogs} für den Export von Videos 
+            und Bildern~\autocite{GitHub:Nativefiledialog}
 \end{itemize}
 
 Zusätzlich zu diesen Technologien, gibt es auch einige Tools und Programme, die für die Entwicklung
 verwendet wurden.
-Dabei wurden CLion und YouTrack von JetBrains und Git als Versionskontrolle eingesetzt. \\
+Dabei wurden CLion und YouTrack von JetBrains~\autocite{Website:CLion,Website:YouTrack} und
+Git~\autocite{Website:Git} als \textit{Versionskontrolle} eingesetzt. \\
 
 \textbf{Rendering Techniken} \\
 
@@ -75,7 +77,8 @@ Dies wird dann am Bildschirm dargestellt.
 Beim Ray Marching nutzt man auch Lichtstrahlen, die von der Kamera ausgehen, aber man geht hier Schritt für
 Schritt und rechnet nicht sofort den Schnittpunkt mit einem Objekt aus.
 Grundsätzlich ist diese Methode also rechenintensiver, aber sie ermöglicht es, gekrümmte Lichtstrahlen abzubilden.
-Diese gekrümmten Lichtstrahlen sind dafür verantwortlich, dass ein schwarzes Loch aussieht, wie es aussieht.
+Diese gekrümmten Lichtstrahlen sind dafür verantwortlich, dass in der Nähe eines schwarzen Loches komplexe
+visuelle Effekte auftreten.
 Die Lichtstrahlen werden durch die Gravitation abgelenkt und dieser sogenannte Gravitationslinseneffekt
 wird durch das Ray Marching in der Applikation simuliert.
 Da die Rechenleistung eines normalen Computers für das Ray Marching nicht ausreicht, muss man einen Kompromiss eingehen.
@@ -97,10 +100,28 @@ Löchern zu berechnen. \\
 Die physikalischen Effekte, die bis zum jetzigen Stand in der Software realisiert worden sind,
 bilden die Grundlage für die Simulation schwarzer Löcher.
 
-Der wichtigste Effekt betrifft den \textit{Gravitationslinseneffekt}, der sich durch die starke
+Der wichtigste Effekt betrifft den Gravitationslinseneffekt, der sich durch die starke
 Raumzeitkrümmung in der Nähe eines schwarzen Loches ergibt.
 Hierbei werden Lichtstrahlen in der Nähe einer großen Masse stärker abgelenkt als in größerer Entfernung.
-Dies entspricht dann einem ähnlichen Effekt wie bei einer herkömmlichen Konvexlinse.
+Dies entspricht dann einem ähnlichen Effekt wie bei einer herkömmlichen \textit{Konvexlinse}.
+Um diesen Effekt visuell darzustellen, ist es nötig die \textit{Nullgeodätische} auszurechnen, welche den
+Weg des Lichts um ein schwarzes Loch angibt~\autocite{Book:General_Relativity}.
+Man nehme an, dass $x(\lambda)$ den Weg eines Objektes durch Raum und Zeit und $\Gamma$ das
+\textit{Christoffel-Symbol} angibt.
+Damit ergibt sich nach Lösung von
+\begin{equation}
+    \frac{d^2 x^{\rho}}{d\lambda^2} + \Gamma^{\rho}_{\mu \nu} \frac{d x^{\mu}}{d\lambda} \frac{d x^{\nu}}{d\lambda} = 0
+    \label{eq:geodesic_equation}
+\end{equation}
+genau dieser Weg~\autocite{Book:Gravitation,Book:General_Relativity}.
+Für diese Lösung gibt es in der \textit{Schwarzschild-Metrik} eine vereinfachte Form, die in der Applikation
+tatsächlich verwendet wird.
+Die Kraft $\vec{F}(r)$ ergibt sich aus
+\begin{equation}
+    \vec{F}(r) = \frac{3h^2\hat{r}}{2r^5}
+    \label{eq:schwarzschild_acceleration}
+\end{equation}
+mit einer Konstante $h$, dem Radius $r$ und der Basis $\hat{r}$.
 
 Die Theorie, die vorerst zur Simulation der Gravitation verwendet wird, ist die Gravitationstheorie
 von Isaac Newton.
@@ -109,23 +130,20 @@ zwischen Objekten mit geringen Massen.
 $G$ sei die Gravitationskonstante, $M$ und $m$ die Massen zweier Objekte und $\vec{r}$ der Abstand
 zwischen den Zentren der beiden Objekte.
 Die Gravitationskraft $\vec{F}_G$ berechnet sich dann durch~\autocite{Book:Principia_Mathematica}
-
 \begin{equation}
     \vec{F}_G = \frac{GMm}{\vec{r}^2}.
     \label{eq:gravitational_force}
 \end{equation}
 
-Für die Visualisierung der Raumzeitkrümmung wird die Schwarzschildmetrik verwendet.
+Für die Visualisierung der Raumzeitkrümmung wird die Schwarzschild-Metrik verwendet.
 Diese wird zur Berechnung der Krümmung in der Nähe einer Punktmasse verwendet.
 Es seien die Distanz zwischen zwei Ereignissen $ds$, der Schwarzschildradius $R_S$, die Entfernung
 vom Zentrum der Masse $R$ sowie die Dimensionen der Raumzeit $dt$, $dr$ und $d\Omega$ gegeben.
 Dann beschreibt
-
 \begin{equation}
-    ds^2 = -\Bigg(1 - \frac{R_S}{R}\Bigg)dt^2 + \frac{1}{(1 - \frac{R_S}{R})}dr^2 + d\Omega^2
+    ds^2 = -\Bigg(1 - \frac{R_S}{R}\Bigg)dt^2 + \frac{1}{\Big(1 - \frac{R_S}{R}\Big)}dr^2 + r^2 d\Omega^2
     \label{eq:schwarzschild_metric}
 \end{equation}
-
 die Raumzeitkrümmung in der Nähe einer
 Punktmasse~\autocite{Book:Gravitation,Book:General_Relativity,Book:Black_Holes_bc}. \\
 

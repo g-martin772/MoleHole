@@ -13,12 +13,19 @@ Planung auseinandersetzen. \\
     \label{fig:original_notes_project_goals}
 \end{figure}
 
+\subsubsection{Projektentstehung} \label{subsubsec:project_origin} \\
+
+In dieser Sektion werden die Projektidee und das allgemeine Ziel des Projektes behandelt.
+Dabei wird auf die äußeren Umstände sowie die eigenen Ideen eingegangen. \\
+
 \textbf{Projektidee} \\
 
-Die Projektidee entstammt einem spontanen Einfall.
+Im Unterrichtsgegenstand \textit{Informationstechnische-Projekte-Labor (ITPL)} an der
+HTL Krems~\autocite{Website:HTL_Krems} hatte das Projektteam die Aufgabe,
+ein Projekt nach dessen eigenen Vorstellungen zu planen und durchzuführen.
 Die beiden Mitglieder des Projektteams waren frustriert mit dem Verlauf deren früherer Projekte
 und wollten etwas Neuartiges entwickeln.
-Daraus entsprang die Idee, schwarze Löcher virtuell darzustellen und in Echtzeit zu simulieren.
+Daraus entsprang die Idee, schwarze Löcher virtuell und visuell darzustellen und in Echtzeit zu simulieren.
 Im Zuge der Einigung auf ein Gesamtziel versuchte das Projektteam, diese Vorstellung in einzelne
 Teile zu gliedern.
 In Abbildung~\ref{fig:original_notes_project_goals} sind die originalen Notizen des Projektteams zu
@@ -28,24 +35,26 @@ möchte.
 Im Zuge der besseren Lesbarkeit und genaueren Dokumentation werden diese sogenannten funktionalen
 Anforderungen nochmals in höherer Genauigkeit aufgelistet:
 \begin{itemize}
-    \item   \textbf{Basis mit Dear ImGui:} Als Basis wird eine C++ Applikation aufgesetzt, welche die
-            Library Dear ImGui nutzt, um dem Endnutzer die Möglichkeit zu bieten, verschiedenste Parameter
-            einzustellen, als auch sich im drei dimensionalen Raum zu bewegen.
+    \item   \textbf{Basis mit Dear ImGui:} Als Basis wird eine \textit{C++ Applikation} aufgesetzt, welche die
+            \textit{Library} Dear ImGui nutzt~\autocite{GitHub:ImGui}, um dem Endnutzer die Möglichkeit zu bieten,
+            verschiedenste \textit{Parameter} einzustellen, als auch sich im drei dimensionalen Raum zu bewegen.
     \item   \textbf{Visualisierung:} Zum besseren Verständnis schwarzer Löcher trägt vor allem die Visualisierung
             bei.
-            Deshalb sollen der Ereignishorizont, die Photonensphäre, die Akkretionsscheibe und die
+            Deshalb sollen der \textit{Ereignishorizont}, die \textit{Photonensphäre}, die Akkretionsscheibe und die
             Raumzeitkrümmung dargestellt werden.
             Zudem sollen auch noch verschiedenste Parameter eines schwarzen Loches angepasst werden können.
-            Das sind die Masse $m$, Position $x^i$, Geschwindigkeit $v^i$ sowie der Spin-Parameter $a$.
-            Diese Punkte sollen mithilfe des Shader-Frameworks OpenGL erfüllt werden.
+            Das sind die Masse $m$, Position $x^i$, Geschwindigkeit $v^i$ sowie der \textit{Spin-Parameter} $a$.
+            Diese Punkte sollen mithilfe des \textit{Shader-Frameworks OpenGL} erfüllt werden.
     \item   \textbf{Simulation:} Um über die reine Darstellung hinaus auch die unvorstellbaren Kräfte
             schwarzer Löcher zu erkennen, soll es auch die Möglichkeit geben, eine Simulation zu konfigurieren
             und danach anzusehen.
-            Dabei soll es möglich sein, andere Objekte wie z.B.\ Sterne, Planeten und Raumschiffe einzufügen und
-            mit dem schwarzen Loch interagieren zu lassen.
+            In dieser soll es möglich sein, Phänomene wie die Anziehungskräfte zwischen verschiedenen Objekten
+            zu erfahren.
+            Außerdem wird die Möglichkeit, andere Objekte wie z.B.\ Sterne, Planeten und Raumschiffe einzufügen und
+            mit dem schwarzen Loch interagieren zu lassen, einen Teil der Implementierung ausmachen.
     \item   \textbf{Physikalische Korrektheit:} Damit ein Endnutzer auch lernen kann, wie schwarze Löcher in der
             realen Welt funktionieren, sollen möglichst genaue Theorien über schwarze Löcher angewendet werden.
-            Zu diesen gehören z.B.\ die Kerr Metrik zur Berechnung der Raumzeitkrümmung in der Nähe rotierender
+            Zu diesen gehören z.B.\ die \textit{Kerr-Metrik} zur Berechnung der Raumzeitkrümmung in der Nähe rotierender
             schwarzer Löcher oder der Dopplereffekt zur Veränderung des ausgesandten Lichts.
 \end{itemize} \\
 
@@ -73,32 +82,77 @@ Weise Wissenschaft zu erfahren.
 In diesem Projekt werden bei Erfüllung der Projektziele große Teile der Errungenschaften der Astronomie und
 Kosmologie der letzten 150 Jahre umgesetzt und versucht, dem Endnutzer möglichst verständlich zu präsentieren. \\
 
+\subsubsection{Recherche und Planung} \label{subsubsec:planning} \\
+
+In dieser Sektion wird die Recherche und Planung des Projektes beschrieben.
+Es wird dafür auf die verschiedenen Quellen eingegangen sowie die Art der Planung erklärt. \\
+
 \textbf{Informationsgewinn} \\
 
 Die Quellen für die Recherche und den Informationsgewinn sind so zahlreich, dass sie nicht in einer Liste aufgeführt
 werden können, ohne den Rahmen dieses Dokumentes zu sprengen oder die Lesbarkeit zu beeinträchtigen.
 Deshalb werden hier nur einige Beispiele aufgeführt werden.
 Als wichtigste Ressourcen zählen einige Projekte, die als Inspiration für die Arbeit dienen.
-Sie sind in~\autocite{Project:Black_Hole_Sim_eliot, Project:Black_Hole_Sim_rossning, Project:Black_Hole_Sim_hdeu,
-    Project:Black_Hole_Sim_Kamminga, Reddit:Black_Hole_Sim_Burgao} zu sehen.
-Viele dieser Projekte können auf GitHub betrachtet werden, während auch auf Reddit einiges zu finden war.
-Auch Bücher waren eine ordentliche Hilfestellung bei der Implementierung, wie~\autocite{Book:General_Relativity,
-    Book:Black_Holes_bc} \\
+Vor allem die Programmierung dieser Projekte war von großer Relevanz, da sie bei der Implementierung
+verschiedener Effekte helfen.
+Die Ressourcen sind:
+\begin{itemize}
+    \item   \textbf{Black Hole Raytracer - Ross Ning}: Dieses Projekt hat anfänglich als hauptsächliche Quelle für die Programmierung
+            der Visualisierung schwarzer Löcher gedient.
+            Es ist eine gute Simulation, auch wenn die Physik nicht perfekt umgesetzt
+            ist~\autocite{Project:Black_Hole_Sim_rossning}.
+    \item   \textbf{Black Hole Raytracer - Hydrogendeuteride}: In diesem Projekt sind vor allem der Dopplereffekt und die
+            \textit{Schwarzkörperstrahlung} genau umgesetzt worden~\autocite{Project:Black_Hole_Sim_hdeu}.
+    \item   \textbf{Thomas Kamminga}: Dieses Projekt ist vor allem aufgrund der korrekten physikalischen
+            Implementierung eine gute Hilfe~\autocite{Project:Black_Hole_Sim_Kamminga}.
+    \item   \textbf{Black Hole Raytracer - Eliot Han}: Die Dokumentation dieser Ressource war eine Hilfestellung, indem
+            auf einer verlinkten Website die Lösung für die Implementierung des Gravitationslinseneffektes
+            gut erklärt ist~\autocite{Project:Black_Hole_Sim_eliot,Website:Eliot_Han}.
+    \item   \textbf{Andere}: Außerdem gibt es auch noch einige andere Projekte oder Beiträge, die von der
+            Visualisierung schwarzer Löcher handeln, sie sind
+            in~\autocite{Project:Black_Hole_Sim_20k,Project:Black_Hole_Sim_bhusie,Project:Black_Hole_Sim_starless,
+            Reddit:Black_Hole_Sim_Burgao,Project:Black_Hole_Sim_sirxemic,Website:Starless} aufgezählt.
+\end{itemize}
+Viele dieser Projekte können auf GitHub betrachtet werden, während auch auf Reddit etwas zu finden war.
+Auch Bücher waren eine ordentliche Hilfestellung bei der Implementierung.
+Diese sind:
+\begin{itemize}
+    \item   \textbf{Spacetime and Geometry: An Introduction to General Relativity}: Dieses Buch ist 
+            eine umfangreiche Einführung in die \textit{Allgemeine Relativitätstheorie (ART)} und erklärt
+            die dafür notwendigen mathematischen Grundlagen~\autocite{Book:General_Relativity}.
+    \item   \textbf{Schwarze Löcher: Der Schlüssel zum Verständnis des Universums}: In diesem Buch werden
+            in populärwissenschaftlicher Weise bestimmte Phänomene und Theorien rund um schwarze Löcher
+            erklärt~\autocite{Book:Black_Holes_bc}.
+    \item   \textbf{Andere}: Es gibt natürlich auch noch viele andere Bücher zu dieser Thematik, allerdings
+            wurden viele nicht für das Projekt verwendet oder es wurde nur wenig Wissen entnommen, wie
+            aus~\autocite{Book:Gravitation,Book:Science_of_Interstellar}.
+\end{itemize}
+Insgesamt ist die Recherche für ein Projekt dieser Komplexität äußerst wichtig und dementsprechend viele
+verschiedene Quellen wurden hierfür herangezogen.
+Neben den oben genannten wichtigsten Ressourcen wurden auch einige wissenschaftliche Artikel, Dissertationen,
+Videos und Webinhalte genutzt, um an das notwendige Wissen zu gelangen. \\
 
 \textbf{Planung des Projektablaufes} \\
 
-Die Planung des Projektes erfolgt agil und es wurden dementsprechend keine Meilensteine vordefiniert.
+Die Planung des Projektes erfolgt agil, was nicht bedeutet, dass auf eine Planung im Vorfeld verzichtet
+wurde.
+Vielmehr wurde sich am Anfang die Zeit genommen, um die groben Ziele aufzustellen -
+siehe~\ref{subsubsec:project_origin} - und Rahmenbedingen zu schaffen sowie das
+Aufsetzen eines \textit{GitHub Repositories} und der \textit{Projektmanagementsoftware}
+YouTrack~\autocite{Project:Black_Hole_Sim_MoleHole,Website:YouTrack}.
+Darüber hinaus werden kleinere Aufgaben für jede Iteration eines sogenannten
+\textit{Sprints}~\autocite{Website:Scrum} eingeteilt.
 Die untergeordneten Projektziele werden im Laufe des Projektes angepasst und hinzugefügt oder gelöscht.
-Es wird eine Mischung der agilen Projektplanungsframeworks Scrum~\autocite{Wikipedia:Scrum} und Kanban~\autocite{
-    Wikipedia:Kanban} - Scrumban~\autocite{Wikipedia:Scrumban} - ausgeführt.
+Es wird eine Mischung der agilen Projektplanungsframeworks \textit{Scrum}~\autocite{Wikipedia:Scrum} und
+\textit{Kanban}~\autocite{Wikipedia:Kanban} - \textit{Scrumban}~\autocite{Wikipedia:Scrumban} - ausgeführt.
 Dies wird insofern eingehalten, als das Rollen für die Mitglieder des Projektteams festgelegt wurden,
 wöchentliche Meetings abgehalten werden, alle drei Wochen ein Product Increment erfolgt und alles über ein
 Kanban-Board verwaltet wird.
-Zudem werden mittels einer Knowledge Base alle Meetings dokumentiert und andere wichtige Informationen
+Zudem werden mittels einer \textit{Knowledge Base} alle Meetings dokumentiert und andere wichtige Informationen
 festgehalten.
-Diese Art, ein Projekt zu planen und führen, ermöglicht eine flexible Arbeitsweise und macht besonders im Falle dieses
-Projektes Sinn, da am Anfang den Mitgliedern des Projektteams nicht klar, wohin die Reise gehen soll.
-Eigentlich war die Idee hinter dem Projekt eine Abwechslung in Bezug auf die restlichen Unterrichtsfächer an
-der HTL Krems~\autocite{Website:HTL_Krems}.
+Diese Art, ein Projekt zu planen und führen, ermöglicht eine flexible Arbeitsweise und macht besonders
+im Falle dieses Projektes Sinn.
+Dies kommt daher, dass die beiden Richtungen der Programmierung und der Physik miteinander kombiniert werden
+müssen und dies einen ständigen Paradigmenwechsel sowie eine Überarbeitung alter Konzepte erfordert.
 Da alle Beteiligten des Projektes großes Engagement zeigen, wird auch außerhalb des Unterrichts gearbeitet und
 versucht, die aktuellen Ziele zu erfüllen. \\

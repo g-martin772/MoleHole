@@ -5,7 +5,7 @@
 	titlepage=true,
 ]{article}
 
-\include{packages}
+\input{packages}
 
 \addbibresource{references.bib}
 
@@ -36,7 +36,8 @@
 		Dieses Projekt beschäftigt sich mit der Visualisierung und Simulation von schwarzen Löchern.
 		Dafür soll Rücksicht auf verschiedenste physikalische Effekte wie den Gravitationslinseneffekt
 		oder die Schwarzschildmetrik genommen werden.
-		Das Ergebnis ist eine Applikation, die von jedem, der einen PC besitzt, genutzt werden kann.
+		Weiters werden für die Darstellung dieser Erscheinungen Technologien wie OpenGL und in Spezialisierung
+		Ray Tracing und Ray Marching verwendet.
 	\end{abstract}
 
 	\tableofcontents
@@ -77,6 +78,17 @@
 	% #########################################################################################
 
 	\newpage
-	\printbibliography[heading=bibintoc]
+	\section{Literaturverzeichnis} \label{sec:literaturverzeichnis}
+	\printbibliography[heading=none, title={Literaturverzeichnis}]
+
+	\newpage
+	\section{Abbildungsverzeichnis} \label{sec:abbildungsverzeichnis}
+	%! suppress = Makeatletter
+	\makeatletter
+	\renewcommand\listoffigures{%
+		\@starttoc{lof}%
+	}
+	\makeatother
+	\listoffigures
 
 \end{document}

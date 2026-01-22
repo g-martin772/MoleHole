@@ -1,16 +1,20 @@
-﻿
+﻿% Setup TOC
+\renewcommand{\contentsname}{Inhaltsverzeichnis}
 
 % Setup Bibliography
 \usepackage[
     backend=biber,
-    citestyle=numeric,
+    citestyle=numeric-comp,
     bibstyle=numeric,
     sorting=none
 ]{biblatex}
+\setlength{\bibitemsep}{0.5em}
 
 % Setup Images
+\usepackage{tocloft}
 \usepackage{graphicx}
 \usepackage{subcaption}
+\renewcommand{\figurename}{Abbildung}
 
 % Setup Page Styling
 \usepackage[
