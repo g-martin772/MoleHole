@@ -542,6 +542,14 @@ parameters:
     defaultValue: true
     showInUI: true
 
+  - name: "App.BackgroundImage"
+    displayName: "Background Image"
+    tooltip: "Select a background image for the scene"
+    type: string
+    group: Application
+    defaultValue: "space.hdr"
+    showInUI: true
+
   # UI Parameters
   - name: "UI.FontSize"
     displayName: "Font Size"

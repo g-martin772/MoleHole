@@ -31,6 +31,8 @@ public:
     // Export mode control
     void SetExportMode(bool isExporting) { m_isExportMode = isExporting; }
     bool IsExportMode() const { return m_isExportMode; }
+
+    void LoadSkybox();
     
 private:
     void CreateComputeTexture();
@@ -38,7 +40,6 @@ private:
     void ApplyBloom();
     void ApplyLensFlare();
     void CreateFullscreenQuad();
-    void LoadSkybox();
     void GenerateBlackbodyLUT();
     void GenerateAccelerationLUT();
     void GenerateHRDiagramLUT();

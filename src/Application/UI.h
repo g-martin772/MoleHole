@@ -43,7 +43,8 @@ public:
     
     void ReloadFonts();
     std::vector<std::string> GetAvailableFonts() const;
-    
+    std::vector<std::string> GetAvailableBackgrounds() const;
+
     // Screenshot state
     bool IsTakingScreenshot() const { return m_takingScreenshot; }
     void SetTakingScreenshot(bool taking) { m_takingScreenshot = taking; }

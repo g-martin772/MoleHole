@@ -71,8 +71,8 @@ void BlackHoleRenderer::Init(int width, int height) {
 }
 
 void BlackHoleRenderer::LoadSkybox() {
-    const std::string defaultPath = "../assets/space.hdr";
-    m_skyboxTexture = std::unique_ptr<Image>(Image::LoadHDR(defaultPath));
+    const std::string path = Application::Params().Get(Params::AppBackgroundImage, std::string("space.hdr"));
+    m_skyboxTexture = std::unique_ptr<Image>(Image::LoadHDR("../assets/backgrounds/" + path));
 }
 
 void BlackHoleRenderer::GenerateBlackbodyLUT() {

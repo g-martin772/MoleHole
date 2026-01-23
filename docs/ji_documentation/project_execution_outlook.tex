@@ -124,7 +124,7 @@ Die Kraft $\vec{F}(r)$ ergibt sich aus
     \vec{F}(r) = \frac{3h^2\hat{r}}{2r^5}
     \label{eq:schwarzschild_acceleration}
 \end{equation}
-mit einer Konstante $h$, dem Radius $r$ und der Basis $\hat{r}$.
+mit einer Konstante $h$, dem Radius $r$ und der Basis $\hat{r}$~\autocite{Website:Starless,Website:Eliot_Han}.
 
 Die Theorie, die vorerst zur Simulation der Gravitation verwendet wird, ist die \textit{Gravitationstheorie}
 von Isaac Newton.
@@ -148,7 +148,19 @@ Dann beschreibt
     \label{eq:schwarzschild_metric}
 \end{equation}
 die Raumzeitkrümmung in der Nähe einer
-Punktmasse~\autocite{Book:Gravitation,Book:General_Relativity,Book:Black_Holes_bc}. \\
+Punktmasse~\autocite{Book:Gravitation,Book:General_Relativity,Book:Black_Holes_bc}.
+
+Ein weiterer wichtiger Effekt ist die richtige Temperaturskalierung in der Akkretionsscheibe und die damit verbundene
+Lichtemission, die vom menschlichen Auge oder einem Bildsensor als Farbe erkannt wird.
+Man nehme an, dass $G$ die Gravitationskonstante, $\sigma$ die Stefan-Boltzmann-Konstante,
+$M$ die Masse des schwarzen Loches, $\dot{M}$ die Akkretionsrate, $R_i$ der innere Radius der Akkretionsscheibe
+und $R$ der aktuelle Radius in der Akkretionsscheibe ist.
+Die Temperaturverteilung $T(R)$ in der Akkretionsscheibe lässt sich dann durch
+\begin{equation}
+    T(R) = \Bigg[ \frac{3GM\dot{M}}{8\pi \sigma R^3} \Bigg( 1 - \sqrt{\frac{R_i}{R}}\Bigg) \Bigg]^{\frac{1}{4}}\label
+    {eq:temp_scaling_accretion_disk}
+\end{equation}
+beschreiben~\autocite{Article:Temp_Accretion_Disk}. \\
 
 %Physikalische Effekte:
 
@@ -193,23 +205,82 @@ verwendet. \\
 Diese Sektion beschäftigt sich mit dem Fortschritt, der bis heute erreicht werden konnte.
 Dabei werden einige Bilder zu sehen sein und anhand einiger Zahlen der Umfang beschrieben. \\
 
+\FloatBarrier
+\begin{figure}[!bth]
+    \centering
+    \includegraphics[width=0.9\textwidth]{img/Export-JI-10}
+    \caption{Beispiel des User-Interfaces der Applikation.}
+    \label{fig:user_interface}
+\end{figure}
+
 \textbf{Ergebnisse in visueller Darstellung} \\
 
-\begin{figure}[b]
+Die folgende Liste wird die Bereiche des User-Interfaces (UIs) der Applikation erklären und
+minimal auf die Funktionsweise der Unterpunkte eingehen.
+In Abbildung~\ref{fig:user_interface} ist ein Beispiel des UIs abgebildet.
+Die nummerierten Bereiche werden nachstehend erläutert:
+\begin{itemize}
+    \item   \textbf{1 - Objekte:} In diesem Bereich des Menüs ist es möglich, Objekte hinzuzufügen, zu löschen
+            und zu bearbeiten.
+            Es können drei verschiedene Arten an Objekten verwendet werden: schwarze Löcher, Sterne~\&~Planeten
+            sowie verschiedene 3D-Modelle aus .gltf-Dateien.
+            In dieser Szene wurde beispielhaft ein schwarzes Loch hinzugefügt.
+            Es ist zu erkennen, dass für ein schwarzes Loch die Parameter Masse $m$, Spin $a$, Position $x^i$ sowie
+            die Drehachse $a^i$ anpassbar sind.
+    \item   \textbf{2 - Visualisierungen:} Dieses Fenster ermöglicht die Anpassung verschiedenster Effekt, die im
+            Prozess des Renderings verwendet werden.
+            Dazu zählen die Aktivierung des Gravitationslinseneffektes, der gravitativen Rotverschiebung, des
+            Volumetric Cloud Renderings sowie des Dopplereffektes.
+            Weiters lassen sich die Höhe der Akkretionsscheibe, die Skalierung der \textit{Noise-Funktion}, die für
+            die Darstellung der Akkretionsscheibe genutzt wird, die Details in der Scheibe, als auch die Geschwindigkeit
+            $\omega$ mit der sich die Scheibe dreht, einstellen.
+            Weiters gibt es die Möglichkeit, den \textit{Bloom-Effekt} zu aktivieren und einige Einstellungen dafür, die
+            man verändern kann.
+            Zusätzlich ist es auch möglich, das \textit{Anti-Aliasing} einzuschalten, welches für eine verbesserte
+            Qualität des Bildes der Szene sorgt.
+            Die Einstellungen, die in diesem Menü aber die größten Möglichkeiten bieten, sind die verschiedenen
+            \textit{Debug-Layer}, die angezeigt werden können.
+            Es gibt hier die Auswahl zwischen den \textit{Object Paths}, welche die Pfade der Objekte während einer
+            Simulation anzeigen und dem \textit{Gravity Grid}, welches die Raumzeitkrümmung in einem dreidimensionalen
+            Gitternetz darstellt.
+            Diese Debug-Layer sind in Abbildung~\ref{fig:debug_layers} zu sehen.
+    \item   \textbf{3 - Kamera:}
+            Der Bereich für die Konfiguration der Kamera ist hier zu finden.
+            Die meisten Einstellungen in diesem Menüpunkt werden meistens nicht gebraucht, da
+            sich auch mit den Tasten W, A, S, D, Q und E fortbewegt werden kann.
+            Allerdings können Fortbewegungsgeschwindigkeit und das Sichtfeld angepasst werden.
+            Zudem sind hier auch die Einstellungen für die Perspektiven zu finden.
+            Wenn die \textit{Third-Person-Perspektive} aktiviert wird, ist es möglich ein 3D-Modell als
+            Kamera-Objekt auszuwählen und dieses durch eine Szene zu bewegen.
+            In Abbildung~\ref{fig:third_person_perspective} kann dies angesehen werden.
+    \item   \textbf{4 - Simulation:} Diese beiden Icons bieten die Möglichkeit, eine Simulation
+            zu starten, zu pausieren oder zu stoppen.
+            Wenn die Simulation gestartet wird, werden auch alle Objekte in den Ursprungszustand zurückgesetzt.
+    \item   \textbf{5 - Seitenleiste:} Die Seitenleiste soll dem Benutzer eine bessere Übersicht geben und
+            Funktion bereitstellen, die Menüs ein- und auszublenden.
+            Weiters sind hier auch die Einstellungen untergebracht, die für das Setzen eines standardmäßigen
+            Export-Pfades und das Anpassen der Schriftgröße und Schriftart eine Möglichkeit bieten.
+    \item   \textbf{6 - Szene:} Dies ist der Bereich, in dem die hauptsächliche Simulation und Visualisierung
+            eingebettet ist und somit das Kernstück der Software ist.
+            Hier kann man alle Einstellungen als finales Bild ansehen und eine Simulation beobachten.
+\end{itemize}
+
+\FloatBarrier
+\begin{figure}[!bth]
     \centering
-    \begin{subfigure}{0.4\textwidth}
+    \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{img/02_Black_Hole_Rendering_White}
-        \caption{Rendering eines schwarzen Loches mit Akkretionsscheibe und Gravitationslinseneffekt.}
+        \includegraphics[width=\linewidth]{img/Export-JI-12}
+        \caption{Rendering eines schwarzen Loches mit weißer Akkretionsscheibe}
         \label{fig:black_hole_rendering_white}
     \end{subfigure}
-    \begin{subfigure}{0.4\textwidth}
+    \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{img/Export-JI-07}
-        \caption{Rendering eines schwarzen Loches mit Akkretionsscheibe und Gravitationslinseneffekt.}
+        \includegraphics[width=\linewidth]{img/Export-JI-13}
+        \caption{Rendering eines schwarzen Loches mit Akkretionsscheibe und realistischer Lichtemission.}
         \label{fig:black_hole_rendering_black}
     \end{subfigure}
-    \caption{Rendering eines schwarzen Loches mit Akkretionsscheibe und Gravitationslinseneffekt.}
+    \caption{Rendering schwarzer Löcher mit Akkretionsscheibe und Gravitationslinseneffekt.}
     \label{fig:black_hole_rendering}
 \end{figure}
 
@@ -222,18 +293,11 @@ die Temperaturskalierung nicht den realen Verhältnissen entsprochen hat.
 Im rechten Bild in Abbildung~\ref{fig:black_hole_rendering_black} kann man eine genauere Verteilung der
 Temperatur in der Akkretionsscheibe erkennen, welche sich in Abhängigkeit der Entfernung zum Zentrum
 des schwarzen Loches ändert.
+Diese Temperaturverteilung wird in der Gleichung~\ref{eq:temp_scaling_accretion_disk}
+mathematisch beschrieben.
 
-Man nehme an, dass $G$ die Gravitationskonstante, $\sigma$ die Stefan-Boltzmann-Konstante,
-$M$ die Masse des schwarzen Loches, $\dot{M}$ die Akkretionsrate, $R_i$ der innere Radius der Akkretionsscheibe
-und $R$ der aktuelle Radius in der Akkretionsscheibe ist.
-Die Temperaturverteilung $T(R)$ in der Akkretionsscheibe lässt sich dann durch
-\begin{equation}
-    T(R) = \Bigg[ \frac{3GM\dot{M}}{8\pi \sigma R^3} \Bigg( 1 - \sqrt{\frac{R_i}{R}}\Bigg) \Bigg]^{\frac{1}{4}}\label
-    {eq:temp_scaling_accretion_disk}
-\end{equation}
-beschreiben~\autocite{Article:Temp_Accretion_Disk}.
-
-\begin{figure}[b]
+\FloatBarrier
+\begin{figure}[!bth]
     \centering
     \begin{subfigure}{0.45\textwidth}
         \centering
@@ -256,14 +320,40 @@ die Third-Person-Perspektive.
 In Abbildung~\ref{fig:camera_perspectives} kann man die beiden im Vergleich betrachten.
 Für die Third-Person-Perspektive kann man ein Objekt auswählen, das man dann steuern kann.
 Dieses Objekt wird mit einem zusätzlichen Würfel, welcher eine Art Crosshair darstellen soll, in der
-Applikation gerendert. \\
+Applikation gerendert.
+
+\FloatBarrier
+\begin{figure}[!bth]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/Export-JI-05}
+        \caption{Object Paths Debug-Layer}
+        \label{fig:debug_layer_object_paths}
+    \end{subfigure}
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/Export-JI-06}
+        \caption{Gravity Grid Debug-Layer}
+        \label{fig:debug_layer_gravity_grid}
+    \end{subfigure}
+    \caption{Beispiele der Debug-Layer zur Visualisierung komplexer Phänomene.}
+    \label{fig:debug_layers}
+\end{figure} \\
+
+Weiters ist auch das Anregen der Vorstellungskraft ein wichtiger Punkt.
+Hierfür gibt es die Debug-Layer, welche in Abbildung~\ref{fig:debug_layers} zu sehen sind.
+Diese Visualisierungen sollen dem Benutzer helfen, sich die physikalischen Effekte besser
+vorstellen zu können.
+Da es leider nicht möglich ist, sich eine 4-dimensionale Raumzeit vorzustellen, muss dem Gehirn
+ein wenig auf die Sprünge geholfen werden.
+Diese Tricks nutzt die Applikation, um ein besseres Verständnis für die komplexen und abstrakten
+Konzepte der Physik zu vermitteln. \\
 
 %Dreifachsternsystem:
+%Performance:
 
-%Visualisierung Raumzeitkrümmung:
-
-%Performance: \\
-
+\FloatBarrier
 \textbf{Erreichung der Ziele} \\
 
 Das Projektteam setzt sich alle Ziele am Anfang eines sogenannten Sprints~\autocite{Website:Scrum} und schreibt

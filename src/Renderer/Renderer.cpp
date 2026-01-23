@@ -464,6 +464,12 @@ void Renderer::Render3DSimulation(Scene *scene) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     if (!scene || !blackHoleRenderer) return;
 
+    if (scene->reloadSkybox)
+    {
+        blackHoleRenderer->LoadSkybox();
+        scene->reloadSkybox = false;
+    }
+
     float currentTime = static_cast<float>(glfwGetTime());
 
         // Pre-load meshes into cache before rendering

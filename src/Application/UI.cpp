@@ -818,3 +818,30 @@ std::vector<std::string> UI::GetAvailableFonts() const {
     
     return fonts;
 }
+
+std::vector<std::string> UI::GetAvailableBackgrounds() const {
+    std::vector<std::string> backgrounds;
+
+    try {
+        std::filesystem::path backgroundDir = "../assets/backgrounds/";
+        if (std::filesystem::exists(backgroundDir) && std::filesystem::is_directory(backgroundDir)) {
+            for (const auto& entry : std::filesystem::directory_iterator(backgroundDir)) {
+                if (entry.is_regular_file()) {
+                    std::string filename = entry.path().filename().string();
+                    std::string ext = entry.path().extension().string();
+                    std::ranges::transform(ext, ext.begin(),
+                        [](const unsigned char c){ return std::tolower(c); });
+
+                    if (ext == ".hdr") {
+                        backgrounds.push_back(filename);
+                    }
+                }
+            }
+        }
+    } catch (const std::exception& e) {
+        spdlog::error("Failed to scan background directory: {}", e.what());
+    }
+
+    std::ranges::sort(backgrounds);
+    return backgrounds;
+}

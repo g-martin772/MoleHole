@@ -93,6 +93,8 @@ struct Scene {
     std::filesystem::path currentPath;
     Camera* camera = nullptr;
 
+    bool reloadSkybox = false;
+
     enum class ObjectType { BlackHole, Mesh, Sphere };
     struct SelectedObject {
         ObjectType type;
