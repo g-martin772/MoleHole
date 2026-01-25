@@ -26,14 +26,14 @@ Vorgänge in der Nähe eines schwarzen Loches zu erleben. \\
 
 Das Projekt ist ein OpenSource-Projekt und der gesamte Quellcode ist auf GitHub
 ersichtlich~\autocite{Project:Black_Hole_Sim_MoleHole}.
-Das Projekt wurde unter der GNU General Public License v3.0 (GPL-3.0)
+Zudem wurde es unter der GNU General Public License v3.0 (GPL-3.0)
 veröffentlicht~\autocite{License:GPL}. \\
 
 \textbf{Einzigartigkeit} \\
 
 Es gibt ohnehin wenig frei zugängliche Projekte, die als Ziel die Visualisierung schwarzer Löcher verfolgen.
-Jedoch ist bei diesen Projekten nie eine Benutzerinteraktion vorgesehen, was der größte Unterschied zu
-diesem Projekt ist.
+Jedoch ist bei diesen Projekten nie eine Benutzerinteraktion vorgesehen und schränkt somit die Bedienung
+dieser Applikationen stark ein.
 Genau in dieser Lücke findet sich das MoleHole Projekt wieder, indem es die Echtzeitsimulation schwarzer Löcher mit einer
 interaktiven Benutzeroberfläche kombiniert. \\
 
@@ -192,10 +192,11 @@ in~\ref{subsubsec:planning} erklärt.
 Sie ermöglicht die Reflexion über die vergangene Arbeit und eine kontinuierliche Verbesserung
 des Projektes.
 Außerdem sind in diesem Format regelmäßige Erweiterungen der Software geplant - sogenannte
-\textit{Product Increments} - die vom agilen Projektmanagement vorgegeben sind und andauernd für
+Product Increments - die vom agilen Projektmanagement vorgegeben sind und andauernd für
 eine verbesserte Version des Produktes sorgen.
 
-Weiters war die Recherche ein wichtiges Mittel, um an nötige Informationen zu gelangen.
+Weiters war die Recherche ein wichtiges Mittel, um an nötige Informationen zu gelangen
+und die aktuellen Ergebnisse und Implementierungen zu überprüfen.
 Hierfür wurden wissenschaftliche Artikel, Bücher und Videos wie zum
 Beispiel~\autocite{Book:General_Relativity,Book:Black_Holes_bc,Video:Coding_Adventure_Clouds}
 verwendet. \\
@@ -208,7 +209,7 @@ Dabei werden einige Bilder zu sehen sein und anhand einiger Zahlen der Umfang be
 \FloatBarrier
 \begin{figure}[!bth]
     \centering
-    \includegraphics[width=0.9\textwidth]{img/Export-JI-10}
+    \includegraphics[width=0.9\textwidth]{img/05_UI_Overview}
     \caption{Beispiel des User-Interfaces der Applikation.}
     \label{fig:user_interface}
 \end{figure}
@@ -227,7 +228,7 @@ Die nummerierten Bereiche werden nachstehend erläutert:
             In dieser Szene wurde beispielhaft ein schwarzes Loch hinzugefügt.
             Es ist zu erkennen, dass für ein schwarzes Loch die Parameter Masse $m$, Spin $a$, Position $x^i$ sowie
             die Drehachse $a^i$ anpassbar sind.
-    \item   \textbf{2 - Visualisierungen:} Dieses Fenster ermöglicht die Anpassung verschiedenster Effekt, die im
+    \item   \textbf{2 - Visualisierungen:} Dieses Fenster ermöglicht die Anpassung verschiedenster Effekte, die im
             Prozess des Renderings verwendet werden.
             Dazu zählen die Aktivierung des Gravitationslinseneffektes, der gravitativen Rotverschiebung, des
             Volumetric Cloud Renderings sowie des Dopplereffektes.
@@ -255,9 +256,9 @@ Die nummerierten Bereiche werden nachstehend erläutert:
             In Abbildung~\ref{fig:third_person_perspective} kann dies angesehen werden.
     \item   \textbf{4 - Simulation:} Diese beiden Icons bieten die Möglichkeit, eine Simulation
             zu starten, zu pausieren oder zu stoppen.
-            Wenn die Simulation gestartet wird, werden auch alle Objekte in den Ursprungszustand zurückgesetzt.
-    \item   \textbf{5 - Seitenleiste:} Die Seitenleiste soll dem Benutzer eine bessere Übersicht geben und
-            Funktion bereitstellen, die Menüs ein- und auszublenden.
+            Wenn die Simulation gestoppt wird, werden auch alle Objekte in den Ursprungszustand zurückgesetzt.
+    \item   \textbf{5 - Seitenleiste:} Die Seitenleiste soll dem Benutzer eine bessere Übersicht geben und die
+            Funktion bereitstellen, die Menüs ein- und ausblenden zu können.
             Weiters sind hier auch die Einstellungen untergebracht, die für das Setzen eines standardmäßigen
             Export-Pfades und das Anpassen der Schriftgröße und Schriftart eine Möglichkeit bieten.
     \item   \textbf{6 - Szene:} Dies ist der Bereich, in dem die hauptsächliche Simulation und Visualisierung
@@ -270,13 +271,13 @@ Die nummerierten Bereiche werden nachstehend erläutert:
     \centering
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{img/Export-JI-12}
+        \includegraphics[width=\linewidth]{img/03_Black_Hole_Early}
         \caption{Rendering eines schwarzen Loches mit weißer Akkretionsscheibe}
         \label{fig:black_hole_rendering_white}
     \end{subfigure}
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{img/Export-JI-13}
+        \includegraphics[width=\linewidth]{img/04_Black_Hole_Now}
         \caption{Rendering eines schwarzen Loches mit Akkretionsscheibe und realistischer Lichtemission.}
         \label{fig:black_hole_rendering_black}
     \end{subfigure}
@@ -296,18 +297,23 @@ des schwarzen Loches ändert.
 Diese Temperaturverteilung wird in der Gleichung~\ref{eq:temp_scaling_accretion_disk}
 mathematisch beschrieben.
 
+Für die nachfolgenden Bilder wurde eine Grafik aus dem Internet verwendet, um die restlichen Objekte
+besser hervorzuheben.
+Dieses Bild ist ein Foto der Milchstraße von Jcomp~\autocite{Picture:Milky_Way}.
+
+
 \FloatBarrier
 \begin{figure}[!bth]
     \centering
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{img/Export-JI-03}
+        \includegraphics[width=\linewidth]{img/06_Scene_First_Person}
         \caption{First-Person-Perspektive}
         \label{fig:first_person_perspective}
     \end{subfigure}
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{img/Export-JI-04}
+        \includegraphics[width=\linewidth]{img/07_Scene_Third_Person}
         \caption{Third-Person-Perspektive}
         \label{fig:third_person_perspective}
     \end{subfigure}
@@ -327,13 +333,13 @@ Applikation gerendert.
     \centering
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{img/Export-JI-05}
+        \includegraphics[width=\linewidth]{img/09_Scene_Object_Paths}
         \caption{Object Paths Debug-Layer}
         \label{fig:debug_layer_object_paths}
     \end{subfigure}
     \begin{subfigure}{0.45\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{img/Export-JI-06}
+        \includegraphics[width=\linewidth]{img/08_Scene_Gravity_Grid}
         \caption{Gravity Grid Debug-Layer}
         \label{fig:debug_layer_gravity_grid}
     \end{subfigure}
@@ -350,27 +356,69 @@ ein wenig auf die Sprünge geholfen werden.
 Diese Tricks nutzt die Applikation, um ein besseres Verständnis für die komplexen und abstrakten
 Konzepte der Physik zu vermitteln. \\
 
-%Dreifachsternsystem:
-%Performance:
+\textbf{Ergebnisse in Zahlen} \\
+
+Eine weitere gute Methode, um den Fortschritt eines Projektes zu messen, ist die Angabe
+bestimmter Kennzahlen, um eine gewisse Größe und Komplexität zu beschreiben.
+Die wichtigsten Zahlen betreffen die Performance der Applikation bei verschiedenster Auslastung
+durch das Rendering einer verschiedenen Anzahl an Objekten.
 
 \FloatBarrier
-\textbf{Erreichung der Ziele} \\
+\begin{figure}[!bth]
+    \centering
+    \includegraphics[width=0.4\textwidth]{img/02_mean_fps_orange}
+    \caption{Ergebnisse des Tests der Performance in verschiedenen Szenarien.}
+    \label{fig:performance_test}
+\end{figure}
+
+Für den Test der Performance wurde ein Acer Predator Triton 500 Laptop mit einem Intel Core i7-10750H
+und einer Nvidia GeForce RTX 2080 Super verwendet~\autocite{Website:Acer}.
+Die Ergebnisse sind am 25.01.2026 aufgenommen worden und sind in Abbildung~\ref{fig:performance_test} zu sehen.
+Es wurden für jedes Szenario insgesamt 10 Stichproben genommen und danach der Durchschnittswert berechnet.
+Aus den Daten lässt sich klar erkennen, dass vor allem schwarze Löcher einen ordentlichen
+Rechenaufwand benötigen.
+Für 3D-Modelle (Meshes) und Sterne~\&~Planeten (Spheres) ist die Performance nahe am Wert ohne Objekte.
+
+Insgesamt hat das Projekt bis zum 25.01.2026 197 Commits auf GitHub zustande gebracht.
+Dabei wurden 1404 Zeilen Code in der Sprache GLSL und 12966 Zeilen in der Sprache C++ geschrieben.
+Das Projekt wurde bis jetzt von einem Team aus zwei Personen im Durchlauf von 5 Sprints realisiert.
+
+\FloatBarrier
+\textbf{Prüfen der abgeschlossenen Aufgaben} \\
 
 Das Projektteam setzt sich alle Ziele am Anfang eines sogenannten Sprints~\autocite{Website:Scrum} und schreibt
-diese in der Projektmanagement-Software YouTrack~\autocite{Website:YouTrack} nieder.
-Dort werden allgemein die Ziele formuliert, mit einer Priorität versehen, der Arbeitsaufwand anhand von Story Points
+diese in der Projektmanagementsoftware YouTrack~\autocite{Website:YouTrack} nieder.
+Dort werden allgemein die Ziele formuliert, mit einer Priorität versehen, der Arbeitsaufwand anhand von \textit{Story Points}
 geschätzt und ein Verantwortlicher festgelegt.
 Um zu überprüfen, ob das Projektteam die Ziele erfüllt, werden diese in der Applikation von den Mitgliedern des
 Projektteams ausprobiert.
 Da dies keine besonders zuverlässige Methode zur Bestimmung der erfüllten Ziele ist, gibt es am Ende eines jeden
-Sprints ein Sprint-Review Meeting, bei dem das Team ihre Ergebnisse dem Projektbetreuer sowie einem ausgewählten Kunden
+Sprints ein \textit{Sprint-Review Meeting}, bei dem das Team ihre Ergebnisse dem Projektbetreuer sowie einem ausgewählten Kunden
 (ein Mitschüler) vorstellt und den Sprint somit abschließt~\autocite{Website:Scrum}.
 Danach werden erneut Ziele für die nächste Iteration überlegt. \\
+
+\textbf{Erreichte Ziele} \\
+
+Im Vergleich zu~\ref{fig:original_notes_project_goals} und~\ref{subsubsec:project_origin} sind bis jetzt
+einige Ziele erreicht worden.
+Das Grundsetup der Applikation wurde erfolgreich durchgeführt und die wichtigsten Basisfunktionen wie
+das Laden und Speichern von Szenen sowie das Verschieben der Fenster sind funktionstüchtig.
+Es ist dem Benutzer auch möglich, das UI zu bedienen und sich im dreidimensionalen Raum fortzubewegen.
+Die Visualisierung mit OpenGL wurde auch schon erfolgreich implementiert.
+Hierbei kann ein statisches schwarzes Loch mit einer Akkretionsscheibe beobachtet werden.
+Außerdem kann der Gravitationslinseneffekt, die gravitative Rotverschiebung, der Dopplereffekt und auch
+die Photonensphäre gesehen werden.
+Diese Effekte sind vor allem in der Abbildung~\ref{fig:black_hole_rendering_black} gut zu erkennen.
+Für die Simulation hat der Benutzer die Möglichkeit, andere Objekte wie Kugeln und 3D-Modelle hinzuzufügen und
+miteinander interagieren zu lassen.
+Es ist hierfür möglich, die Gravitation zu beobachten, die zwischen allen verschiedenen Objekten wirkt.
+Weiters können die Objekte miteinander kollidieren und für den Fall, dass ein schwarzes Loch
+mit einem Objekt zusammenstößt, wird dieses aus der Szene entfernt. \\
 
 \subsubsection{Entwicklungspotenzial} \label{subsubsec:potential} \\
 
 Es steckt noch einiges an Potenzial in diesem Projekt und das Team plant eine regelmäßige Erweiterung
-der Software, um diesem Potenzial gerecht zu werden.
+der Software, um diesem gerecht zu werden.
 Demnach werden in dieser Sektion alle potenziellen Erweiterungen des Projektes aufgezählt. \\
 
 \textbf{Gesellschaftliche Auswirkungen} \\
@@ -390,7 +438,7 @@ Wissenschaftskommunikation zu verbessern und damit mehr Menschen den Zugang zur 
 Aktuell gibt es bei diesem Projekt keine bestehenden Kooperationen, jedoch würde das Projektteam in Zukunft welche anstreben.
 Vor allem in der Zukunft möchte das Projektteam die Applikation weiter verbessern, indem im zukünftigen Studium
 wichtige Erkenntnisse gesammelt werden und mit professionellen Wissenschaftlern zusammengearbeitet wird.
-Zusätzlich wird mit Kooperationen auch die Entwicklung weiterer Forschungsarbeiten angestrebt. \\
+Zusätzlich wird mithilfe von Kooperationen auch die Entwicklung weiterer Forschungsarbeiten angestrebt. \\
 
 \textbf{Releases} \\
 
@@ -398,11 +446,11 @@ Wenn die Entwicklung des Projektes weiterhin große Fortschritte erzielt, ist ei
 zum Beispiel auf Steam anzuvisieren.
 Aktuell kann das Projekt zwar schon benutzt werden, da es ein öffentliches GitHub Repository mit dem Code gibt, aber
 es ist ein wenig technisches Wissen notwendig, um die Applikation zu verwenden.
-Wenn die Applikation auf einer Vertriebsplattform wie Steam veröffentlicht werden kann, würde das den Zugang
+Wenn diese auf einer Vertriebsplattform wie Steam veröffentlicht werden kann, würde das den Zugang
 zu der Software erleichtern.
 Insgesamt kann die Aussage getroffen werden, dass das Projekt in Zukunft offiziell veröffentlicht werden soll, aber
 noch viel Arbeit notwendig ist, um dieses Ziel zu erreichen.
-Hierfür muss vor allem noch eine umfangreiche Dokumentation angefertigt werden und die technischen Potenzial sollten
+Hierfür muss vor allem noch eine umfangreiche Dokumentation angefertigt werden und die technischen Potenziale sollten
 möglichst gut ausgeschöpft sein.
 Hinzu kommt die Entfernung aller Fehler und Unannehmlichkeiten aus der Software. \\
 
@@ -442,7 +490,7 @@ Außerdem wird eine Partikel Simulation angestrebt, sodass man sehen kann, wie s
 ein schwarzes Loch bildet.
 Abgesehen von der technischen Simulation, ist es auch das Ziel, Wissenschaft zu kommunizieren.
 Daher ist auch geplant, Erklärungen und Beschreibungen mittels Tooltips und detaillierte Berichte in einem Menü unterzubringen.
-Diese Erklärungen sollen auch nicht auf Mathematik verzichten, sollen diese aber verständlich erklären und wenn nötig auf externe
+Diese Erklärungen sollen auch nicht auf Mathematik verzichten, diese aber verständlich erklären und wenn nötig auf externe
 Ressourcen verweisen.
 Somit wäre garantiert, dass interessierte Menschen relativ einfach an die nötigen Ressourcen gelangen können, die notwendig sind, um
 komplexe physikalische Konzepte zu verstehen. \\
