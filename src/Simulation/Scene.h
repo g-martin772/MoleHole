@@ -7,17 +7,40 @@
 #include <string>
 #include <optional>
 #include "Application/AnimationGraph.h"
+#include "Application/ParameterRegistry.h"
 
 class Camera;
+
+struct ObjectClassDefinition {
+    std::string name;
+    std::vector<std::string> availableParameterKeys;
+};
+
+struct SceneObjectDefinition {
+    mutable std::mutex mutex;
+    std::vector<ObjectClassDefinition*> objectClasses;
+    std::vector<std::string> requiredParameterKeys;
+    std::unordered_map<uint64_t, ParameterMetadata> meta;
+};
+
+struct SceneObject {
+    SceneObject();
+    virtual ~SceneObject() = default;
+
+    bool HasField(const ParameterHandle& handle) const;
+    ParameterValue GetField(const ParameterHandle& handle) const;
+    void SetField(const ParameterHandle& handle, const ParameterValue& value);
+protected:
+    SceneObjectDefinition* definition;
+    std::vector<ParameterValue> values;
+};
+
+
 
 struct BlackHole {
     float mass;
     glm::vec3 position;
     glm::vec3 velocity;
-    bool showAccretionDisk;
-    float accretionDiskDensity;
-    float accretionDiskSize;
-    glm::vec3 accretionDiskColor;
 
     float spin = 0.0f;  // 0.0 to 1.0
     glm::vec3 spinAxis = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -26,37 +49,8 @@ struct BlackHole {
         return mass == other.mass &&
                position == other.position &&
                velocity == other.velocity &&
-               showAccretionDisk == other.showAccretionDisk &&
-               accretionDiskDensity == other.accretionDiskDensity &&
-               accretionDiskSize == other.accretionDiskSize &&
-               accretionDiskColor == other.accretionDiskColor &&
                spin == other.spin &&
                spinAxis == other.spinAxis;
-    }
-
-    float GetEventHorizonRadius() const {
-        // Simplified Schwarzschild radius calculation (in arbitrary units)
-        return 2.0f * mass;
-    }
-};
-
-struct BlackHoleHash {
-    std::size_t operator()(const BlackHole& bh) const {
-        std::size_t h1 = std::hash<float>{}(bh.position.x);
-        std::size_t h2 = std::hash<float>{}(bh.position.y);
-        std::size_t h3 = std::hash<float>{}(bh.position.z);
-        std::size_t h4 = std::hash<float>{}(bh.mass);
-        std::size_t h5 = std::hash<float>{}(bh.spin);
-        std::size_t h6 = std::hash<float>{}(bh.spinAxis.x);
-        std::size_t h7 = std::hash<float>{}(bh.spinAxis.y);
-        std::size_t h8 = std::hash<float>{}(bh.spinAxis.z);
-        std::size_t h9 = std::hash<float>{}(bh.velocity.x);
-        std::size_t h10 = std::hash<float>{}(bh.velocity.y);
-        std::size_t h11 = std::hash<float>{}(bh.velocity.z);
-
-        return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h4 << 3) ^
-               (h5 << 4) ^ (h6 << 5) ^ (h7 << 6) ^ (h8 << 7) ^
-               (h9 << 8) ^ (h10 << 9) ^ (h11 << 10);
     }
 };
 
@@ -85,6 +79,12 @@ struct Sphere {
     Sphere() : massKg(1000.0f), position(0.0f), velocity(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), color(0.5f, 0.5f, 0.5f, 1.0f), spin(0.0f), radius(1.0f) {}
 };
 
+
+
+enum class ObjectType { BlackHole, Mesh, Sphere };
+
+
+
 struct Scene {
     std::string name;
     std::vector<BlackHole> blackHoles;
@@ -95,7 +95,6 @@ struct Scene {
 
     bool reloadSkybox = false;
 
-    enum class ObjectType { BlackHole, Mesh, Sphere };
     struct SelectedObject {
         ObjectType type;
         size_t index;

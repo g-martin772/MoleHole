@@ -34,7 +34,7 @@ bool Application::Initialize() {
 
     TryInitializeGtk();
 
-    AppState::Params().LoadDefinitionsFromYaml("../templates/parameters.yaml");
+    AppState::Params().LoadDefinitionsFromYaml("../assets/config/parameters.yaml");
     m_state.LoadState("config.yaml");
 
     try {
