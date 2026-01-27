@@ -207,6 +207,7 @@ void Render(UI* ui, Scene* scene) {
                     if (ImGui::DragFloat("Mass", &bh.mass, 0.02f, 0.0f, 1e10f)) bhChanged = true;
                     if (ImGui::DragFloat("Spin", &bh.spin, 0.01f, 0.0f, 2.0f)) bhChanged = true;
                     if (ImGui::DragFloat3("Position", &bh.position[0], 0.05f)) bhChanged = true;
+                    if (ImGui::DragFloat3("Velocity", &bh.velocity[0], 0.05f)) bhChanged = true;
                     if (ImGui::DragFloat3("Spin Axis", &bh.spinAxis[0], 0.01f, -1.0f, 1.0f)) bhChanged = true;
 
                     if (bhChanged) {
