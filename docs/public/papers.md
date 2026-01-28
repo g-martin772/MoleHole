@@ -6,7 +6,7 @@ already finished.
 ## Documentation for "Jugend Innovativ"
 
 This project is taking part in the Austrian competition "Jugend Innovativ" and wrote a project report
-to hand in. This file can be downloaded at <a id="raw-url" href="./molehole_ji_documentation.pdf">Project Report</a>.
+to hand in. It can be downloaded at [Project Report](pdf/molehole_ji_documentation.pdf).
 
 ## Dissertation for publication
 
