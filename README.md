@@ -13,7 +13,7 @@ in an OpenGL environment developed with C++.
 
 For getting a view of the application, a screenshot of it is provided.
 
-[UI Overview](docs/public/img/05_UI_Overview.png)
+![UI Overview](docs/public/img/05_UI_Overview.png)
 
 
 ## Scientific Accuracy
@@ -32,15 +32,20 @@ particle simulations for the formation of accretion disks.
 Rendering techniques include Ray Tracing, Ray Marching and Anti Aliasing.
 
 
-## Examples
+## Application Examples
 
 A few examples of the application are included below. There are pictures of the visualisation of 
 spacetime curvature, paths for objects in simulations as well as camera perspectives.
 
-[First Person](docs/public/img/06_Scene_First_Person.png)
+![First Person](docs/public/img/06_Scene_First_Person.png)
 
-[Third Person](docs/public/img/07_Scene_Third_Person.png)
+![Third Person](docs/public/img/07_Scene_Third_Person.png)
 
-[Spacetime Curvature](docs/public/img/08_Scene_Gravity_Grid.png)
+![Spacetime Curvature](docs/public/img/08_Scene_Gravity_Grid.png)
 
-[Paths](docs/public/img/09_Scene_Object_Paths.png)
+![Paths](docs/public/img/09_Scene_Object_Paths.png)
+
+
+## Science
+
+

@@ -16,7 +16,7 @@ float AccelerationLUTGenerator::calculateAccelerationFactor(float angMomentumSqr
         return -1.5f * angMomentumSqrd / (1.0f * EPSILON);
     }
     
-    return -1.5f * angMomentumSqrd / r5;
+    return -2.0f * angMomentumSqrd / r5;
 }
 
 std::vector<float> AccelerationLUTGenerator::generateLUT() {
