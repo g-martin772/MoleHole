@@ -15,6 +15,43 @@ For getting a view of the application, a screenshot of it is provided.
 
 ![UI Overview](docs/public/img/05_UI_Overview.png)
 
+### 1 - Scene Objects
+
+One has the possibility of adding scene objects to a scene, such as black holes,
+spheres or meshes. Those objects have various parameters which may be changed.
+Furthermore, objects can be selected and transform as well, where a selected object
+is highlighted in the viewport (6) and seen in this menu.
+
+### 2 - Debug
+
+The debug window provides some utilities that include the adjustment of bloom parameters,
+the enabling of a varierty of effects. There are also debug layers to add to the 
+visualisation. Those are: rendering of gravity wells, object trace paths for a simulation 
+and PhysX debug layers. The debug layers should help a user understand effects and theories,
+such as General Relativity. The first two debug layers are showcased in the Examples section 
+below.
+
+### 3 - Camera
+
+These are the settings for the camera. FOV and speed can be adjusted as well as the default 
+parameters position, pitch and yaw. There is also an option for enabling the third person
+camera as seen in a screenshot furhter below.
+
+### 4 - Simulation
+
+With these two icons, one may start, pause and stop a simulation. A simulation currently
+supports the visualisation of the effect of gravitation with an addition of object trace paths.
+
+### 5 - Navigation
+
+For easier navigation, a sidebar is implemented, where each window may be toggled. The settings 
+are also accessible from here.
+
+### 6 - Viewport
+
+This is where the magic happens! All configurations and adjustments of parameters will take their
+final form in the real time rendering in this window.
+
 
 ## Scientific Accuracy
 
@@ -48,4 +85,12 @@ spacetime curvature, paths for objects in simulations as well as camera perspect
 
 ## Science
 
+If you are interested in the scientific background of this project, check out the section
+[Papers](docs/public/papers.md). Currently, there is only one paper available, which was handed
+in for the "Jugend Innovativ" contest in Austria. (https://www.jugendinnovativ.at/) 
+But there are more to come!
+
+## Development
+
+For information regarding the development, refer to the  [Developer Notes](docs/public/development.md).
 

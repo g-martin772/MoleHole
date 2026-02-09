@@ -6,10 +6,10 @@ already finished.
 ## Documentation for "Jugend Innovativ"
 
 This project is taking part in the Austrian competition "Jugend Innovativ" and wrote a project report
-to hand in. It can be downloaded at [Project Report](pdf/molehole_ji_documentation.pdf).
+to hand in. It can be downloaded at [Project Report](pdf/molehole_ji_documentation_v1.1.pdf).
 
 ## Dissertation for publication
 
 The project also plans to develop a paper, which will include a detailed explanation
 of all used rendering techniques and pyhsics implementation. Furthermore, it will 
-come up with new ideas for rendering curved spaces.
+come up with some new ideas for rendering curved spaces.
