@@ -20,7 +20,76 @@ std::string Shader::ReadFile(const char* path) {
     }
     std::stringstream buffer;
     buffer << file.rdbuf();
-    return buffer.str();
+    std::string source = buffer.str();
+    return PreprocessIncludes(source, path);
+}
+
+std::string Shader::PreprocessIncludes(const std::string& source, const char* sourcePath) {
+    namespace fs = std::filesystem;
+    std::stringstream result;
+    std::istringstream stream(source);
+    std::string line;
+    int lineNumber = 0;
+    fs::path sourceDir = fs::path(sourcePath).parent_path();
+
+    while (std::getline(stream, line)) {
+        lineNumber++;
+        if (size_t includePos = line.find("#include"); includePos != std::string::npos) {
+            size_t startQuote = line.find('"', includePos);
+            size_t endQuote = line.find('"', startQuote + 1);
+
+            if (startQuote == std::string::npos) {
+                startQuote = line.find('<', includePos);
+                endQuote = line.find('>', startQuote + 1);
+            }
+
+            if (startQuote != std::string::npos && endQuote != std::string::npos) {
+                std::string includePath = line.substr(startQuote + 1, endQuote - startQuote - 1);
+                fs::path fullPath;
+                if (fs::path relativePath = sourceDir / includePath; fs::exists(relativePath)) {
+                    fullPath = relativePath;
+                } else {
+                    if (fs::path shadersPath = fs::path("shaders") / includePath; fs::exists(shadersPath)) {
+                        fullPath = shadersPath;
+                    } else {
+                        if (fs::path parentShadersPath = fs::path("../shaders") / includePath; fs::exists(parentShadersPath)) {
+                            fullPath = parentShadersPath;
+                        } else {
+                            spdlog::error("Cannot find include file: {} (referenced from {})", includePath, sourcePath);
+                            result << "// ERROR: Cannot find include: " << includePath << "\n";
+                            continue;
+                        }
+                    }
+                }
+
+                if (std::ifstream includeFile(fullPath); includeFile.is_open()) {
+                    std::stringstream includeBuffer;
+                    includeBuffer << includeFile.rdbuf();
+                    std::string includeContent = includeBuffer.str();
+
+                    if (size_t versionPos = includeContent.find("#version"); versionPos != std::string::npos) {
+                        if (size_t versionEnd = includeContent.find('\n', versionPos); versionEnd != std::string::npos) {
+                            includeContent.erase(versionPos, versionEnd - versionPos + 1);
+                        }
+                    }
+
+                    std::string processedInclude = PreprocessIncludes(includeContent, fullPath.string().c_str());
+                    result << "// BEGIN INCLUDE: " << includePath << "\n";
+                    result << processedInclude;
+                    result << "// END INCLUDE: " << includePath << "\n";
+                } else {
+                    spdlog::error("Failed to open include file: {}", fullPath.string());
+                    result << "// ERROR: Failed to open include: " << includePath << "\n";
+                }
+            } else {
+                spdlog::warn("Malformed #include directive at line {}: {}", lineNumber, line);
+                result << line << "\n";
+            }
+        } else {
+            result << line << "\n";
+        }
+    }
+    return result.str();
 }
 
 std::string Shader::GetCacheDir() {
