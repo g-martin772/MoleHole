@@ -6,6 +6,8 @@
 #include "imgui.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <unordered_map>
+#include <functional>
 #include <nfd.h>
 
 namespace ParameterWidgets {
@@ -350,7 +352,52 @@ bool RenderObjectParameter(SceneObject* object, const ParameterHandle& handle, c
             float value = std::holds_alternative<float>(currentValue) ? std::get<float>(currentValue) :
                          std::get<float>(meta.defaultValue);
 
-            if (meta.minValue != 0.0f || meta.maxValue != 0.0f) {
+            if (!meta.scaleValueNames.empty() && !meta.scaleValues.empty()) {
+                // Track scale index per object+parameter
+                static std::unordered_map<std::pair<void*, uint64_t>, size_t,
+                    decltype([](const auto& p) {
+                        return std::hash<void*>{}(p.first) ^ std::hash<uint64_t>{}(p.second);
+                    })> scaleIndices;
+
+                auto key = std::make_pair(static_cast<void*>(object), handle.m_Id);
+                if (scaleIndices.find(key) == scaleIndices.end()) {
+                    scaleIndices[key] = 0; // Default to first unit
+                }
+                size_t& currentScaleIdx = scaleIndices[key];
+
+                // Convert value to display units
+                float displayValue = value / meta.scaleValues[currentScaleIdx];
+                float dragSpeedScaled = (meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f) / meta.scaleValues[currentScaleIdx];
+
+                ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.65f);
+                if (ImGui::DragFloat(("##value_" + meta.name).c_str(), &displayValue, dragSpeedScaled,
+                                    0.0f, 0.0f, "%.6g")) {
+                    // Convert back to base units
+                    float newValue = displayValue * meta.scaleValues[currentScaleIdx];
+                    object->SetParameter(handle, newValue);
+                    valueChanged = true;
+                }
+                ImGui::PopItemWidth();
+
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                if (ImGui::BeginCombo(("##scale_" + meta.name).c_str(),
+                                     meta.scaleValueNames[currentScaleIdx].c_str())) {
+                    for (size_t i = 0; i < meta.scaleValues.size(); ++i) {
+                        bool isSelected = (i == currentScaleIdx);
+                        if (ImGui::Selectable(meta.scaleValueNames[i].c_str(), isSelected)) {
+                            currentScaleIdx = i;
+                            valueChanged = true;
+                        }
+                        if (isSelected) {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::SameLine();
+                ImGui::Text("%s", meta.displayName.c_str());
+            } else if (meta.minValue != 0.0f || meta.maxValue != 0.0f) {
                 if (ImGui::DragFloat(meta.displayName.c_str(), &value,
                                     meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f,
                                     meta.minValue, meta.maxValue, "%.3f")) {
@@ -426,10 +473,57 @@ bool RenderObjectParameter(SceneObject* object, const ParameterHandle& handle, c
                              std::get<glm::vec3>(currentValue) :
                              std::get<glm::vec3>(meta.defaultValue);
 
-            if (ImGui::DragFloat3(meta.displayName.c_str(), &value[0],
-                                 meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f)) {
-                object->SetParameter(handle, value);
-                valueChanged = true;
+            if (!meta.scaleValueNames.empty() && !meta.scaleValues.empty()) {
+                // Track scale index per object+parameter
+                static std::unordered_map<std::pair<void*, uint64_t>, size_t,
+                    decltype([](const auto& p) {
+                        return std::hash<void*>{}(p.first) ^ std::hash<uint64_t>{}(p.second);
+                    })> scaleIndices;
+
+                auto key = std::make_pair(static_cast<void*>(object), handle.m_Id);
+                if (scaleIndices.find(key) == scaleIndices.end()) {
+                    scaleIndices[key] = 0; // Default to first unit
+                }
+                size_t& currentScaleIdx = scaleIndices[key];
+
+                // Convert value to display units
+                glm::vec3 displayValue = value / meta.scaleValues[currentScaleIdx];
+                float dragSpeedScaled = (meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f) / meta.scaleValues[currentScaleIdx];
+
+                ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.65f);
+                if (ImGui::DragFloat3(("##value_" + meta.name).c_str(), &displayValue[0], dragSpeedScaled,
+                                     0.0f, 0.0f, "%.6g")) {
+                    // Convert back to base units
+                    glm::vec3 newValue = displayValue * meta.scaleValues[currentScaleIdx];
+                    object->SetParameter(handle, newValue);
+                    valueChanged = true;
+                }
+                ImGui::PopItemWidth();
+
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                if (ImGui::BeginCombo(("##scale_" + meta.name).c_str(),
+                                     meta.scaleValueNames[currentScaleIdx].c_str())) {
+                    for (size_t i = 0; i < meta.scaleValues.size(); ++i) {
+                        bool isSelected = (i == currentScaleIdx);
+                        if (ImGui::Selectable(meta.scaleValueNames[i].c_str(), isSelected)) {
+                            currentScaleIdx = i;
+                            valueChanged = true;
+                        }
+                        if (isSelected) {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::SameLine();
+                ImGui::Text("%s", meta.displayName.c_str());
+            } else {
+                if (ImGui::DragFloat3(meta.displayName.c_str(), &value[0],
+                                     meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f)) {
+                    object->SetParameter(handle, value);
+                    valueChanged = true;
+                }
             }
 
             if (!meta.tooltip.empty() && ImGui::IsItemHovered()) {

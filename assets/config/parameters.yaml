@@ -595,6 +595,8 @@ scene_parameters:
     type: vec3
     group: Simulation
     defaultValue: [0.0, 0.0, 0.0]
+    scaleValueNames: ["m", "km", "AU", "ly"]
+    scaleValues: [1.0, 1000.0, 149597870700.0, 9460730472580800.0]
     showInUI: true
 
   - name: "Entity.Rotation"
@@ -611,6 +613,8 @@ scene_parameters:
     type: vec3
     group: Simulation
     defaultValue: [1.0, 1.0, 1.0]
+    scaleValueNames: ["1x", "10x", "100x", "1000x"]
+    scaleValues: [1.0, 10.0, 100.0, 1000.0]
     showInUI: true
 
   # Physics Parameters
@@ -623,16 +627,16 @@ scene_parameters:
     showInUI: true
 
   - name: "Physics.Mass"
-    displayName: "Mass (kg)"
-    tooltip: "Physical mass in kilograms"
+    displayName: "Mass"
+    tooltip: "Physical mass"
     type: float
     group: Simulation
     defaultValue: 1000.0
     minValue: 0.0
-    maxValue: 1000000000.0
+    maxValue: 1.0e38
     dragSpeed: 1000.0
-    scaleValueNames: ["kg", "tons", "kilotons", "megatons"]
-    scaleValues: [1.0, 1000.0, 1000000.0, 1000000000.0]
+    scaleValueNames: ["kg", "tons", "SM", "1000 SM", "10⁶ SM"]
+    scaleValues: [1.0, 1000.0, 1.989e30, 1.989e33, 1.989e36]
     showInUI: true
 
   - name: "Physics.Velocity"
@@ -641,6 +645,8 @@ scene_parameters:
     type: vec3
     group: Simulation
     defaultValue: [0.0, 0.0, 0.0]
+    scaleValueNames: ["m/s", "km/s", "km/h", "c (light speed)"]
+    scaleValues: [1.0, 1000.0, 0.277778, 299792458.0]
     showInUI: true
 
   - name: "Physics.Rigidbody.Type"
@@ -807,6 +813,8 @@ scene_parameters:
     type: vec3
     group: Simulation
     defaultValue: [0.0, 0.0, 0.0]
+    scaleValueNames: ["m", "km", "AU", "ly"]
+    scaleValues: [1.0, 1000.0, 149597870700.0, 9460730472580800.0]
     showInUI: true
 
   # Sphere Parameters
