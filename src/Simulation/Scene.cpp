@@ -9,71 +9,222 @@
 #include <cmath>
 
 #include "Application/Application.h"
+#include "Simulation.h"
+
+SceneObject::SceneObject() = default;
+
+SceneObject::SceneObject(const std::vector<std::string>& classNames) {
+    for (const auto& className : classNames) {
+        AddClass(className);
+    }
+}
+
+void SceneObject::AddClass(const std::string& className) {
+    auto& simulation = Application::Instance().GetSimulation();
+    const auto& objectClasses = simulation.GetObjectClasses();
+
+    for (auto& objClass : objectClasses) {
+        if (objClass.name == className) {
+            m_Classes.push_back(const_cast<ObjectClass*>(&objClass));
+            RebuildMetadata();
+            return;
+        }
+    }
+
+    spdlog::warn("SceneObject: Unknown class '{}'", className);
+}
+
+bool SceneObject::HasClass(const std::string& className) const {
+    for (const auto* objClass : m_Classes) {
+        if (objClass->name == className) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void SceneObject::RebuildMetadata() {
+    m_AggregatedMeta.clear();
+
+    for (const auto* objClass : m_Classes) {
+        for (const auto& [id, metadata] : objClass->meta) {
+            if (!m_AggregatedMeta.contains(id)) {
+                m_AggregatedMeta[id] = metadata;
+            }
+        }
+    }
+}
+
+bool SceneObject::HasParameter(const ParameterHandle& handle) const {
+    return m_AggregatedMeta.contains(handle.m_Id);
+}
+
+ParameterValue SceneObject::GetParameter(const ParameterHandle& handle) const {
+    if (auto it = m_Parameters.find(handle.m_Id); it != m_Parameters.end()) {
+        return it->second;
+    }
+
+    if (auto metaIt = m_AggregatedMeta.find(handle.m_Id); metaIt != m_AggregatedMeta.end()) {
+        return metaIt->second.defaultValue;
+    }
+
+    spdlog::warn("SceneObject::GetParameter: Parameter '{}' not available in this object's classes", handle.m_Id);
+    return 0.0f;
+}
+
+void SceneObject::SetParameter(const ParameterHandle& handle, const ParameterValue& value) {
+    if (!HasParameter(handle)) {
+        spdlog::warn("SceneObject::SetParameter: Parameter '{}' not available in this object's classes", handle.m_Id);
+        return;
+    }
+
+    m_Parameters[handle.m_Id] = value;
+}
+
+void SceneObject::SerializeToYAML(YAML::Emitter& out) const {
+    out << YAML::BeginMap;
+
+    out << YAML::Key << "classes" << YAML::Value << YAML::BeginSeq;
+    for (const auto* objClass : m_Classes) {
+        out << objClass->name;
+    }
+    out << YAML::EndSeq;
+
+    bool hasNonDefaultParams = false;
+    for (const auto& [id, value] : m_Parameters) {
+        auto metaIt = m_AggregatedMeta.find(id);
+        if (metaIt == m_AggregatedMeta.end()) {
+            continue;
+        }
+
+        const auto& meta = metaIt->second;
+
+        bool isDefault = false;
+        if (std::holds_alternative<bool>(value) && std::holds_alternative<bool>(meta.defaultValue)) {
+            isDefault = std::get<bool>(value) == std::get<bool>(meta.defaultValue);
+        } else if (std::holds_alternative<int>(value) && std::holds_alternative<int>(meta.defaultValue)) {
+            isDefault = std::get<int>(value) == std::get<int>(meta.defaultValue);
+        } else if (std::holds_alternative<float>(value) && std::holds_alternative<float>(meta.defaultValue)) {
+            isDefault = std::abs(std::get<float>(value) - std::get<float>(meta.defaultValue)) < 0.0001f;
+        } else if (std::holds_alternative<std::string>(value) && std::holds_alternative<std::string>(meta.defaultValue)) {
+            isDefault = std::get<std::string>(value) == std::get<std::string>(meta.defaultValue);
+        } else if (std::holds_alternative<glm::vec3>(value) && std::holds_alternative<glm::vec3>(meta.defaultValue)) {
+            auto v1 = std::get<glm::vec3>(value);
+            auto v2 = std::get<glm::vec3>(meta.defaultValue);
+            isDefault = glm::length(v1 - v2) < 0.0001f;
+        }
+
+        if (!isDefault) {
+            hasNonDefaultParams = true;
+            break;
+        }
+    }
+
+    if (hasNonDefaultParams) {
+        out << YAML::Key << "parameters" << YAML::Value << YAML::BeginMap;
+
+        for (const auto& [id, value] : m_Parameters) {
+            auto metaIt = m_AggregatedMeta.find(id);
+            if (metaIt == m_AggregatedMeta.end()) {
+                continue;
+            }
+
+            const auto& meta = metaIt->second;
+
+            bool isDefault = false;
+            if (std::holds_alternative<bool>(value) && std::holds_alternative<bool>(meta.defaultValue)) {
+                isDefault = std::get<bool>(value) == std::get<bool>(meta.defaultValue);
+            } else if (std::holds_alternative<int>(value) && std::holds_alternative<int>(meta.defaultValue)) {
+                isDefault = std::get<int>(value) == std::get<int>(meta.defaultValue);
+            } else if (std::holds_alternative<float>(value) && std::holds_alternative<float>(meta.defaultValue)) {
+                isDefault = std::abs(std::get<float>(value) - std::get<float>(meta.defaultValue)) < 0.0001f;
+            } else if (std::holds_alternative<std::string>(value) && std::holds_alternative<std::string>(meta.defaultValue)) {
+                isDefault = std::get<std::string>(value) == std::get<std::string>(meta.defaultValue);
+            } else if (std::holds_alternative<glm::vec3>(value) && std::holds_alternative<glm::vec3>(meta.defaultValue)) {
+                auto v1 = std::get<glm::vec3>(value);
+                auto v2 = std::get<glm::vec3>(meta.defaultValue);
+                isDefault = glm::length(v1 - v2) < 0.0001f;
+            }
+
+            if (isDefault) {
+                continue;
+            }
+
+            out << YAML::Key << meta.name << YAML::Value;
+
+            if (std::holds_alternative<bool>(value)) {
+                out << std::get<bool>(value);
+            } else if (std::holds_alternative<int>(value)) {
+                out << std::get<int>(value);
+            } else if (std::holds_alternative<float>(value)) {
+                out << std::get<float>(value);
+            } else if (std::holds_alternative<std::string>(value)) {
+                out << std::get<std::string>(value);
+            } else if (std::holds_alternative<glm::vec3>(value)) {
+                auto v = std::get<glm::vec3>(value);
+                out << YAML::Flow << YAML::BeginSeq << v.x << v.y << v.z << YAML::EndSeq;
+            } else if (std::holds_alternative<std::vector<std::string>>(value)) {
+                auto vec = std::get<std::vector<std::string>>(value);
+                out << YAML::BeginSeq;
+                for (const auto& str : vec) {
+                    out << str;
+                }
+                out << YAML::EndSeq;
+            }
+        }
+
+        out << YAML::EndMap;
+    }
+
+    out << YAML::EndMap;
+}
+
+void SceneObject::DeserializeFromYAML(const YAML::Node& node) {
+    m_Classes.clear();
+    m_Parameters.clear();
+
+    if (node["classes"]) {
+        for (const auto& classNode : node["classes"]) {
+            AddClass(classNode.as<std::string>());
+        }
+    }
+
+    if (node["parameters"]) {
+        for (const auto& param : node["parameters"]) {
+            std::string paramName = param.first.as<std::string>();
+            ParameterHandle handle(paramName.c_str());
+
+            auto metaIt = m_AggregatedMeta.find(handle.m_Id);
+            if (metaIt == m_AggregatedMeta.end()) {
+                spdlog::warn("SceneObject: Parameter '{}' not available in object's classes, skipping", paramName);
+                continue;
+            }
+
+            const auto& meta = metaIt->second;
+
+            try {
+                ParameterValue value = ParameterRegistry::ParseValueNode(param.second, meta.type);
+                m_Parameters[handle.m_Id] = value;
+            } catch (const std::exception& e) {
+                spdlog::warn("SceneObject: Failed to parse parameter '{}': {}", paramName, e.what());
+            }
+        }
+    }
+}
 
 void Scene::Serialize(const std::filesystem::path &path) {
     currentPath = path;
     YAML::Emitter out;
     out << YAML::BeginMap;
     out << YAML::Key << "name" << YAML::Value << name;
-    out << YAML::Key << "black_holes" << YAML::Value << YAML::BeginSeq;
-    for (const auto &bh: blackHoles) {
-        out << YAML::BeginMap;
-        out << YAML::Key << "mass" << YAML::Value << bh.mass;
-        out << YAML::Key << "position" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.position.x << bh.position.y
-                << bh.position.z << YAML::EndSeq;
-        out << YAML::Key << "velocity" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.velocity.x << bh.velocity.y
-                << bh.velocity.z << YAML::EndSeq;
-        out << YAML::Key << "show_accretion_disk" << YAML::Value << bh.showAccretionDisk;
-        out << YAML::Key << "accretion_disk_density" << YAML::Value << bh.accretionDiskDensity;
-        out << YAML::Key << "accretion_disk_size" << YAML::Value << bh.accretionDiskSize;
-        out << YAML::Key << "accretion_disk_color" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.
-                accretionDiskColor.r << bh.accretionDiskColor.g << bh.accretionDiskColor.b << YAML::EndSeq;
-        out << YAML::Key << "spin" << YAML::Value << bh.spin;
-        out << YAML::Key << "spin_axis" << YAML::Value << YAML::Flow << YAML::BeginSeq << bh.spinAxis.x << bh.spinAxis.y
-                << bh.spinAxis.z << YAML::EndSeq;
-        out << YAML::EndMap;
-    }
-    out << YAML::EndSeq;
 
-    out << YAML::Key << "meshes" << YAML::Value << YAML::BeginSeq;
-    for (const auto &mesh: meshes) {
-        out << YAML::BeginMap;
-        out << YAML::Key << "name" << YAML::Value << mesh.name;
-        out << YAML::Key << "path" << YAML::Value << mesh.path;
-        out << YAML::Key << "mass" << YAML::Value << mesh.massKg;
-        out << YAML::Key << "position" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.position.x << mesh.
-                position.y << mesh.position.z << YAML::EndSeq;
-        out << YAML::Key << "velocity" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.velocity.x << mesh.
-                velocity.y << mesh.velocity.z << YAML::EndSeq;
-        out << YAML::Key << "com_offset" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.comOffset.x << mesh.
-                comOffset.y << mesh.comOffset.z << YAML::EndSeq;
-        out << YAML::Key << "rotation" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.rotation.w << mesh.
-                rotation.x << mesh.rotation.y << mesh.rotation.z << YAML::EndSeq;
-        out << YAML::Key << "scale" << YAML::Value << YAML::Flow << YAML::BeginSeq << mesh.scale.x << mesh.scale.y <<
-                mesh.scale.z << YAML::EndSeq;
-        out << YAML::EndMap;
+    if (!objects.empty()) {
+        out << YAML::Key << "objects" << YAML::Value << YAML::BeginSeq;
+        for (const auto &obj: objects) {
+            obj.SerializeToYAML(out);
+        }
+        out << YAML::EndSeq;
     }
-    out << YAML::EndSeq;
-
-    out << YAML::Key << "spheres" << YAML::Value << YAML::BeginSeq;
-    for (const auto &sphere: spheres) {
-        out << YAML::BeginMap;
-        out << YAML::Key << "name" << YAML::Value << sphere.name;
-        out << YAML::Key << "mass" << YAML::Value << sphere.massKg;
-        out << YAML::Key << "texture_path" << YAML::Value << sphere.texturePath;
-        out << YAML::Key << "velocity" << YAML::Value << YAML::Flow << YAML::BeginSeq << sphere.velocity.x << sphere.
-                velocity.y << sphere.velocity.z << YAML::EndSeq;
-        out << YAML::Key << "position" << YAML::Value << YAML::Flow << YAML::BeginSeq << sphere.position.x << sphere.
-                position.y << sphere.position.z << YAML::EndSeq;
-        out << YAML::Key << "rotation" << YAML::Value << YAML::Flow << YAML::BeginSeq << sphere.rotation.w << sphere.
-                rotation.x << sphere.rotation.y << sphere.rotation.z << YAML::EndSeq;
-        out << YAML::Key << "color" << YAML::Value << YAML::Flow << YAML::BeginSeq << sphere.color.r << sphere.color.g
-                << sphere.color.b << sphere.color.a << YAML::EndSeq;
-        out << YAML::Key << "spin" << YAML::Value << sphere.spin;
-        out << YAML::Key << "radius" << YAML::Value << sphere.radius;
-        out << YAML::EndMap;
-    }
-    out << YAML::EndSeq;
 
     Application::Instance().GetUI().GetAnimationGraph()->Serialize(out);
 
@@ -86,85 +237,24 @@ void Scene::Deserialize(const std::filesystem::path &path, bool setCurrentPath) 
     if (setCurrentPath) {
         currentPath = path;
     }
-    blackHoles.clear();
-    meshes.clear();
-    spheres.clear();
+
+    objects.clear();
+
     YAML::Node root = YAML::LoadFile(path.string());
+
     if (root["name"]) {
         name = root["name"].as<std::string>();
     } else {
         name = "";
     }
-    if (root["black_holes"]) {
-        for (const auto &node: root["black_holes"]) {
-            BlackHole bh{};
-            bh.mass = node["mass"].as<float>();
-            auto pos = node["position"];
-            bh.position = glm::vec3(pos[0].as<float>(), pos[1].as<float>(), pos[2].as<float>());
-            auto vel = node["velocity"];
-            bh.velocity = glm::vec3(vel[0].as<float>(), vel[1].as<float>(), vel[2].as<float>());
-            bh.showAccretionDisk = node["show_accretion_disk"].as<bool>();
-            bh.accretionDiskDensity = node["accretion_disk_density"].as<float>();
-            bh.accretionDiskSize = node["accretion_disk_size"].as<float>();
-            auto color = node["accretion_disk_color"];
-            bh.accretionDiskColor = glm::vec3(color[0].as<float>(), color[1].as<float>(), color[2].as<float>());
 
-            if (node["spin"]) {
-                bh.spin = node["spin"].as<float>();
-            } else {
-                bh.spin = 0.0f;
-            }
-
-            if (node["spin_axis"]) {
-                auto spinAxis = node["spin_axis"];
-                bh.spinAxis = glm::vec3(spinAxis[0].as<float>(), spinAxis[1].as<float>(), spinAxis[2].as<float>());
-            } else {
-                bh.spinAxis = glm::vec3(0.0f, 1.0f, 0.0f);
-            }
-
-            blackHoles.push_back(bh);
+    if (root["objects"]) {
+        for (const auto &objNode: root["objects"]) {
+            SceneObject obj;
+            obj.DeserializeFromYAML(objNode);
+            objects.push_back(std::move(obj));
         }
-    }
-
-    if (root["meshes"]) {
-        for (const auto &node: root["meshes"]) {
-            MeshObject mesh;
-            mesh.name = node["name"].as<std::string>();
-            mesh.path = node["path"].as<std::string>();
-            mesh.massKg = node["mass"].as<float>();
-            auto pos = node["position"];
-            mesh.position = glm::vec3(pos[0].as<float>(), pos[1].as<float>(), pos[2].as<float>());
-            auto vel = node["velocity"];
-            mesh.velocity = glm::vec3(vel[0].as<float>(), vel[1].as<float>(), vel[2].as<float>());
-            auto comOffset = node["com_offset"];
-            mesh.comOffset = glm::vec3(comOffset[0].as<float>(), comOffset[1].as<float>(), comOffset[2].as<float>());
-            auto rot = node["rotation"];
-            mesh.rotation = glm::quat(rot[0].as<float>(), rot[1].as<float>(), rot[2].as<float>(), rot[3].as<float>());
-            auto scale = node["scale"];
-            mesh.scale = glm::vec3(scale[0].as<float>(), scale[1].as<float>(), scale[2].as<float>());
-            meshes.push_back(mesh);
-        }
-    }
-
-    if (root["spheres"]) {
-        for (const auto &node: root["spheres"]) {
-            Sphere sphere;
-            sphere.name = node["name"].as<std::string>();
-            sphere.texturePath = node["texture_path"].as<std::string>();
-            sphere.massKg = node["mass"].as<float>();
-            auto pos = node["position"];
-            sphere.position = glm::vec3(pos[0].as<float>(), pos[1].as<float>(), pos[2].as<float>());
-            auto vel = node["velocity"];
-            sphere.velocity = glm::vec3(vel[0].as<float>(), vel[1].as<float>(), vel[2].as<float>());
-            auto rot = node["rotation"];
-            sphere.rotation = glm::quat(rot[0].as<float>(), rot[1].as<float>(), rot[2].as<float>(), rot[3].as<float>());
-            auto color = node["color"];
-            sphere.color = glm::vec4(color[0].as<float>(), color[1].as<float>(), color[2].as<float>(),
-                                     color[3].as<float>());
-            sphere.spin = node["spin"].as<float>();
-            sphere.radius = node["radius"].as<float>();
-            spheres.push_back(sphere);
-        }
+        spdlog::info("Loaded {} dynamic objects from scene", objects.size());
     }
 
     Application::Instance().GetUI().GetAnimationGraph()->Deserialize(root);
@@ -191,15 +281,8 @@ std::filesystem::path Scene::ShowFileDialog(bool save) {
 }
 
 void Scene::SelectObject(ObjectType type, size_t index) {
-    if (type == ObjectType::BlackHole && index < blackHoles.size()) {
-        selectedObject = SelectedObject{type, index};
-    } else if (type == ObjectType::Mesh && index < meshes.size()) {
-        selectedObject = SelectedObject{type, index};
-    } else if (type == ObjectType::Sphere && index < spheres.size()) {
-        selectedObject = SelectedObject{type, index};
-    } else {
-        ClearSelection();
-    }
+    // TODO
+    ClearSelection();
 }
 
 void Scene::ClearSelection() {
@@ -208,80 +291,25 @@ void Scene::ClearSelection() {
 
 glm::vec3 *Scene::GetSelectedObjectPosition() {
     if (!selectedObject.has_value()) return nullptr;
-
-    switch (selectedObject->type) {
-        case ObjectType::BlackHole:
-            if (selectedObject->index < blackHoles.size()) {
-                return &blackHoles[selectedObject->index].position;
-            }
-            break;
-        case ObjectType::Mesh:
-            if (selectedObject->index < meshes.size()) {
-                return &meshes[selectedObject->index].position;
-            }
-            break;
-        case ObjectType::Sphere:
-            if (selectedObject->index < spheres.size()) {
-                return &spheres[selectedObject->index].position;
-            }
-    }
+    // TODO
     return nullptr;
 }
 
 glm::quat *Scene::GetSelectedObjectRotation() {
     if (!selectedObject.has_value()) return nullptr;
-
-    switch (selectedObject->type) {
-        case ObjectType::Mesh:
-            if (selectedObject->index < meshes.size()) {
-                return &meshes[selectedObject->index].rotation;
-            }
-            break;
-        case ObjectType::Sphere:
-            if (selectedObject->index < spheres.size()) {
-                return &spheres[selectedObject->index].rotation;
-            }
-        default:
-            break;
-    }
+    // TODO
     return nullptr;
 }
 
 glm::vec3 *Scene::GetSelectedObjectScale() {
     if (!selectedObject.has_value()) return nullptr;
-
-    switch (selectedObject->type) {
-        case ObjectType::Mesh:
-            if (selectedObject->index < meshes.size()) {
-                return &meshes[selectedObject->index].scale;
-            }
-            break;
-        default:
-            break;
-    }
+    // TODO
     return nullptr;
 }
 
 std::string Scene::GetSelectedObjectName() const {
     if (!selectedObject.has_value()) return "";
-
-    switch (selectedObject->type) {
-        case ObjectType::BlackHole:
-            if (selectedObject->index < blackHoles.size()) {
-                return "Black Hole #" + std::to_string(selectedObject->index + 1);
-            }
-            break;
-        case ObjectType::Mesh:
-            if (selectedObject->index < meshes.size()) {
-                return meshes[selectedObject->index].name;
-            }
-            break;
-        case ObjectType::Sphere:
-            if (selectedObject->index < spheres.size()) {
-                return spheres[selectedObject->index].name;
-            }
-            break;
-    }
+    // TODO
     return "";
 }
 
@@ -289,52 +317,6 @@ std::optional<Scene::SelectedObject>
 Scene::PickObject(const glm::vec3 &rayOrigin, const glm::vec3 &rayDirection) const {
     float closestDistance = std::numeric_limits<float>::max();
     std::optional<SelectedObject> closestObject;
-
-    for (size_t i = 0; i < blackHoles.size(); ++i) {
-        const auto &bh = blackHoles[i];
-
-        float schwarzschildRadius = 2.0f * bh.mass;
-        float pickingRadius = std::max(schwarzschildRadius, 1.0f);
-
-        glm::vec3 oc = rayOrigin - bh.position;
-        float a = glm::dot(rayDirection, rayDirection);
-        float b = 2.0f * glm::dot(oc, rayDirection);
-        float c = glm::dot(oc, oc) - pickingRadius * pickingRadius;
-        float discriminant = b * b - 4 * a * c;
-
-        if (discriminant >= 0) {
-            float t1 = (-b - sqrt(discriminant)) / (2.0f * a);
-            float t2 = (-b + sqrt(discriminant)) / (2.0f * a);
-            float t = (t1 > 0) ? t1 : t2;
-
-            if (t > 0 && t < closestDistance) {
-                closestDistance = t;
-                closestObject = SelectedObject{ObjectType::BlackHole, i};
-            }
-        }
-    }
-
-    for (size_t i = 0; i < meshes.size(); ++i) {
-    }
-
-    for (size_t i = 0; i < spheres.size(); ++i) {
-        const auto &sphere = spheres[i];
-        float pickingRadius = sphere.radius;
-        glm::vec3 oc = rayOrigin - sphere.position;
-        float a = glm::dot(rayDirection, rayDirection);
-        float b = 2.0f * glm::dot(oc, rayDirection);
-        float c = glm::dot(oc, oc) - pickingRadius * pickingRadius;
-        float discriminant = b * b - 4 * a * c;
-        if (discriminant >= 0) {
-            float t1 = (-b - sqrt(discriminant)) / (2.0f * a);
-            float t2 = (-b + sqrt(discriminant)) / (2.0f * a);
-            float t = (t1 > 0) ? t1 : t2;
-            if (t > 0 && t < closestDistance) {
-                closestDistance = t;
-                closestObject = SelectedObject{ObjectType::Sphere, i};
-            }
-        }
-    }
-
+   // TODO
     return closestObject;
 }

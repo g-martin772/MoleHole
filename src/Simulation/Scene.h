@@ -6,6 +6,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <string>
 #include <optional>
+#include <unordered_map>
 #include "Application/AnimationGraph.h"
 #include "Application/ParameterRegistry.h"
 
@@ -24,73 +25,40 @@ struct SceneObjectDefinition {
     std::unordered_map<uint64_t, ParameterMetadata> meta;
 };
 
-struct SceneObject {
+class SceneObject {
+public:
     SceneObject();
+    explicit SceneObject(const std::vector<std::string>& classNames);
     virtual ~SceneObject() = default;
 
-    bool HasField(const ParameterHandle& handle) const;
-    ParameterValue GetField(const ParameterHandle& handle) const;
-    void SetField(const ParameterHandle& handle, const ParameterValue& value);
-protected:
-    SceneObjectDefinition* definition;
-    std::vector<ParameterValue> values;
+    void AddClass(const std::string& className);
+    bool HasClass(const std::string& className) const;
+    const std::vector<ObjectClass*>& GetClasses() const { return m_Classes; }
+
+    bool HasParameter(const ParameterHandle& handle) const;
+    ParameterValue GetParameter(const ParameterHandle& handle) const;
+    void SetParameter(const ParameterHandle& handle, const ParameterValue& value);
+
+    const std::unordered_map<uint64_t, ParameterValue>& GetAllParameters() const { return m_Parameters; }
+    const std::unordered_map<uint64_t, ParameterMetadata>& GetAllMetadata() const { return m_AggregatedMeta; }
+
+    void SerializeToYAML(YAML::Emitter& out) const;
+    void DeserializeFromYAML(const YAML::Node& node);
+
+private:
+    std::vector<ObjectClass*> m_Classes;
+    std::unordered_map<uint64_t, ParameterValue> m_Parameters;
+    std::unordered_map<uint64_t, ParameterMetadata> m_AggregatedMeta;
+
+    void RebuildMetadata();
 };
 
-
-
-struct BlackHole {
-    float mass;
-    glm::vec3 position;
-    glm::vec3 velocity;
-
-    float spin = 0.0f;  // 0.0 to 1.0
-    glm::vec3 spinAxis = glm::vec3(0.0f, 1.0f, 0.0f);
-
-    bool operator==(const BlackHole& other) const {
-        return mass == other.mass &&
-               position == other.position &&
-               velocity == other.velocity &&
-               spin == other.spin &&
-               spinAxis == other.spinAxis;
-    }
-};
-
-struct MeshObject {
-    float massKg;
-    std::string name;
-    std::string path;
-    glm::vec3 position;
-    glm::vec3 velocity;
-    glm::vec3 comOffset;
-    glm::quat rotation;
-    glm::vec3 scale;
-
-    MeshObject() : massKg(1000.0f), position(0.0f), velocity(0.0f), comOffset(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), scale(1.0f) {}
-};
-
-struct Sphere {
-    float massKg;
-    std::string name;
-    std::string texturePath;
-    glm::vec3 velocity;
-    glm::vec3 position;
-    glm::quat rotation;
-    glm::vec4 color;
-    float spin, radius;
-    Sphere() : massKg(1000.0f), position(0.0f), velocity(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), color(0.5f, 0.5f, 0.5f, 1.0f), spin(0.0f), radius(1.0f) {}
-};
-
-
-
-enum class ObjectType { BlackHole, Mesh, Sphere };
-
-
+enum class ObjectType { BlackHole, Mesh, Sphere, DynamicObject };
 
 struct Scene {
     std::string name;
-    std::vector<BlackHole> blackHoles;
-    std::vector<MeshObject> meshes;
-    std::vector<Sphere> spheres;
+    std::vector<SceneObject> objects;
+
     std::filesystem::path currentPath;
     Camera* camera = nullptr;
 
