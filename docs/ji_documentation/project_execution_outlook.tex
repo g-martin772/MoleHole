@@ -3,7 +3,7 @@
 
 \subsection{Projektumsetzung und Ausblick} \label{subsec:project_execution_outlook}
 
-Dieser Abschnitt beschreibt die wesentlichen Merkmale dieses Projektes und soll die Realisierung und die aktuellen
+Dieser Abschnitt beschreibt die wesentlichen Merkmale dieses Projektes und soll die Realisierung, die aktuellen
 Ergebnisse sowie das Entwicklungspotenzial erläutern. \\
 
 \subsubsection{Innovationsgehalt und Einzigartigkeit} \label{subsubsec:innovation_uniqueness} \\
@@ -13,8 +13,8 @@ In dieser Sektion wird erklärt, warum dieses Projekt einzigartig ist und einen 
 \textbf{Innovationscharakter} \\
 
 Dieses Projekt kann als innovativ oder außergewöhnlich angesehen werden, da schwarze Löcher für einen Großteil der
-Bevölkerung ein sehr unbekanntes Thema sind und eher einschüchternd wirken, wenn man die komplexe Mathematik dahinter
-betrachtet.
+Bevölkerung ein sehr unbekanntes Thema sind und eher einschüchternd wirken, wenn die komplexe Mathematik dahinter
+betrachtet wird.
 Außerdem geht es um besonders abstrakte Konzepte, da bis heute erst zwei echte Bilder eines schwarzen Loches angefertigt
 werden konnten~\autocite{Article:EHT_Imaging_M87,Article:EHT_Imaging_SgrA}.
 Demnach ist das Projekt innovativ, weil es sich mit dieser komplizierten Thematik auseinandersetzt.
@@ -26,14 +26,14 @@ Vorgänge in der Nähe eines schwarzen Loches zu erleben. \\
 
 Das Projekt ist ein OpenSource-Projekt und der gesamte Quellcode ist auf GitHub
 ersichtlich~\autocite{Project:Black_Hole_Sim_MoleHole}.
-Zudem wurde es unter der GNU General Public License v3.0 (GPL-3.0)
+Zudem wurde es unter der \textit{GNU General Public License v3.0 (GPL-3.0)}
 veröffentlicht~\autocite{License:GPL}. \\
 
 \textbf{Einzigartigkeit} \\
 
 Es gibt ohnehin wenig frei zugängliche Projekte, die als Ziel die Visualisierung schwarzer Löcher verfolgen.
-Jedoch ist bei diesen Projekten nie eine Benutzerinteraktion vorgesehen und schränkt somit die Bedienung
-dieser Applikationen stark ein.
+Jedoch ist bei diesen Projekten nie eine Benutzerinteraktion vorgesehen und die Bedienung
+dieser Applikationen wird stark eingeschränkt.
 Genau in dieser Lücke findet sich das MoleHole Projekt wieder, indem es die Echtzeitsimulation schwarzer Löcher mit einer
 interaktiven Benutzeroberfläche kombiniert. \\
 
@@ -76,16 +76,17 @@ Ray Marching.
 Beim Ray Tracing geht von der Kamera aus bis zu einem Schnittpunkt mit einem Objekt ein Lichtstrahl
 aus und wird dort reflektiert und zur Lichtquelle zurückverfolgt.
 Dies wird für eine große Anzahl an Schnittpunkten durchgeführt, bis schlussendlich das ganze Objekt sichtbar ist.
-Dies wird dann am Bildschirm dargestellt.
-Beim Ray Marching nutzt man auch Lichtstrahlen, die von der Kamera ausgehen, aber man geht hier Schritt für
-Schritt und rechnet nicht sofort den Schnittpunkt mit einem Objekt aus.
+Dies wird dann am Bildschirm dargestellt~\autocite{Article:Ray_Tracing}.
+Beim Ray Marching werden auch Lichtstrahlen, die von der Kamera ausgehen, genutzt, aber es wird hier Schritt für
+Schritt entlang des Lichtstrahls gegangen und nicht sofort der Schnittpunkt mit einem Objekt
+ausgerechnet~\autocite{Article:Ray_Tracing_Fractals}.
 Grundsätzlich ist diese Methode also rechenintensiver, aber sie ermöglicht es, gekrümmte Lichtstrahlen abzubilden.
 Diese gekrümmten Lichtstrahlen sind dafür verantwortlich, dass in der Nähe eines schwarzen Loches komplexe
 visuelle Effekte auftreten.
 Die Lichtstrahlen werden durch die Gravitation abgelenkt und dieser sogenannte Gravitationslinseneffekt
 wird durch das Ray Marching in der Applikation simuliert.
-Da die Rechenleistung eines normalen Computers für das Ray Marching nicht ausreicht, muss man einen Kompromiss eingehen.
-Man verzichtet auf die exakte Darstellung der Objekte und beschäftigt sich nur mit der Simulation von Lichtstrahlen,
+Da die Rechenleistung eines normalen Computers für das Ray Marching nicht ausreicht, muss ein Kompromiss eingegangen werden.
+Es wird auf die exakte Darstellung der Objekte verzichtet und sich nur mit der Krümmung von Lichtstrahlen beschäftigt,
 die sehr nahe an einer großen Masse vorbeigehen.
 Dadurch wird gewährleistet, dass die gewünschten optischen Effekte zu sehen sind, jedoch auch nicht zu viel Genauigkeit
 verloren geht, da die Lichtstrahlen in größerer Entfernung nicht mehr wirklich sichtbar abgelenkt werden.
@@ -109,7 +110,7 @@ Hierbei werden Lichtstrahlen in der Nähe einer großen Masse stärker abgelenkt
 Dies entspricht dann einem ähnlichen Effekt wie bei einer herkömmlichen \textit{Konvexlinse}.
 Um diesen Effekt visuell darzustellen, ist es nötig die \textit{Nullgeodätische} auszurechnen, welche den
 Weg des Lichts um ein schwarzes Loch angibt~\autocite{Book:General_Relativity}.
-Man nehme an, dass $x(\lambda)$ den Weg eines Objektes durch Raum und Zeit und $\Gamma$ das
+Es werde angenommen, dass $x(\lambda)$ den Weg eines Objektes durch Raum und Zeit und $\Gamma$ das
 \textit{Christoffel-Symbol} angibt.
 Damit ergibt sich nach Lösung von
 \begin{equation}
@@ -152,7 +153,7 @@ Punktmasse~\autocite{Book:Gravitation,Book:General_Relativity,Book:Black_Holes_b
 
 Ein weiterer wichtiger Effekt ist die richtige Temperaturskalierung in der Akkretionsscheibe und die damit verbundene
 Lichtemission, die vom menschlichen Auge oder einem Bildsensor als Farbe erkannt wird.
-Man nehme an, dass $G$ die Gravitationskonstante, $\sigma$ die Stefan-Boltzmann-Konstante,
+Es werde angenommen, dass $G$ die Gravitationskonstante, $\sigma$ die Stefan-Boltzmann-Konstante,
 $M$ die Masse des schwarzen Loches, $\dot{M}$ die Akkretionsrate, $R_i$ der innere Radius der Akkretionsscheibe
 und $R$ der aktuelle Radius in der Akkretionsscheibe ist.
 Die Temperaturverteilung $T(R)$ in der Akkretionsscheibe lässt sich dann durch
@@ -177,11 +178,11 @@ beschreiben~\autocite{Article:Temp_Accretion_Disk}. \\
 Die verwendete Methodik, um Erkenntnisse zu gewinnen, ist die Empirie.
 Sie dient der Verbesserung der Applikation.
 Es wurde ein Problem identifiziert und danach an einer vermeintlichen Lösung gearbeitet.
-Nachdem man eine Lösung auf dem Papier entwickelt hatte, wurde diese in der Applikation implementiert und ausprobiert.
+Nachdem eine Lösung auf dem Papier entwickelt worden war, wurde diese in der Applikation implementiert und ausprobiert.
 Durch die Überprüfung der neuen Implementierung konnte eine Entscheidung getroffen werden, ob die Lösung
 zielführend war oder nicht.
 Genau so musste das Projektteam die Performance verbessern.
-Es wurde festgestellt, das die Software die gewünschte Leistung nicht lieferte, also musste sich etwas überlegt werden.
+Es wurde festgestellt, dass die Software die gewünschte Leistung nicht lieferte, also musste sich etwas überlegt werden.
 Deswegen wurde mithilfe einiger Zeichnungen an der Tafel eine mögliche Lösung erarbeitet.
 Diese bezieht sich auf die oben genannte Kombination aus Ray Tracing und Ray Marching.
 Nach der Implementierung dieser Lösung konnte festgestellt werden, dass die Performance
@@ -190,7 +191,7 @@ signifikant verbessert wurde.
 Ein weiteres Mittel für die Gewinnung wichtiger Erkenntnisse ist die Arbeitsweise mit Sprints wie
 in~\ref{subsubsec:planning} erklärt.
 Sie ermöglicht die Reflexion über die vergangene Arbeit und eine kontinuierliche Verbesserung
-des Projektes.
+des Produktes.
 Außerdem sind in diesem Format regelmäßige Erweiterungen der Software geplant - sogenannte
 Product Increments - die vom agilen Projektmanagement vorgegeben sind und andauernd für
 eine verbesserte Version des Produktes sorgen.
@@ -230,13 +231,13 @@ Die nummerierten Bereiche werden nachstehend erläutert:
             die Drehachse $a^i$ anpassbar sind.
     \item   \textbf{2 - Visualisierungen:} Dieses Fenster ermöglicht die Anpassung verschiedenster Effekte, die im
             Prozess des Renderings verwendet werden.
-            Dazu zählen die Aktivierung des Gravitationslinseneffektes, der gravitativen Rotverschiebung, des
-            Volumetric Cloud Renderings sowie des Dopplereffektes.
+            Dazu zählen die Aktivierung des Gravitationslinseneffektes, der gravitativen Rotverschiebung
+            sowie des Dopplereffektes.
             Weiters lassen sich die Höhe der Akkretionsscheibe, die Skalierung der \textit{Noise-Funktion}, die für
             die Darstellung der Akkretionsscheibe genutzt wird, die Details in der Scheibe, als auch die Geschwindigkeit
-            $\omega$ mit der sich die Scheibe dreht, einstellen.
+            $\omega$, mit der sich die Scheibe dreht, einstellen.
             Weiters gibt es die Möglichkeit, den \textit{Bloom-Effekt} zu aktivieren und einige Einstellungen dafür, die
-            man verändern kann.
+            verändert werden können.
             Zusätzlich ist es auch möglich, das \textit{Anti-Aliasing} einzuschalten, welches für eine verbesserte
             Qualität des Bildes der Szene sorgt.
             Die Einstellungen, die in diesem Menü aber die größten Möglichkeiten bieten, sind die verschiedenen
@@ -262,8 +263,8 @@ Die nummerierten Bereiche werden nachstehend erläutert:
             Weiters sind hier auch die Einstellungen untergebracht, die für das Setzen eines standardmäßigen
             Export-Pfades und das Anpassen der Schriftgröße und Schriftart eine Möglichkeit bieten.
     \item   \textbf{6 - Szene:} Dies ist der Bereich, in dem die hauptsächliche Simulation und Visualisierung
-            eingebettet ist und somit das Kernstück der Software ist.
-            Hier kann man alle Einstellungen als finales Bild ansehen und eine Simulation beobachten.
+            eingebettet ist und somit das Kernstück der Software.
+            Hier können alle Einstellungen als finales Bild angesehen und eine Simulation beobachtet werden.
 \end{itemize}
 
 \FloatBarrier
@@ -289,18 +290,17 @@ Die beiden Rendering-Ergebnisse in Abbildung~\ref{fig:black_hole_rendering} zeig
 einziges schwarzes Loch.
 Bei dem linken Bild in Abbildung~\ref{fig:black_hole_rendering_white} ist die Akkretionsscheibe als weiß zu
 erkennen.
-Das kommt daher, da dieses Rendering in einem früheren Stadium des Projektes aufgenommen worden ist und
+Das kommt daher, dass dieses Rendering in einem früheren Stadium des Projektes aufgenommen worden ist und
 die Temperaturskalierung nicht den realen Verhältnissen entsprochen hat.
-Im rechten Bild in Abbildung~\ref{fig:black_hole_rendering_black} kann man eine genauere Verteilung der
-Temperatur in der Akkretionsscheibe erkennen, welche sich in Abhängigkeit der Entfernung zum Zentrum
+Im rechten Bild in Abbildung~\ref{fig:black_hole_rendering_black} ist eine genauere Verteilung der
+Temperatur in der Akkretionsscheibe zu erkennen, welche sich in Abhängigkeit der Entfernung zum Zentrum
 des schwarzen Loches ändert.
 Diese Temperaturverteilung wird in der Gleichung~\ref{eq:temp_scaling_accretion_disk}
 mathematisch beschrieben.
 
-Für die nachfolgenden Bilder wurde eine Grafik aus dem Internet verwendet, um die restlichen Objekte
-besser hervorzuheben.
+Für die nachfolgenden Bilder in~\ref{fig:camera_perspectives} und~\ref{fig:debug_layers} wurde eine
+Grafik aus dem Internet verwendet, um die restlichen Objekte besser hervorzuheben.
 Dieses Bild ist ein Foto der Milchstraße von Jcomp~\autocite{Picture:Milky_Way}.
-
 
 \FloatBarrier
 \begin{figure}[!bth]
@@ -324,11 +324,10 @@ Dieses Bild ist ein Foto der Milchstraße von Jcomp~\autocite{Picture:Milky_Way}
 In der Software wurden zwei verschiedene Kameraperspektiven umgesetzt: die First-Person-Perspektive und
 die Third-Person-Perspektive.
 In Abbildung~\ref{fig:camera_perspectives} kann man die beiden im Vergleich betrachten.
-Für die Third-Person-Perspektive kann man ein Objekt auswählen, das man dann steuern kann.
+Für die Third-Person-Perspektive kann ein Objekt ausgewählt werden, das dann gesteuert werden kann.
 Dieses Objekt wird mit einem zusätzlichen Würfel, welcher eine Art Crosshair darstellen soll, in der
 Applikation gerendert.
 
-\FloatBarrier
 \begin{figure}[!bth]
     \centering
     \begin{subfigure}{0.45\textwidth}
@@ -373,7 +372,7 @@ durch das Rendering einer verschiedenen Anzahl an Objekten.
 
 Für den Test der Performance wurde ein Acer Predator Triton 500 Laptop mit einem Intel Core i7-10750H
 und einer Nvidia GeForce RTX 2080 Super verwendet~\autocite{Website:Acer}.
-Die Ergebnisse sind am 25.01.2026 aufgenommen worden und sind in Abbildung~\ref{fig:performance_test} zu sehen.
+Die Ergebnisse sind am 25.01.2026 aufgenommen worden und in Abbildung~\ref{fig:performance_test} zu sehen.
 Es wurden für jedes Szenario insgesamt 10 Stichproben genommen und danach der Durchschnittswert berechnet.
 Aus den Daten lässt sich klar erkennen, dass vor allem schwarze Löcher einen ordentlichen
 Rechenaufwand benötigen.
@@ -381,9 +380,8 @@ Für 3D-Modelle (Meshes) und Sterne~\&~Planeten (Spheres) ist die Performance na
 
 Insgesamt hat das Projekt bis zum 25.01.2026 197 Commits auf GitHub zustande gebracht.
 Dabei wurden 1404 Zeilen Code in der Sprache GLSL und 12966 Zeilen in der Sprache C++ geschrieben.
-Das Projekt wurde bis jetzt von einem Team aus zwei Personen im Durchlauf von 5 Sprints realisiert.
+Das Projekt wurde bis jetzt von einem Team aus zwei Personen im Durchlauf von 5 Sprints realisiert. \\
 
-\FloatBarrier
 \textbf{Prüfen der abgeschlossenen Aufgaben} \\
 
 Das Projektteam setzt sich alle Ziele am Anfang eines sogenannten Sprints~\autocite{Website:Scrum} und schreibt
@@ -394,7 +392,7 @@ Um zu überprüfen, ob das Projektteam die Ziele erfüllt, werden diese in der A
 Projektteams ausprobiert.
 Da dies keine besonders zuverlässige Methode zur Bestimmung der erfüllten Ziele ist, gibt es am Ende eines jeden
 Sprints ein \textit{Sprint-Review Meeting}, bei dem das Team ihre Ergebnisse dem Projektbetreuer sowie einem ausgewählten Kunden
-(ein Mitschüler) vorstellt und den Sprint somit abschließt~\autocite{Website:Scrum}.
+(einem Mitschüler) vorstellt und den Sprint somit abschließt~\autocite{Website:Scrum}.
 Danach werden erneut Ziele für die nächste Iteration überlegt. \\
 
 \textbf{Erreichte Ziele} \\
@@ -424,8 +422,8 @@ Demnach werden in dieser Sektion alle potenziellen Erweiterungen des Projektes a
 \textbf{Gesellschaftliche Auswirkungen} \\
 
 Wie bereits in~\ref{subsec:project_origin_and_planning} erwähnt ist das Gesamtziel des Projektes eine verbesserte
-Wissenschaftskommunikation durch eine Applikation mit der man experimentell und spielerisch komplexe Vorgänge
-unseres Universums erleben und erlernen kann.
+Wissenschaftskommunikation durch eine Applikation mit der experimentell und spielerisch komplexe Vorgänge
+unseres Universums erlebt und erlernt werden können.
 Das Produkt ist so konzipiert, dass es die Möglichkeit gibt, eigene Simulationen zu erstellen und in diesen zu experimentieren,
 aber auch über Tooltips und Dokumentation Genaueres über die simulierten physikalischen Effekte zu erfahren.
 Weiters ist die Applikation als OpenSource-Software frei auf GitHub verfügbar und wird dies in Zukunft auch bleiben, was
@@ -443,10 +441,10 @@ Zusätzlich wird mithilfe von Kooperationen auch die Entwicklung weiterer Forsch
 \textbf{Releases} \\
 
 Wenn die Entwicklung des Projektes weiterhin große Fortschritte erzielt, ist eine Veröffentlichung des Projektes
-zum Beispiel auf Steam anzuvisieren.
+zum Beispiel auf Steam~\autocite{Website:Steam} anzuvisieren.
 Aktuell kann das Projekt zwar schon benutzt werden, da es ein öffentliches GitHub Repository mit dem Code gibt, aber
 es ist ein wenig technisches Wissen notwendig, um die Applikation zu verwenden.
-Wenn diese auf einer Vertriebsplattform wie Steam veröffentlicht werden kann, würde das den Zugang
+Wenn diese auf einer Vertriebsplattform wie Steam~\autocite{Website:Steam} veröffentlicht werden kann, würde das den Zugang
 zu der Software erleichtern.
 Insgesamt kann die Aussage getroffen werden, dass das Projekt in Zukunft offiziell veröffentlicht werden soll, aber
 noch viel Arbeit notwendig ist, um dieses Ziel zu erreichen.
@@ -465,7 +463,8 @@ Nichtsdestotrotz beschäftigt sich das Team mit diesem Effekt, da dieser extrem 
 eines schwarzen Loches ist.
 Mit der Kerr-Metrik folgen einige andere wichtige Phänomene aus der ART, die als mögliche Ziele des Projektes
 im Hinterkopf behalten werden sollen, jedoch erst nach Umsetzung der Kerr-Metrik implementiert werden können.
-Diese Effekte sind das Frame-Dragging, die Zeitdilatation, die Längenkontraktion sowie die Gravitation im Allgemeinen.
+Diese Effekte sind das \textit{Frame-Dragging}, die \textit{Zeitdilatation}, die \textit{Längenkontraktion}
+sowie die Gravitation im Allgemeinen.
 Vor allem Zeitdilatation und Längenkontraktion sind wichtig für eine genaue Simulation schwarzer Löcher, da für Beobachter
 außerhalb der unmittelbaren Umgebung eines schwarzen Loches Objekte nahe dem Ereignishorizont sich immer langsamer
 bewegen und letztendlich verblassen~\autocite{Book:Gravitation}.
@@ -486,7 +485,7 @@ detailreicher darzustellen.
 Diese Rendering-Technik kümmert sich um die Belichtung wolkenartiger Gebilde, da Licht in Wolken gestreut und abgelenkt wird,
 sodass nicht genau das Licht den Beobachter erreicht, das ursprünglich in seine Richtung ausgesandt worden
 ist~\autocite{Video:Coding_Adventure_Clouds,Paper:Volumetric_Cloud_Rendering}.
-Außerdem wird eine Partikel Simulation angestrebt, sodass man sehen kann, wie sich über die Zeit eine Akkretionsscheibe um
+Außerdem wird eine Partikel Simulation angestrebt, sodass zu sehen ist, wie sich über die Zeit eine Akkretionsscheibe um
 ein schwarzes Loch bildet.
 Abgesehen von der technischen Simulation, ist es auch das Ziel, Wissenschaft zu kommunizieren.
 Daher ist auch geplant, Erklärungen und Beschreibungen mittels Tooltips und detaillierte Berichte in einem Menü unterzubringen.

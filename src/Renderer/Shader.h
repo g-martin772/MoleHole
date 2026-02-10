@@ -24,6 +24,7 @@ public:
 
 private:
     static std::string ReadFile(const char* path);
+    static std::string PreprocessIncludes(const std::string& source, const char* sourcePath);
     unsigned int Compile(const std::string& vertexSrc, const std::string& fragmentSrc);
     unsigned int CompileCompute(const std::string& computeSrc);
     
