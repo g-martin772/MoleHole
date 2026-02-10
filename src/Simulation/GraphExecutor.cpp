@@ -457,10 +457,10 @@ GraphExecutor::Value GraphExecutor::ExecuteDecomposer(AnimationGraph::Node* node
                         spdlog::debug("[GraphExecutor] Stored mass {} in pin {}", bh->mass, node->Outputs[i].Id.Get());
                         break;
                 case 1: m_PinValues[node->Outputs[i].Id.Get()] = bh->position; break;
-                case 2: m_PinValues[node->Outputs[i].Id.Get()] = bh->showAccretionDisk; break;
-                case 3: m_PinValues[node->Outputs[i].Id.Get()] = bh->accretionDiskDensity; break;
-                case 4: m_PinValues[node->Outputs[i].Id.Get()] = bh->accretionDiskSize; break;
-                case 5: m_PinValues[node->Outputs[i].Id.Get()] = bh->accretionDiskColor; break;
+                // case 2: m_PinValues[node->Outputs[i].Id.Get()] = bh->showAccretionDisk; break;
+                // case 3: m_PinValues[node->Outputs[i].Id.Get()] = bh->accretionDiskDensity; break;
+                // case 4: m_PinValues[node->Outputs[i].Id.Get()] = bh->accretionDiskSize; break;
+                // case 5: m_PinValues[node->Outputs[i].Id.Get()] = bh->accretionDiskColor; break;
                 case 6: m_PinValues[node->Outputs[i].Id.Get()] = bh->spin; break;
                 case 7: m_PinValues[node->Outputs[i].Id.Get()] = bh->spinAxis; break;
             }
@@ -533,35 +533,35 @@ void GraphExecutor::ExecuteSetter(AnimationGraph::Node* node, float deltaTime) {
                     bh->position = newPos;
                     break;
                 }
-                case 4: {
-                    bool newShowDisk = GetValueAs<bool>(val, bh->showAccretionDisk);
-                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting showAccretionDisk from {} to {}",
-                                 bh->showAccretionDisk, newShowDisk);
-                    bh->showAccretionDisk = newShowDisk;
-                    break;
-                }
-                case 5: {
-                    float newDiskDensity = GetValueAs<float>(val, bh->accretionDiskDensity);
-                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskDensity from {} to {}",
-                                 bh->accretionDiskDensity, newDiskDensity);
-                    bh->accretionDiskDensity = newDiskDensity;
-                    break;
-                }
-                case 6: {
-                    float newDiskSize = GetValueAs<float>(val, bh->accretionDiskSize);
-                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskSize from {} to {}",
-                                 bh->accretionDiskSize, newDiskSize);
-                    bh->accretionDiskSize = newDiskSize;
-                    break;
-                }
-                case 7: {
-                    glm::vec3 newDiskColor = GetValueAs<glm::vec3>(val, bh->accretionDiskColor);
-                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskColor from ({},{},{}) to ({},{},{})",
-                                 bh->accretionDiskColor.r, bh->accretionDiskColor.g, bh->accretionDiskColor.b,
-                                 newDiskColor.r, newDiskColor.g, newDiskColor.b);
-                    bh->accretionDiskColor = newDiskColor;
-                    break;
-                }
+                // case 4: {
+                //     bool newShowDisk = GetValueAs<bool>(val, bh->showAccretionDisk);
+                //     spdlog::debug("[GraphExecutor] ExecuteSetter: Setting showAccretionDisk from {} to {}",
+                //                  bh->showAccretionDisk, newShowDisk);
+                //     bh->showAccretionDisk = newShowDisk;
+                //     break;
+                // }
+                // case 5: {
+                //     float newDiskDensity = GetValueAs<float>(val, bh->accretionDiskDensity);
+                //     spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskDensity from {} to {}",
+                //                  bh->accretionDiskDensity, newDiskDensity);
+                //     bh->accretionDiskDensity = newDiskDensity;
+                //     break;
+                // }
+                // case 6: {
+                //     float newDiskSize = GetValueAs<float>(val, bh->accretionDiskSize);
+                //     spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskSize from {} to {}",
+                //                  bh->accretionDiskSize, newDiskSize);
+                //     bh->accretionDiskSize = newDiskSize;
+                //     break;
+                // }
+                // case 7: {
+                //     glm::vec3 newDiskColor = GetValueAs<glm::vec3>(val, bh->accretionDiskColor);
+                //     spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskColor from ({},{},{}) to ({},{},{})",
+                //                  bh->accretionDiskColor.r, bh->accretionDiskColor.g, bh->accretionDiskColor.b,
+                //                  newDiskColor.r, newDiskColor.g, newDiskColor.b);
+                //     bh->accretionDiskColor = newDiskColor;
+                //     break;
+                // }
                 case 8: {
                     float newSpin = GetValueAs<float>(val, bh->spin);
                     spdlog::debug("[GraphExecutor] ExecuteSetter: Setting spin from {} to {}",

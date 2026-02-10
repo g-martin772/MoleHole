@@ -25,7 +25,7 @@ struct PhysicsBodyData {
     bool isBlackHole = false;
     std::string meshPath;
     size_t sceneIndex = 0;
-    Scene::ObjectType objectType;
+    //Scene::ObjectType objectType;
 };
 
 struct BlackHoleBodyData {

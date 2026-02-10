@@ -35,4 +35,5 @@
 [submodule "dependencies/physx"]
 	path = dependencies/physx
 	url = https://github.com/g-martin772/PhysX5
-	branch = main
+	branch = mai
+	n

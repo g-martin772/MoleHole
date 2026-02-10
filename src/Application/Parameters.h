@@ -80,6 +80,10 @@ namespace Params {
     inline constexpr ParameterHandle UIFontSize("UI.FontSize");
     inline constexpr ParameterHandle UIMainFont("UI.MainFont");
     inline constexpr ParameterHandle UIDefaultExportPath("UI.DefaultExportPath");
+
+    // Config
+    inline constexpr ParameterHandle AdditionalObjectClassSources("Config.AdditionalObjectClassSources");
+    inline constexpr ParameterHandle AdditionalSceneObjectDefinitionSources("Config.AdditionalSceneObjectDefinitionSources");
 }
 
 namespace Field {

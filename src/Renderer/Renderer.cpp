@@ -448,10 +448,6 @@ void Renderer::Render2DRays(Scene *scene) {
 
     float currentTime = static_cast<float>(glfwGetTime());
 
-    for (const auto &bh: scene->blackHoles) {
-        DrawCircle(glm::vec2(bh.position.x, bh.position.y), 0.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
-    }
-
     std::vector<Sphere> emptySpheres;
     std::vector<MeshObject> emptyMeshes;
     std::unordered_map<std::string, std::shared_ptr<GLTFMesh>> emptyMeshCache;

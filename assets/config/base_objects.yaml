@@ -1,0 +1,18 @@
+base_objects:
+  - name: "BlackHole"
+    classes:
+      - "Entity"
+      - "BlackHole"
+      - "Physics"
+
+  - name: "Mesh"
+    classes:
+      - "Entity"
+      - "Mesh"
+      - "Physics"
+
+  - name: "Sphere"
+    classes:
+      - "Entity"
+      - "Sphere"
+      - "Physics"

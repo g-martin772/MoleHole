@@ -11,15 +11,16 @@
 
 class Camera;
 
-struct ObjectClassDefinition {
+struct ObjectClass {
     std::string name;
     std::vector<std::string> availableParameterKeys;
+    std::vector<std::string> requiredParameterKeys;
+    std::unordered_map<uint64_t, ParameterMetadata> meta;
 };
 
 struct SceneObjectDefinition {
-    mutable std::mutex mutex;
-    std::vector<ObjectClassDefinition*> objectClasses;
-    std::vector<std::string> requiredParameterKeys;
+    std::string name;
+    std::vector<ObjectClass*> objectClasses;
     std::unordered_map<uint64_t, ParameterMetadata> meta;
 };
 

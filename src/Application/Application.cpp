@@ -193,37 +193,15 @@ void Application::RequestClose() const {
 }
 
 void Application::LoadScene(const std::filesystem::path& scenePath) {
-    try {
-        if (auto scene = m_simulation.GetScene(); scene && std::filesystem::exists(scenePath)) {
-            scene->Deserialize(scenePath);
-            Application::Params().Set(Params::AppLastOpenScene, scenePath.string());
-            spdlog::info("Loaded scene: {}", scenePath.string());
-        }
-    } catch (const std::exception& e) {
-        spdlog::error("Failed to load scene {}: {}", scenePath.string(), e.what());
-    }
+    m_simulation.LoadScene(scenePath);
 }
 
 void Application::SaveScene(const std::filesystem::path& scenePath) {
-    try {
-        if (auto scene = m_simulation.GetScene()) {
-            scene->Serialize(scenePath);
-            Application::Params().Set(Params::AppLastOpenScene, scenePath.string());
-            spdlog::info("Saved scene: {}", scenePath.string());
-        }
-    } catch (const std::exception& e) {
-        spdlog::error("Failed to save scene {}: {}", scenePath.string(), e.what());
-    }
+    m_simulation.SaveScene(scenePath);
 }
 
 void Application::NewScene() {
-    if (auto scene = m_simulation.GetScene()) {
-        scene->blackHoles.clear();
-        scene->name = "New Scene";
-        scene->currentPath.clear();
-        Application::Params().Set(Params::AppLastOpenScene, std::string(""));
-        spdlog::info("Created new scene");
-    }
+    m_simulation.NewScene();
 }
 
 void Application::SaveState() {
@@ -274,6 +252,7 @@ void Application::InitializeRenderer() {
 }
 
 void Application::InitializeSimulation() {
+    m_simulation.Initialize();
     m_simulation.SetAnimationGraph(m_ui.GetAnimationGraph());
     m_simulation.GetPhysics()->SetRenderer(&m_renderer);
 

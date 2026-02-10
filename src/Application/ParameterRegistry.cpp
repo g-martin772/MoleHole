@@ -65,54 +65,101 @@ void ParameterRegistry::LoadDefinitionsFromYaml(const std::filesystem::path &pat
 
     try {
         YAML::Node root = YAML::LoadFile(path.string());
-        if (!root["parameters"]) {
-            spdlog::warn("No 'parameters' section in {}", path.string());
-            return;
+
+        int appParamCount = 0;
+        if (root["parameters"]) {
+            for (const auto &entry: root["parameters"]) {
+                auto name = entry["name"].as<std::string>();
+                std::uint64_t id = RuntimeFnv1a(name);
+
+                ParameterMetadata meta;
+                meta.id = id;
+                meta.name = name;
+                meta.displayName = entry["displayName"] ? entry["displayName"].as<std::string>() : name;
+                meta.tooltip = entry["tooltip"] ? entry["tooltip"].as<std::string>() : "";
+                meta.type = ParseType(entry["type"].as<std::string>());
+                meta.group = entry["group"] ? ParseGroup(entry["group"].as<std::string>()) : ParameterGroup::Application;
+
+                if (entry["defaultValue"]) {
+                    meta.defaultValue = ParseValueNode(entry["defaultValue"], meta.type);
+                    m_Values[id] = meta.defaultValue;
+                }
+
+                if (entry["minValue"]) meta.minValue = entry["minValue"].as<float>();
+                if (entry["maxValue"]) meta.maxValue = entry["maxValue"].as<float>();
+                if (entry["dragSpeed"]) meta.dragSpeed = entry["dragSpeed"].as<float>();
+                if (entry["showInUI"]) meta.showInUI = entry["showInUI"].as<bool>();
+                if (entry["isReadOnly"]) meta.isReadOnly = entry["isReadOnly"].as<bool>();
+
+                if (entry["scaleValueNames"]) {
+                    for (const auto &n: entry["scaleValueNames"]) {
+                        meta.scaleValueNames.push_back(n.as<std::string>());
+                    }
+                }
+                if (entry["scaleValues"]) {
+                    for (const auto &n: entry["scaleValues"]) {
+                        meta.scaleValues.push_back(n.as<float>());
+                    }
+                }
+                if (entry["enumValues"]) {
+                    for (const auto &n: entry["enumValues"]) {
+                        meta.enumValues.push_back(n.as<std::string>());
+                    }
+                }
+
+                m_Meta[id] = meta;
+                appParamCount++;
+            }
         }
 
-        for (const auto &entry: root["parameters"]) {
-            auto name = entry["name"].as<std::string>();
-            std::uint64_t id = RuntimeFnv1a(name);
+        int sceneParamCount = 0;
+        if (root["scene_parameters"]) {
+            for (const auto &entry: root["scene_parameters"]) {
+                auto name = entry["name"].as<std::string>();
+                std::uint64_t id = RuntimeFnv1a(name);
 
-            ParameterMetadata meta;
-            meta.id = id;
-            meta.name = name;
-            meta.displayName = entry["displayName"] ? entry["displayName"].as<std::string>() : name;
-            meta.tooltip = entry["tooltip"] ? entry["tooltip"].as<std::string>() : "";
-            meta.type = ParseType(entry["type"].as<std::string>());
-            meta.group = entry["group"] ? ParseGroup(entry["group"].as<std::string>()) : ParameterGroup::Application;
+                ParameterMetadata meta;
+                meta.id = id;
+                meta.name = name;
+                meta.displayName = entry["displayName"] ? entry["displayName"].as<std::string>() : name;
+                meta.tooltip = entry["tooltip"] ? entry["tooltip"].as<std::string>() : "";
+                meta.type = ParseType(entry["type"].as<std::string>());
+                meta.group = entry["group"] ? ParseGroup(entry["group"].as<std::string>()) : ParameterGroup::Simulation;
 
-            if (entry["defaultValue"]) {
-                meta.defaultValue = ParseValueNode(entry["defaultValue"], meta.type);
-                m_Values[id] = meta.defaultValue;
-            }
-
-            if (entry["minValue"]) meta.minValue = entry["minValue"].as<float>();
-            if (entry["maxValue"]) meta.maxValue = entry["maxValue"].as<float>();
-            if (entry["dragSpeed"]) meta.dragSpeed = entry["dragSpeed"].as<float>();
-            if (entry["showInUI"]) meta.showInUI = entry["showInUI"].as<bool>();
-            if (entry["isReadOnly"]) meta.isReadOnly = entry["isReadOnly"].as<bool>();
-
-            if (entry["scaleValueNames"]) {
-                for (const auto &n: entry["scaleValueNames"]) {
-                    meta.scaleValueNames.push_back(n.as<std::string>());
+                if (entry["defaultValue"]) {
+                    meta.defaultValue = ParseValueNode(entry["defaultValue"], meta.type);
+                    m_Values[id] = meta.defaultValue;
                 }
-            }
-            if (entry["scaleValues"]) {
-                for (const auto &n: entry["scaleValues"]) {
-                    meta.scaleValues.push_back(n.as<float>());
-                }
-            }
-            if (entry["enumValues"]) {
-                for (const auto &n: entry["enumValues"]) {
-                    meta.enumValues.push_back(n.as<std::string>());
-                }
-            }
 
-            m_Meta[id] = meta;
+                if (entry["minValue"]) meta.minValue = entry["minValue"].as<float>();
+                if (entry["maxValue"]) meta.maxValue = entry["maxValue"].as<float>();
+                if (entry["dragSpeed"]) meta.dragSpeed = entry["dragSpeed"].as<float>();
+                if (entry["showInUI"]) meta.showInUI = entry["showInUI"].as<bool>();
+                if (entry["isReadOnly"]) meta.isReadOnly = entry["isReadOnly"].as<bool>();
+
+                if (entry["scaleValueNames"]) {
+                    for (const auto &n: entry["scaleValueNames"]) {
+                        meta.scaleValueNames.push_back(n.as<std::string>());
+                    }
+                }
+                if (entry["scaleValues"]) {
+                    for (const auto &n: entry["scaleValues"]) {
+                        meta.scaleValues.push_back(n.as<float>());
+                    }
+                }
+                if (entry["enumValues"]) {
+                    for (const auto &n: entry["enumValues"]) {
+                        meta.enumValues.push_back(n.as<std::string>());
+                    }
+                }
+
+                m_Meta[id] = meta;
+                sceneParamCount++;
+            }
         }
 
-        spdlog::info("Loaded {} parameter definitions from {}", m_Meta.size(), path.string());
+        spdlog::info("Loaded {} parameter definitions from {} ({} app, {} scene)",
+                     m_Meta.size(), path.string(), appParamCount, sceneParamCount);
     } catch (const std::exception &e) {
         spdlog::error("Failed to load parameter definitions from {}: {}", path.string(), e.what());
     }

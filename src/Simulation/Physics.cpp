@@ -178,7 +178,7 @@ void Physics::SetScene(Scene *scene) {
         data.meshPath = mesh.path;
         data.initialVelocity = mesh.velocity;
         data.sceneIndex = i;
-        data.objectType = Scene::ObjectType::Mesh;
+        //data.objectType = Scene::ObjectType::Mesh;
 
         CreatePhysicsBody(data);
     }
@@ -194,7 +194,7 @@ void Physics::SetScene(Scene *scene) {
         data.initialVelocity = sphere.velocity;
         data.mass = sphere.massKg;
         data.sceneIndex = i;
-        data.objectType = Scene::ObjectType::Sphere;
+        //data.objectType = Scene::ObjectType::Sphere;
 
         CreatePhysicsBody(data);
     }
@@ -485,20 +485,20 @@ void Physics::ProcessDeletedBodies() {
             body.actor->release();
         }
 
-        switch (body.objectType) {
-            case Scene::ObjectType::Mesh:
-                if (body.sceneIndex < m_CurrentScene->meshes.size()) {
-                    m_CurrentScene->meshes.erase(m_CurrentScene->meshes.begin() + static_cast<std::ptrdiff_t>(body.sceneIndex));
-                }
-                break;
-            case Scene::ObjectType::Sphere:
-                if (body.sceneIndex < m_CurrentScene->spheres.size()) {
-                    m_CurrentScene->spheres.erase(m_CurrentScene->spheres.begin() + static_cast<std::ptrdiff_t>(body.sceneIndex));
-                }
-                break;
-            default:
-                break;
-        }
+        // switch (body.objectType) {
+        //     case Scene::ObjectType::Mesh:
+        //         if (body.sceneIndex < m_CurrentScene->meshes.size()) {
+        //             m_CurrentScene->meshes.erase(m_CurrentScene->meshes.begin() + static_cast<std::ptrdiff_t>(body.sceneIndex));
+        //         }
+        //         break;
+        //     case Scene::ObjectType::Sphere:
+        //         if (body.sceneIndex < m_CurrentScene->spheres.size()) {
+        //             m_CurrentScene->spheres.erase(m_CurrentScene->spheres.begin() + static_cast<std::ptrdiff_t>(body.sceneIndex));
+        //         }
+        //         break;
+        //     default:
+        //         break;
+        // }
 
         m_Bodies.erase(m_Bodies.begin() + static_cast<std::ptrdiff_t>(idx));
     }
@@ -507,26 +507,26 @@ void Physics::ProcessDeletedBodies() {
 
     for (size_t i = 0; i < m_Bodies.size(); ++i) {
         size_t newSceneIndex = 0;
-        switch (m_Bodies[i].objectType) {
-            case Scene::ObjectType::Mesh:
-                for (size_t j = 0; j < i; ++j) {
-                    if (m_Bodies[j].objectType == Scene::ObjectType::Mesh) {
-                        newSceneIndex++;
-                    }
-                }
-                m_Bodies[i].sceneIndex = newSceneIndex;
-                break;
-            case Scene::ObjectType::Sphere:
-                for (size_t j = 0; j < i; ++j) {
-                    if (m_Bodies[j].objectType == Scene::ObjectType::Sphere) {
-                        newSceneIndex++;
-                    }
-                }
-                m_Bodies[i].sceneIndex = newSceneIndex;
-                break;
-            default:
-                break;
-        }
+        // switch (m_Bodies[i].objectType) {
+        //     case Scene::ObjectType::Mesh:
+        //         for (size_t j = 0; j < i; ++j) {
+        //             if (m_Bodies[j].objectType == Scene::ObjectType::Mesh) {
+        //                 newSceneIndex++;
+        //             }
+        //         }
+        //         m_Bodies[i].sceneIndex = newSceneIndex;
+        //         break;
+        //     case Scene::ObjectType::Sphere:
+        //         for (size_t j = 0; j < i; ++j) {
+        //             if (m_Bodies[j].objectType == Scene::ObjectType::Sphere) {
+        //                 newSceneIndex++;
+        //             }
+        //         }
+        //         m_Bodies[i].sceneIndex = newSceneIndex;
+        //         break;
+        //     default:
+        //         break;
+        // }
     }
 }
 
