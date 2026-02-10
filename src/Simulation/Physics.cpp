@@ -160,8 +160,9 @@ void Physics::SetScene(Scene *scene) {
         auto &blackHole = scene->blackHoles[i];
         BlackHoleBodyData data;
         data.scenePosition = &blackHole.position;
-        data.schwarzschildRadius = CalculateSchwarzchildRadius(blackHole.mass);
+        data.schwarzschildRadius = CalculateSchwarzschildRadius(blackHole.mass);
         data.sceneIndex = i;
+        data.initialVelocity = blackHole.velocity;
 
         CreateBlackHoleBody(data);
     }
@@ -214,7 +215,7 @@ void Physics::Apply() {
 }
 
 void Physics::Update(float deltaTime) {
-    ApplyGravitationalForces();
+    ApplyGravitationalForces(deltaTime);
     UpdatePhysicsBodies();
     m_Scene->simulate(deltaTime);
     m_Scene->fetchResults(true);
@@ -282,15 +283,33 @@ void Physics::CreatePhysicsBody(PhysicsBodyData &data) {
 }
 
 
-void Physics::ApplyGravitationalForces() {
+void Physics::ApplyGravitationalForces(float dt) const
+{
     for (size_t i = 0; i < m_Bodies.size(); ++i) {
         if (!m_Bodies[i].actor) continue;
 
-        PxVec3 totalForce(0.0f, 0.0f, 0.0f);
-        PxTransform transform_i = m_Bodies[i].actor->getGlobalPose();
-        float mass_i = m_Bodies[i].actor->getMass();
+        PxTransform p_i = m_Bodies[i].actor->getGlobalPose();
+        PxVec3 v_i = m_Bodies[i].actor->getLinearVelocity();
 
         for (size_t j = 0; j < m_Bodies.size(); ++j) {
+            if (i == j) continue;
+
+            PxTransform p_j = m_Bodies[j].actor->getGlobalPose();
+            const float m_j = m_Bodies[j].actor->getMass();
+
+            PxVec3 a = G * m_j / (p_j.p - p_i.p).magnitudeSquared() * (p_j.p - p_i.p).getNormalized();
+
+            // update velocity
+            v_i = v_i + a * dt;
+            m_Bodies[i].actor->setLinearVelocity(v_i);
+
+            // update position
+            p_i.p = p_i.p + v_i * dt;
+            m_Bodies[i].actor->setGlobalPose(p_i);
+        }
+
+
+        /*for (size_t j = 0; j < m_Bodies.size(); ++j) {
             if (i == j || !m_Bodies[j].actor) continue;
 
             PxTransform transform_j = m_Bodies[j].actor->getGlobalPose();
@@ -333,7 +352,7 @@ void Physics::ApplyGravitationalForces() {
             totalForce += direction * forceMagnitude;
         }
 
-        m_Bodies[i].actor->addForce(totalForce, PxForceMode::eFORCE);
+        m_Bodies[i].actor->addForce(totalForce, PxForceMode::eFORCE);*/
     }
 }
 
@@ -431,7 +450,7 @@ void Physics::CreateBlackHoleBody(BlackHoleBodyData &data) {
     spdlog::debug("Created black hole collision (index: {}, radius: {})", data.sceneIndex, data.schwarzschildRadius);
 }
 
-float Physics::CalculateSchwarzchildRadius(float solarMass) {
+float Physics::CalculateSchwarzschildRadius(float solarMass) {
     float massKg = solarMass * SOLAR_MASS;
     return (2.0f * G * massKg) / (C * C);
 }
