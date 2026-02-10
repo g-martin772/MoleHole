@@ -135,7 +135,7 @@ namespace Field {
     }
 
     namespace BlackHole {
-        inline constexpr ParameterHandle Mass("BlackHole.Mass");
+        inline constexpr ParameterHandle Mass("Physics.Mass");
         inline constexpr ParameterHandle Spin("BlackHole.Spin");
         inline constexpr ParameterHandle SpinAxis("BlackHole.SpinAxis");
     }

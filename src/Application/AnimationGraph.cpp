@@ -1867,8 +1867,29 @@ void AnimationGraph::UpdateSceneObjects(Scene *scene) {
 
     m_SceneObjects.push_back("Primary Camera");
 
-    for (size_t i = 0; i < scene->blackHoles.size(); ++i) {
-        m_SceneObjects.push_back("Black Hole #" + std::to_string(i + 1));
+    size_t bhCount = 0;
+    size_t meshCount = 0;
+    size_t sphereCount = 0;
+
+    for (const auto& obj : scene->objects) {
+        if (obj.HasClass("BlackHole")) {
+            bhCount++;
+            m_SceneObjects.push_back("Black Hole #" + std::to_string(bhCount));
+        }  else if (obj.HasClass("Mesh")) {
+            meshCount++;
+            ParameterHandle nameHandle("Entity.Name");
+            auto nameValue = obj.GetParameter(nameHandle);
+            std::string name = std::holds_alternative<std::string>(nameValue) ?
+                             std::get<std::string>(nameValue) : "Mesh #" + std::to_string(meshCount);
+            m_SceneObjects.push_back(name);
+        } else if (obj.HasClass("Sphere")) {
+            sphereCount++;
+            ParameterHandle nameHandle("Entity.Name");
+            auto nameValue = obj.GetParameter(nameHandle);
+            std::string name = std::holds_alternative<std::string>(nameValue) ?
+                             std::get<std::string>(nameValue) : "Sphere #" + std::to_string(sphereCount);
+            m_SceneObjects.push_back(name);
+        }
     }
 
     for (auto &node: m_Nodes) {

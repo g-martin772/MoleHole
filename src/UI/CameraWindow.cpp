@@ -96,11 +96,18 @@ void Render(UI* ui, Scene* scene) {
             std::string currentObjectName = Application::Params().Get(Params::CameraObject, std::string("None"));
 
             if (ImGui::BeginCombo("Camera Object", currentObjectName.c_str())) {
-                for (size_t i = 0; i < scene->meshes.size(); ++i) {
-                    bool isSelected = (scene->meshes[i].name == currentObjectName);
-                    if (ImGui::Selectable(scene->meshes[i].name.c_str(), isSelected)) {
+                for (size_t i = 0; i < scene->objects.size(); ++i) {
+                    if (!scene->objects[i].HasClass("Mesh")) continue;
+
+                    ParameterHandle nameHandle("Entity.Name");
+                    auto nameValue = scene->objects[i].GetParameter(nameHandle);
+                    if (!std::holds_alternative<std::string>(nameValue)) continue;
+
+                    std::string meshName = std::get<std::string>(nameValue);
+                    bool isSelected = (meshName == currentObjectName);
+                    if (ImGui::Selectable(meshName.c_str(), isSelected)) {
                         selectedCameraIndex = static_cast<int>(i);
-                        Application::Params().Set(Params::CameraObject, scene->meshes[i].name);
+                        Application::Params().Set(Params::CameraObject, meshName);
                         ui->MarkConfigDirty();
                     }
                     if (isSelected) {

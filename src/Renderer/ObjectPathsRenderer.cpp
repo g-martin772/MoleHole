@@ -1,11 +1,10 @@
 #include "ObjectPathsRenderer.h"
 #include "Buffer.h"
+#include "Simulation/Scene.h"
 #include <glad/gl.h>
 #include <glm/gtc/type_ptr.hpp>
-#include <algorithm>
 #include "Camera.h"
 #include "Application/Application.h"
-#include <spdlog/spdlog.h>
 
 void ObjectPathsRenderer::Init() {
     m_shader = std::make_unique<Shader>("../shaders/object_paths.vert", "../shaders/object_paths.frag");
@@ -27,30 +26,55 @@ void ObjectPathsRenderer::RecordCurrentPositions(Scene* scene) {
         ClearHistories();
         m_cachedScene = scene;
     }
-    
-    if (m_meshHistories.size() != scene->meshes.size()) {
-        m_meshHistories.resize(scene->meshes.size());
+
+    size_t meshCount = 0;
+    size_t sphereCount = 0;
+    for (const auto& obj : scene->objects) {
+        if (obj.HasClass("Mesh")) meshCount++;
+        if (obj.HasClass("Sphere")) sphereCount++;
+    }
+
+    if (m_meshHistories.size() != meshCount) {
+        m_meshHistories.resize(meshCount);
     }
     
-    if (m_sphereHistories.size() != scene->spheres.size()) {
-        m_sphereHistories.resize(scene->spheres.size());
+    if (m_sphereHistories.size() != sphereCount) {
+        m_sphereHistories.resize(sphereCount);
     }
-    
-    for (size_t i = 0; i < scene->meshes.size(); ++i) {
-        auto& history = m_meshHistories[i];
-        history.positions.push_back(scene->meshes[i].position);
-        
-        if (history.positions.size() > m_maxHistorySize) {
-            history.positions.pop_front();
+
+    size_t meshIdx = 0;
+    for (const auto& obj : scene->objects) {
+        if (obj.HasClass("Mesh") && meshIdx < m_meshHistories.size()) {
+            ParameterHandle posHandle("Entity.Position");
+            auto pos = obj.GetParameter(posHandle);
+
+            if (std::holds_alternative<glm::vec3>(pos)) {
+                auto& history = m_meshHistories[meshIdx];
+                history.positions.push_back(std::get<glm::vec3>(pos));
+
+                if (history.positions.size() > m_maxHistorySize) {
+                    history.positions.pop_front();
+                }
+            }
+            meshIdx++;
         }
     }
-    
-    for (size_t i = 0; i < scene->spheres.size(); ++i) {
-        auto& history = m_sphereHistories[i];
-        history.positions.push_back(scene->spheres[i].position);
-        
-        if (history.positions.size() > m_maxHistorySize) {
-            history.positions.pop_front();
+
+    size_t sphereIdx = 0;
+    for (const auto& obj : scene->objects) {
+        if (obj.HasClass("Sphere") && sphereIdx < m_sphereHistories.size()) {
+            ParameterHandle posHandle("Entity.Position");
+            auto pos = obj.GetParameter(posHandle);
+
+            if (std::holds_alternative<glm::vec3>(pos)) {
+                auto& history = m_sphereHistories[sphereIdx];
+                history.positions.push_back(std::get<glm::vec3>(pos));
+
+                if (history.positions.size() > m_maxHistorySize) {
+                    history.positions.pop_front();
+                }
+            }
+            sphereIdx++;
         }
     }
 }
@@ -88,7 +112,7 @@ void ObjectPathsRenderer::UpdateBuffers() {
     }
 }
 
-void ObjectPathsRenderer::Render(const std::vector<BlackHole>& /*blackHoles*/, const Camera& camera, float /*time*/) {
+void ObjectPathsRenderer::Render(const Scene& /*scene*/, const Camera& camera, float /*time*/) {
     if (!m_shader) return;
     
     auto& simulation = Application::GetSimulation();

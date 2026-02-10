@@ -2,9 +2,11 @@
 #include "../Application/UI.h"
 #include "../Application/Application.h"
 #include "../Application/Parameters.h"
+#include "../Simulation/Scene.h"
 #include "imgui.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <nfd.h>
 
 namespace ParameterWidgets {
 
@@ -275,6 +277,264 @@ void RenderParameterGroupWithFilter(ParameterGroup group, UI* ui,
         if (style == WidgetStyle::Detailed) {
             ImGui::Spacing();
             ImGui::Separator();
+        }
+    }
+}
+
+bool RenderObjectParameter(SceneObject* object, const ParameterHandle& handle, const ParameterMetadata& meta,
+                           WidgetStyle style) {
+    if (!meta.showInUI) {
+        return false;
+    }
+
+    ImGui::PushID(static_cast<int>(meta.id));
+
+    bool valueChanged = false;
+    ParameterValue currentValue = object->GetParameter(handle);
+
+    switch (meta.type) {
+        case ParameterType::Bool: {
+            bool value = std::holds_alternative<bool>(currentValue) ? std::get<bool>(currentValue) :
+                        std::get<bool>(meta.defaultValue);
+            if (ImGui::Checkbox(meta.displayName.c_str(), &value)) {
+                object->SetParameter(handle, value);
+                valueChanged = true;
+            }
+            if (!meta.tooltip.empty() && ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", meta.tooltip.c_str());
+            }
+            break;
+        }
+
+        case ParameterType::Int: {
+            int value = std::holds_alternative<int>(currentValue) ? std::get<int>(currentValue) :
+                       std::get<int>(meta.defaultValue);
+
+            if (!meta.enumValues.empty()) {
+                if (ImGui::BeginCombo(meta.displayName.c_str(),
+                                     value >= 0 && value < static_cast<int>(meta.enumValues.size())
+                                     ? meta.enumValues[value].c_str() : "Unknown")) {
+                    for (size_t i = 0; i < meta.enumValues.size(); ++i) {
+                        bool isSelected = (value == static_cast<int>(i));
+                        if (ImGui::Selectable(meta.enumValues[i].c_str(), isSelected)) {
+                            object->SetParameter(handle, static_cast<int>(i));
+                            valueChanged = true;
+                        }
+                        if (isSelected) {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+            } else if (meta.minValue != 0.0f || meta.maxValue != 0.0f) {
+                if (ImGui::SliderInt(meta.displayName.c_str(), &value,
+                                    static_cast<int>(meta.minValue),
+                                    static_cast<int>(meta.maxValue))) {
+                    object->SetParameter(handle, value);
+                    valueChanged = true;
+                }
+            } else {
+                if (ImGui::DragInt(meta.displayName.c_str(), &value)) {
+                    object->SetParameter(handle, value);
+                    valueChanged = true;
+                }
+            }
+
+            if (!meta.tooltip.empty() && ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", meta.tooltip.c_str());
+            }
+            break;
+        }
+
+        case ParameterType::Float: {
+            float value = std::holds_alternative<float>(currentValue) ? std::get<float>(currentValue) :
+                         std::get<float>(meta.defaultValue);
+
+            if (meta.minValue != 0.0f || meta.maxValue != 0.0f) {
+                if (ImGui::DragFloat(meta.displayName.c_str(), &value,
+                                    meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f,
+                                    meta.minValue, meta.maxValue, "%.3f")) {
+                    object->SetParameter(handle, value);
+                    valueChanged = true;
+                }
+            } else {
+                if (ImGui::DragFloat(meta.displayName.c_str(), &value,
+                                    meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f)) {
+                    object->SetParameter(handle, value);
+                    valueChanged = true;
+                }
+            }
+
+            if (!meta.tooltip.empty() && ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", meta.tooltip.c_str());
+            }
+            break;
+        }
+
+        case ParameterType::String: {
+            std::string value = std::holds_alternative<std::string>(currentValue) ?
+                               std::get<std::string>(currentValue) :
+                               std::get<std::string>(meta.defaultValue);
+
+            if (meta.name.find("FilePath") != std::string::npos || meta.name.find("Path") != std::string::npos) {
+                char buffer[512];
+                strncpy(buffer, value.c_str(), sizeof(buffer) - 1);
+                buffer[sizeof(buffer) - 1] = '\0';
+
+                ImGui::PushItemWidth(-50.0f);
+                if (ImGui::InputText(meta.displayName.c_str(), buffer, sizeof(buffer))) {
+                    object->SetParameter(handle, std::string(buffer));
+                    valueChanged = true;
+                }
+                ImGui::PopItemWidth();
+
+                ImGui::SameLine();
+                if (ImGui::Button("...##FilePicker")) {
+                    nfdchar_t* outPath = nullptr;
+                    nfdfilteritem_t filterItems[] = {
+                        { "GLTF/GLB", "gltf,glb" },
+                        { "Images", "png,jpg,jpeg,hdr" },
+                        { "All Files", "*" }
+                    };
+                    nfdresult_t result = NFD_OpenDialog(&outPath, filterItems, 3, nullptr);
+
+                    if (result == NFD_OKAY && outPath) {
+                        object->SetParameter(handle, std::string(outPath));
+                        free(outPath);
+                        valueChanged = true;
+                    }
+                }
+            } else {
+                char buffer[256];
+                strncpy(buffer, value.c_str(), sizeof(buffer) - 1);
+                buffer[sizeof(buffer) - 1] = '\0';
+
+                if (ImGui::InputText(meta.displayName.c_str(), buffer, sizeof(buffer))) {
+                    object->SetParameter(handle, std::string(buffer));
+                    valueChanged = true;
+                }
+            }
+
+            if (!meta.tooltip.empty() && ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", meta.tooltip.c_str());
+            }
+            break;
+        }
+
+        case ParameterType::Vec3: {
+            glm::vec3 value = std::holds_alternative<glm::vec3>(currentValue) ?
+                             std::get<glm::vec3>(currentValue) :
+                             std::get<glm::vec3>(meta.defaultValue);
+
+            if (ImGui::DragFloat3(meta.displayName.c_str(), &value[0],
+                                 meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f)) {
+                object->SetParameter(handle, value);
+                valueChanged = true;
+            }
+
+            if (!meta.tooltip.empty() && ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", meta.tooltip.c_str());
+            }
+            break;
+        }
+
+        case ParameterType::Quat: {
+            glm::quat value = std::holds_alternative<glm::quat>(currentValue) ?
+                             std::get<glm::quat>(currentValue) :
+                             std::get<glm::quat>(meta.defaultValue);
+
+            float eulerAngles[3];
+            eulerAngles[0] = glm::degrees(glm::pitch(value));
+            eulerAngles[1] = glm::degrees(glm::yaw(value));
+            eulerAngles[2] = glm::degrees(glm::roll(value));
+
+            if (ImGui::DragFloat3((meta.displayName + " (deg)").c_str(), eulerAngles, 1.0f)) {
+                glm::quat newQuat = glm::quat(glm::vec3(
+                    glm::radians(eulerAngles[0]),
+                    glm::radians(eulerAngles[1]),
+                    glm::radians(eulerAngles[2])
+                ));
+                object->SetParameter(handle, newQuat);
+                valueChanged = true;
+            }
+
+            if (!meta.tooltip.empty() && ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", meta.tooltip.c_str());
+            }
+            break;
+        }
+
+        case ParameterType::StringVector: {
+            auto value = std::holds_alternative<std::vector<std::string>>(currentValue) ?
+                        std::get<std::vector<std::string>>(currentValue) :
+                        std::get<std::vector<std::string>>(meta.defaultValue);
+
+            if (ImGui::TreeNode(meta.displayName.c_str())) {
+                for (size_t i = 0; i < value.size(); ++i) {
+                    ImGui::BulletText("%s", value[i].c_str());
+                }
+                ImGui::TreePop();
+            }
+            break;
+        }
+
+        default:
+            ImGui::TextDisabled("%s: (unsupported type)", meta.displayName.c_str());
+            break;
+    }
+
+    if (meta.isReadOnly && style == WidgetStyle::Detailed) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("[Read-Only]");
+    }
+
+    ImGui::PopID();
+    return valueChanged;
+}
+
+void RenderSceneObjectParameters(SceneObject* object, WidgetStyle style) {
+    if (!object) {
+        return;
+    }
+
+    const auto& metadata = object->GetAllMetadata();
+
+    std::map<std::string, std::vector<std::pair<uint64_t, ParameterMetadata>>> groupedParams;
+
+    for (const auto& [id, meta] : metadata) {
+        if (!meta.showInUI) {
+            continue;
+        }
+
+        std::string group;
+        size_t dotPos = meta.name.find('.');
+        if (dotPos != std::string::npos) {
+            group = meta.name.substr(0, dotPos);
+        } else {
+            group = "General";
+        }
+
+        groupedParams[group].push_back({id, meta});
+    }
+
+    for (auto& [groupName, params] : groupedParams) {
+        std::sort(params.begin(), params.end(),
+                 [](const auto& a, const auto& b) {
+                     return a.second.name < b.second.name;
+                 });
+
+        bool shouldRender = ImGui::TreeNodeEx(groupName.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+
+        if (shouldRender) {
+            for (const auto& [id, meta] : params) {
+                RenderObjectParameter(object, ParameterHandle(id), meta, style);
+
+                if (style != WidgetStyle::Compact) {
+                    ImGui::Spacing();
+                }
+            }
+
+            ImGui::TreePop();
         }
     }
 }

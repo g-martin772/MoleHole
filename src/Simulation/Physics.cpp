@@ -156,60 +156,133 @@ void Physics::SetScene(Scene *scene) {
     }
     m_BlackHoles.clear();
 
-    for (size_t i = 0; i < scene->blackHoles.size(); ++i) {
-        auto &blackHole = scene->blackHoles[i];
-        BlackHoleBodyData data;
-        data.scenePosition = &blackHole.position;
-        data.schwarzschildRadius = CalculateSchwarzchildRadius(blackHole.mass);
-        data.sceneIndex = i;
-
-        CreateBlackHoleBody(data);
+    if (!scene) {
+        return;
     }
 
-    for (size_t i = 0; i < scene->meshes.size(); ++i) {
-        auto &mesh = scene->meshes[i];
-        PhysicsBodyData data;
-        data.scenePosition = &mesh.position;
-        data.sceneRotation = &mesh.rotation;
-        data.sceneScale = &mesh.scale;
-        data.radius = 0.0f;
-        data.isSphere = false;
-        data.mass = mesh.massKg;
-        data.meshPath = mesh.path;
-        data.initialVelocity = mesh.velocity;
-        data.sceneIndex = i;
-        //data.objectType = Scene::ObjectType::Mesh;
+    for (size_t i = 0; i < scene->objects.size(); ++i) {
+        auto &obj = scene->objects[i];
 
-        CreatePhysicsBody(data);
-    }
+        if (obj.HasClass("BlackHole")) {
+            BlackHoleBodyData bhData;
+            bhData.sceneIndex = i;
 
-    for (size_t i = 0; i < scene->spheres.size(); ++i) {
-        auto &sphere = scene->spheres[i];
-        PhysicsBodyData data;
-        data.scenePosition = &sphere.position;
-        data.sceneRotation = &sphere.rotation;
-        data.sceneScale = nullptr;
-        data.radius = sphere.radius;
-        data.isSphere = true;
-        data.initialVelocity = sphere.velocity;
-        data.mass = sphere.massKg;
-        data.sceneIndex = i;
-        //data.objectType = Scene::ObjectType::Sphere;
+            auto posHandle = ParameterHandle("position");
+            auto massHandle = ParameterHandle("mass");
 
-        CreatePhysicsBody(data);
+            if (obj.HasParameter(posHandle)) {
+                bhData.position = std::get<glm::vec3>(obj.GetParameter(posHandle));
+            }
+
+            if (obj.HasParameter(massHandle)) {
+                float solarMass = std::get<float>(obj.GetParameter(massHandle));
+                bhData.schwarzschildRadius = CalculateSchwarzchildRadius(solarMass);
+            }
+
+            CreateBlackHoleBody(bhData);
+        }
+        else if (obj.HasClass("Mesh")) {
+            PhysicsBodyData bodyData;
+            bodyData.sceneIndex = i;
+            bodyData.isSphere = false;
+
+            auto posHandle = ParameterHandle("position");
+            auto rotHandle = ParameterHandle("rotation");
+            auto scaleHandle = ParameterHandle("scale");
+            auto massHandle = ParameterHandle("mass");
+            auto pathHandle = ParameterHandle("path");
+            auto velHandle = ParameterHandle("velocity");
+
+            if (obj.HasParameter(posHandle)) {
+                bodyData.position = std::get<glm::vec3>(obj.GetParameter(posHandle));
+            }
+            if (obj.HasParameter(rotHandle)) {
+                bodyData.rotation = std::get<glm::quat>(obj.GetParameter(rotHandle));
+            }
+            if (obj.HasParameter(scaleHandle)) {
+                bodyData.scale = std::get<glm::vec3>(obj.GetParameter(scaleHandle));
+            }
+            if (obj.HasParameter(massHandle)) {
+                bodyData.mass = std::get<float>(obj.GetParameter(massHandle));
+            }
+            if (obj.HasParameter(pathHandle)) {
+                bodyData.meshPath = std::get<std::string>(obj.GetParameter(pathHandle));
+            }
+            if (obj.HasParameter(velHandle)) {
+                bodyData.initialVelocity = std::get<glm::vec3>(obj.GetParameter(velHandle));
+            }
+
+            bodyData.radius = glm::length(bodyData.scale) * 0.5f;
+
+            CreatePhysicsBody(bodyData);
+        }
+        else if (obj.HasClass("Sphere")) {
+            PhysicsBodyData bodyData;
+            bodyData.sceneIndex = i;
+            bodyData.isSphere = true;
+
+            auto posHandle = ParameterHandle("position");
+            auto rotHandle = ParameterHandle("rotation");
+            auto radiusHandle = ParameterHandle("radius");
+            auto massHandle = ParameterHandle("mass");
+            auto velHandle = ParameterHandle("velocity");
+
+            if (obj.HasParameter(posHandle)) {
+                bodyData.position = std::get<glm::vec3>(obj.GetParameter(posHandle));
+            }
+            if (obj.HasParameter(rotHandle)) {
+                bodyData.rotation = std::get<glm::quat>(obj.GetParameter(rotHandle));
+            }
+            if (obj.HasParameter(radiusHandle)) {
+                bodyData.radius = std::get<float>(obj.GetParameter(radiusHandle));
+            }
+            if (obj.HasParameter(massHandle)) {
+                bodyData.mass = std::get<float>(obj.GetParameter(massHandle));
+            }
+            if (obj.HasParameter(velHandle)) {
+                bodyData.initialVelocity = std::get<glm::vec3>(obj.GetParameter(velHandle));
+            }
+
+            bodyData.scale = glm::vec3(bodyData.radius * 2.0f);
+
+            CreatePhysicsBody(bodyData);
+        }
     }
 
     spdlog::info("Loaded {} black holes and {} physics bodies from scene", m_BlackHoles.size(), m_Bodies.size());
 }
 
 void Physics::Apply() {
+    if (!m_CurrentScene) return;
+
+    auto posHandle = ParameterHandle("position");
+    auto rotHandle = ParameterHandle("rotation");
+
     for (auto& body : m_Bodies) {
-        if (!body.actor || !body.scenePosition || !body.sceneRotation) continue;
+        if (!body.actor) continue;
 
         PxTransform transform = body.actor->getGlobalPose();
 
-        *body.scenePosition = glm::vec3(transform.p.x, transform.p.y, transform.p.z);
-        *body.sceneRotation = glm::quat(transform.q.w, transform.q.x, transform.q.y, transform.q.z);
+        body.position = glm::vec3(transform.p.x, transform.p.y, transform.p.z);
+        body.rotation = glm::quat(transform.q.w, transform.q.x, transform.q.y, transform.q.z);
+
+        if (body.sceneIndex < m_CurrentScene->objects.size()) {
+            auto& obj = m_CurrentScene->objects[body.sceneIndex];
+            obj.SetParameter(posHandle, body.position);
+            obj.SetParameter(rotHandle, body.rotation);
+        }
+    }
+
+    for (auto& bh : m_BlackHoles) {
+        if (!bh.actor) continue;
+
+        PxTransform transform = bh.actor->getGlobalPose();
+        bh.position = glm::vec3(transform.p.x, transform.p.y, transform.p.z);
+
+        if (bh.sceneIndex < m_CurrentScene->objects.size()) {
+            auto& obj = m_CurrentScene->objects[bh.sceneIndex];
+            obj.SetParameter(posHandle, bh.position);
+        }
     }
 }
 
@@ -223,8 +296,8 @@ void Physics::Update(float deltaTime) {
 
 void Physics::CreatePhysicsBody(PhysicsBodyData &data) {
     PxTransform transform(
-        PxVec3(data.scenePosition->x, data.scenePosition->y, data.scenePosition->z),
-        PxQuat(data.sceneRotation->x, data.sceneRotation->y, data.sceneRotation->z, data.sceneRotation->w)
+        PxVec3(data.position.x, data.position.y, data.position.z),
+        PxQuat(data.rotation.x, data.rotation.y, data.rotation.z, data.rotation.w)
     );
 
     PxRigidDynamic *body = m_Physics->createRigidDynamic(transform);
@@ -239,22 +312,19 @@ void Physics::CreatePhysicsBody(PhysicsBodyData &data) {
     } else if (!data.meshPath.empty()) {
         PxConvexMesh* convexMesh = LoadConvexMesh(data.meshPath);
         if (convexMesh) {
-            glm::vec3 scale = data.sceneScale ? *data.sceneScale : glm::vec3(1.0f);
-            PxMeshScale meshScale(PxVec3(scale.x, scale.y, scale.z));
+            PxMeshScale meshScale(PxVec3(data.scale.x, data.scale.y, data.scale.z));
             shape = PxRigidActorExt::createExclusiveShape(*body,
                                                           PxConvexMeshGeometry(convexMesh, meshScale),
                                                           *m_Material);
         } else {
             spdlog::warn("Failed to load convex mesh for '{}', using box collider", data.meshPath);
-            glm::vec3 scale = data.sceneScale ? *data.sceneScale : glm::vec3(1.0f);
             shape = PxRigidActorExt::createExclusiveShape(*body,
-                                                          PxBoxGeometry(scale.x * 0.5f, scale.y * 0.5f, scale.z * 0.5f),
+                                                          PxBoxGeometry(data.scale.x * 0.5f, data.scale.y * 0.5f, data.scale.z * 0.5f),
                                                           *m_Material);
         }
     } else {
-        glm::vec3 scale = data.sceneScale ? *data.sceneScale : glm::vec3(1.0f);
         shape = PxRigidActorExt::createExclusiveShape(*body,
-                                                      PxBoxGeometry(scale.x * 0.5f, scale.y * 0.5f, scale.z * 0.5f),
+                                                      PxBoxGeometry(data.scale.x * 0.5f, data.scale.y * 0.5f, data.scale.z * 0.5f),
                                                       *m_Material);
     }
 
@@ -313,7 +383,7 @@ void Physics::ApplyGravitationalForces() {
         }
 
         for (size_t j = 0; j < m_BlackHoles.size(); ++j) {
-            if (!m_BlackHoles[j].actor || !m_BlackHoles[j].scenePosition) continue;
+            if (!m_BlackHoles[j].actor) continue;
 
             PxTransform bhTransform = m_BlackHoles[j].actor->getGlobalPose();
 
@@ -398,7 +468,7 @@ PxConvexMesh* Physics::LoadConvexMesh(const std::string& path) {
 }
 
 void Physics::CreateBlackHoleBody(BlackHoleBodyData &data) {
-    PxTransform transform(PxVec3(data.scenePosition->x, data.scenePosition->y, data.scenePosition->z));
+    PxTransform transform(PxVec3(data.position.x, data.position.y, data.position.z));
 
     PxRigidStatic *blackHoleActor = m_Physics->createRigidStatic(transform);
     if (!blackHoleActor) {

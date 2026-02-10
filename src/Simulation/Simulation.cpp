@@ -140,9 +140,7 @@ void Simulation::SaveScene(const std::filesystem::path& path) {
 
 void Simulation::NewScene() {
     if (m_Scene) {
-        m_Scene->blackHoles.clear();
-        m_Scene->meshes.clear();
-        m_Scene->spheres.clear();
+        m_Scene->objects.clear();
         m_Scene->name = "New Scene";
         m_Scene->currentPath.clear();
         Application::Params().Set(Params::AppLastOpenScene, std::string(""));

@@ -1,28 +1,17 @@
 classes:
-  - name: "BlackHole"
-    required_parameters:
-      - "Entity.Position"
-      - "BlackHole.Mass"
-    available_parameters:
-      - "Entity.Name"
-      - "Entity.Position"
-      - "Physics.Enable"
-      - "Physics.Mass"
-      - "Physics.Velocity"
-      - "BlackHole.Mass"
-      - "BlackHole.Spin"
-      - "BlackHole.SpinAxis"
-
-  - name: "Mesh"
+  - name: "Entity"
     required_parameters:
       - "Entity.Name"
       - "Entity.Position"
-      - "Mesh.FilePath"
     available_parameters:
       - "Entity.Name"
       - "Entity.Position"
       - "Entity.Rotation"
       - "Entity.Scale"
+
+  - name: "Physics"
+    required_parameters: []
+    available_parameters:
       - "Physics.Enable"
       - "Physics.Mass"
       - "Physics.Velocity"
@@ -40,33 +29,24 @@ classes:
       - "Physics.Collider.Density"
       - "Physics.Collider.CollisionLayer"
       - "Physics.Collider.CollisionMask"
+
+  - name: "BlackHole"
+    required_parameters: []
+    available_parameters:
+      - "BlackHole.Spin"
+      - "BlackHole.SpinAxis"
+
+  - name: "Mesh"
+    required_parameters:
+      - "Mesh.FilePath"
+    available_parameters:
       - "Mesh.FilePath"
       - "Mesh.ComOffset"
 
   - name: "Sphere"
     required_parameters:
-      - "Entity.Name"
-      - "Entity.Position"
       - "Sphere.Radius"
     available_parameters:
-      - "Entity.Name"
-      - "Entity.Position"
-      - "Entity.Rotation"
-      - "Physics.Enable"
-      - "Physics.Mass"
-      - "Physics.Velocity"
-      - "Physics.Rigidbody.Type"
-      - "Physics.Rigidbody.UseGravity"
-      - "Physics.Rigidbody.LinearDamping"
-      - "Physics.Rigidbody.AngularDamping"
-      - "Physics.Collider.Type"
-      - "Physics.Collider.IsTrigger"
-      - "Physics.Collider.Offset"
-      - "Physics.Collider.Friction"
-      - "Physics.Collider.Restitution"
-      - "Physics.Collider.Density"
-      - "Physics.Collider.CollisionLayer"
-      - "Physics.Collider.CollisionMask"
       - "Sphere.Radius"
       - "Sphere.Color"
       - "Sphere.TexturePath"

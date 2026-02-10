@@ -7,6 +7,7 @@
 #include "../Application/Application.h"
 #include "../Simulation/Scene.h"
 #include "IconsFontAwesome6.h"
+#include "ParameterWidgets.h"
 #include "imgui.h"
 #include "spdlog/spdlog.h"
 #include <nfd.h>
@@ -38,7 +39,6 @@ void RenderSimulationControls(UI* ui) {
         bool isStopped = simulation.IsStopped();
         bool isPaused = simulation.IsPaused();
 
-        // Use icon font if available, otherwise fall back to text
         if (ui->GetIconFont()) {
             ImGui::PushFont(ui->GetIconFont());
         }
@@ -85,429 +85,214 @@ void RenderSimulationControls(UI* ui) {
     ImGui::PopStyleVar(2);
 }
 
+void RenderObjectTypeSection(Scene* scene, const std::string& objectTypeName,
+                             const std::function<void()>& createNewObject) {
+    if (!scene) {
+        return;
+    }
+
+    auto& simulation = Application::GetSimulation();
+    const auto& objectDefinitions = simulation.GetObjectDefinitions();
+
+    const SceneObjectDefinition* definition = nullptr;
+    for (const auto& def : objectDefinitions) {
+        if (def.name == objectTypeName) {
+            definition = &def;
+            break;
+        }
+    }
+
+    if (!definition) {
+        ImGui::TextDisabled("Definition for %s not found", objectTypeName.c_str());
+        return;
+    }
+
+    if (ImGui::Button(("Add " + objectTypeName).c_str())) {
+        createNewObject();
+    }
+
+    size_t objectCount = 0;
+    for (const auto& obj : scene->objects) {
+        if (obj.HasClass(objectTypeName)) {
+            objectCount++;
+        }
+    }
+
+    ImGui::Text("%s Objects: %zu", objectTypeName.c_str(), objectCount);
+
+    int objIdx = 0;
+    for (size_t i = 0; i < scene->objects.size(); ) {
+        auto& obj = scene->objects[i];
+        if (!obj.HasClass(objectTypeName)) {
+            ++i;
+            continue;
+        }
+
+        ImGui::PushID(("obj_" + objectTypeName + "_" + std::to_string(i)).c_str());
+
+        ObjectType objType = ObjectType::DynamicObject;
+        if (objectTypeName == "BlackHole") objType = ObjectType::BlackHole;
+        else if (objectTypeName == "Mesh") objType = ObjectType::Mesh;
+        else if (objectTypeName == "Sphere") objType = ObjectType::Sphere;
+
+        bool isSelected = scene->HasSelection() &&
+                         scene->selectedObject->type == objType &&
+                         scene->selectedObject->index == i;
+
+        if (isSelected) {
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.7f, 1.0f, 0.6f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.4f, 0.8f, 1.0f, 0.8f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.5f, 0.9f, 1.0f, 1.0f));
+        }
+
+        auto nameParam = obj.GetParameter(ParameterHandle("Entity.Name"));
+        std::string objectName = std::holds_alternative<std::string>(nameParam) ?
+                                std::get<std::string>(nameParam) :
+                                (objectTypeName + " #" + std::to_string(objIdx + 1));
+
+        std::string label = objectName;
+        if (isSelected) {
+            label += " (Selected)";
+        }
+
+        bool open = ImGui::TreeNode(label.c_str());
+
+        if (isSelected) {
+            ImGui::PopStyleColor(3);
+        }
+
+        ImGui::SameLine();
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 0.6f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(200.0f/255.0f, 120.0f/255.0f, 50.0f/255.0f, 0.8f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(160.0f/255.0f, 90.0f/255.0f, 35.0f/255.0f, 1.0f));
+        if (ImGui::SmallButton("Select")) {
+            scene->SelectObject(objType, i);
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine();
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.2f, 0.6f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.8f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
+        bool remove = ImGui::SmallButton("Remove");
+        ImGui::PopStyleColor(3);
+
+        if (open) {
+            ParameterWidgets::RenderSceneObjectParameters(&obj, ParameterWidgets::WidgetStyle::Standard);
+
+            if (!scene->currentPath.empty()) {
+                scene->Serialize(scene->currentPath);
+            }
+
+            ImGui::TreePop();
+        }
+
+        ImGui::PopID();
+
+        if (remove) {
+            if (isSelected) {
+                scene->ClearSelection();
+            }
+            scene->objects.erase(scene->objects.begin() + i);
+            if (!scene->currentPath.empty()) {
+                scene->Serialize(scene->currentPath);
+            }
+        } else {
+            ++i;
+            ++objIdx;
+        }
+    }
+}
+
 void Render(UI* ui, Scene* scene) {
     if (!ImGui::Begin("Simulation")) {
         ImGui::End();
         return;
     }
 
-    // Black Holes Section
-    if (ImGui::CollapsingHeader("Black Holes", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (!scene) {
-            ImGui::TextDisabled("No scene loaded");
-        } else {
-            // Transform Controls (only show if something is selected)
-            if (scene->HasSelection()) {
-                ImGui::Text("Transform Controls:");
-                ImGui::SameLine();
+    if (scene && scene->HasSelection()) {
+        ImGui::Text("Transform Controls:");
+        ImGui::SameLine();
 
-                auto currentOp = ui->GetCurrentGizmoOperation();
-                if (ImGui::RadioButton("Translate", currentOp == UI::GizmoOperation::Translate)) {
-                    ui->SetCurrentGizmoOperation(UI::GizmoOperation::Translate);
-                }
-                ImGui::SameLine();
-                if (ImGui::RadioButton("Rotate", currentOp == UI::GizmoOperation::Rotate)) {
-                    ui->SetCurrentGizmoOperation(UI::GizmoOperation::Rotate);
-                }
-                ImGui::SameLine();
-                if (ImGui::RadioButton("Scale", currentOp == UI::GizmoOperation::Scale)) {
-                    ui->SetCurrentGizmoOperation(UI::GizmoOperation::Scale);
-                }
+        auto currentOp = ui->GetCurrentGizmoOperation();
+        if (ImGui::RadioButton("Translate", currentOp == UI::GizmoOperation::Translate)) {
+            ui->SetCurrentGizmoOperation(UI::GizmoOperation::Translate);
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Rotate", currentOp == UI::GizmoOperation::Rotate)) {
+            ui->SetCurrentGizmoOperation(UI::GizmoOperation::Rotate);
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Scale", currentOp == UI::GizmoOperation::Scale)) {
+            ui->SetCurrentGizmoOperation(UI::GizmoOperation::Scale);
+        }
 
-                bool useSnap = ui->IsUsingSnap();
-                if (ImGui::Checkbox("Use Snap", &useSnap)) {
-                    ui->SetUsingSnap(useSnap);
-                }
-                
-                if (useSnap) {
-                    switch (currentOp) {
-                        case UI::GizmoOperation::Translate:
-                            ImGui::DragFloat3("Snap", ui->GetSnapTranslate(), 0.1f);
-                            break;
-                        case UI::GizmoOperation::Rotate:
-                            ImGui::DragFloat("Snap", ui->GetSnapRotatePtr(), 1.0f);
-                            break;
-                        case UI::GizmoOperation::Scale:
-                            ImGui::DragFloat("Snap", ui->GetSnapScalePtr(), 0.01f);
-                            break;
-                    }
-                }
+        bool useSnap = ui->IsUsingSnap();
+        if (ImGui::Checkbox("Use Snap", &useSnap)) {
+            ui->SetUsingSnap(useSnap);
+        }
 
-                if (ImGui::Button("Deselect")) {
-                    scene->ClearSelection();
-                }
-
-                ImGui::Separator();
-            }
-
-            if (ImGui::Button("Add Black Hole")) {
-                BlackHole newHole;
-                newHole.mass = 10.0f;
-                newHole.position = glm::vec3(0.0f, 0.0f, -5.0f);
-                newHole.showAccretionDisk = true;
-                newHole.accretionDiskDensity = 1.0f;
-                newHole.accretionDiskSize = 15.0f;
-                newHole.accretionDiskColor = glm::vec3(1.0f, 0.5f, 0.0f);
-                newHole.spinAxis = glm::vec3(0.0f, 1.0f, 0.0f);
-                newHole.spin = 0.5f;
-                scene->blackHoles.push_back(newHole);
-            }
-
-            ImGui::Text("Black Holes: %zu", scene->blackHoles.size());
-
-            int idx = 0;
-            for (auto it = scene->blackHoles.begin(); it != scene->blackHoles.end();) {
-                ImGui::PushID(("bh_" + std::to_string(idx)).c_str());
-
-                bool isSelected = scene->HasSelection() &&
-                                 scene->selectedObject->type == Scene::ObjectType::BlackHole &&
-                                 scene->selectedObject->index == static_cast<size_t>(idx);
-
-                if (isSelected) {
-                    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.7f, 1.0f, 0.6f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.4f, 0.8f, 1.0f, 0.8f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.5f, 0.9f, 1.0f, 1.0f));
-                }
-
-                std::string label = "Black Hole #" + std::to_string(idx + 1);
-                if (isSelected) {
-                    label += " (Selected)";
-                }
-
-                bool open = ImGui::TreeNode(label.c_str());
-
-                if (isSelected) {
-                    ImGui::PopStyleColor(3);
-                }
-
-                ImGui::SameLine();
-                
-                // Styled Select button
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 0.6f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(200.0f/255.0f, 120.0f/255.0f, 50.0f/255.0f, 0.8f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(160.0f/255.0f, 90.0f/255.0f, 35.0f/255.0f, 1.0f));
-                if (ImGui::SmallButton("Select")) {
-                    scene->SelectObject(Scene::ObjectType::BlackHole, idx);
-                }
-                ImGui::PopStyleColor(3);
-                
-                ImGui::SameLine();
-                
-                // Styled Remove button
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.2f, 0.6f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.8f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
-                bool remove = ImGui::SmallButton("Remove");
-                ImGui::PopStyleColor(3);
-
-                if (open) {
-                    BlackHole& bh = *it;
-                    bool bhChanged = false;
-
-                    if (ImGui::DragFloat("Mass", &bh.mass, 0.02f, 0.0f, 1e10f)) bhChanged = true;
-                    if (ImGui::DragFloat("Spin", &bh.spin, 0.01f, 0.0f, 2.0f)) bhChanged = true;
-                    if (ImGui::DragFloat3("Position", &bh.position[0], 0.05f)) bhChanged = true;
-                    if (ImGui::DragFloat3("Spin Axis", &bh.spinAxis[0], 0.01f, -1.0f, 1.0f)) bhChanged = true;
-
-                    if (bhChanged) {
-                        if (!scene->currentPath.empty()) {
-                            scene->Serialize(scene->currentPath);
-                        }
-                    }
-
-                    ImGui::TreePop();
-                }
-
-                ImGui::PopID();
-
-                if (remove) {
-                    if (isSelected) {
-                        scene->ClearSelection();
-                    }
-                    it = scene->blackHoles.erase(it);
-                    if (!scene->currentPath.empty()) {
-                        scene->Serialize(scene->currentPath);
-                    }
-                } else {
-                    ++it;
-                }
-                idx++;
+        if (useSnap) {
+            switch (currentOp) {
+                case UI::GizmoOperation::Translate:
+                    ImGui::DragFloat3("Snap", ui->GetSnapTranslate(), 0.1f);
+                    break;
+                case UI::GizmoOperation::Rotate:
+                    ImGui::DragFloat("Snap", ui->GetSnapRotatePtr(), 1.0f);
+                    break;
+                case UI::GizmoOperation::Scale:
+                    ImGui::DragFloat("Snap", ui->GetSnapScalePtr(), 0.01f);
+                    break;
             }
         }
+
+        if (ImGui::Button("Deselect")) {
+            scene->ClearSelection();
+        }
+
+        ImGui::Separator();
     }
 
-    // Meshes Section
-    if (ImGui::CollapsingHeader("Meshes", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (!scene) {
-            ImGui::TextDisabled("No scene loaded");
-        } else {
-            if (ImGui::Button("Add Mesh")) {
-                nfdchar_t* outPath = nullptr;
-                nfdfilteritem_t filterItems[] = {
-                    { "GLTF/GLB", "gltf,glb" }
-                };
-                nfdresult_t result = NFD_OpenDialog(&outPath, filterItems, 1, nullptr);
+    if (!scene) {
+        ImGui::TextDisabled("No scene loaded");
+        ImGui::End();
+        return;
+    }
 
-                if (result == NFD_OKAY && outPath) {
-                    MeshObject newMesh;
-                    newMesh.path = outPath;
-                    newMesh.name = std::filesystem::path(outPath).stem().string();
-                    newMesh.position = glm::vec3(0.0f, 0.0f, 0.0f);
-                    newMesh.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-                    newMesh.scale = glm::vec3(1.0f);
-                    scene->meshes.push_back(newMesh);
-                    free(outPath);
+    auto& simulation = Application::GetSimulation();
+    const auto& objectDefinitions = simulation.GetObjectDefinitions();
 
-                    if (!scene->currentPath.empty()) {
-                        scene->Serialize(scene->currentPath);
-                    }
-                }
-            }
-
-            ImGui::Text("Meshes: %zu", scene->meshes.size());
-
-            int idx = 0;
-            for (auto it = scene->meshes.begin(); it != scene->meshes.end();) {
-                ImGui::PushID(("mesh_" + std::to_string(idx)).c_str());
-
-                bool isSelected = scene->HasSelection() &&
-                                 scene->selectedObject->type == Scene::ObjectType::Mesh &&
-                                 scene->selectedObject->index == static_cast<size_t>(idx);
-
-                if (isSelected) {
-                    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.7f, 1.0f, 0.6f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.4f, 0.8f, 1.0f, 0.8f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.5f, 0.9f, 1.0f, 1.0f));
+    for (const auto& definition : objectDefinitions) {
+        if (ImGui::CollapsingHeader(definition.name.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+            RenderObjectTypeSection(scene, definition.name, [&]() {
+                std::vector<std::string> classNames;
+                for (const auto* objClass : definition.objectClasses) {
+                    classNames.push_back(objClass->name);
                 }
 
-                std::string label = it->name.empty() ? "Mesh #" + std::to_string(idx + 1) : it->name;
-                if (isSelected) {
-                    label += " (Selected)";
-                }
+                SceneObject newObj(classNames);
 
-                bool open = ImGui::TreeNode((label + "###NodeHeader").c_str());
-
-                if (isSelected) {
-                    ImGui::PopStyleColor(3);
-                }
-
-                ImGui::SameLine();
-                
-                // Styled Select button
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 0.6f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(200.0f/255.0f, 120.0f/255.0f, 50.0f/255.0f, 0.8f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(160.0f/255.0f, 90.0f/255.0f, 35.0f/255.0f, 1.0f));
-                if (ImGui::SmallButton("Select")) {
-                    scene->SelectObject(Scene::ObjectType::Mesh, idx);
-                }
-                ImGui::PopStyleColor(3);
-                
-                ImGui::SameLine();
-                
-                // Styled Remove button
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.2f, 0.6f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.8f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
-                bool remove = ImGui::SmallButton("Remove");
-                ImGui::PopStyleColor(3);
-
-                if (open) {
-                    MeshObject& mesh = *it;
-                    bool meshChanged = false;
-
-                    char nameBuffer[128];
-                    std::strncpy(nameBuffer, mesh.name.c_str(), sizeof(nameBuffer));
-                    nameBuffer[sizeof(nameBuffer) - 1] = '\0';
-                    if (ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer))) {
-                        mesh.name = nameBuffer;
-                        meshChanged = true;
-                    }
-
-                    ImGui::TextWrapped("Path: %s", mesh.path.c_str());
-
-                    ImGui::SameLine();
-                    if (ImGui::Button("Change...")) {
-                        nfdchar_t* outPath = nullptr;
-                        nfdfilteritem_t filterItems[] = {
-                            { "GLTF/GLB", "gltf,glb" }
-                        };
-                        nfdresult_t result = NFD_OpenDialog(&outPath, filterItems, 1, nullptr);
-
-                        if (result == NFD_OKAY && outPath) {
-                            mesh.path = outPath;
-                            free(outPath);
-                            meshChanged = true;
+                for (const auto* objClass : definition.objectClasses) {
+                    for (const auto& reqParam : objClass->requiredParameterKeys) {
+                        ParameterHandle handle(reqParam.c_str());
+                        auto metaIt = objClass->meta.find(handle.m_Id);
+                        if (metaIt != objClass->meta.end()) {
+                            const auto& meta = metaIt->second;
+                            newObj.SetParameter(handle, meta.defaultValue);
                         }
                     }
-
-                    if (ImGui::DragFloat("Mass (kg)", &mesh.massKg, 100.0f, 0.1f, 1e10f)) {
-                        meshChanged = true;
-                    }
-
-                    if (ImGui::DragFloat3("Position", &mesh.position[0], 0.1f)) {
-                        meshChanged = true;
-                    }
-
-                    float eulerAngles[3];
-                    glm::quat q = mesh.rotation;
-                    eulerAngles[0] = glm::degrees(glm::pitch(q));
-                    eulerAngles[1] = glm::degrees(glm::yaw(q));
-                    eulerAngles[2] = glm::degrees(glm::roll(q));
-                    
-                    if (ImGui::DragFloat3("Rotation (deg)", eulerAngles, 1.0f)) {
-                        q = glm::quat(glm::vec3(
-                            glm::radians(eulerAngles[0]),
-                            glm::radians(eulerAngles[1]),
-                            glm::radians(eulerAngles[2])
-                        ));
-                        mesh.rotation = q;
-                        meshChanged = true;
-                    }
-
-                    if (ImGui::DragFloat3("Scale", &mesh.scale[0], 0.01f)) {
-                        meshChanged = true;
-                    }
-
-                    if (meshChanged && !scene->currentPath.empty()) {
-                        scene->Serialize(scene->currentPath);
-                    }
-
-                    ImGui::TreePop();
                 }
 
-                ImGui::PopID();
+                newObj.SetParameter(ParameterHandle("Entity.Name"), definition.name);
+                newObj.SetParameter(ParameterHandle("Entity.Position"), glm::vec3(0.0f, 0.0f, -5.0f));
 
-                if (remove) {
-                    if (isSelected) {
-                        scene->ClearSelection();
-                    }
-                    it = scene->meshes.erase(it);
-                    if (!scene->currentPath.empty()) {
-                        scene->Serialize(scene->currentPath);
-                    }
-                } else {
-                    ++it;
+                scene->objects.push_back(std::move(newObj));
+                if (!scene->currentPath.empty()) {
+                    scene->Serialize(scene->currentPath);
                 }
-                idx++;
-            }
-        }
-    }
-
-    // Spheres Section
-    if (ImGui::CollapsingHeader("Spheres", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (!scene) {
-            ImGui::TextDisabled("No scene loaded");
-        } else {
-            if (ImGui::Button("Add Sphere")) {
-                Sphere newSphere;
-                newSphere.name = "New Sphere";
-                newSphere.position = glm::vec3(0.0f, 0.0f, -5.0f);
-                newSphere.radius = 1.0f;
-                newSphere.color = glm::vec4(0.0f, 0.5f, 1.0f, 1.0f);
-                scene->spheres.push_back(newSphere);
-            }
-
-            ImGui::Text("Spheres: %zu", scene->spheres.size());
-
-            int idx = 0;
-            for (auto it = scene->spheres.begin(); it != scene->spheres.end();) {
-                ImGui::PushID(("sphere_" + std::to_string(idx)).c_str());
-
-                bool isSelected = scene->HasSelection() &&
-                                 scene->selectedObject->type == Scene::ObjectType::Sphere &&
-                                 scene->selectedObject->index == static_cast<size_t>(idx);
-
-                if (isSelected) {
-                    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.7f, 1.0f, 0.6f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.4f, 0.8f, 1.0f, 0.8f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.5f, 0.9f, 1.0f, 1.0f));
-                }
-
-                std::string label = it->name.empty() ? "Sphere #" + std::to_string(idx + 1) : it->name;
-                if (isSelected) {
-                    label += " (Selected)";
-                }
-
-                bool open = ImGui::TreeNode((label + "###NodeHeader").c_str());
-
-                if (isSelected) {
-                    ImGui::PopStyleColor(3);
-                }
-
-                ImGui::SameLine();
-                
-                // Styled Select button
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 0.6f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(200.0f/255.0f, 120.0f/255.0f, 50.0f/255.0f, 0.8f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(160.0f/255.0f, 90.0f/255.0f, 35.0f/255.0f, 1.0f));
-                if (ImGui::SmallButton("Select")) {
-                    scene->SelectObject(Scene::ObjectType::Sphere, idx);
-                }
-                ImGui::PopStyleColor(3);
-                
-                ImGui::SameLine();
-                
-                // Styled Remove button
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.2f, 0.6f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.8f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
-                bool remove = ImGui::SmallButton("Remove");
-                ImGui::PopStyleColor(3);
-
-                if (open) {
-                    Sphere& sphere = *it;
-                    bool sphereChanged = false;
-
-                    char nameBuffer[128];
-                    std::strncpy(nameBuffer, sphere.name.c_str(), sizeof(nameBuffer));
-                    nameBuffer[sizeof(nameBuffer) - 1] = '\0';
-                    if (ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer))) {
-                        sphere.name = nameBuffer;
-                        sphereChanged = true;
-                    }
-
-                    if (ImGui::DragFloat3("Position", &sphere.position[0], 0.1f)) {
-                        sphereChanged = true;
-                    }
-
-                    if (ImGui::DragFloat3("Velocity", &sphere.velocity[0], 0.1f)) {
-                        sphereChanged = true;
-                    }
-
-                    if (ImGui::DragFloat("Mass (kg)", &sphere.massKg, 100.0f, 0.1f, 1e10f)) {
-                        sphereChanged = true;
-                    }
-
-                    if (ImGui::DragFloat("Radius", &sphere.radius, 0.1f, 0.1f, 100.0f)) {
-                        sphereChanged = true;
-                    }
-
-                    if (ImGui::ColorEdit4("Color", &sphere.color[0])) {
-                        sphereChanged = true;
-                    }
-
-                    if (sphereChanged && !scene->currentPath.empty()) {
-                        scene->Serialize(scene->currentPath);
-                    }
-
-                    ImGui::TreePop();
-                }
-
-                ImGui::PopID();
-
-                if (remove) {
-                    if (isSelected) {
-                        scene->ClearSelection();
-                    }
-                    it = scene->spheres.erase(it);
-                    if (!scene->currentPath.empty()) {
-                        scene->Serialize(scene->currentPath);
-                    }
-                } else {
-                    ++it;
-                }
-                idx++;
-            }
+            });
         }
     }
 

@@ -600,7 +600,7 @@ scene_parameters:
   - name: "Entity.Rotation"
     displayName: "Rotation"
     tooltip: "Rotation quaternion (w, x, y, z)"
-    type: vec3
+    type: quat
     group: Simulation
     defaultValue: [1.0, 0.0, 0.0, 0.0]
     showInUI: true
@@ -684,7 +684,7 @@ scene_parameters:
   - name: "Physics.Rigidbody.Constraints"
     displayName: "Constraints"
     tooltip: "Movement and rotation constraints"
-    type: stringvector
+    type: string_vector
     group: Simulation
     defaultValue: []
     showInUI: true
@@ -773,19 +773,6 @@ scene_parameters:
     showInUI: true
 
   # BlackHole Parameters
-  - name: "BlackHole.Mass"
-    displayName: "Gravitational Mass"
-    tooltip: "Mass parameter for gravitational effects (solar masses)"
-    type: float
-    group: Simulation
-    defaultValue: 1.0
-    minValue: 0.1
-    maxValue: 100.0
-    dragSpeed: 0.1
-    scaleValueNames: ["Solar Masses", "x10", "x100"]
-    scaleValues: [1.0, 10.0, 100.0]
-    showInUI: true
-
   - name: "BlackHole.Spin"
     displayName: "Spin"
     tooltip: "Kerr spin parameter (0.0 to 1.0)"
@@ -838,10 +825,10 @@ scene_parameters:
 
   - name: "Sphere.Color"
     displayName: "Color"
-    tooltip: "Base color (RGBA)"
+    tooltip: "Base color (RGB)"
     type: vec3
     group: Simulation
-    defaultValue: [0.5, 0.5, 0.5, 1.0]
+    defaultValue: [0.5, 0.5, 0.5]
     showInUI: true
 
   - name: "Sphere.TexturePath"

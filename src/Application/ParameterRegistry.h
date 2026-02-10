@@ -10,6 +10,7 @@
 #include <optional>
 #include <cstdint>
 #include <glm/vec3.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <yaml-cpp/yaml.h>
 
 constexpr uint64_t FnvOffsetBasis = 14695981039346656037ull;
@@ -84,11 +85,12 @@ enum class ParameterType {
     Vec2,
     Vec3,
     Vec4,
+    Quat,
     Enum,
     StringVector
 };
 
-using ParameterValue = std::variant<bool, int, float, std::string, glm::vec3, std::vector<std::string>>;
+using ParameterValue = std::variant<bool, int, float, std::string, glm::vec3, glm::quat, std::vector<std::string>>;
 
 struct ParameterMetadata {
     uint64_t id;
