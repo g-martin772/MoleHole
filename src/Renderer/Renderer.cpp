@@ -55,7 +55,7 @@ void Renderer::Init() {
     }
 
     spdlog::info("Loaded OpenGL {0}.{1}", GLAD_VERSION_MAJOR(version), GLAD_VERSION_MINOR(version));
-
+    spdlog::info("OpenGL version: {}", (const char *) glGetString(GL_RENDERER));
     spdlog::info("OpenGL version: {}", (const char *) glGetString(GL_VERSION));
 
     IMGUI_CHECKVERSION();

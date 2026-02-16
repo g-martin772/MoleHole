@@ -103,6 +103,7 @@ void UI::RenderDockspace(Scene* scene) {
     // setup
     ImGuiIO& io = ImGui::GetIO();
     bool ctrl = io.KeyCtrl;
+    bool alt = io.KeyAlt;
     static bool prevCtrlS = false, prevCtrlO = false;
     static bool prevF12 = false, prevF11 = false, prevCtrlF11 = false, prevCtrlF12 = false;
     static bool prevSpace = false, prevP = false, prevS = false, prevR = false;
@@ -116,7 +117,7 @@ void UI::RenderDockspace(Scene* scene) {
     bool ctrlf11 = ctrl && ImGui::IsKeyPressed(ImGuiKey_F11);
     bool spaceKey = ImGui::IsKeyPressed(ImGuiKey_Space);
     bool pKey = ImGui::IsKeyPressed(ImGuiKey_P);
-    bool sKey = ImGui::IsKeyPressed(ImGuiKey_S) && !ctrl;
+    bool AltSKey = alt && ImGui::IsKeyPressed(ImGuiKey_S) && !ctrl;
     bool rKey = ImGui::IsKeyPressed(ImGuiKey_R);
     
     // Screenshot shortcuts
@@ -148,7 +149,7 @@ void UI::RenderDockspace(Scene* scene) {
         }
     }
     if (pKey && !prevP) doSimPause = true;
-    if (sKey && !prevS) doSimStop = true;
+    if (AltSKey && !prevS) doSimStop = true;
     if (rKey && !prevR) doSimResume = true;
 
     prevCtrlS = ctrlS;
@@ -159,7 +160,7 @@ void UI::RenderDockspace(Scene* scene) {
     prevCtrlF11 = ctrlf11;
     prevSpace = spaceKey;
     prevP = pKey;
-    prevS = sKey;
+    prevS = AltSKey;
     prevR = rKey;
 
     TopBar::RenderMainMenuBar(this, scene, doSave, doOpen, doTakeScreenshotDialog, doTakeScreenshotViewportDialog, doTakeScreenshot, doTakeScreenshotViewport);
@@ -235,7 +236,7 @@ void UI::RenderMainUI(float fps, Scene* scene) {
     }
 
     if (m_showSettingsWindow) {
-        SettingsPopUp::Render(this, &m_showSettingsWindow);
+        SettingsPopUp::Render(this, scene, &m_showSettingsWindow);
     }
 
     if (m_showGeneralRelativityWindow)
