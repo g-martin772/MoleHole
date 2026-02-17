@@ -1,5 +1,4 @@
 #pragma once
-#include <chrono>
 
 class FpsCounter {
 public:

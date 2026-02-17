@@ -2,8 +2,6 @@
 #include "../Application/AnimationGraph.h"
 #include <imgui.h>
 #include <imgui_node_editor.h>
-#include <vector>
-#include <string>
 
 namespace ed = ax::NodeEditor;
 

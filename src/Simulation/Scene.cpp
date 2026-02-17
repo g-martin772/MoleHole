@@ -1,12 +1,7 @@
 #include "Scene.h"
 
-#include <filesystem>
-#include <fstream>
 #include <yaml-cpp/yaml.h>
 #include <nfd.h>
-#include <spdlog/spdlog.h>
-#include <limits>
-#include <cmath>
 
 #include "Application/Application.h"
 #include "Simulation.h"

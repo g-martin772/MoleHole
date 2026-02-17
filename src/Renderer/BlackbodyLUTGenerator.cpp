@@ -1,6 +1,4 @@
 #include "BlackbodyLUTGenerator.h"
-#include <cmath>
-#include <algorithm>
 
 namespace MoleHole {
 

@@ -1,11 +1,5 @@
 #include "BlackHoleRenderer.h"
 #include <glad/gl.h>
-#include <spdlog/spdlog.h>
-#include <glm/gtc/type_ptr.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtc/quaternion.hpp>
-#include <glm/gtx/quaternion.hpp>
-
 #include "Simulation/Scene.h"
 #include "Application/Application.h"
 #include "Application/Parameters.h"

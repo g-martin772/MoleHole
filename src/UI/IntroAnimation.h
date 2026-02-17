@@ -1,8 +1,5 @@
 #pragma once
 
-#include <memory>
-#include <glm/glm.hpp>
-
 class Shader;
 
 class IntroAnimation {

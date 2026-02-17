@@ -1,16 +1,5 @@
 #pragma once
 
-#include <string>
-#include <string_view>
-#include <variant>
-#include <vector>
-#include <unordered_map>
-#include <filesystem>
-#include <mutex>
-#include <optional>
-#include <cstdint>
-#include <glm/vec3.hpp>
-#include <glm/gtc/quaternion.hpp>
 #include <yaml-cpp/yaml.h>
 
 constexpr uint64_t FnvOffsetBasis = 14695981039346656037ull;

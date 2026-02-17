@@ -1,7 +1,5 @@
 #include "Physics.h"
 
-#include <algorithm>
-#include <spdlog/spdlog.h>
 #include "Renderer/Renderer.h"
 #include "Renderer/GLTFMesh.h"
 

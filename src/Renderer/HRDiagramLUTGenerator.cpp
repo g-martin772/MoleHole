@@ -1,6 +1,4 @@
 #include "HRDiagramLUTGenerator.h"
-#include <cmath>
-#include <algorithm>
 
 namespace MoleHole {
 

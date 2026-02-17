@@ -108,6 +108,8 @@ list(APPEND SOURCES ${PLATFORM_SOURCES})
 
 add_executable(MoleHole ${SOURCES})
 
+target_precompile_headers(MoleHole PRIVATE src/mhpch.h)
+
 set_property(TARGET MoleHole PROPERTY CXX_STANDARD 23)
 set_property(TARGET MoleHole PROPERTY CXX_STANDARD_REQUIRED ON)
 set_property(TARGET PhysX PROPERTY CXX_STANDARD 11)

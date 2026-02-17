@@ -4,8 +4,6 @@
 
 #include "RendererWindow.h"
 #include "ParameterWidgets.h"
-#include "UI.h"
-#include "../Application/Application.h"
 #include "../Application/Parameters.h"
 #include "imgui.h"
 

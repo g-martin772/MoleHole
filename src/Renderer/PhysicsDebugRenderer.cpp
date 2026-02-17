@@ -2,8 +2,6 @@
 #include "Shader.h"
 #include "Camera.h"
 #include <glad/gl.h>
-#include <glm/gtc/type_ptr.hpp>
-#include <spdlog/spdlog.h>
 
 void PhysicsDebugRenderer::Init() {
     m_LineShader = std::make_unique<Shader>("../shaders/physics_debug_line.vert", "../shaders/physics_debug_line.frag");

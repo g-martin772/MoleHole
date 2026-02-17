@@ -1,7 +1,5 @@
 #include "Input.h"
 
-#include <algorithm>
-#include <cmath>
 #include <GLFW/glfw3.h>
 
 Input::Input(GLFWwindow* window)

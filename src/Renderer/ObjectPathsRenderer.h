@@ -1,8 +1,4 @@
 #pragma once
-#include <memory>
-#include <vector>
-#include <deque>
-#include <glm/glm.hpp>
 #include "Shader.h"
 #include "Buffer.h"
 

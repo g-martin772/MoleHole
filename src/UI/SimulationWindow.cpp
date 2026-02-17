@@ -9,10 +9,7 @@
 #include "IconsFontAwesome6.h"
 #include "ParameterWidgets.h"
 #include "imgui.h"
-#include "spdlog/spdlog.h"
 #include <nfd.h>
-#include <filesystem>
-#include <cstring>
 
 namespace SimulationWindow {
 

@@ -3,10 +3,7 @@
 #include "../UI/NodeBuilder.h"
 #include <imgui.h>
 #include <imgui_node_editor.h>
-#include <algorithm>
 #include <yaml-cpp/yaml.h>
-#include <random>
-
 #include "Simulation/Scene.h"
 
 namespace ed = ax::NodeEditor;

@@ -8,8 +8,6 @@
 #include "FpsCounter.h"
 #include "../UI/IntroAnimation.h"
 #include "CommandLineArgs.h"
-#include <functional>
-#include <memory>
 
 struct GLFWwindow;
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../Application/ParameterRegistry.h"
-#include <functional>
 
 class UI;
 class SceneObject;

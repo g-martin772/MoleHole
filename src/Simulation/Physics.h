@@ -1,12 +1,9 @@
 #pragma once
 #include "Scene.h"
-#include <vector>
-#include <unordered_map>
 
 #ifndef _DEBUG
 #define _DEBUG
 #endif
-#include <version>
 #include <PxPhysicsAPI.h>
 
 using namespace physx;

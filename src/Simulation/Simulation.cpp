@@ -1,7 +1,5 @@
 #include "Simulation.h"
-#include <spdlog/spdlog.h>
 #include <yaml-cpp/yaml.h>
-#include <algorithm>
 #include "GraphExecutor.h"
 #include "Application/AnimationGraph.h"
 #include "Application/Application.h"

@@ -6,22 +6,12 @@
 #include "ImGuizmo.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-#include "spdlog/spdlog.h"
 #include "Shader.h"
-#include <memory>
 #include "Camera.h"
 #include "Input.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/matrix_decompose.hpp>
-#include <glm/gtx/quaternion.hpp>
 
 #include "Buffer.h"
-#include <cmath>
-#include <cstdlib>
 
 #include "Application/Application.h"
 #include "Application/Parameters.h"

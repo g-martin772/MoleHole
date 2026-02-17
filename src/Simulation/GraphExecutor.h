@@ -1,11 +1,6 @@
 #pragma once
 #include "../Application/AnimationGraph.h"
 #include "Simulation/Scene.h"
-#include <unordered_map>
-#include <variant>
-#include <vector>
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 class Camera;
 class SceneObject;

@@ -8,12 +8,6 @@
 #include "../Application/Parameters.h"
 #include "../Simulation/Scene.h"
 #include "imgui.h"
-#include "spdlog/spdlog.h"
-#include <filesystem>
-#include <algorithm>
-#include <set>
-#include <vector>
-#include <cstring>
 
 #include "ParameterWidgets.h"
 

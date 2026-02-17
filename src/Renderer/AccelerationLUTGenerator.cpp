@@ -1,6 +1,4 @@
 #include "AccelerationLUTGenerator.h"
-#include <cmath>
-#include <algorithm>
 
 namespace MoleHole {
 

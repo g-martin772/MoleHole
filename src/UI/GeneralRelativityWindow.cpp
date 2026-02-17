@@ -3,7 +3,6 @@
 //
 
 #include "GeneralRelativityWindow.h"
-#include "ParameterWidgets.h"
 #include "UI.h"
 #include "../Application/Application.h"
 #include "../Application/Parameters.h"

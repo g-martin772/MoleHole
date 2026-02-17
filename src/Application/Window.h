@@ -1,9 +1,5 @@
 #pragma once
 
-#include <string>
-#include <functional>
-#include <cstdint>
-
 struct GLFWwindow;
 
 struct WindowProperties {

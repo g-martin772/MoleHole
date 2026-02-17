@@ -1,13 +1,8 @@
 #include "Image.h"
 #include <glad/gl.h>
-#include <spdlog/spdlog.h>
-
 #include "stb_image.h"
 #include <Application/Profiler.h>
-#include <filesystem>
-#include <fstream>
-#include <vector>
-#include <cstring>
+
 
 Image::Image(int width, int height) : width(width), height(height), textureID(0) {
     glGenTextures(1, &textureID);

@@ -1,7 +1,4 @@
 #pragma once
-#include <memory>
-#include <filesystem>
-
 #include "Scene.h"
 #include "Physics.h"
 

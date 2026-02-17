@@ -12,25 +12,13 @@
 #include "AnimationGraphWindow.h"
 #include "GeneralRelativityWindow.h"
 #include "imgui.h"
-#include "spdlog/spdlog.h"
 #include <nfd.h>
-#include <cstring>
-#include <filesystem>
-#include <algorithm>
 #include <imgui_node_editor.h>
-#include <vector>
-#include <memory>
 #include "../Renderer/ExportRenderer.h"
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <glm/gtx/matrix_decompose.hpp>
-#include <glm/gtx/quaternion.hpp>
+
 
 #include "../Application/Parameters.h"
-#include "Renderer/PhysicsDebugRenderer.h"
 
 #ifndef _DEBUG
 #define _DEBUG

@@ -1,12 +1,4 @@
 #pragma once
-#include <vector>
-#include <filesystem>
-#include <glm/vec3.hpp>
-#include <glm/mat4x4.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <string>
-#include <optional>
-#include <unordered_map>
 #include "Application/AnimationGraph.h"
 #include "Application/ParameterRegistry.h"
 

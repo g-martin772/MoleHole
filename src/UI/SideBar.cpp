@@ -6,7 +6,6 @@
 #include "UI.h"
 #include "IconsFontAwesome6.h"
 #include "imgui.h"
-#include <glm/glm.hpp>
 
 namespace SideBar {
 

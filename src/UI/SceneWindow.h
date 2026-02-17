@@ -5,8 +5,6 @@
 #ifndef MOLEHOLE_SCENEWINDOW_H
 #define MOLEHOLE_SCENEWINDOW_H
 
-#include <string>
-
 class Scene;
 class UI;
 

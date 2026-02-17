@@ -1,5 +1,4 @@
 #include "CommandLineArgs.h"
-#include <spdlog/spdlog.h>
 
 void CommandLineArgs::Parse(int argc, char* argv[]) {
     m_values.clear();

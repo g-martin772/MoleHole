@@ -1,7 +1,4 @@
 #include "KerrGeodesicLUTGenerator.h"
-#include <cmath>
-#include <algorithm>
-#include <spdlog/spdlog.h>
 
 namespace MoleHole {
 

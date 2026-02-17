@@ -8,10 +8,7 @@
 #include "../Application/Application.h"
 #include "../Application/Parameters.h"
 #include "imgui.h"
-#include "spdlog/spdlog.h"
 #include <nfd.h>
-#include <filesystem>
-#include <algorithm>
 
 namespace SettingsPopUp {
 

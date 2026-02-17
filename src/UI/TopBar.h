@@ -5,8 +5,6 @@
 #ifndef MOLEHOLE_TOPBAR_H
 #define MOLEHOLE_TOPBAR_H
 
-#include <string>
-
 class Scene;
 class UI;
 

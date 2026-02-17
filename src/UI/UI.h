@@ -1,6 +1,5 @@
 #pragma once
 
-#include <string>
 #include "Simulation/Scene.h"
 #include "../Application/AnimationGraph.h"
 

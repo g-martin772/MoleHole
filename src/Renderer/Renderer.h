@@ -2,11 +2,7 @@
 #include "Shader.h"
 #include "BlackHoleRenderer.h"
 #include "GLTFMesh.h"
-#include "../Platform/GLFW/Window.h"
-#include <memory>
-#include <glm/glm.hpp>
-#include <vector>
-#include <unordered_map>
+#include "../Application/Window.h"
 
 #include "Simulation/Scene.h"
 #include "Image.h"
@@ -14,6 +10,14 @@
 #include "Input.h"
 #include "GravityGridRenderer.h"
 #include "ObjectPathsRenderer.h"
+
+enum class RenderAPI
+{
+    None = 0,
+    OpenGL = 1,
+    DirectX = 2,
+    Vulkan = 3
+};
 
 class PhysicsDebugRenderer;
 struct GLFWwindow;

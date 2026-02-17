@@ -1,8 +1,5 @@
 #pragma once
 
-#include <memory>
-#include <glm/glm.hpp>
-
 #ifndef _DEBUG
 #define _DEBUG
 #endif

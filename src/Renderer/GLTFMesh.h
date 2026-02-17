@@ -1,10 +1,4 @@
 #pragma once
-#include <string>
-#include <vector>
-#include <memory>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 namespace tinygltf {
     class Model;

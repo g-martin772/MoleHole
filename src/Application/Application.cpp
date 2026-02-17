@@ -1,9 +1,5 @@
 #include "Application.h"
 #include <GLFW/glfw3.h>
-#include <spdlog/spdlog.h>
-#include <filesystem>
-#include <chrono>
-#include <thread>
 #include "LinuxGtkInit.h"
 #include "Parameters.h"
 #include "Renderer/PhysicsDebugRenderer.h"

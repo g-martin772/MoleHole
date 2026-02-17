@@ -2,8 +2,6 @@
 
 #if defined(__linux__)
 #include <dlfcn.h>
-#include <cstdlib>
-#include <spdlog/spdlog.h>
 
 static void* load_library(const char* name) {
     void* h = dlopen(name, RTLD_LAZY | RTLD_LOCAL);

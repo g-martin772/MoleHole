@@ -1,15 +1,5 @@
 #include "Shader.h"
-#include <fstream>
-#include <sstream>
 #include <glad/gl.h>
-#include <spdlog/spdlog.h>
-#include <glm/gtc/type_ptr.hpp>
-#include <vector>
-#include <iomanip>
-#include <cstring>
-#include <filesystem>
-#include <string_view>
-#include <chrono>
 #include "Application/Profiler.h"
 
 std::string Shader::ReadFile(const char* path) {

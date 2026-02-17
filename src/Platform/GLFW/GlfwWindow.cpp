@@ -1,6 +1,5 @@
-#include "Window.h"
+#include "Application/Window.h"
 #include <GLFW/glfw3.h>
-#include <spdlog/spdlog.h>
 
 class GLFWWindow : public Window {
 public:

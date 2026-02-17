@@ -1,11 +1,5 @@
 #include "IntroAnimation.h"
 #include <glad/gl.h>
-#include <GLFW/glfw3.h>
-#include <spdlog/spdlog.h>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <cmath>
-#include <cstring>
 #include "imgui.h"
 #include "Renderer/Shader.h"
 

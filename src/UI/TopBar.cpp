@@ -10,11 +10,7 @@
 #include "../Renderer/Renderer.h"
 #include "../Renderer/Screenshot.h"
 #include "imgui.h"
-#include "spdlog/spdlog.h"
 #include <nfd.h>
-#include <GLFW/glfw3.h>
-#include <filesystem>
-#include <algorithm>
 
 namespace TopBar {
 

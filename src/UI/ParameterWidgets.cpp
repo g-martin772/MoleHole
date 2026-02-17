@@ -4,10 +4,6 @@
 #include "../Application/Parameters.h"
 #include "../Simulation/Scene.h"
 #include "imgui.h"
-#include <spdlog/spdlog.h>
-#include <algorithm>
-#include <unordered_map>
-#include <functional>
 #include <nfd.h>
 
 namespace ParameterWidgets {

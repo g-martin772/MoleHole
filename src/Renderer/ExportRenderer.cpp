@@ -4,10 +4,7 @@
 #include "Camera.h"
 #include "Application/Application.h"
 #include "Application/Parameters.h"
-#include <spdlog/spdlog.h>
 #include <stb_image_write.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
 extern "C" {
 #include <libavcodec/avcodec.h>

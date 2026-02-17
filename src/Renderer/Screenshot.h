@@ -1,8 +1,5 @@
 ﻿#pragma once
 
-#include <string>
-#include <vector>
-
 class Screenshot {
 public:
     static bool CaptureViewport(int x, int y, int width, int height, const std::string& filename);

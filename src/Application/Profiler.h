@@ -1,9 +1,5 @@
 #pragma once
 
-#include <chrono>
-#include <string_view>
-#include <spdlog/spdlog.h>
-
 class ScopeTimer {
 public:
 	ScopeTimer(const char* file, const char* func, std::string_view label = {})

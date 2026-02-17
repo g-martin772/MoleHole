@@ -2,8 +2,6 @@
 #include "Buffer.h"
 #include "Simulation/Scene.h"
 #include <glad/gl.h>
-#include <glm/gtc/type_ptr.hpp>
-#include <algorithm>
 
 #include "Camera.h"
 

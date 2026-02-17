@@ -1,12 +1,5 @@
 #pragma once
 #include <imgui_node_editor.h>
-#include <vector>
-#include <memory>
-#include <string>
-#include <variant>
-#include <random>
-
-#include "glm/glm.hpp"
 #include "yaml-cpp/emitter.h"
 
 struct Scene;

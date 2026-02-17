@@ -1,5 +1,4 @@
 #include "NodeBuilder.h"
-#include <algorithm>
 
 extern ImVec4 GetNodeColor(AnimationGraph::NodeType type, const std::string &name);
 

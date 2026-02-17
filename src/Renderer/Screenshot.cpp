@@ -1,11 +1,6 @@
 ﻿#include "Screenshot.h"
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
-#include <spdlog/spdlog.h>
-#include <chrono>
-#include <iomanip>
-#include <sstream>
-#include <filesystem>
 #include <stb_image_write.h>
 
 int ConvertImGuiYToGL(int imguiY, int captureHeight) {

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <filesystem>
 #include "ParameterRegistry.h"
 
 class AppState {

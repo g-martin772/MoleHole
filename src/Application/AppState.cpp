@@ -1,6 +1,4 @@
 #include "AppState.h"
-#include <spdlog/spdlog.h>
-#include <fstream>
 
 ParameterRegistry& AppState::Params() noexcept {
     return ParameterRegistry::Instance();

@@ -2,13 +2,7 @@
 #include "Shader.h"
 #include <glad/gl.h>
 #include <tiny_gltf.h>
-#include <spdlog/spdlog.h>
-#include <glm/gtc/type_ptr.hpp>
 #include <Application/Profiler.h>
-#include <filesystem>
-#include <fstream>
-#include <numeric>
-#include <cstring>
 
 namespace {
 struct MeshCacheHeader {
