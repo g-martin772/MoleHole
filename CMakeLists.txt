@@ -85,6 +85,7 @@ add_subdirectory(dependencies/physx/physx/compiler/public)
 
 file(GLOB SOURCES
         src/*.cpp
+        src/Core/*.cpp
         src/Application/*.cpp
         src/Simulation/*.cpp
         src/Renderer/*.cpp

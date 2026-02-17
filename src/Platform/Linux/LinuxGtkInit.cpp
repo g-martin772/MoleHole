@@ -1,6 +1,5 @@
 #include "LinuxGtkInit.h"
 
-#if defined(__linux__)
 #include <dlfcn.h>
 
 static void* load_library(const char* name) {
@@ -65,7 +64,4 @@ void TryInitializeGtk() {
     dlclose(handle);
     done = true;
 }
-#else
-void TryInitializeGtk() {}
-#endif
 

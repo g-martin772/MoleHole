@@ -1,6 +1,6 @@
 #include "Application.h"
 #include <GLFW/glfw3.h>
-#include "LinuxGtkInit.h"
+#include "../Platform/Linux/LinuxGtkInit.h"
 #include "Parameters.h"
 #include "Renderer/PhysicsDebugRenderer.h"
 
@@ -29,7 +29,9 @@ bool Application::Initialize() {
 
     spdlog::info("Initializing MoleHole Application");
 
+#ifdef __linux__
     TryInitializeGtk();
+#endif
 
     AppState::Params().LoadDefinitionsFromYaml("../assets/config/parameters.yaml");
     m_state.LoadState("config.yaml");

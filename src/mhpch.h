@@ -24,6 +24,10 @@
 #include <thread>
 #include <random>
 #include <variant>
+#include <new>
+#include <type_traits>
+
+#include "Core/Memory.h"
 
 #include "spdlog/spdlog.h"
 
