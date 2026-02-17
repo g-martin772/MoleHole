@@ -15,7 +15,7 @@
 
 namespace SettingsPopUp {
 
-void Render(UI* ui, bool* showSettingsWindow) {
+void Render(UI* ui, Scene* scene, bool* showSettingsWindow) {
     // Open the popup when the window flag is set
     if (*showSettingsWindow && !ImGui::IsPopupOpen("Settings")) {
         ImGui::OpenPopup("Settings");
@@ -115,6 +115,63 @@ void Render(UI* ui, bool* showSettingsWindow) {
                     static std::vector<std::string> availableFonts;
                     static int selectedFontIndex = -1;
                     static bool fontsLoaded = false;
+
+                    if (ImGui::CollapsingHeader("Scene Configuration"), ImGuiTreeNodeFlags_DefaultOpen)
+                    {
+                        if (scene)
+                        {
+                            ImGui::Indent();
+
+                            static int selectedBackgroundIndex = -1;
+                            const std::string currentBackground = Application::Params().Get(Params::AppBackgroundImage, std::string("space.hdr"));
+                            const std::vector<std::string> backgroundPaths = ui->GetAvailableBackgrounds();
+
+                            if (ImGui::BeginCombo("Background Image", currentBackground.c_str())) {
+                                for (size_t i = 0; i < backgroundPaths.size(); ++i) {
+                                    const bool isSelected = (backgroundPaths[i] == currentBackground);
+                                    if (ImGui::Selectable(backgroundPaths[i].c_str(), isSelected)) {
+                                        selectedBackgroundIndex = static_cast<int>(i);
+                                        Application::Params().Set(Params::AppBackgroundImage, backgroundPaths[i]);
+                                        ui->MarkConfigDirty();
+                                        scene->reloadSkybox = true;
+                                    }
+                                    if (isSelected) {
+                                        ImGui::SetItemDefaultFocus();
+                                    }
+                                }
+                                ImGui::EndCombo();
+                            }
+
+                            if (ImGui::Button("Add custom background image (.hdr)", ImVec2(-1, 0))) {
+                                nfdchar_t* outPath = nullptr;
+                                nfdfilteritem_t filterItems[] = {
+                                    { "High Dynamic Range", "hdr" }
+                                };
+
+                                if (nfdresult_t result = NFD_OpenDialog(&outPath, filterItems, 1, nullptr); result == NFD_OKAY && outPath) {
+                                    std::filesystem::path sourcePath(outPath);
+                                    std::filesystem::path destPath = "../assets/backgrounds/" + sourcePath.filename().string();
+
+                                    try {
+                                        std::filesystem::copy_file(sourcePath, destPath,
+                                                                   std::filesystem::copy_options::overwrite_existing);
+
+                                        Application::Params().Set(Params::AppBackgroundImage, sourcePath.filename().string());
+                                        ui->MarkConfigDirty();
+                                        scene->reloadSkybox = true;
+
+                                        spdlog::info("Custom background image added successfully: {}", sourcePath.filename().string());
+                                    } catch (const std::exception& e) {
+                                        spdlog::error("Failed to copy background image file: {}", e.what());
+                                    }
+
+                                    free(outPath);
+                                }
+                            }
+
+                            ImGui::Unindent();
+                        }
+                    }
 
                     if (ImGui::CollapsingHeader("Font Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
                         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));

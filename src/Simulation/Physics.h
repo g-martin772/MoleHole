@@ -31,6 +31,7 @@ struct BlackHoleBodyData {
     glm::vec3 position = glm::vec3(0.0f);
     float schwarzschildRadius = 0.0f;
     size_t sceneIndex = 0;
+    glm::vec3 initialVelocity = glm::vec3(0.0f);
 };
 
 class Physics : public PxSimulationEventCallback {
@@ -74,12 +75,12 @@ private:
 
     void CreatePhysicsBody(PhysicsBodyData& data);
     void CreateBlackHoleBody(BlackHoleBodyData& data);
-    void ApplyGravitationalForces();
+    void ApplyGravitationalForces(float dt) const;
     void UpdatePhysicsBodies();
     void ProcessDeletedBodies();
     PxConvexMesh* LoadConvexMesh(const std::string& path);
-    float CalculateSchwarzchildRadius(float solarMass);
-public:
+    float CalculateSchwarzschildRadius(float solarMass);
+
     static constexpr float G = 6.67430e-11f;
     static constexpr float SOLAR_MASS = 1.989e30f;
     static constexpr float C = 299792458.0f;

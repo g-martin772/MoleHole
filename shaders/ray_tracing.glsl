@@ -76,21 +76,18 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
 
     if (u_enableThirdPerson == 1) {
         float t;
-        if (intersectCube(rayOrigin, rayDir, u_cameraPos, u_cubeSize, t)) {
+        int axis = intersectCrosshair(rayOrigin, rayDir, u_cameraPos, u_cubeSize * 0.3, t);
+        if (axis > 0) {
             if (t < record.t) {
                 record.hit = true;
                 record.t = t;
-                record.type = 3; // cube type
+                record.type = 3;
                 record.objectIndex = 0;
 
                 vec3 hitPoint = rayOrigin + rayDir * t;
-                vec3 normal = getCubeNormal(hitPoint, u_cameraPos, u_cubeSize);
-
-                // Simple Lambertian shading for the cube
-                vec3 cubeColor = vec3(0.7, 0.3, 0.2); // Orange-ish color
-                float diffuse = max(dot(normal, lightDir), 0.0);
-                vec3 ambient = vec3(0.1);
-                record.color = cubeColor * (ambient + diffuse * 0.9);
+                vec3 normal = getCrosshairNormal(hitPoint, u_cameraPos, axis);
+                vec3 crosshairColor = getCrosshairColor(axis);
+                record.color = crosshairColor;
             }
         }
     }

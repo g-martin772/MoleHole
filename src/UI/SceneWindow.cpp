@@ -97,37 +97,6 @@ void Render(UI* ui, Scene* scene) {
         return;
     }
 
-
-    if (ImGui::CollapsingHeader("Scene Configuration"), ImGuiTreeNodeFlags_DefaultOpen)
-    {
-        if (scene)
-        {
-            ImGui::Indent();
-
-            static int selectedBackgroundIndex = -1;
-            const std::string currentBackground = Application::Params().Get(Params::AppBackgroundImage, std::string("space.hdr"));
-            const std::vector<std::string> backgroundPaths = ui->GetAvailableBackgrounds();
-
-            if (ImGui::BeginCombo("Background Image", currentBackground.c_str())) {
-                for (size_t i = 0; i < backgroundPaths.size(); ++i) {
-                    const bool isSelected = (backgroundPaths[i] == currentBackground);
-                    if (ImGui::Selectable(backgroundPaths[i].c_str(), isSelected)) {
-                        selectedBackgroundIndex = static_cast<int>(i);
-                        Application::Params().Set(Params::AppBackgroundImage, backgroundPaths[i]);
-                        ui->MarkConfigDirty();
-                        scene->reloadSkybox = true;
-                    }
-                    if (isSelected) {
-                        ImGui::SetItemDefaultFocus();
-                    }
-                }
-                ImGui::EndCombo();
-            }
-
-            ImGui::Unindent();
-        }
-    }
-
     // Scene Properties Section
     if (ImGui::CollapsingHeader("Scene Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (scene) {

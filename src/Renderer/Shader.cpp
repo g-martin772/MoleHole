@@ -247,7 +247,7 @@ unsigned int Shader::CompileWithCache(const char* vertexPath, const char* fragme
 }
 
 unsigned int Shader::CompileComputeWithCache(const char* computePath) {
-    const std::string cacheKey = ComputeHash(computePath);
+    /*const std::string cacheKey = ComputeHash(computePath);
     
     if (IsCacheValid(cacheKey, computePath)) {
         const auto tStart = std::chrono::steady_clock::now();
@@ -258,7 +258,7 @@ unsigned int Shader::CompileComputeWithCache(const char* computePath) {
             spdlog::info("Loaded compute shader from cache in {} ms: {}", ms, computePath);
             return program;
         }
-    }
+    }*/
     
     spdlog::debug("Compiling compute shader from source: {}", computePath);
     const auto tStart = std::chrono::steady_clock::now();
@@ -267,12 +267,12 @@ unsigned int Shader::CompileComputeWithCache(const char* computePath) {
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(tEnd - tStart).count();
     spdlog::info("Compiled compute shader in {} ms: {}", ms, computePath);
     
-    SaveCachedProgram(program, cacheKey);
+    /*SaveCachedProgram(program, cacheKey);
     
     std::ofstream metaFile(GetCachePath(cacheKey) + ".meta");
     if (metaFile.is_open()) {
         metaFile << GetFileModTime(computePath) << "\n";
-    }
+    }*/
     
     return program;
 }
