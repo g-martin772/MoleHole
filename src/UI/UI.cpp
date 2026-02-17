@@ -1,16 +1,16 @@
 #include "UI.h"
-#include "Application.h"
-#include "../UI/IconsFontAwesome6.h"
-#include "../UI/TopBar.h"
-#include "../UI/SideBar.h"
-#include "../UI/SettingsPopUp.h"
-#include "../UI/RendererWindow.h"
-#include "../UI/CameraWindow.h"
-#include "../UI/DebugWindow.h"
-#include "../UI/SceneWindow.h"
-#include "../UI/SimulationWindow.h"
-#include "../UI/AnimationGraphWindow.h"
-#include "../UI/GeneralRelativityWindow.h"
+#include "../Application/Application.h"
+#include "IconsFontAwesome6.h"
+#include "TopBar.h"
+#include "SideBar.h"
+#include "SettingsPopUp.h"
+#include "RendererWindow.h"
+#include "CameraWindow.h"
+#include "DebugWindow.h"
+#include "SceneWindow.h"
+#include "SimulationWindow.h"
+#include "AnimationGraphWindow.h"
+#include "GeneralRelativityWindow.h"
 #include "imgui.h"
 #include "spdlog/spdlog.h"
 #include <nfd.h>
@@ -29,7 +29,7 @@
 #include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtx/quaternion.hpp>
 
-#include "Parameters.h"
+#include "../Application/Parameters.h"
 #include "Renderer/PhysicsDebugRenderer.h"
 
 #ifndef _DEBUG

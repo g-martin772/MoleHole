@@ -4,7 +4,7 @@
 
 #include "SettingsPopUp.h"
 #include "ParameterWidgets.h"
-#include "../Application/UI.h"
+#include "UI.h"
 #include "../Application/Application.h"
 #include "../Application/Parameters.h"
 #include "imgui.h"

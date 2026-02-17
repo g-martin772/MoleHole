@@ -253,6 +253,22 @@ void Application::Update(float deltaTime) {
             spdlog::error("Update callback '{}' threw exception: {}", name, e.what());
         }
     }
+
+    if (!m_args.IsHeadless()) {
+        auto scene = m_simulation.GetScene();
+        std::string sceneName = "New Scene";
+
+        if (scene) {
+            if (!scene->name.empty()) {
+                sceneName = scene->name;
+            } else if (!scene->currentPath.empty()) {
+                sceneName = scene->currentPath.filename().string();
+            }
+        }
+
+        std::string title = "MoleHole - " + sceneName + " - " + std::to_string(static_cast<int>(GetFPS())) + " FPS";
+        SetWindowTitle(title);
+    }
 }
 
 void Application::Render() {

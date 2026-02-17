@@ -2,7 +2,7 @@
 
 #include <string>
 #include "Simulation/Scene.h"
-#include "AnimationGraph.h"
+#include "../Application/AnimationGraph.h"
 
 class UI {
 public:

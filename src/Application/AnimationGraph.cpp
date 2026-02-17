@@ -1,6 +1,6 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "AnimationGraph.h"
-#include "NodeBuilder.h"
+#include "../UI/NodeBuilder.h"
 #include <imgui.h>
 #include <imgui_node_editor.h>
 #include <algorithm>

@@ -1,12 +1,12 @@
 #pragma once
 
 #include "AppState.h"
-#include "UI.h"
+#include "../UI/UI.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/ExportRenderer.h"
 #include "Simulation/Simulation.h"
 #include "FpsCounter.h"
-#include "IntroAnimation.h"
+#include "../UI/IntroAnimation.h"
 #include "CommandLineArgs.h"
 #include <functional>
 #include <memory>

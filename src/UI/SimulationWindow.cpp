@@ -3,7 +3,7 @@
 //
 
 #include "SimulationWindow.h"
-#include "../Application/UI.h"
+#include "UI.h"
 #include "../Application/Application.h"
 #include "../Simulation/Scene.h"
 #include "IconsFontAwesome6.h"
