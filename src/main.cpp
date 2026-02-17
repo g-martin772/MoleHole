@@ -12,7 +12,12 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    app.Run();
+    if (Application::Args().IsHeadless()) {
+        app.RunHeadless();
+    } else {
+        app.Run();
+    }
+
     app.Shutdown();
     return 0;
 }

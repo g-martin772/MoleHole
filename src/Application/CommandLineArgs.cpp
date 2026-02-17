@@ -65,6 +65,32 @@ std::string CommandLineArgs::GetValue(const std::string& key, const std::string&
     return value.value_or(defaultValue);
 }
 
+int CommandLineArgs::GetValueInt(const std::string& key, int defaultValue) const {
+    auto value = GetValue(key);
+    if (!value.has_value()) {
+        return defaultValue;
+    }
+    try {
+        return std::stoi(value.value());
+    } catch (...) {
+        spdlog::warn("Failed to parse integer value for key '{}': {}", key, value.value());
+        return defaultValue;
+    }
+}
+
+float CommandLineArgs::GetValueFloat(const std::string& key, float defaultValue) const {
+    auto value = GetValue(key);
+    if (!value.has_value()) {
+        return defaultValue;
+    }
+    try {
+        return std::stof(value.value());
+    } catch (...) {
+        spdlog::warn("Failed to parse float value for key '{}': {}", key, value.value());
+        return defaultValue;
+    }
+}
+
 std::string CommandLineArgs::NormalizeFlag(const std::string& flag) {
     std::string result = flag;
 

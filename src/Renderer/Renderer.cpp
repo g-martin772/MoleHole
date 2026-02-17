@@ -44,6 +44,10 @@ extern "C" {
 #endif
 
 void Renderer::Init() {
+    Init(false);
+}
+
+void Renderer::Init(bool headless) {
     if (!glfwInit()) {
         spdlog::error("Failed to initialize GLFW");
         exit(-1);
@@ -51,6 +55,11 @@ void Renderer::Init() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    if (headless) {
+        spdlog::info("Initializing renderer in headless mode");
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    }
 
     window = glfwCreateWindow(800, 600, "MoleHole Window", nullptr, nullptr);
     if (!window) {

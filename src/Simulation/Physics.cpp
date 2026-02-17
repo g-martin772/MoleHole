@@ -175,7 +175,7 @@ void Physics::SetScene(Scene *scene) {
             }
 
             if (obj.HasParameter(massHandle)) {
-                float solarMass = std::get<float>(obj.GetParameter(massHandle));
+                float solarMass = std::get<float>(obj.GetParameter(massHandle)) / SOLAR_MASS;
                 bhData.schwarzschildRadius = CalculateSchwarzchildRadius(solarMass);
             }
 
@@ -268,8 +268,12 @@ void Physics::Apply() {
 
         if (body.sceneIndex < m_CurrentScene->objects.size()) {
             auto& obj = m_CurrentScene->objects[body.sceneIndex];
-            obj.SetParameter(posHandle, body.position);
-            obj.SetParameter(rotHandle, body.rotation);
+            if (obj.HasParameter(posHandle)) {
+                obj.SetParameter(posHandle, body.position);
+            }
+            if (obj.HasParameter(rotHandle)) {
+                obj.SetParameter(rotHandle, body.rotation);
+            }
         }
     }
 
@@ -281,7 +285,9 @@ void Physics::Apply() {
 
         if (bh.sceneIndex < m_CurrentScene->objects.size()) {
             auto& obj = m_CurrentScene->objects[bh.sceneIndex];
-            obj.SetParameter(posHandle, bh.position);
+            if (obj.HasParameter(posHandle)) {
+                obj.SetParameter(posHandle, bh.position);
+            }
         }
     }
 }
@@ -477,7 +483,7 @@ void Physics::CreateBlackHoleBody(BlackHoleBodyData &data) {
     }
 
     PxShape *shape = PxRigidActorExt::createExclusiveShape(*blackHoleActor,
-                                                           PxSphereGeometry(data.schwarzschildRadius),
+                                                           PxSphereGeometry(std::max(1000.0f, std::min(0.0f, data.schwarzschildRadius))),
                                                            *m_Material);
     if (!shape) {
         spdlog::error("Failed to create black hole shape");

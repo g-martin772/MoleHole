@@ -2,6 +2,8 @@
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
 #include <filesystem>
+#include <chrono>
+#include <thread>
 #include "LinuxGtkInit.h"
 #include "Parameters.h"
 #include "Renderer/PhysicsDebugRenderer.h"
@@ -38,22 +40,40 @@ bool Application::Initialize() {
     m_state.LoadState("config.yaml");
 
     try {
+        bool headlessMode = m_args.IsHeadless();
+        spdlog::debug("Headless mode: {}", headlessMode);
+
         InitializeRenderer();
         InitializeSimulation();
 
-        m_ui.Initialize();
+        if (!headlessMode) {
+            m_ui.Initialize();
 
-
-        if (m_args.ShouldShowIntro()) {
-            m_introAnimation = std::make_unique<IntroAnimation>();
-            m_introAnimation->Init();
-            spdlog::info("Intro animation enabled");
+            if (m_args.ShouldShowIntro()) {
+                m_introAnimation = std::make_unique<IntroAnimation>();
+                m_introAnimation->Init();
+                spdlog::info("Intro animation enabled");
+            } else {
+                spdlog::info("Intro animation disabled via command line");
+            }
         } else {
-            spdlog::info("Intro animation disabled via command line");
+            spdlog::info("Running in headless mode - skipping UI and intro");
         }
 
         const std::string lastScene = Params().Get(Params::AppLastOpenScene, std::string());
-        if (!lastScene.empty() && std::filesystem::exists(lastScene)) {
+
+        if (m_args.IsHeadless()) {
+            auto sceneArg = m_args.GetValue("scene");
+            if (sceneArg.has_value() && std::filesystem::exists(sceneArg.value())) {
+                LoadScene(sceneArg.value());
+                spdlog::info("Loaded scene from command line: {}", sceneArg.value());
+            } else if (!lastScene.empty() && std::filesystem::exists(lastScene)) {
+                LoadScene(lastScene);
+            } else if (sceneArg.has_value()) {
+                spdlog::error("Scene file not found: {}", sceneArg.value());
+                return false;
+            }
+        } else if (!lastScene.empty() && std::filesystem::exists(lastScene)) {
             LoadScene(lastScene);
         }
 
@@ -91,6 +111,101 @@ void Application::Run() {
     }
 
     spdlog::info("Application loop ended");
+}
+
+void Application::RunHeadless() {
+    if (!m_initialized) {
+        spdlog::error("Cannot run application - not initialized");
+        return;
+    }
+
+    spdlog::info("Starting headless mode");
+
+    auto exportImagePath = m_args.GetValue("export-image");
+    auto exportVideoPath = m_args.GetValue("export-video");
+
+    if (!exportImagePath.has_value() && !exportVideoPath.has_value()) {
+        spdlog::error("Headless mode requires --export-image or --export-video argument");
+        return;
+    }
+
+    auto scene = m_simulation.GetScene();
+    if (!scene) {
+        spdlog::error("No scene loaded for export");
+        return;
+    }
+
+    int width = m_args.GetValueInt("width", 1920);
+    int height = m_args.GetValueInt("height", 1080);
+
+    if (exportImagePath.has_value()) {
+        spdlog::info("Starting image export: {}x{} -> {}", width, height, exportImagePath.value());
+
+        ExportRenderer::ImageConfig config;
+        config.width = width;
+        config.height = height;
+
+        m_exportRenderer.StartImageExport(config, exportImagePath.value(), scene);
+    } else if (exportVideoPath.has_value()) {
+        float videoLength = m_args.GetValueFloat("video-length", 10.0f);
+        int videoFps = m_args.GetValueInt("video-fps", 60);
+
+        spdlog::info("Starting video export: {}x{} {}s @{}fps -> {}",
+                    width, height, videoLength, videoFps, exportVideoPath.value());
+
+        ExportRenderer::VideoConfig config;
+        config.width = width;
+        config.height = height;
+        config.length = videoLength;
+        config.framerate = videoFps;
+        config.tickrate = videoFps;
+
+        if (m_args.HasFlag("use-custom-ray-settings")) {
+            config.useCustomRaySettings = true;
+            config.customRayStepSize = m_args.GetValueFloat("ray-step-size", 0.01f);
+            config.customMaxRaySteps = m_args.GetValueInt("max-ray-steps", 1000);
+        }
+
+        m_exportRenderer.StartVideoExport(config, exportVideoPath.value(), scene);
+    }
+
+    // Main export loop
+    m_running = true;
+    m_lastFrameTime = glfwGetTime();
+
+    while (m_running && m_exportRenderer.IsExporting()) {
+        double currentTime = glfwGetTime();
+        m_deltaTime = static_cast<float>(currentTime - m_lastFrameTime);
+        m_lastFrameTime = currentTime;
+
+        glfwPollEvents();
+
+        m_exportRenderer.Update();
+
+        static float lastProgressLog = 0.0f;
+        float currentProgress = m_exportRenderer.GetProgress();
+        if (currentProgress - lastProgressLog >= 0.05f) { // Log every 5%
+            spdlog::info("Export progress: {:.1f}% - {}",
+                        currentProgress * 100.0f,
+                        m_exportRenderer.GetCurrentTask());
+            lastProgressLog = currentProgress;
+        }
+
+        // Small sleep to avoid busy-waiting
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    if (m_exportRenderer.IsExporting()) {
+        spdlog::warn("Export loop ended but export is still in progress");
+    } else {
+        spdlog::info("Export completed successfully");
+    }
+
+    if (m_args.ShouldExitOnComplete()) {
+        spdlog::info("Exiting as requested by --exit-on-complete flag");
+    }
+
+    spdlog::info("Headless mode finished");
 }
 
 void Application::Shutdown() {
@@ -226,26 +341,29 @@ void Application::UnregisterRenderCallback(const std::string& name) {
 }
 
 void Application::InitializeRenderer() {
-    m_renderer.Init();
+    bool headless = m_args.IsHeadless();
+    m_renderer.Init(headless);
 
     if (auto window = m_renderer.GetWindow()) {
-        glfwSetWindowUserPointer(window, this);
-        glfwSetWindowSizeCallback(window, WindowSizeCallback);
-        glfwSetWindowPosCallback(window, WindowPosCallback);
-        glfwSetWindowMaximizeCallback(window, WindowMaximizeCallback);
-        glfwSetWindowCloseCallback(window, WindowCloseCallback);
+        if (!headless) {
+            glfwSetWindowUserPointer(window, this);
+            glfwSetWindowSizeCallback(window, WindowSizeCallback);
+            glfwSetWindowPosCallback(window, WindowPosCallback);
+            glfwSetWindowMaximizeCallback(window, WindowMaximizeCallback);
+            glfwSetWindowCloseCallback(window, WindowCloseCallback);
 
-        glfwSetWindowSize(window, Application::Params().Get(Params::WindowWidth, 1280), Application::Params().Get(Params::WindowHeight, 720));
-        int posX = Application::Params().Get(Params::WindowPosX, -1);
-        int posY = Application::Params().Get(Params::WindowPosY, -1);
-        if (posX >= 0 && posY >= 0) {
-            glfwSetWindowPos(window, posX, posY);
-        }
-        if (Application::Params().Get(Params::WindowMaximized, false)) {
-            glfwMaximizeWindow(window);
-        }
+            glfwSetWindowSize(window, Application::Params().Get(Params::WindowWidth, 1280), Application::Params().Get(Params::WindowHeight, 720));
+            int posX = Application::Params().Get(Params::WindowPosX, -1);
+            int posY = Application::Params().Get(Params::WindowPosY, -1);
+            if (posX >= 0 && posY >= 0) {
+                glfwSetWindowPos(window, posX, posY);
+            }
+            if (Application::Params().Get(Params::WindowMaximized, false)) {
+                glfwMaximizeWindow(window);
+            }
 
-        glfwSetWindowTitle(window, "MoleHole");
+            glfwSetWindowTitle(window, "MoleHole");
+        }
     }
 
     glfwSwapInterval(Application::Params().Get(Params::WindowVSync, true) ? 1 : 0);
