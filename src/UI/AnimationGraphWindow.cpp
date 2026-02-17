@@ -4,8 +4,6 @@
 
 #include "AnimationGraphWindow.h"
 #include "UI.h"
-#include "imgui.h"
-#include <imgui_node_editor.h>
 
 namespace ed = ax::NodeEditor;
 

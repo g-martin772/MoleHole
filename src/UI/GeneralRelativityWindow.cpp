@@ -6,7 +6,6 @@
 #include "UI.h"
 #include "../Application/Application.h"
 #include "../Application/Parameters.h"
-#include "imgui.h"
 
 bool GeneralRelativityWindow::s_showAdvancedSettings = false;
 

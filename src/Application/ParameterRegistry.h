@@ -1,7 +1,5 @@
 #pragma once
 
-#include <yaml-cpp/yaml.h>
-
 constexpr uint64_t FnvOffsetBasis = 14695981039346656037ull;
 constexpr uint64_t FnvPrime = 1099511628211ull;
 

@@ -1,6 +1,5 @@
 #include "IntroAnimation.h"
 #include <glad/gl.h>
-#include "imgui.h"
 #include "Renderer/Shader.h"
 
 #ifndef M_PI

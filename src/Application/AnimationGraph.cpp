@@ -1,9 +1,6 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "AnimationGraph.h"
 #include "../UI/NodeBuilder.h"
-#include <imgui.h>
-#include <imgui_node_editor.h>
-#include <yaml-cpp/yaml.h>
 #include "Simulation/Scene.h"
 
 namespace ed = ax::NodeEditor;

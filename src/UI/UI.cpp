@@ -11,9 +11,7 @@
 #include "SimulationWindow.h"
 #include "AnimationGraphWindow.h"
 #include "GeneralRelativityWindow.h"
-#include "imgui.h"
 #include <nfd.h>
-#include <imgui_node_editor.h>
 #include "../Renderer/ExportRenderer.h"
 
 

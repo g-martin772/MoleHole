@@ -5,7 +5,6 @@
 #include "SideBar.h"
 #include "UI.h"
 #include "IconsFontAwesome6.h"
-#include "imgui.h"
 
 namespace SideBar {
 

@@ -1,5 +1,4 @@
 #include "Simulation.h"
-#include <yaml-cpp/yaml.h>
 #include "GraphExecutor.h"
 #include "Application/AnimationGraph.h"
 #include "Application/Application.h"

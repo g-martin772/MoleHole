@@ -1,6 +1,4 @@
 #pragma once
-#include <imgui_node_editor.h>
-#include "yaml-cpp/emitter.h"
 
 struct Scene;
 namespace ed = ax::NodeEditor;

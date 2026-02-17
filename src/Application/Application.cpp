@@ -3,7 +3,6 @@
 #include "LinuxGtkInit.h"
 #include "Parameters.h"
 #include "Renderer/PhysicsDebugRenderer.h"
-#include "imgui.h"
 
 #ifndef _DEBUG
 #define _DEBUG

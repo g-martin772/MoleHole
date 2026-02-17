@@ -1,6 +1,5 @@
 #include "Scene.h"
 
-#include <yaml-cpp/yaml.h>
 #include <nfd.h>
 
 #include "Application/Application.h"

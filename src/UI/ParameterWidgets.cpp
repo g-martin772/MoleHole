@@ -3,7 +3,6 @@
 #include "../Application/Application.h"
 #include "../Application/Parameters.h"
 #include "../Simulation/Scene.h"
-#include "imgui.h"
 #include <nfd.h>
 
 namespace ParameterWidgets {

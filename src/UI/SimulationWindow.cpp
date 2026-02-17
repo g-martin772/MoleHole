@@ -8,7 +8,6 @@
 #include "../Simulation/Scene.h"
 #include "IconsFontAwesome6.h"
 #include "ParameterWidgets.h"
-#include "imgui.h"
 #include <nfd.h>
 
 namespace SimulationWindow {

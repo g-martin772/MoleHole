@@ -9,7 +9,6 @@
 #include "../Simulation/Scene.h"
 #include "../Renderer/Renderer.h"
 #include "../Renderer/Screenshot.h"
-#include "imgui.h"
 #include <nfd.h>
 
 namespace TopBar {
