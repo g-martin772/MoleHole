@@ -6,96 +6,64 @@
 #include <glm/gtc/quaternion.hpp>
 #include <string>
 #include <optional>
+#include <unordered_map>
 #include "Application/AnimationGraph.h"
+#include "Application/ParameterRegistry.h"
 
 class Camera;
 
-struct BlackHole {
-    float mass;
-    glm::vec3 position;
-    glm::vec3 velocity;
-    bool showAccretionDisk;
-    float accretionDiskDensity;
-    float accretionDiskSize;
-    glm::vec3 accretionDiskColor;
-
-    float spin = 0.0f;  // 0.0 to 1.0
-    glm::vec3 spinAxis = glm::vec3(0.0f, 1.0f, 0.0f);
-
-    bool operator==(const BlackHole& other) const {
-        return mass == other.mass &&
-               position == other.position &&
-               velocity == other.velocity &&
-               showAccretionDisk == other.showAccretionDisk &&
-               accretionDiskDensity == other.accretionDiskDensity &&
-               accretionDiskSize == other.accretionDiskSize &&
-               accretionDiskColor == other.accretionDiskColor &&
-               spin == other.spin &&
-               spinAxis == other.spinAxis;
-    }
-
-    float GetEventHorizonRadius() const {
-        // Simplified Schwarzschild radius calculation (in arbitrary units)
-        return 2.0f * mass;
-    }
-};
-
-struct BlackHoleHash {
-    std::size_t operator()(const BlackHole& bh) const {
-        std::size_t h1 = std::hash<float>{}(bh.position.x);
-        std::size_t h2 = std::hash<float>{}(bh.position.y);
-        std::size_t h3 = std::hash<float>{}(bh.position.z);
-        std::size_t h4 = std::hash<float>{}(bh.mass);
-        std::size_t h5 = std::hash<float>{}(bh.spin);
-        std::size_t h6 = std::hash<float>{}(bh.spinAxis.x);
-        std::size_t h7 = std::hash<float>{}(bh.spinAxis.y);
-        std::size_t h8 = std::hash<float>{}(bh.spinAxis.z);
-        std::size_t h9 = std::hash<float>{}(bh.velocity.x);
-        std::size_t h10 = std::hash<float>{}(bh.velocity.y);
-        std::size_t h11 = std::hash<float>{}(bh.velocity.z);
-
-        return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h4 << 3) ^
-               (h5 << 4) ^ (h6 << 5) ^ (h7 << 6) ^ (h8 << 7) ^
-               (h9 << 8) ^ (h10 << 9) ^ (h11 << 10);
-    }
-};
-
-struct MeshObject {
-    float massKg;
+struct ObjectClass {
     std::string name;
-    std::string path;
-    glm::vec3 position;
-    glm::vec3 velocity;
-    glm::vec3 comOffset;
-    glm::quat rotation;
-    glm::vec3 scale;
-
-    MeshObject() : massKg(1000.0f), position(0.0f), velocity(0.0f), comOffset(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), scale(1.0f) {}
+    std::vector<std::string> availableParameterKeys;
+    std::vector<std::string> requiredParameterKeys;
+    std::unordered_map<uint64_t, ParameterMetadata> meta;
 };
 
-struct Sphere {
-    float massKg;
+struct SceneObjectDefinition {
     std::string name;
-    std::string texturePath;
-    glm::vec3 velocity;
-    glm::vec3 position;
-    glm::quat rotation;
-    glm::vec4 color;
-    float spin, radius;
-    Sphere() : massKg(1000.0f), position(0.0f), velocity(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), color(0.5f, 0.5f, 0.5f, 1.0f), spin(0.0f), radius(1.0f) {}
+    std::vector<ObjectClass*> objectClasses;
+    std::unordered_map<uint64_t, ParameterMetadata> meta;
 };
+
+class SceneObject {
+public:
+    SceneObject();
+    explicit SceneObject(const std::vector<std::string>& classNames);
+    virtual ~SceneObject() = default;
+
+    void AddClass(const std::string& className);
+    bool HasClass(const std::string& className) const;
+    const std::vector<ObjectClass*>& GetClasses() const { return m_Classes; }
+
+    bool HasParameter(const ParameterHandle& handle) const;
+    ParameterValue GetParameter(const ParameterHandle& handle) const;
+    void SetParameter(const ParameterHandle& handle, const ParameterValue& value);
+
+    const std::unordered_map<uint64_t, ParameterValue>& GetAllParameters() const { return m_Parameters; }
+    const std::unordered_map<uint64_t, ParameterMetadata>& GetAllMetadata() const { return m_AggregatedMeta; }
+
+    void SerializeToYAML(YAML::Emitter& out) const;
+    void DeserializeFromYAML(const YAML::Node& node);
+
+private:
+    std::vector<ObjectClass*> m_Classes;
+    std::unordered_map<uint64_t, ParameterValue> m_Parameters;
+    std::unordered_map<uint64_t, ParameterMetadata> m_AggregatedMeta;
+
+    void RebuildMetadata();
+};
+
+enum class ObjectType { BlackHole, Mesh, Sphere, DynamicObject };
 
 struct Scene {
     std::string name;
-    std::vector<BlackHole> blackHoles;
-    std::vector<MeshObject> meshes;
-    std::vector<Sphere> spheres;
+    std::vector<SceneObject> objects;
+
     std::filesystem::path currentPath;
     Camera* camera = nullptr;
 
     bool reloadSkybox = false;
 
-    enum class ObjectType { BlackHole, Mesh, Sphere };
     struct SelectedObject {
         ObjectType type;
         size_t index;

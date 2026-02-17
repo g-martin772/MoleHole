@@ -4,13 +4,15 @@
 #include <deque>
 #include <glm/glm.hpp>
 #include "Shader.h"
-#include "Simulation/Scene.h"
 #include "Buffer.h"
+
+class Scene;
+class Camera;
 
 class ObjectPathsRenderer {
 public:
     void Init();
-    void Render(const std::vector<BlackHole>& blackHoles, const Camera& camera, float time);
+    void Render(const Scene& scene, const Camera& camera, float time);
     void RecordCurrentPositions(Scene* scene);
     void ClearHistories();
 

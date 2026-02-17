@@ -36,6 +36,14 @@ void TryInitializeGtk() {
         return;
     }
 
+    using gtk_disable_setlocale_t = void(*)();
+    auto disable_setlocale_sym = dlsym(handle, "gtk_disable_setlocale");
+    if (disable_setlocale_sym) {
+        gtk_disable_setlocale_t gtk_disable_setlocale = reinterpret_cast<gtk_disable_setlocale_t>(disable_setlocale_sym);
+        gtk_disable_setlocale();
+        spdlog::debug("Called gtk_disable_setlocale");
+    }
+
     using gtk_init_check_t = int(*)(int*, char***);
     auto sym = dlsym(handle, "gtk_init_check");
     if (!sym) {

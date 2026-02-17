@@ -6,6 +6,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 
+#include "Simulation/Scene.h"
 #include "Application/Application.h"
 #include "Application/Parameters.h"
 #include "BlackbodyLUTGenerator.h"
@@ -336,9 +337,9 @@ void BlackHoleRenderer::CreateFullscreenQuad() {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
 }
 
-void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time) {
-    UpdateUniforms(blackHoles, spheres, meshes, meshCache, camera, time);
-    // UpdateMeshBuffers(meshes, meshCache);
+void BlackHoleRenderer::Render(const Scene& scene, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time) {
+    UpdateUniforms(scene, meshCache, camera, time);
+    // UpdateMeshBuffers(scene, meshCache);
 
     m_computeShader->Bind();
 
@@ -416,7 +417,15 @@ void BlackHoleRenderer::Render(const std::vector<BlackHole>& blackHoles, const s
                            m_kerrPhotonSphereLUT && m_kerrISCOLUT);
     m_computeShader->SetInt("u_useKerrPhysics", useKerrPhysics ? 1 : 0);
 
-    if (!blackHoles.empty()) {
+    bool hasBlackHoles = false;
+    for (const auto& obj : scene.objects) {
+        if (obj.HasClass("BlackHole")) {
+            hasBlackHoles = true;
+            break;
+        }
+    }
+
+    if (hasBlackHoles) {
         m_computeShader->SetInt("u_debugMode", Application::Params().Get(Params::RenderingDebugMode, 0));
     }
 
@@ -519,7 +528,7 @@ void BlackHoleRenderer::ApplyLensFlare() {
     m_lensFlareShader->Unbind();
 }
 
-void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time) {
+void BlackHoleRenderer::UpdateUniforms(const Scene& scene, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time) {
     m_computeShader->Bind();
 
     glm::vec3 cameraPos = camera.GetPosition();
@@ -542,18 +551,20 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
 
         // Find the selected mesh object
         bool foundObject = false;
-        for (const auto& meshObj : meshes) {
-            if (meshObj.name == selectedObjectName) {
-                // Third-person camera distance and height (can be made configurable via params)
-                m_computeShader->SetFloat("u_thirdPersonDistance", Application::Params().Get(Params::ThirdPersonDistance, 10.0f));
-                m_computeShader->SetFloat("u_thirdPersonHeight", Application::Params().Get(Params::ThirdPersonHeight, 3.0f));
-
-                foundObject = true;
-                break;
+        for (const auto& obj : scene.objects) {
+            if (obj.HasClass("Mesh")) {
+                ParameterHandle nameHandle("Entity.Name");
+                auto nameValue = obj.GetParameter(nameHandle);
+                if (std::holds_alternative<std::string>(nameValue) && std::get<std::string>(nameValue) == selectedObjectName) {
+                    m_computeShader->SetFloat("u_thirdPersonDistance", Application::Params().Get(Params::ThirdPersonDistance, 10.0f));
+                    m_computeShader->SetFloat("u_thirdPersonHeight", Application::Params().Get(Params::ThirdPersonHeight, 3.0f));
+                    foundObject = true;
+                    break;
+                }
             }
         }
 
-        // Fallback if object not found - use default cube values
+        // Fallback if object not found
         if (!foundObject) {
             m_computeShader->SetFloat("u_cubeSize", 1.0f);
             m_computeShader->SetFloat("u_thirdPersonDistance", 10.0f);
@@ -575,57 +586,89 @@ void BlackHoleRenderer::UpdateUniforms(const std::vector<BlackHole>& blackHoles,
     m_computeShader->SetInt("u_gravitationalRedshiftEnabled", Application::Params().Get(Params::RenderingGravitationalRedshiftEnabled, true) ? 1 : 0);
 
     // Ray marching quality settings - only set during export mode
-    // In real-time mode, use shader defaults for better performance
     if (m_isExportMode) {
         m_computeShader->SetFloat("u_rayStepSize", Application::Params().Get(Params::RenderingRayStepSize, 0.1f));
         m_computeShader->SetInt("u_maxRaySteps", Application::Params().Get(Params::RenderingMaxRaySteps, 128));
         m_computeShader->SetFloat("u_adaptiveStepRate", Application::Params().Get(Params::RenderingAdaptiveStepRate, 0.1f));
     }
 
-    // Black holes
-    int numBlackHoles = std::min(static_cast<int>(blackHoles.size()), 8);
+    int numBlackHoles = 0;
+    constexpr int MAX_BLACKHOLES = 8;
+    for (const auto& obj : scene.objects) {
+        if (numBlackHoles >= MAX_BLACKHOLES) break;
+        if (obj.HasClass("BlackHole")) {
+            ParameterHandle posHandle("Entity.Position");
+            ParameterHandle massHandle("Physics.Mass");
+            ParameterHandle spinHandle("BlackHole.Spin");
+            ParameterHandle spinAxisHandle("BlackHole.SpinAxis");
+
+            auto pos = obj.GetParameter(posHandle);
+            auto mass = obj.GetParameter(massHandle);
+            auto spin = obj.GetParameter(spinHandle);
+            auto spinAxis = obj.GetParameter(spinAxisHandle);
+
+            if (std::holds_alternative<glm::vec3>(pos) && std::holds_alternative<float>(mass)) {
+                std::string posUniform = "u_blackHolePositions[" + std::to_string(numBlackHoles) + "]";
+                std::string massUniform = "u_blackHoleMasses[" + std::to_string(numBlackHoles) + "]";
+                std::string spinUniform = "u_blackHoleSpins[" + std::to_string(numBlackHoles) + "]";
+                std::string spinAxisUniform = "u_blackHoleSpinAxes[" + std::to_string(numBlackHoles) + "]";
+
+                m_computeShader->SetVec3(posUniform, std::get<glm::vec3>(pos));
+                m_computeShader->SetFloat(massUniform, std::get<float>(mass) / Physics::SOLAR_MASS);
+                m_computeShader->SetFloat(spinUniform, std::holds_alternative<float>(spin) ? std::get<float>(spin) : 0.0f);
+
+                glm::vec3 axis = std::holds_alternative<glm::vec3>(spinAxis) ? std::get<glm::vec3>(spinAxis) : glm::vec3(0.0f, 1.0f, 0.0f);
+                m_computeShader->SetVec3(spinAxisUniform, glm::normalize(axis));
+
+                numBlackHoles++;
+            }
+        }
+    }
     m_computeShader->SetInt("u_numBlackHoles", numBlackHoles);
 
-    for (int i = 0; i < numBlackHoles; i++) {
-        const BlackHole& bh = blackHoles[i];
+    m_computeShader->SetInt("u_renderSpheres", 1);
+    int numSpheres = 0;
+    constexpr int MAX_SPHERES = 16;
+    for (const auto& obj : scene.objects) {
+        if (numSpheres >= MAX_SPHERES) break;
+        if (obj.HasClass("Sphere")) {
+            ParameterHandle posHandle("Entity.Position");
+            ParameterHandle radiusHandle("Sphere.Radius");
+            ParameterHandle colorHandle("Sphere.Color");
+            ParameterHandle massHandle("Physics.Mass");
 
-        // Convert mass to appropriate units for shader (using solar masses as base unit)
-        float normalizedMass = bh.mass; // Assume mass is already in appropriate units, whatever these are like pls help
+            auto pos = obj.GetParameter(posHandle);
+            auto radius = obj.GetParameter(radiusHandle);
+            auto color = obj.GetParameter(colorHandle);
+            auto mass = obj.GetParameter(massHandle);
 
-        std::string posUniform = "u_blackHolePositions[" + std::to_string(i) + "]";
-        std::string massUniform = "u_blackHoleMasses[" + std::to_string(i) + "]";
-        std::string spinUniform = "u_blackHoleSpins[" + std::to_string(i) + "]";
-        std::string spinAxisUniform = "u_blackHoleSpinAxes[" + std::to_string(i) + "]";
+            if (std::holds_alternative<glm::vec3>(pos) && std::holds_alternative<float>(radius)) {
+                std::string posUniform = "u_spherePositions[" + std::to_string(numSpheres) + "]";
+                std::string radiusUniform = "u_sphereRadii[" + std::to_string(numSpheres) + "]";
+                std::string colorUniform = "u_sphereColors[" + std::to_string(numSpheres) + "]";
+                std::string massUniform = "u_sphereMasses[" + std::to_string(numSpheres) + "]";
 
-        m_computeShader->SetVec3(posUniform, bh.position);
-        m_computeShader->SetFloat(massUniform, normalizedMass);
-        m_computeShader->SetFloat(spinUniform, bh.spin);
-        m_computeShader->SetVec3(spinAxisUniform, glm::normalize(bh.spinAxis));
+                m_computeShader->SetVec3(posUniform, std::get<glm::vec3>(pos));
+                m_computeShader->SetFloat(radiusUniform, std::get<float>(radius));
+
+                glm::vec4 col = glm::vec4(1.0f);
+                if (std::holds_alternative<glm::vec3>(color)) {
+                    glm::vec3 c = std::get<glm::vec3>(color);
+                    col = glm::vec4(c.x, c.y, c.z, 1.0f);
+                }
+                m_computeShader->SetVec4(colorUniform, col);
+
+                float massInSolarMasses = 0.0f;
+                if (std::holds_alternative<float>(mass)) {
+                    massInSolarMasses = std::get<float>(mass) / 1.989e30f;
+                }
+                m_computeShader->SetFloat(massUniform, massInSolarMasses);
+
+                numSpheres++;
+            }
+        }
     }
-    
-    // Spheres
-    int renderSpheres = 1; // Default enabled
-    m_computeShader->SetInt("u_renderSpheres", renderSpheres);
-    
-    int numSpheres = std::min(static_cast<int>(spheres.size()), 16); // MAX_SPHERES = 16
     m_computeShader->SetInt("u_numSpheres", numSpheres);
-    
-    for (int i = 0; i < numSpheres; i++) {
-        const Sphere& sphere = spheres[i];
-        
-        std::string posUniform = "u_spherePositions[" + std::to_string(i) + "]";
-        std::string radiusUniform = "u_sphereRadii[" + std::to_string(i) + "]";
-        std::string colorUniform = "u_sphereColors[" + std::to_string(i) + "]";
-        std::string massUniform = "u_sphereMasses[" + std::to_string(i) + "]";
-        
-        m_computeShader->SetVec3(posUniform, sphere.position);
-        m_computeShader->SetFloat(radiusUniform, sphere.radius);
-        m_computeShader->SetVec4(colorUniform, sphere.color);
-        
-        // Convert mass from kg to solar masses (1 solar mass = 1.989e30 kg)
-        float massInSolarMasses = sphere.massKg / 1.989e30f;
-        m_computeShader->SetFloat(massUniform, massInSolarMasses);
-    }
 
     m_computeShader->Unbind();
 }
@@ -696,7 +739,7 @@ void BlackHoleRenderer::CreateMeshBuffers() {
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 }
 
-void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache) {
+void BlackHoleRenderer::UpdateMeshBuffers(const Scene& scene, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache) {
     struct MeshData {
         glm::mat4 transform;
         glm::vec4 baseColor;
@@ -717,11 +760,26 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
     int triangleOffset = 0;
     constexpr int MAX_MESHES = 3;
     int totalTriangles = 0;
-    
-    for (size_t i = 0; i < meshes.size() && i < MAX_MESHES; ++i) {
-        const auto& meshObj = meshes[i];
-        
-        auto it = meshCache.find(meshObj.path);
+    int meshCount = 0;
+
+    for (const auto& obj : scene.objects) {
+        if (meshCount >= MAX_MESHES) break;
+        if (!obj.HasClass("Mesh")) continue;
+
+        ParameterHandle pathHandle("Mesh.FilePath");
+        ParameterHandle posHandle("Entity.Position");
+        ParameterHandle rotHandle("Entity.Rotation");
+        ParameterHandle scaleHandle("Entity.Scale");
+
+        auto pathValue = obj.GetParameter(pathHandle);
+        auto posValue = obj.GetParameter(posHandle);
+        auto rotValue = obj.GetParameter(rotHandle);
+        auto scaleValue = obj.GetParameter(scaleHandle);
+
+        if (!std::holds_alternative<std::string>(pathValue)) continue;
+        std::string meshPath = std::get<std::string>(pathValue);
+
+        auto it = meshCache.find(meshPath);
         if (it == meshCache.end() || !it->second || !it->second->IsLoaded()) {
             continue;
         }
@@ -734,9 +792,16 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
         }
         
         MeshData data{};
-        data.transform = glm::translate(glm::mat4(1.0f), meshObj.position);
-        data.transform = data.transform * glm::mat4_cast(meshObj.rotation);
-        data.transform = glm::scale(data.transform, meshObj.scale);
+
+        glm::vec3 pos = std::holds_alternative<glm::vec3>(posValue) ? std::get<glm::vec3>(posValue) : glm::vec3(0.0f);
+        glm::vec3 scale = std::holds_alternative<glm::vec3>(scaleValue) ? std::get<glm::vec3>(scaleValue) : glm::vec3(1.0f);
+
+        // TODO: Fix rotation - needs to handle quaternion properly
+        glm::quat rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+
+        data.transform = glm::translate(glm::mat4(1.0f), pos);
+        data.transform = data.transform * glm::mat4_cast(rot);
+        data.transform = glm::scale(data.transform, scale);
         data.baseColor = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
         data.metallic = 0.5f;
         data.roughness = 0.5f;
@@ -752,7 +817,7 @@ void BlackHoleRenderer::UpdateMeshBuffers(const std::vector<MeshObject>& meshes,
             }
             
             if (meshTriangleCount >= MAX_TRIANGLES_PER_MESH) {
-                spdlog::warn("Mesh {} exceeded MAX_TRIANGLES_PER_MESH, skipping remaining triangles", meshObj.path);
+                spdlog::warn("Mesh {} exceeded MAX_TRIANGLES_PER_MESH, skipping remaining triangles", meshPath);
                 break;
             }
             

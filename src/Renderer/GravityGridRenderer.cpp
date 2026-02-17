@@ -1,5 +1,6 @@
 #include "GravityGridRenderer.h"
 #include "Buffer.h"
+#include "Simulation/Scene.h"
 #include <glad/gl.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
@@ -77,7 +78,7 @@ void GravityGridRenderer::CreatePlane() {
     m_vao->Unbind();
 }
 
-void GravityGridRenderer::Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const Camera& camera, float /*time*/) {
+void GravityGridRenderer::Render(const Scene& scene, const Camera& camera, float /*time*/) {
     if (!m_shader || m_indexCount == 0) return;
 
     glDisable(GL_DEPTH_TEST);
@@ -90,32 +91,65 @@ void GravityGridRenderer::Render(const std::vector<BlackHole>& blackHoles, const
     m_shader->SetMat4("uVP", vp);
     m_shader->SetFloat("u_planeY", m_planeY);
 
-    // Black holes
-    int numBH = static_cast<int>(std::min<size_t>(blackHoles.size(), 8));
+    int numBH = 0;
+    constexpr int MAX_BLACKHOLES = 8;
+    for (const auto& obj : scene.objects) {
+        if (numBH >= MAX_BLACKHOLES) break;
+        if (obj.HasClass("BlackHole")) {
+            ParameterHandle posHandle("Entity.Position");
+            ParameterHandle massHandle("Physics.Mass");
+
+            auto pos = obj.GetParameter(posHandle);
+            auto mass = obj.GetParameter(massHandle);
+
+            if (std::holds_alternative<glm::vec3>(pos) && std::holds_alternative<float>(mass)) {
+                m_shader->SetVec3("u_blackHolePositions[" + std::to_string(numBH) + "]", std::get<glm::vec3>(pos));
+                m_shader->SetFloat("u_blackHoleMasses[" + std::to_string(numBH) + "]", std::get<float>(mass));
+                numBH++;
+            }
+        }
+    }
     m_shader->SetInt("u_numBlackHoles", numBH);
-    for (int i = 0; i < numBH; ++i) {
-        const BlackHole& bh = blackHoles[i];
-        m_shader->SetVec3("u_blackHolePositions[" + std::to_string(i) + "]", bh.position);
-        m_shader->SetFloat("u_blackHoleMasses[" + std::to_string(i) + "]", bh.mass);
-    }
 
-    // Spheres
-    int numSpheres = static_cast<int>(std::min<size_t>(spheres.size(), 16));
+    int numSpheres = 0;
+    constexpr int MAX_SPHERES = 128;
+    for (const auto& obj : scene.objects) {
+        if (numSpheres >= MAX_SPHERES) break;
+        if (obj.HasClass("Sphere")) {
+            ParameterHandle posHandle("Entity.Position");
+            ParameterHandle massHandle("Physics.Mass");
+
+            auto pos = obj.GetParameter(posHandle);
+            auto mass = obj.GetParameter(massHandle);
+
+            if (std::holds_alternative<glm::vec3>(pos) && std::holds_alternative<float>(mass)) {
+                m_shader->SetVec3("u_spherePositions[" + std::to_string(numSpheres) + "]", std::get<glm::vec3>(pos));
+                m_shader->SetFloat("u_sphereMasses[" + std::to_string(numSpheres) + "]", std::get<float>(mass));
+                numSpheres++;
+            }
+        }
+    }
     m_shader->SetInt("u_numSpheres", numSpheres);
-    for (int i = 0; i < numSpheres; ++i) {
-        const Sphere& sphere = spheres[i];
-        m_shader->SetVec3("u_spherePositions[" + std::to_string(i) + "]", sphere.position);
-        m_shader->SetFloat("u_sphereMasses[" + std::to_string(i) + "]", sphere.massKg);
-    }
 
-    // Meshes
-    int numMeshes = static_cast<int>(std::min<size_t>(meshes.size(), 8));
-    m_shader->SetInt("u_numMeshes", numMeshes);
-    for (int i = 0; i < numMeshes; ++i) {
-        const MeshObject& mesh = meshes[i];
-        m_shader->SetVec3("u_meshPositions[" + std::to_string(i) + "]", mesh.position);
-        m_shader->SetFloat("u_meshMasses[" + std::to_string(i) + "]", mesh.massKg);
+    int numMeshes = 0;
+    constexpr int MAX_MESHES = 128;
+    for (const auto& obj : scene.objects) {
+        if (numMeshes >= MAX_MESHES) break;
+        if (obj.HasClass("Mesh")) {
+            ParameterHandle posHandle("Entity.Position");
+            ParameterHandle massHandle("Physics.Mass");
+
+            auto pos = obj.GetParameter(posHandle);
+            auto mass = obj.GetParameter(massHandle);
+
+            if (std::holds_alternative<glm::vec3>(pos) && std::holds_alternative<float>(mass)) {
+                m_shader->SetVec3("u_meshPositions[" + std::to_string(numMeshes) + "]", std::get<glm::vec3>(pos));
+                m_shader->SetFloat("u_meshMasses[" + std::to_string(numMeshes) + "]", std::get<float>(mass));
+                numMeshes++;
+            }
+        }
     }
+    m_shader->SetInt("u_numMeshes", numMeshes);
 
     m_shader->SetFloat("u_cellSize", m_cellSize);
     m_shader->SetFloat("u_lineThickness", m_lineThickness);
@@ -129,4 +163,5 @@ void GravityGridRenderer::Render(const std::vector<BlackHole>& blackHoles, const
     m_shader->Unbind();
 
     glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
 }

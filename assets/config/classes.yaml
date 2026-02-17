@@ -1,0 +1,54 @@
+classes:
+  - name: "Entity"
+    required_parameters:
+      - "Entity.Name"
+      - "Entity.Position"
+    available_parameters:
+      - "Entity.Name"
+      - "Entity.Position"
+      - "Entity.Rotation"
+      - "Entity.Scale"
+
+  - name: "Physics"
+    required_parameters: []
+    available_parameters:
+      - "Physics.Enable"
+      - "Physics.Mass"
+      - "Physics.Velocity"
+      - "Physics.Rigidbody.Type"
+      - "Physics.Rigidbody.UseGravity"
+      - "Physics.Rigidbody.LinearDamping"
+      - "Physics.Rigidbody.AngularDamping"
+      - "Physics.Rigidbody.Constraints"
+      - "Physics.Collider.Type"
+      - "Physics.Collider.IsTrigger"
+      - "Physics.Collider.Offset"
+      - "Physics.Collider.Scale"
+      - "Physics.Collider.Friction"
+      - "Physics.Collider.Restitution"
+      - "Physics.Collider.Density"
+      - "Physics.Collider.CollisionLayer"
+      - "Physics.Collider.CollisionMask"
+
+  - name: "BlackHole"
+    required_parameters: []
+    available_parameters:
+      - "BlackHole.Spin"
+      - "BlackHole.SpinAxis"
+
+  - name: "Mesh"
+    required_parameters:
+      - "Mesh.FilePath"
+    available_parameters:
+      - "Mesh.FilePath"
+      - "Mesh.ComOffset"
+
+  - name: "Sphere"
+    required_parameters:
+      - "Sphere.Radius"
+    available_parameters:
+      - "Sphere.Radius"
+      - "Sphere.Color"
+      - "Sphere.TexturePath"
+      - "Sphere.Spin"
+      - "Sphere.SpinAxis"

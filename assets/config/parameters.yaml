@@ -578,3 +578,291 @@ parameters:
     defaultValue: "."
     showInUI: true
 
+# Scene Object Parameters
+scene_parameters:
+  # Entity Parameters
+  - name: "Entity.Name"
+    displayName: "Name"
+    tooltip: "Name of the object"
+    type: string
+    group: Simulation
+    defaultValue: "Object"
+    showInUI: true
+
+  - name: "Entity.Position"
+    displayName: "Position"
+    tooltip: "Position in 3D space"
+    type: vec3
+    group: Simulation
+    defaultValue: [0.0, 0.0, 0.0]
+    scaleValueNames: ["m", "km", "AU", "ly"]
+    scaleValues: [1.0, 1000.0, 149597870700.0, 9460730472580800.0]
+    showInUI: true
+
+  - name: "Entity.Rotation"
+    displayName: "Rotation"
+    tooltip: "Rotation quaternion (w, x, y, z)"
+    type: quat
+    group: Simulation
+    defaultValue: [1.0, 0.0, 0.0, 0.0]
+    showInUI: true
+
+  - name: "Entity.Scale"
+    displayName: "Scale"
+    tooltip: "Scale factor in 3D space"
+    type: vec3
+    group: Simulation
+    defaultValue: [1.0, 1.0, 1.0]
+    scaleValueNames: ["1x", "10x", "100x", "1000x"]
+    scaleValues: [1.0, 10.0, 100.0, 1000.0]
+    showInUI: true
+
+  # Physics Parameters
+  - name: "Physics.Enable"
+    displayName: "Enable Physics"
+    tooltip: "Enable physics simulation for this object"
+    type: bool
+    group: Simulation
+    defaultValue: true
+    showInUI: true
+
+  - name: "Physics.Mass"
+    displayName: "Mass"
+    tooltip: "Physical mass"
+    type: float
+    group: Simulation
+    defaultValue: 1000.0
+    minValue: 0.0
+    maxValue: 1.0e38
+    dragSpeed: 1000.0
+    scaleValueNames: ["kg", "tons", "SM", "1000 SM", "10⁶ SM"]
+    scaleValues: [1.0, 1000.0, 1.989e30, 1.989e33, 1.989e36]
+    showInUI: true
+
+  - name: "Physics.Velocity"
+    displayName: "Velocity"
+    tooltip: "Initial velocity vector"
+    type: vec3
+    group: Simulation
+    defaultValue: [0.0, 0.0, 0.0]
+    scaleValueNames: ["m/s", "km/s", "km/h", "c (light speed)"]
+    scaleValues: [1.0, 1000.0, 0.277778, 299792458.0]
+    showInUI: true
+
+  - name: "Physics.Rigidbody.Type"
+    displayName: "Rigidbody Type"
+    tooltip: "Type of rigidbody (Dynamic, Kinematic, Static)"
+    type: string
+    group: Simulation
+    defaultValue: "Dynamic"
+    showInUI: true
+
+  - name: "Physics.Rigidbody.UseGravity"
+    displayName: "Use Gravity"
+    tooltip: "Apply gravitational forces"
+    type: bool
+    group: Simulation
+    defaultValue: true
+    showInUI: true
+
+  - name: "Physics.Rigidbody.LinearDamping"
+    displayName: "Linear Damping"
+    tooltip: "Damping applied to linear velocity"
+    type: float
+    group: Simulation
+    defaultValue: 0.0
+    minValue: 0.0
+    maxValue: 10.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Physics.Rigidbody.AngularDamping"
+    displayName: "Angular Damping"
+    tooltip: "Damping applied to angular velocity"
+    type: float
+    group: Simulation
+    defaultValue: 0.05
+    minValue: 0.0
+    maxValue: 10.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Physics.Rigidbody.Constraints"
+    displayName: "Constraints"
+    tooltip: "Movement and rotation constraints"
+    type: string_vector
+    group: Simulation
+    defaultValue: []
+    showInUI: true
+
+  - name: "Physics.Collider.Type"
+    displayName: "Collider Type"
+    tooltip: "Type of collision shape (Box, Sphere, Capsule, Mesh)"
+    type: string
+    group: Simulation
+    defaultValue: "Mesh"
+    showInUI: true
+
+  - name: "Physics.Collider.IsTrigger"
+    displayName: "Is Trigger"
+    tooltip: "Collider acts as trigger (no physical collision)"
+    type: bool
+    group: Simulation
+    defaultValue: false
+    showInUI: true
+
+  - name: "Physics.Collider.Offset"
+    displayName: "Collider Offset"
+    tooltip: "Offset from object center"
+    type: vec3
+    group: Simulation
+    defaultValue: [0.0, 0.0, 0.0]
+    showInUI: true
+
+  - name: "Physics.Collider.Scale"
+    displayName: "Collider Scale"
+    tooltip: "Scale factor for collision shape"
+    type: vec3
+    group: Simulation
+    defaultValue: [1.0, 1.0, 1.0]
+    showInUI: true
+
+  - name: "Physics.Collider.Friction"
+    displayName: "Friction"
+    tooltip: "Surface friction coefficient"
+    type: float
+    group: Simulation
+    defaultValue: 0.5
+    minValue: 0.0
+    maxValue: 1.0
+    dragSpeed: 0.01
+    showInUI: true
+
+  - name: "Physics.Collider.Restitution"
+    displayName: "Restitution"
+    tooltip: "Bounciness (0 = no bounce, 1 = perfectly elastic)"
+    type: float
+    group: Simulation
+    defaultValue: 0.3
+    minValue: 0.0
+    maxValue: 1.0
+    dragSpeed: 0.01
+    showInUI: true
+
+  - name: "Physics.Collider.Density"
+    displayName: "Density"
+    tooltip: "Material density (kg/m³)"
+    type: float
+    group: Simulation
+    defaultValue: 1000.0
+    minValue: 0.1
+    maxValue: 100000.0
+    dragSpeed: 100.0
+    showInUI: true
+
+  - name: "Physics.Collider.CollisionLayer"
+    displayName: "Collision Layer"
+    tooltip: "Layer this object belongs to"
+    type: int
+    group: Simulation
+    defaultValue: 0
+    minValue: 0
+    maxValue: 31
+    showInUI: true
+
+  - name: "Physics.Collider.CollisionMask"
+    displayName: "Collision Mask"
+    tooltip: "Layers this object can collide with"
+    type: int
+    group: Simulation
+    defaultValue: -1
+    showInUI: true
+
+  # BlackHole Parameters
+  - name: "BlackHole.Spin"
+    displayName: "Spin"
+    tooltip: "Kerr spin parameter (0.0 to 1.0)"
+    type: float
+    group: Simulation
+    defaultValue: 0.0
+    minValue: 0.0
+    maxValue: 1.0
+    dragSpeed: 0.01
+    showInUI: true
+
+  - name: "BlackHole.SpinAxis"
+    displayName: "Spin Axis"
+    tooltip: "Rotation axis for Kerr black hole"
+    type: vec3
+    group: Simulation
+    defaultValue: [0.0, 1.0, 0.0]
+    showInUI: true
+
+  # Mesh Parameters
+  - name: "Mesh.FilePath"
+    displayName: "Mesh File"
+    tooltip: "Path to GLTF mesh file"
+    type: string
+    group: Simulation
+    defaultValue: ""
+    showInUI: true
+
+  - name: "Mesh.ComOffset"
+    displayName: "Center of Mass Offset"
+    tooltip: "Offset from model origin to center of mass"
+    type: vec3
+    group: Simulation
+    defaultValue: [0.0, 0.0, 0.0]
+    scaleValueNames: ["m", "km", "AU", "ly"]
+    scaleValues: [1.0, 1000.0, 149597870700.0, 9460730472580800.0]
+    showInUI: true
+
+  # Sphere Parameters
+  - name: "Sphere.Radius"
+    displayName: "Radius"
+    tooltip: "Sphere radius"
+    type: float
+    group: Simulation
+    defaultValue: 1.0
+    minValue: 0.1
+    maxValue: 1000.0
+    dragSpeed: 0.1
+    scaleValueNames: ["m", "km", "Mm"]
+    scaleValues: [1.0, 1000.0, 1000000.0]
+    showInUI: true
+
+  - name: "Sphere.Color"
+    displayName: "Color"
+    tooltip: "Base color (RGB)"
+    type: vec3
+    group: Simulation
+    defaultValue: [0.5, 0.5, 0.5]
+    showInUI: true
+
+  - name: "Sphere.TexturePath"
+    displayName: "Texture"
+    tooltip: "Path to texture file"
+    type: string
+    group: Simulation
+    defaultValue: ""
+    showInUI: true
+
+  - name: "Sphere.Spin"
+    displayName: "Spin Rate"
+    tooltip: "Rotation speed"
+    type: float
+    group: Simulation
+    defaultValue: 0.0
+    minValue: 0.0
+    maxValue: 10.0
+    dragSpeed: 0.1
+    showInUI: true
+
+  - name: "Sphere.SpinAxis"
+    displayName: "Spin Axis"
+    tooltip: "Rotation axis"
+    type: vec3
+    group: Simulation
+    defaultValue: [0.0, 1.0, 0.0]
+    showInUI: true
+

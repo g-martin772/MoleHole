@@ -10,6 +10,7 @@
 #include <optional>
 #include <cstdint>
 #include <glm/vec3.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <yaml-cpp/yaml.h>
 
 constexpr uint64_t FnvOffsetBasis = 14695981039346656037ull;
@@ -84,11 +85,12 @@ enum class ParameterType {
     Vec2,
     Vec3,
     Vec4,
+    Quat,
     Enum,
     StringVector
 };
 
-using ParameterValue = std::variant<bool, int, float, std::string, glm::vec3, std::vector<std::string>>;
+using ParameterValue = std::variant<bool, int, float, std::string, glm::vec3, glm::quat, std::vector<std::string>>;
 
 struct ParameterMetadata {
     uint64_t id;
@@ -133,15 +135,15 @@ public:
 
     const std::unordered_map<uint64_t, ParameterMetadata>& GetAllMetadata() const noexcept;
 
+    static ParameterType ParseType(const std::string &typeStr);
+    static ParameterGroup ParseGroup(const std::string &groupStr);
+    static ParameterValue ParseValueNode(const YAML::Node &node, ParameterType type);
+    static YAML::Node ValueToYamlNode(const ParameterValue &value);
+
 private:
     ParameterRegistry() = default;
 
     mutable std::mutex m_Mutex;
     std::unordered_map<uint64_t, ParameterValue> m_Values;
     std::unordered_map<uint64_t, ParameterMetadata> m_Meta;
-
-    static ParameterType ParseType(const std::string &typeStr);
-    static ParameterGroup ParseGroup(const std::string &groupStr);
-    static ParameterValue ParseValueNode(const YAML::Node &node, ParameterType type);
-    static YAML::Node ValueToYamlNode(const ParameterValue &value);
 };

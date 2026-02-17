@@ -447,22 +447,32 @@ GraphExecutor::Value GraphExecutor::ExecuteDecomposer(AnimationGraph::Node* node
 
     spdlog::debug("[GraphExecutor] ExecuteDecomposer for node: {}", node->Name);
 
-    if (node->SubType == AnimationGraph::NodeSubType::Blackhole && std::holds_alternative<BlackHole*>(inputVal)) {
-        BlackHole* bh = std::get<BlackHole*>(inputVal);
+    if (node->SubType == AnimationGraph::NodeSubType::Blackhole && std::holds_alternative<SceneObject*>(inputVal)) {
+        SceneObject* obj = std::get<SceneObject*>(inputVal);
+
+        auto mass = std::get<float>(obj->GetParameter(ParameterHandle("Physics.Mass")));
+        auto position = std::get<glm::vec3>(obj->GetParameter(ParameterHandle("Transform.Position")));
+
         spdlog::debug("[GraphExecutor] Decomposing BlackHole - mass={}, position=({},{},{})",
-                     bh->mass, bh->position.x, bh->position.y, bh->position.z);
+                     mass, position.x, position.y, position.z);
         for (size_t i = 0; i < node->Outputs.size(); ++i) {
             switch (i) {
-                case 0: m_PinValues[node->Outputs[i].Id.Get()] = bh->mass;
-                        spdlog::debug("[GraphExecutor] Stored mass {} in pin {}", bh->mass, node->Outputs[i].Id.Get());
+                case 0: m_PinValues[node->Outputs[i].Id.Get()] = mass;
+                        spdlog::debug("[GraphExecutor] Stored mass {} in pin {}", mass, node->Outputs[i].Id.Get());
                         break;
-                case 1: m_PinValues[node->Outputs[i].Id.Get()] = bh->position; break;
-                case 2: m_PinValues[node->Outputs[i].Id.Get()] = bh->showAccretionDisk; break;
-                case 3: m_PinValues[node->Outputs[i].Id.Get()] = bh->accretionDiskDensity; break;
-                case 4: m_PinValues[node->Outputs[i].Id.Get()] = bh->accretionDiskSize; break;
-                case 5: m_PinValues[node->Outputs[i].Id.Get()] = bh->accretionDiskColor; break;
-                case 6: m_PinValues[node->Outputs[i].Id.Get()] = bh->spin; break;
-                case 7: m_PinValues[node->Outputs[i].Id.Get()] = bh->spinAxis; break;
+                case 1: m_PinValues[node->Outputs[i].Id.Get()] = position; break;
+                case 6: {
+                    if (obj->HasParameter(ParameterHandle("BlackHole.Spin"))) {
+                        m_PinValues[node->Outputs[i].Id.Get()] = std::get<float>(obj->GetParameter(ParameterHandle("BlackHole.Spin")));
+                    }
+                    break;
+                }
+                case 7: {
+                    if (obj->HasParameter(ParameterHandle("BlackHole.SpinAxis"))) {
+                        m_PinValues[node->Outputs[i].Id.Get()] = std::get<glm::vec3>(obj->GetParameter(ParameterHandle("BlackHole.SpinAxis")));
+                    }
+                    break;
+                }
             }
         }
     } else if (node->SubType == AnimationGraph::NodeSubType::Camera && std::holds_alternative<Camera*>(inputVal)) {
@@ -488,8 +498,8 @@ GraphExecutor::Value GraphExecutor::ExecuteDecomposer(AnimationGraph::Node* node
 
 GraphExecutor::Value GraphExecutor::ExecuteSceneGetter(AnimationGraph::Node* node) {
     if (node->SubType == AnimationGraph::NodeSubType::Blackhole) {
-        if (node->SceneObjectIndex >= 1 && node->SceneObjectIndex < static_cast<int>(m_pScene->blackHoles.size())) {
-            return &m_pScene->blackHoles[node->SceneObjectIndex - 1];
+        if (node->SceneObjectIndex >= 0 && node->SceneObjectIndex < static_cast<int>(m_pScene->objects.size())) {
+            return &m_pScene->objects[node->SceneObjectIndex];
         }
     } else if (node->SubType == AnimationGraph::NodeSubType::Camera) {
         if (m_pScene->camera) {
@@ -504,13 +514,13 @@ void GraphExecutor::ExecuteSetter(AnimationGraph::Node* node, float deltaTime) {
 
     if (node->SubType == AnimationGraph::NodeSubType::Blackhole) {
         auto bhVal = EvaluatePinValue(node->Inputs[1].Id, deltaTime);
-        if (!std::holds_alternative<BlackHole*>(bhVal)) {
+        if (!std::holds_alternative<SceneObject*>(bhVal)) {
             spdlog::debug("[GraphExecutor] ExecuteSetter: BlackHole input is not valid");
             return;
         }
 
-        BlackHole* bh = std::get<BlackHole*>(bhVal);
-        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting properties on BlackHole at {}", (void*)bh);
+        SceneObject* obj = std::get<SceneObject*>(bhVal);
+        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting properties on SceneObject at {}", (void*)obj);
 
         for (size_t i = 2; i < node->Inputs.size(); ++i) {
             auto val = EvaluatePinValue(node->Inputs[i].Id, deltaTime);
@@ -521,67 +531,45 @@ void GraphExecutor::ExecuteSetter(AnimationGraph::Node* node, float deltaTime) {
 
             switch (i) {
                 case 2: {
-                    float newMass = GetValueAs<float>(val, bh->mass);
-                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting mass from {} to {}", bh->mass, newMass);
-                    bh->mass = newMass;
+                    float oldMass = std::get<float>(obj->GetParameter(ParameterHandle("Physics.Mass")));
+                    float newMass = GetValueAs<float>(val, oldMass);
+                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting mass from {} to {}", oldMass, newMass);
+                    obj->SetParameter(ParameterHandle("Physics.Mass"), newMass);
                     break;
                 }
                 case 3: {
-                    glm::vec3 newPos = GetValueAs<glm::vec3>(val, bh->position);
+                    glm::vec3 oldPos = std::get<glm::vec3>(obj->GetParameter(ParameterHandle("Transform.Position")));
+                    glm::vec3 newPos = GetValueAs<glm::vec3>(val, oldPos);
                     spdlog::debug("[GraphExecutor] ExecuteSetter: Setting position from ({},{},{}) to ({},{},{})",
-                                 bh->position.x, bh->position.y, bh->position.z, newPos.x, newPos.y, newPos.z);
-                    bh->position = newPos;
-                    break;
-                }
-                case 4: {
-                    bool newShowDisk = GetValueAs<bool>(val, bh->showAccretionDisk);
-                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting showAccretionDisk from {} to {}",
-                                 bh->showAccretionDisk, newShowDisk);
-                    bh->showAccretionDisk = newShowDisk;
-                    break;
-                }
-                case 5: {
-                    float newDiskDensity = GetValueAs<float>(val, bh->accretionDiskDensity);
-                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskDensity from {} to {}",
-                                 bh->accretionDiskDensity, newDiskDensity);
-                    bh->accretionDiskDensity = newDiskDensity;
-                    break;
-                }
-                case 6: {
-                    float newDiskSize = GetValueAs<float>(val, bh->accretionDiskSize);
-                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskSize from {} to {}",
-                                 bh->accretionDiskSize, newDiskSize);
-                    bh->accretionDiskSize = newDiskSize;
-                    break;
-                }
-                case 7: {
-                    glm::vec3 newDiskColor = GetValueAs<glm::vec3>(val, bh->accretionDiskColor);
-                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting accretionDiskColor from ({},{},{}) to ({},{},{})",
-                                 bh->accretionDiskColor.r, bh->accretionDiskColor.g, bh->accretionDiskColor.b,
-                                 newDiskColor.r, newDiskColor.g, newDiskColor.b);
-                    bh->accretionDiskColor = newDiskColor;
+                                 oldPos.x, oldPos.y, oldPos.z, newPos.x, newPos.y, newPos.z);
+                    obj->SetParameter(ParameterHandle("Transform.Position"), newPos);
                     break;
                 }
                 case 8: {
-                    float newSpin = GetValueAs<float>(val, bh->spin);
-                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting spin from {} to {}",
-                                 bh->spin, newSpin);
-                    bh->spin = newSpin;
+                    if (obj->HasParameter(ParameterHandle("BlackHole.Spin"))) {
+                        float oldSpin = std::get<float>(obj->GetParameter(ParameterHandle("BlackHole.Spin")));
+                        float newSpin = GetValueAs<float>(val, oldSpin);
+                        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting spin from {} to {}", oldSpin, newSpin);
+                        obj->SetParameter(ParameterHandle("BlackHole.Spin"), newSpin);
+                    }
                     break;
                 }
                 case 9: {
-                    glm::vec3 newSpinAxis = GetValueAs<glm::vec3>(val, bh->spinAxis);
-                    spdlog::debug("[GraphExecutor] ExecuteSetter: Setting spinAxis from ({},{},{}) to ({},{},{})",
-                                 bh->spinAxis.x, bh->spinAxis.y, bh->spinAxis.z,
-                                 newSpinAxis.x, newSpinAxis.y, newSpinAxis.z);
-                    bh->spinAxis = newSpinAxis;
+                    if (obj->HasParameter(ParameterHandle("BlackHole.SpinAxis"))) {
+                        glm::vec3 oldSpinAxis = std::get<glm::vec3>(obj->GetParameter(ParameterHandle("BlackHole.SpinAxis")));
+                        glm::vec3 newSpinAxis = GetValueAs<glm::vec3>(val, oldSpinAxis);
+                        spdlog::debug("[GraphExecutor] ExecuteSetter: Setting spinAxis from ({},{},{}) to ({},{},{})",
+                                     oldSpinAxis.x, oldSpinAxis.y, oldSpinAxis.z,
+                                     newSpinAxis.x, newSpinAxis.y, newSpinAxis.z);
+                        obj->SetParameter(ParameterHandle("BlackHole.SpinAxis"), newSpinAxis);
+                    }
                     break;
                 }
             }
         }
 
         if (node->Outputs.size() > 1) {
-            m_PinValues[node->Outputs[1].Id.Get()] = bh;
+            m_PinValues[node->Outputs[1].Id.Get()] = obj;
         }
     } else if (node->SubType == AnimationGraph::NodeSubType::Camera) {
         auto camVal = EvaluatePinValue(node->Inputs[1].Id, deltaTime);
@@ -711,6 +699,10 @@ std::string GraphExecutor::ValueToString(const Value& val) {
     if (std::holds_alternative<glm::vec4>(val)) {
         auto v = std::get<glm::vec4>(val);
         return "(" + std::to_string(v.x) + ", " + std::to_string(v.y) + ", " + std::to_string(v.z) + ", " + std::to_string(v.w) + ")";
+    }
+    if (std::holds_alternative<glm::quat>(val)) {
+        auto q = std::get<glm::quat>(val);
+        return "quat(" + std::to_string(q.w) + ", " + std::to_string(q.x) + ", " + std::to_string(q.y) + ", " + std::to_string(q.z) + ")";
     }
     return "<empty>";
 }

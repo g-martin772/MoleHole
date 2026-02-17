@@ -21,6 +21,7 @@
 
 #include "Buffer.h"
 #include <cmath>
+#include <cstdlib>
 
 #include "Application/Application.h"
 #include "Application/Parameters.h"
@@ -30,8 +31,23 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+#ifdef _WIN32
+extern "C" {
+    __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;                    // NVIDIA Optimus
+    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;                      // AMD PowerXpress
+}
+#else
+extern "C" {
+    __attribute__((visibility("default"))) unsigned long NvOptimusEnablement = 0x00000001;   // NVIDIA Optimus
+    __attribute__((visibility("default"))) int AmdPowerXpressRequestHighPerformance = 1;     // AMD PowerXpress
+}
+#endif
 
 void Renderer::Init() {
+    Init(false);
+}
+
+void Renderer::Init(bool headless) {
     if (!glfwInit()) {
         spdlog::error("Failed to initialize GLFW");
         exit(-1);
@@ -39,6 +55,11 @@ void Renderer::Init() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    if (headless) {
+        spdlog::info("Initializing renderer in headless mode");
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    }
 
     window = glfwCreateWindow(800, 600, "MoleHole Window", nullptr, nullptr);
     if (!window) {
@@ -55,8 +76,21 @@ void Renderer::Init() {
     }
 
     spdlog::info("Loaded OpenGL {0}.{1}", GLAD_VERSION_MAJOR(version), GLAD_VERSION_MINOR(version));
-    spdlog::info("OpenGL version: {}", (const char *) glGetString(GL_RENDERER));
-    spdlog::info("OpenGL version: {}", (const char *) glGetString(GL_VERSION));
+    spdlog::info("OpenGL Device: {0}", (const char *) glGetString(GL_RENDERER));
+    spdlog::info("OpenGL Vendor: {0}", (const char *) glGetString(GL_VENDOR));
+    spdlog::info("OpenGL Version: {}", (const char *) glGetString(GL_VERSION));
+
+// #ifndef _WIN32
+//     const char* dri_prime = std::getenv("DRI_PRIME");
+//     const char* vk_icd = std::getenv("VK_ICD_FILENAMES");
+//     if (!dri_prime && !vk_icd) {
+//         spdlog::warn("Running on integrated GPU. To use dedicated GPU, launch with:");
+//         spdlog::warn("  DRI_PRIME=1 ./MoleHole  (for AMD/Intel)");
+//         spdlog::warn("  or use __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia ./MoleHole  (for NVIDIA)");
+//     }
+// #endif
+
+
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -448,14 +482,7 @@ void Renderer::Render2DRays(Scene *scene) {
 
     float currentTime = static_cast<float>(glfwGetTime());
 
-    for (const auto &bh: scene->blackHoles) {
-        DrawCircle(glm::vec2(bh.position.x, bh.position.y), 0.1f * std::cbrt(bh.mass), bh.accretionDiskColor);
-    }
-
-    std::vector<Sphere> emptySpheres;
-    std::vector<MeshObject> emptyMeshes;
-    std::unordered_map<std::string, std::shared_ptr<GLTFMesh>> emptyMeshCache;
-    blackHoleRenderer->Render(scene->blackHoles, emptySpheres, emptyMeshes, emptyMeshCache, *camera, currentTime);
+    blackHoleRenderer->Render(*scene, m_meshCache, *camera, currentTime);
 }
 
 void Renderer::Render3DSimulation(Scene *scene) {
@@ -473,9 +500,16 @@ void Renderer::Render3DSimulation(Scene *scene) {
     float currentTime = static_cast<float>(glfwGetTime());
 
         // Pre-load meshes into cache before rendering
-    for (const auto& meshObj : scene->meshes) {
-        if (m_meshCache.find(meshObj.path) == m_meshCache.end()) {
-            GetOrLoadMesh(meshObj.path);
+    for (const auto& obj : scene->objects) {
+        if (obj.HasClass("Mesh")) {
+            ParameterHandle pathHandle("Mesh.FilePath");
+            auto pathValue = obj.GetParameter(pathHandle);
+            if (std::holds_alternative<std::string>(pathValue)) {
+                std::string meshPath = std::get<std::string>(pathValue);
+                if (!meshPath.empty() && m_meshCache.find(meshPath) == m_meshCache.end()) {
+                    GetOrLoadMesh(meshPath);
+                }
+            }
         }
     }
 
@@ -483,17 +517,17 @@ void Renderer::Render3DSimulation(Scene *scene) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    blackHoleRenderer->Render(scene->blackHoles, scene->spheres, scene->meshes, m_meshCache, *camera, currentTime);
+    blackHoleRenderer->Render(*scene, m_meshCache, *camera, currentTime);
     blackHoleRenderer->RenderToScreen();
 
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
 
        if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::GravityGrid && gravityGridRenderer) {
-        gravityGridRenderer->Render(scene->blackHoles, scene->spheres, scene->meshes, *camera, currentTime);
+        gravityGridRenderer->Render(*scene, *camera, currentTime);
     }
         if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::ObjectPaths && objectPathsRenderer) {
-            objectPathsRenderer->Render(scene->blackHoles, *camera, currentTime);
+            objectPathsRenderer->Render(*scene, *camera, currentTime);
         }
 
     if (m_physicsDebugRenderer && m_physicsDebugRenderer->IsEnabled()) {
@@ -705,35 +739,34 @@ void Renderer::RenderToFramebuffer(unsigned int fbo, int width, int height, Scen
 void Renderer::RenderMeshes(Scene* scene) {
     if (!scene || !camera) return;
 
-    if (scene->meshes.empty()) {
-        return;
-    }
-
     if (Application::Params().Get(Params::RenderingThirdPerson, false))
     {
         std::string defaultMeshName = "";
         std::string meshName = Application::Params().Get(Params::CameraObject, defaultMeshName);
 
-        // Find and update the mesh object in the scene
-        for (size_t i = 0; i < scene->meshes.size(); ++i)
+        for (auto& obj : scene->objects)
         {
-            if (scene->meshes[i].name == meshName)
+            if (!obj.HasClass("Mesh")) continue;
+
+            ParameterHandle nameHandle("Entity.Name");
+            auto nameValue = obj.GetParameter(nameHandle);
+            if (!std::holds_alternative<std::string>(nameValue)) continue;
+
+            if (std::get<std::string>(nameValue) == meshName)
             {
-                auto mesh = GetOrLoadMesh(scene->meshes[i].path);
+                ParameterHandle pathHandle("Mesh.FilePath");
+                auto pathValue = obj.GetParameter(pathHandle);
+                if (!std::holds_alternative<std::string>(pathValue)) break;
+
+                std::string meshPath = std::get<std::string>(pathValue);
+                auto mesh = GetOrLoadMesh(meshPath);
                 if (mesh && mesh->IsLoaded()) {
-                    // Convert Euler angles (yaw, pitch, roll) to quaternion
-                    // Yaw and pitch from camera, roll = 0
                     float yawRad = glm::radians(camera->GetYaw() - 90);
                     float pitchRad = glm::radians(camera->GetPitch());
                     float rollRad = 0.0f;
 
-                    // Create quaternion from Euler angles (using GLM's built-in function)
-                    // GLM expects angles in the order: pitch (x), yaw (y), roll (z)
                     glm::quat q = glm::quat(glm::vec3(-pitchRad, -yawRad, rollRad));
 
-                    // In third-person mode, the shader offsets the rendering camera backward
-                    // so the mesh needs to be positioned forward from the camera
-                    // These values should match u_thirdPersonDistance and u_thirdPersonHeight in the shader
                     float thirdPersonDistance = Application::Params().Get(Params::ThirdPersonDistance, 10.0f);
                     float thirdPersonHeight = Application::Params().Get(Params::ThirdPersonHeight, 3.0f);
 
@@ -742,47 +775,69 @@ void Renderer::RenderMeshes(Scene* scene) {
                     glm::vec3 cameraRight = glm::normalize(glm::cross(cameraFront, cameraUp));
                     glm::vec3 actualCameraUp = glm::normalize(glm::cross(cameraRight, cameraFront));
 
-                    // Calculate mesh position: forward from camera and down by the height offset
                     glm::vec3 offsetForward = cameraFront * thirdPersonDistance;
                     glm::vec3 offsetDown = -actualCameraUp * thirdPersonHeight;
                     glm::vec3 meshPosition = camera->GetPosition() + offsetForward + offsetDown;
 
-                    // Update the mesh object in the scene
-                    scene->meshes[i].position = meshPosition;
-                    scene->meshes[i].rotation = q;
+                    obj.SetParameter(ParameterHandle("Entity.Position"), meshPosition);
+                    obj.SetParameter(ParameterHandle("Entity.Rotation"), q);
 
-                    // Update the loaded mesh for rendering
-                    mesh->SetPosition(scene->meshes[i].position);
-                    mesh->SetRotation(scene->meshes[i].rotation);
+                    mesh->SetPosition(meshPosition);
+                    mesh->SetRotation(q);
 
-                    // Save the updated scene
                     scene->Serialize(scene->currentPath);
                 } else {
-                    spdlog::warn("Failed to load or render mesh: {}", scene->meshes[i].path);
+                    spdlog::warn("Failed to load or render mesh: {}", meshPath);
                 }
-                break; // Found the mesh, no need to continue
+                break;
             }
         }
     }
 
-    for (const auto& meshObj : scene->meshes) {
-        auto mesh = GetOrLoadMesh(meshObj.path);
+    for (const auto& obj : scene->objects) {
+        if (!obj.HasClass("Mesh")) continue;
+
+        ParameterHandle pathHandle("Mesh.FilePath");
+        ParameterHandle posHandle("Entity.Position");
+        ParameterHandle rotHandle("Entity.Rotation");
+        ParameterHandle scaleHandle("Entity.Scale");
+
+        auto pathValue = obj.GetParameter(pathHandle);
+        auto posValue = obj.GetParameter(posHandle);
+        auto rotValue = obj.GetParameter(rotHandle);
+        auto scaleValue = obj.GetParameter(scaleHandle);
+
+        if (!std::holds_alternative<std::string>(pathValue)) continue;
+        std::string meshPath = std::get<std::string>(pathValue);
+
+        auto mesh = GetOrLoadMesh(meshPath);
         if (mesh && mesh->IsLoaded()) {
-            mesh->SetPosition(meshObj.position);
-            mesh->SetRotation(meshObj.rotation);
-            mesh->SetScale(meshObj.scale);
+            glm::vec3 position = std::holds_alternative<glm::vec3>(posValue) ? std::get<glm::vec3>(posValue) : glm::vec3(0.0f);
+            glm::quat rotation = std::holds_alternative<glm::quat>(rotValue) ? std::get<glm::quat>(rotValue) : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+            glm::vec3 scale = std::holds_alternative<glm::vec3>(scaleValue) ? std::get<glm::vec3>(scaleValue) : glm::vec3(1.0f);
+
+            mesh->SetPosition(position);
+            mesh->SetRotation(rotation);
+            mesh->SetScale(scale);
             mesh->Render(camera->GetViewMatrix(), camera->GetProjectionMatrix(), camera->GetPosition());
         } else {
-            spdlog::warn("Failed to load or render mesh: {}", meshObj.path);
+            spdlog::warn("Failed to load or render mesh: {}", meshPath);
         }
     }
 }
 
 void Renderer::RenderSpheres(Scene * scene) {
     if (!scene || !camera) return;
-    if (scene->spheres.empty()) return;
-    
-    // Bind HR diagram and blackbody LUTs once before rendering all spheres
+
+    bool hasSpheres = false;
+    for (const auto& obj : scene->objects) {
+        if (obj.HasClass("Sphere")) {
+            hasSpheres = true;
+            break;
+        }
+    }
+    if (!hasSpheres) return;
+
     if (blackHoleRenderer) {
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, blackHoleRenderer->GetBlackbodyLUT());
@@ -790,23 +845,42 @@ void Renderer::RenderSpheres(Scene * scene) {
         glBindTexture(GL_TEXTURE_2D, blackHoleRenderer->GetHRDiagramLUT());
     }
     
-    for (const auto& sphereObj : scene->spheres) {
-        glm::mat4 model = glm::translate(glm::mat4(1.0f), sphereObj.position);
-        model = glm::scale(model, glm::vec3(sphereObj.radius));
+    for (const auto& obj : scene->objects) {
+        if (!obj.HasClass("Sphere")) continue;
+
+        ParameterHandle posHandle("Entity.Position");
+        ParameterHandle radiusHandle("Sphere.Radius");
+        ParameterHandle colorHandle("Sphere.Color");
+        ParameterHandle massHandle("Sphere.Mass");
+
+        auto posValue = obj.GetParameter(posHandle);
+        auto radiusValue = obj.GetParameter(radiusHandle);
+        auto colorValue = obj.GetParameter(colorHandle);
+        auto massValue = obj.GetParameter(massHandle);
+
+        if (!std::holds_alternative<glm::vec3>(posValue) || !std::holds_alternative<float>(radiusValue)) {
+            continue;
+        }
+
+        glm::vec3 position = std::get<glm::vec3>(posValue);
+        float radius = std::get<float>(radiusValue);
+        glm::vec3 color = std::holds_alternative<glm::vec3>(colorValue) ? std::get<glm::vec3>(colorValue) : glm::vec3(0.5f);
+        float mass = std::holds_alternative<float>(massValue) ? std::get<float>(massValue) : 1.0f;
+
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
+        model = glm::scale(model, glm::vec3(radius));
         sphereShader->Bind();
         sphereShader->SetMat4("uModel", model);
         sphereShader->SetMat4("uVP", camera->GetViewProjectionMatrix());
-        sphereShader->SetVec3("uColor", sphereObj.color);
-        
-        sphereShader->SetFloat("uMass", sphereObj.massKg);
-        
-        // Bind LUT textures
+        sphereShader->SetVec3("uColor", color);
+
+        sphereShader->SetFloat("uMass", mass);
+
         if (blackHoleRenderer) {
             sphereShader->SetInt("u_blackbodyLUT", 2);
             sphereShader->SetInt("u_hrDiagramLUT", 3);
             sphereShader->SetInt("u_useHRDiagramLUT", 1);
             
-            // Set LUT parameters (must match the generator constants)
             sphereShader->SetFloat("u_lutTempMin", 1000.0f);
             sphereShader->SetFloat("u_lutTempMax", 40000.0f);
             sphereShader->SetFloat("u_lutRedshiftMin", 0.1f);

@@ -5,12 +5,14 @@
 #include <variant>
 #include <vector>
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 class Camera;
+class SceneObject;
 
 class GraphExecutor {
 public:
-    using Value = std::variant<std::monostate, bool, int, float, glm::vec2, glm::vec3, glm::vec4, std::string, BlackHole*, Camera*>;
+    using Value = std::variant<std::monostate, bool, int, float, glm::vec2, glm::vec3, glm::vec4, glm::quat, std::string, SceneObject*, Camera*>;
 
     GraphExecutor(AnimationGraph* graph, Scene* scene);
 

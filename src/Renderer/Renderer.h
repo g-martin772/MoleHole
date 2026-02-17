@@ -25,6 +25,7 @@ public:
         Simulation3D = 2
     };
     void Init();
+    void Init(bool headless);
     void Shutdown();
     void BeginFrame();
     void EndFrame(bool clearScreen = true);

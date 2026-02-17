@@ -8,10 +8,11 @@
 #include "HRDiagramLUTGenerator.h"
 #include "KerrGeodesicLUTGenerator.h"
 #include "Shader.h"
-#include "Simulation/Scene.h"
 #include "Image.h"
 
 class GLTFMesh;
+class Scene;
+class Camera;
 
 class BlackHoleRenderer {
 public:
@@ -19,7 +20,7 @@ public:
     ~BlackHoleRenderer();
 
     void Init(int width, int height);
-    void Render(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time);
+    void Render(const Scene& scene, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time);
     void Resize(int width, int height);
     void RenderToScreen();
     
@@ -44,8 +45,8 @@ private:
     void GenerateAccelerationLUT();
     void GenerateHRDiagramLUT();
     void GenerateKerrGeodesicLUTs();
-    void UpdateUniforms(const std::vector<BlackHole>& blackHoles, const std::vector<Sphere>& spheres, const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time);
-    void UpdateMeshBuffers(const std::vector<MeshObject>& meshes, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache);
+    void UpdateUniforms(const Scene& scene, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time);
+    void UpdateMeshBuffers(const Scene& scene, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache);
     void CreateMeshBuffers();
 
     std::unique_ptr<Shader> m_computeShader;
@@ -79,8 +80,6 @@ private:
 
     int m_width, m_height;
 
-    std::vector<BlackHole> m_lastBlackHoles;
-    
     // Export mode flag - when true, uses custom ray marching settings from AppState
     bool m_isExportMode = false;
 

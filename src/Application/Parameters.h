@@ -2,8 +2,8 @@
 
 #include "ParameterRegistry.h"
 
-// Compile-time parameter handles for efficient lookup
-// These use consteval ParameterHandle constructor to hash strings at compile-time
+// These use consteval ParameterHandle constructor to hash strings at compile-time ;)
+
 namespace Params {
     // Window Parameters
     inline constexpr ParameterHandle WindowWidth("Window.Width");
@@ -80,5 +80,63 @@ namespace Params {
     inline constexpr ParameterHandle UIFontSize("UI.FontSize");
     inline constexpr ParameterHandle UIMainFont("UI.MainFont");
     inline constexpr ParameterHandle UIDefaultExportPath("UI.DefaultExportPath");
+
+    // Config
+    inline constexpr ParameterHandle AdditionalObjectClassSources("Config.AdditionalObjectClassSources");
+    inline constexpr ParameterHandle AdditionalSceneObjectDefinitionSources("Config.AdditionalSceneObjectDefinitionSources");
 }
 
+namespace Field {
+    namespace Entity {
+        inline constexpr ParameterHandle Name("Entity.Name");
+        inline constexpr ParameterHandle Position("Entity.Position");
+        inline constexpr ParameterHandle Rotation("Entity.Rotation");
+        inline constexpr ParameterHandle Scale("Entity.Scale");
+    }
+
+    namespace Physics {
+        inline constexpr ParameterHandle Enable("Physics.Enable");
+        inline constexpr ParameterHandle Mass("Physics.Mass");
+        inline constexpr ParameterHandle Velocity("Physics.Velocity");
+        inline constexpr ParameterHandle RigidbodyType("Physics.Rigidbody.Type"); // Static/Dynamic/Kinematic
+        inline constexpr ParameterHandle RigidbodyUseGravity("Physics.Rigidbody.UseGravity");
+        inline constexpr ParameterHandle RigidbodyLinearDamping("Physics.Rigidbody.LinearDamping");
+        inline constexpr ParameterHandle RigidbodyAngularDamping("Physics.Rigidbody.AngularDamping");
+        inline constexpr ParameterHandle RigidbodyConstraints("Physics.Rigidbody.Constraints"); // bitmask for freeze axes
+        inline constexpr ParameterHandle ColliderType("Physics.Collider.Type"); // Box/Sphere/Capsule/Mesh/ConvexHull
+        inline constexpr ParameterHandle ColliderIsTrigger("Physics.Collider.IsTrigger");
+        inline constexpr ParameterHandle ColliderOffset("Physics.Collider.Offset");
+        inline constexpr ParameterHandle ColliderScale("Physics.Collider.Scale");
+        inline constexpr ParameterHandle ColliderFriction("Physics.Collider.Friction");
+        inline constexpr ParameterHandle ColliderRestitution("Physics.Collider.Restitution");
+        inline constexpr ParameterHandle ColliderDensity("Physics.Collider.Density");
+        inline constexpr ParameterHandle ColliderCollisionLayer("Physics.Collider.CollisionLayer");
+        inline constexpr ParameterHandle ColliderCollisionMask("Physics.Collider.CollisionMask");
+        inline constexpr ParameterHandle ColliderBoxHalfExtents("Physics.Collider.Box.HalfExtents");
+        inline constexpr ParameterHandle ColliderSphereRadius("Physics.Collider.Sphere.Radius");
+        inline constexpr ParameterHandle ColliderCapsuleRadius("Physics.Collider.Capsule.Radius");
+        inline constexpr ParameterHandle ColliderCapsuleHeight("Physics.Collider.Capsule.Height");
+        inline constexpr ParameterHandle ColliderMeshFilePath("Physics.Collider.Mesh.FilePath");
+        inline constexpr ParameterHandle ColliderConvexMeshFilePath("Physics.Collider.ConvexMesh.FilePath");
+        inline constexpr ParameterHandle ColliderMeshAutoConvex("Physics.Collider.Mesh.AutoConvex"); // generate convex from mesh
+    }
+
+    namespace Mesh {
+        inline constexpr ParameterHandle FilePath("Mesh.FilePath");
+        inline constexpr ParameterHandle ComOffset("Mesh.ComOffset");
+    }
+
+    namespace Sphere {
+        inline constexpr ParameterHandle Radius("Sphere.Radius");
+        inline constexpr ParameterHandle Color("Sphere.Color");
+        inline constexpr ParameterHandle TexturePath("Sphere.TexturePath");
+        inline constexpr ParameterHandle Spin("Sphere.Spin");
+        inline constexpr ParameterHandle SpinAxis("Sphere.SpinAxis");
+    }
+
+    namespace BlackHole {
+        inline constexpr ParameterHandle Mass("Physics.Mass");
+        inline constexpr ParameterHandle Spin("BlackHole.Spin");
+        inline constexpr ParameterHandle SpinAxis("BlackHole.SpinAxis");
+    }
+}

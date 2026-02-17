@@ -16,21 +16,19 @@ class Renderer;
 struct PhysicsBodyData {
     float mass = 0.0f;
     PxRigidDynamic* actor = nullptr;
-    glm::vec3* scenePosition = nullptr;
-    glm::quat* sceneRotation = nullptr;
-    glm::vec3* sceneScale = nullptr;
+    glm::vec3 position = glm::vec3(0.0f);
+    glm::quat rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    glm::vec3 scale = glm::vec3(1.0f);
     glm::vec3 initialVelocity = glm::vec3(0.0f);
     float radius = 1.0f;
     bool isSphere = false;
-    bool isBlackHole = false;
     std::string meshPath;
     size_t sceneIndex = 0;
-    Scene::ObjectType objectType;
 };
 
 struct BlackHoleBodyData {
     PxRigidStatic* actor = nullptr;
-    glm::vec3* scenePosition = nullptr;
+    glm::vec3 position = glm::vec3(0.0f);
     float schwarzschildRadius = 0.0f;
     size_t sceneIndex = 0;
     glm::vec3 initialVelocity = glm::vec3(0.0f);
