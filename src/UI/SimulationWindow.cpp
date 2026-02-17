@@ -155,7 +155,9 @@ void RenderObjectTypeSection(Scene* scene, const std::string& objectTypeName,
             label += " (Selected)";
         }
 
-        bool open = ImGui::TreeNode(label.c_str());
+        ImGui::PushID(static_cast<int>(i));
+        bool open = ImGui::TreeNode("##ObjectNode", "%s", label.c_str());
+        ImGui::PopID();
 
         if (isSelected) {
             ImGui::PopStyleColor(3);
