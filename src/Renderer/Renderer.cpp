@@ -71,15 +71,15 @@ void Renderer::Init() {
     spdlog::info("OpenGL Vendor: {0}", (const char *) glGetString(GL_VENDOR));
     spdlog::info("OpenGL Version: {}", (const char *) glGetString(GL_VERSION));
 
-#ifndef _WIN32
-    const char* dri_prime = std::getenv("DRI_PRIME");
-    const char* vk_icd = std::getenv("VK_ICD_FILENAMES");
-    if (!dri_prime && !vk_icd) {
-        spdlog::warn("Running on integrated GPU. To use dedicated GPU, launch with:");
-        spdlog::warn("  DRI_PRIME=1 ./MoleHole  (for AMD/Intel)");
-        spdlog::warn("  or use __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia ./MoleHole  (for NVIDIA)");
-    }
-#endif
+// #ifndef _WIN32
+//     const char* dri_prime = std::getenv("DRI_PRIME");
+//     const char* vk_icd = std::getenv("VK_ICD_FILENAMES");
+//     if (!dri_prime && !vk_icd) {
+//         spdlog::warn("Running on integrated GPU. To use dedicated GPU, launch with:");
+//         spdlog::warn("  DRI_PRIME=1 ./MoleHole  (for AMD/Intel)");
+//         spdlog::warn("  or use __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia ./MoleHole  (for NVIDIA)");
+//     }
+// #endif
 
 
 
