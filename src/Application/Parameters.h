@@ -132,6 +132,7 @@ namespace Field {
         inline constexpr ParameterHandle TexturePath("Sphere.TexturePath");
         inline constexpr ParameterHandle Spin("Sphere.Spin");
         inline constexpr ParameterHandle SpinAxis("Sphere.SpinAxis");
+        inline constexpr ParameterHandle Mass("Sphere.Mass");
     }
 
     namespace BlackHole {

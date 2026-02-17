@@ -172,12 +172,11 @@ void UI::RenderDockspace(Scene* scene) {
     if (doSimStart) simulation.Start();
     if (doSimPause) simulation.Pause();
     if (doSimStop) simulation.Stop();
-    if (doSimResume) simulation.Start(); // Resume is just calling Start() when paused
+    if (doSimResume) simulation.Start();
 
-    ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const float sidebarWidth = 60.0f; // Match the sidebar width from RenderSidebar()
-    
-    // Position dockspace to the right of the sidebar
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    constexpr float sidebarWidth = 60.0f;
+
     ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + sidebarWidth, viewport->Pos.y + ImGui::GetFrameHeight()));
     ImGui::SetNextWindowSize(ImVec2(viewport->Size.x - sidebarWidth, viewport->Size.y - ImGui::GetFrameHeight()));
     ImGui::SetNextWindowViewport(viewport->ID);

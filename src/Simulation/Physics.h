@@ -37,7 +37,7 @@ struct BlackHoleBodyData {
 class Physics : public PxSimulationEventCallback {
 public:
     void Init();
-    void Update(float deltaTime);
+    void Update(float deltaTime, Scene* scene);
     void Shutdown();
 
     void SetScene(Scene* scene);
@@ -54,6 +54,10 @@ public:
     const PxRenderBuffer* GetDebugRenderBuffer() const;
     void SetVisualizationParameter(PxVisualizationParameter::Enum param, float value);
     void SetVisualizationScale(float scale);
+
+    static constexpr float G = 6.67430e-11f;
+    static constexpr float SOLAR_MASS = 1.989e30f;
+    static constexpr float C = 299792458.0f;
 
 private:
     PxDefaultAllocator m_Allocator;
@@ -75,13 +79,9 @@ private:
 
     void CreatePhysicsBody(PhysicsBodyData& data);
     void CreateBlackHoleBody(BlackHoleBodyData& data);
-    void ApplyGravitationalForces(float dt) const;
+    void ApplyGravitationalForces(float dt, Scene* scene) const;
     void UpdatePhysicsBodies();
     void ProcessDeletedBodies();
     PxConvexMesh* LoadConvexMesh(const std::string& path);
     float CalculateSchwarzschildRadius(float solarMass);
-
-    static constexpr float G = 6.67430e-11f;
-    static constexpr float SOLAR_MASS = 1.989e30f;
-    static constexpr float C = 299792458.0f;
 };
