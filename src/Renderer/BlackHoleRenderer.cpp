@@ -614,7 +614,7 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene, const std::unordered_
                 std::string spinAxisUniform = "u_blackHoleSpinAxes[" + std::to_string(numBlackHoles) + "]";
 
                 m_computeShader->SetVec3(posUniform, std::get<glm::vec3>(pos));
-                m_computeShader->SetFloat(massUniform, std::get<float>(mass));
+                m_computeShader->SetFloat(massUniform, std::get<float>(mass) / Physics::SOLAR_MASS);
                 m_computeShader->SetFloat(spinUniform, std::holds_alternative<float>(spin) ? std::get<float>(spin) : 0.0f);
 
                 glm::vec3 axis = std::holds_alternative<glm::vec3>(spinAxis) ? std::get<glm::vec3>(spinAxis) : glm::vec3(0.0f, 1.0f, 0.0f);

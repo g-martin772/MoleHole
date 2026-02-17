@@ -79,7 +79,7 @@ private:
     void ProcessDeletedBodies();
     PxConvexMesh* LoadConvexMesh(const std::string& path);
     float CalculateSchwarzchildRadius(float solarMass);
-
+public:
     static constexpr float G = 6.67430e-11f;
     static constexpr float SOLAR_MASS = 1.989e30f;
     static constexpr float C = 299792458.0f;

@@ -21,6 +21,7 @@
 
 #include "Buffer.h"
 #include <cmath>
+#include <cstdlib>
 
 #include "Application/Application.h"
 #include "Application/Parameters.h"
@@ -29,6 +30,17 @@
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
+#endif
+#ifdef _WIN32
+extern "C" {
+    __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;                    // NVIDIA Optimus
+    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;                      // AMD PowerXpress
+}
+#else
+extern "C" {
+    __attribute__((visibility("default"))) unsigned long NvOptimusEnablement = 0x00000001;   // NVIDIA Optimus
+    __attribute__((visibility("default"))) int AmdPowerXpressRequestHighPerformance = 1;     // AMD PowerXpress
+}
 #endif
 
 void Renderer::Init() {
@@ -55,8 +67,21 @@ void Renderer::Init() {
     }
 
     spdlog::info("Loaded OpenGL {0}.{1}", GLAD_VERSION_MAJOR(version), GLAD_VERSION_MINOR(version));
+    spdlog::info("OpenGL Device: {0}", (const char *) glGetString(GL_RENDERER));
+    spdlog::info("OpenGL Vendor: {0}", (const char *) glGetString(GL_VENDOR));
+    spdlog::info("OpenGL Version: {}", (const char *) glGetString(GL_VERSION));
 
-    spdlog::info("OpenGL version: {}", (const char *) glGetString(GL_VERSION));
+#ifndef _WIN32
+    const char* dri_prime = std::getenv("DRI_PRIME");
+    const char* vk_icd = std::getenv("VK_ICD_FILENAMES");
+    if (!dri_prime && !vk_icd) {
+        spdlog::warn("Running on integrated GPU. To use dedicated GPU, launch with:");
+        spdlog::warn("  DRI_PRIME=1 ./MoleHole  (for AMD/Intel)");
+        spdlog::warn("  or use __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia ./MoleHole  (for NVIDIA)");
+    }
+#endif
+
+
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
