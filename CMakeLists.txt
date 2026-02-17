@@ -90,6 +90,22 @@ file(GLOB SOURCES
         src/Renderer/*.cpp
         src/UI/*.cpp)
 
+if(WIN32)
+    file(GLOB PLATFORM_SOURCES
+            src/Platform/Windows/*.cpp
+            src/Platform/GLFW/*.cpp
+            src/Platform/OpenGL/*.cpp
+            src/Platform/Vulkan/*.cpp)
+elseif(UNIX)
+    file(GLOB PLATFORM_SOURCES
+            src/Platform/Linux/*.cpp
+            src/Platform/GLFW/*.cpp
+            src/Platform/OpenGL/*.cpp
+            src/Platform/Vulkan/*.cpp)
+endif()
+
+list(APPEND SOURCES ${PLATFORM_SOURCES})
+
 add_executable(MoleHole ${SOURCES})
 
 set_property(TARGET MoleHole PROPERTY CXX_STANDARD 23)

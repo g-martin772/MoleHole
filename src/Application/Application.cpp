@@ -277,9 +277,11 @@ void Application::Render() {
     // If intro animation is active, render only that
     if (Params().Get(Params::AppIntroAnimationEnabled, true) && m_introAnimation && m_introAnimation->IsActive()) {
         int width, height;
-        glfwGetFramebufferSize(GetWindow(), &width, &height);
+        if (auto* window = m_renderer.GetWindowAbstraction()) {
+            window->GetFramebufferSize(width, height);
+        }
         m_introAnimation->Render(width, height);
-        m_renderer.EndFrame(false); // Don't clear screen - intro has already rendered everything
+        m_renderer.EndFrame(false);
         return;
     }
 
@@ -304,22 +306,23 @@ void Application::Render() {
 }
 
 bool Application::ShouldClose() const {
-    return m_renderer.GetWindow() ? glfwWindowShouldClose(m_renderer.GetWindow()) : true;
+    auto* window = m_renderer.GetWindowAbstraction();
+    return window ? window->ShouldClose() : true;
 }
 
 GLFWwindow* Application::GetWindow() const {
-    return m_renderer.GetWindow();
+    return m_renderer.GetNativeWindow();
 }
 
 void Application::SetWindowTitle(const std::string& title) const {
-    if (auto window = GetWindow()) {
-        glfwSetWindowTitle(window, title.c_str());
+    if (auto* window = m_renderer.GetWindowAbstraction()) {
+        window->SetTitle(title);
     }
 }
 
 void Application::RequestClose() const {
-    if (auto window = GetWindow()) {
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
+    if (auto* window = m_renderer.GetWindowAbstraction()) {
+        window->SetShouldClose(true);
     }
 }
 
@@ -360,29 +363,54 @@ void Application::InitializeRenderer() {
     bool headless = m_args.IsHeadless();
     m_renderer.Init(headless);
 
-    if (auto window = m_renderer.GetWindow()) {
+    if (auto* window = m_renderer.GetWindowAbstraction()) {
         if (!headless) {
-            glfwSetWindowUserPointer(window, this);
-            glfwSetWindowSizeCallback(window, WindowSizeCallback);
-            glfwSetWindowPosCallback(window, WindowPosCallback);
-            glfwSetWindowMaximizeCallback(window, WindowMaximizeCallback);
-            glfwSetWindowCloseCallback(window, WindowCloseCallback);
+            window->SetUserPointer(this);
 
-            glfwSetWindowSize(window, Application::Params().Get(Params::WindowWidth, 1280), Application::Params().Get(Params::WindowHeight, 720));
-            int posX = Application::Params().Get(Params::WindowPosX, -1);
-            int posY = Application::Params().Get(Params::WindowPosY, -1);
+            window->SetResizeCallback([](uint32_t width, uint32_t height) {
+                auto* win = Instance().m_renderer.GetWindowAbstraction();
+                auto* app = static_cast<Application*>(win->GetUserPointer());
+                if (app) {
+                    app->Params().Set(Params::WindowWidth, static_cast<int>(width));
+                    app->Params().Set(Params::WindowHeight, static_cast<int>(height));
+                }
+            });
+
+            window->SetPositionCallback([](int x, int y) {
+                auto* win = Instance().m_renderer.GetWindowAbstraction();
+                auto* app = static_cast<Application*>(win->GetUserPointer());
+                if (app) {
+                    app->Params().Set(Params::WindowPosX, x);
+                    app->Params().Set(Params::WindowPosY, y);
+                }
+            });
+
+            window->SetMaximizeCallback([](bool maximized) {
+                Params().Set(Params::WindowMaximized, maximized);
+            });
+
+            window->SetSize(
+                Params().Get(Params::WindowWidth, 1280),
+                Params().Get(Params::WindowHeight, 720)
+            );
+
+            int posX = Params().Get(Params::WindowPosX, -1);
+            int posY = Params().Get(Params::WindowPosY, -1);
             if (posX >= 0 && posY >= 0) {
-                glfwSetWindowPos(window, posX, posY);
-            }
-            if (Application::Params().Get(Params::WindowMaximized, false)) {
-                glfwMaximizeWindow(window);
+                window->SetPosition(posX, posY);
             }
 
-            glfwSetWindowTitle(window, "MoleHole");
+            if (Params().Get(Params::WindowMaximized, false)) {
+                window->Maximize();
+            }
+
+            window->SetTitle("MoleHole");
         }
     }
 
-    glfwSwapInterval(Application::Params().Get(Params::WindowVSync, true) ? 1 : 0);
+    if (auto* window = m_renderer.GetWindowAbstraction()) {
+        window->SetVSync(Params().Get(Params::WindowVSync, true));
+    }
 }
 
 void Application::InitializeSimulation() {
@@ -423,49 +451,27 @@ void Application::InitializeSimulation() {
 }
 
 void Application::UpdateWindowState() {
-    auto window = GetWindow();
+    auto* window = m_renderer.GetWindowAbstraction();
     if (!window) return;
 
-    int width, height;
-    glfwGetWindowSize(window, &width, &height);
+    uint32_t width = window->GetWidth();
+    uint32_t height = window->GetHeight();
 
     int posX, posY;
-    glfwGetWindowPos(window, &posX, &posY);
+    window->GetPosition(posX, posY);
 
-    int maximized = glfwGetWindowAttrib(window, GLFW_MAXIMIZED);
+    bool maximized = window->IsMaximized();
 
-    Params().Set(Params::WindowWidth, width);
-    Params().Set(Params::WindowHeight, height);
+    Params().Set(Params::WindowWidth, static_cast<int>(width));
+    Params().Set(Params::WindowHeight, static_cast<int>(height));
     Params().Set(Params::WindowPosX, posX);
     Params().Set(Params::WindowPosY, posY);
-    Params().Set(Params::WindowMaximized, maximized == GLFW_TRUE);
+    Params().Set(Params::WindowMaximized, maximized);
 }
 
 void Application::HandleWindowEvents() {
-    glfwPollEvents();
-}
-
-void Application::WindowSizeCallback(GLFWwindow* window, int width, int height) {
-    auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-    if (app) {
-        app->Params().Set(Params::WindowWidth, width);
-        app->Params().Set(Params::WindowHeight, height);
+    auto& instance = Instance();
+    if (auto* window = instance.m_renderer.GetWindowAbstraction()) {
+        window->PollEvents();
     }
-}
-
-void Application::WindowPosCallback(GLFWwindow* window, int xpos, int ypos) {
-    if (auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window))) {
-        app->Params().Set(Params::WindowPosX, xpos);
-        app->Params().Set(Params::WindowPosY, ypos);
-    }
-}
-
-void Application::WindowMaximizeCallback(GLFWwindow* window, int maximized) {
-    if (auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window))) {
-        Application::Params().Set(Params::WindowMaximized, maximized == GLFW_TRUE);
-    }
-}
-
-void Application::WindowCloseCallback(GLFWwindow* window) {
-
 }

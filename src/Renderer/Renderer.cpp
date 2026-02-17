@@ -31,6 +31,15 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+static Window* g_gladWindow = nullptr;
+static GLADapiproc GladGetProcAddress(const char* name) {
+    if (g_gladWindow) {
+        return reinterpret_cast<GLADapiproc>(g_gladWindow->GetProcAddress(name));
+    }
+    return nullptr;
+}
+
 #ifdef _WIN32
 extern "C" {
     __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;                    // NVIDIA Optimus
@@ -48,28 +57,30 @@ void Renderer::Init() {
 }
 
 void Renderer::Init(bool headless) {
-    if (!glfwInit()) {
-        spdlog::error("Failed to initialize GLFW");
-        exit(-1);
-    }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    WindowProperties props;
+    props.width = 800;
+    props.height = 600;
+    props.title = "MoleHole Window";
+    props.visible = !headless;
+    props.vsync = true;
+    props.contextVersionMajor = 4;
+    props.contextVersionMinor = 6;
+    props.coreProfile = true;
 
     if (headless) {
         spdlog::info("Initializing renderer in headless mode");
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     }
 
-    window = glfwCreateWindow(800, 600, "MoleHole Window", nullptr, nullptr);
-    if (!window) {
-        spdlog::error("Failed to create GLFW window");
-        glfwTerminate();
+    m_window = Window::Create(props);
+    if (!m_window) {
+        spdlog::error("Failed to create window");
         exit(-1);
     }
-    glfwMakeContextCurrent(window);
 
-    int version = gladLoadGL(glfwGetProcAddress);
+    g_gladWindow = m_window;
+    int version = gladLoadGL(GladGetProcAddress);
+    g_gladWindow = nullptr;
+
     if (version == 0) {
         spdlog::error("Failed to initialize GLAD");
         exit(-1);
@@ -98,7 +109,7 @@ void Renderer::Init(bool headless) {
     (void) io;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplGlfw_InitForOpenGL(m_window->GetNativeWindow(), true);
     ImGui_ImplOpenGL3_Init("#version 460");
 
     image = std::make_shared<Image>(last_img_width, last_img_height);
@@ -112,14 +123,14 @@ void Renderer::Init(bool headless) {
     blackHoleRenderer->Init(last_img_width, last_img_height);
 
     int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
+    m_window->GetFramebufferSize(width, height);
     // Set a much larger far plane for the camera to avoid grid clipping
     camera = std::make_unique<Camera>(Application::Params().Get(Params::RenderingFOV, 45.0f), (float) width / (float) height, 0.01f, 10000.0f);
 
     camera->SetPosition(Application::Params().Get(Params::CameraPosition, glm::vec3(0.0f, 0.0f, 10.0f)));
     camera->SetYawPitch(Application::Params().Get(Params::CameraYaw, -90.0f), Application::Params().Get(Params::CameraPitch, 0.0f));
 
-    input = std::make_unique<Input>(window);
+    input = std::make_unique<Input>(m_window->GetNativeWindow());
 
     gravityGridRenderer = std::make_unique<GravityGridRenderer>();
     gravityGridRenderer->Init();
@@ -137,18 +148,22 @@ void Renderer::Shutdown() {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
-    glfwDestroyWindow(window);
-    glfwTerminate();
-    window = nullptr;
+
+    if (m_window) {
+        delete m_window;
+        m_window = nullptr;
+    }
+
+    TerminateWindowSystem();
 }
 
 void Renderer::BeginFrame() {
     int vsyncVal = Application::Params().Get(Params::WindowVSync, true) ? 1 : 0;
     if (vsyncVal != lastVsync) {
-        glfwSwapInterval(vsyncVal);
+        m_window->SetVSync(vsyncVal == 1);
         lastVsync = vsyncVal;
     }
-    glfwPollEvents();
+    m_window->PollEvents();
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -157,7 +172,7 @@ void Renderer::BeginFrame() {
 
 void Renderer::EndFrame(bool clearScreen) {
     int display_w, display_h;
-    glfwGetFramebufferSize(window, &display_w, &display_h);
+    m_window->GetFramebufferSize(display_w, display_h);
     glViewport(0, 0, display_w, display_h);
 
     if (clearScreen) {
@@ -167,7 +182,7 @@ void Renderer::EndFrame(bool clearScreen) {
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    glfwSwapBuffers(window);
+    m_window->SwapBuffers();
 }
 
 void Renderer::RenderScene(Scene *scene) {

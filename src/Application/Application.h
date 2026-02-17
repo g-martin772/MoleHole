@@ -93,9 +93,4 @@ private:
     void UpdateWindowState();
 
     static void HandleWindowEvents();
-
-    static void WindowSizeCallback(GLFWwindow* window, int width, int height);
-    static void WindowPosCallback(GLFWwindow* window, int xpos, int ypos);
-    static void WindowMaximizeCallback(GLFWwindow* window, int maximized);
-    static void WindowCloseCallback(GLFWwindow* window);
 };

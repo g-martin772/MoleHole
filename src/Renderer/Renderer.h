@@ -2,6 +2,7 @@
 #include "Shader.h"
 #include "BlackHoleRenderer.h"
 #include "GLTFMesh.h"
+#include "../Platform/GLFW/Window.h"
 #include <memory>
 #include <glm/glm.hpp>
 #include <vector>
@@ -44,16 +45,18 @@ public:
 
     void RenderToFramebuffer(unsigned int fbo, int width, int height, Scene* scene, Camera* cam);
 
-    GLFWwindow* GetWindow() const { return window; }
+    GLFWwindow* GetWindow() const { return m_window ? m_window->GetNativeWindow() : nullptr; }
+    GLFWwindow* GetNativeWindow() const { return m_window ? m_window->GetNativeWindow() : nullptr; }
+    Window* GetWindowAbstraction() const { return m_window; }
 
     ViewportMode GetSelectedViewport() const { return selectedViewport; }
     void SetSelectedViewport(ViewportMode mode) { selectedViewport = mode; }
 
-    GravityGridRenderer* GetGravityGridRenderer() { return gravityGridRenderer.get(); }
-    ObjectPathsRenderer* GetObjectPathsRenderer() { return objectPathsRenderer.get(); }
-    PhysicsDebugRenderer* GetPhysicsDebugRenderer() { return m_physicsDebugRenderer.get(); }
+    GravityGridRenderer* GetGravityGridRenderer() const { return gravityGridRenderer.get(); }
+    ObjectPathsRenderer* GetObjectPathsRenderer() const { return objectPathsRenderer.get(); }
+    PhysicsDebugRenderer* GetPhysicsDebugRenderer() const { return m_physicsDebugRenderer.get(); }
 
-    GLFWwindow* window = nullptr;
+    Window* m_window = nullptr;
     int last_img_width = 800;
     int last_img_height = 600;
     std::shared_ptr<Image> image;
