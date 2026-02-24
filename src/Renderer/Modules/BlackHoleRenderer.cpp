@@ -6,7 +6,7 @@
 #include "BlackbodyLUTGenerator.h"
 #include "AccelerationLUTGenerator.h"
 #include "HRDiagramLUTGenerator.h"
-#include "GLTFMesh.h"
+#include "../Models/GLTFMesh.h"
 
 
 

@@ -1,8 +1,8 @@
 #include "ObjectPathsRenderer.h"
-#include "Buffer.h"
+#include "Renderer/Interface/Buffer.h"
 #include "Simulation/Scene.h"
 #include <glad/gl.h>
-#include "Camera.h"
+#include "Renderer/Interface/Camera.h"
 #include "Application/Application.h"
 
 void ObjectPathsRenderer::Init() {

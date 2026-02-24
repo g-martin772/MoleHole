@@ -1,21 +1,21 @@
 #include <glad/gl.h>
 #include "Renderer.h"
-#include "PhysicsDebugRenderer.h"
+#include "Modules/PhysicsDebugRenderer.h"
 #include <GLFW/glfw3.h>
 #include "ImGuizmo.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-#include "Shader.h"
-#include "Camera.h"
-#include "Input.h"
+#include "Interface/Shader.h"
+#include "Interface/Camera.h"
+#include "Interface/Input.h"
 
 
-#include "Buffer.h"
+#include "Interface/Buffer.h"
 
 #include "Application/Application.h"
 #include "Application/Parameters.h"
 #include "Application/ParameterRegistry.h"
-#include "GravityGridRenderer.h"
+#include "Modules/GravityGridRenderer.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -121,11 +121,11 @@ void Renderer::Init(bool headless) {
 
     input = std::make_unique<Input>(m_window->GetNativeWindow());
 
-    gravityGridRenderer = std::make_unique<GravityGridRenderer>();
-    gravityGridRenderer->Init();
+    m_GravityGridRenderer = std::make_unique<GravityGridRenderer>();
+    m_GravityGridRenderer->Init();
 
-    objectPathsRenderer = std::make_unique<ObjectPathsRenderer>();
-    objectPathsRenderer->Init();
+    m_ObjectPathsRenderer = std::make_unique<ObjectPathsRenderer>();
+    m_ObjectPathsRenderer->Init();
 
     m_physicsDebugRenderer = std::make_unique<PhysicsDebugRenderer>();
     m_physicsDebugRenderer->Init();
@@ -527,11 +527,11 @@ void Renderer::Render3DSimulation(Scene *scene) {
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
 
-       if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::GravityGrid && gravityGridRenderer) {
-        gravityGridRenderer->Render(*scene, *camera, currentTime);
+       if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::GravityGrid && m_GravityGridRenderer) {
+        m_GravityGridRenderer->Render(*scene, *camera, currentTime);
     }
-        if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::ObjectPaths && objectPathsRenderer) {
-            objectPathsRenderer->Render(*scene, *camera, currentTime);
+        if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::ObjectPaths && m_ObjectPathsRenderer) {
+            m_ObjectPathsRenderer->Render(*scene, *camera, currentTime);
         }
 
     if (m_physicsDebugRenderer && m_physicsDebugRenderer->IsEnabled()) {

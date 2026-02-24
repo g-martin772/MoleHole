@@ -1,7 +1,7 @@
 #include "Physics.h"
 
 #include "Renderer/Renderer.h"
-#include "Renderer/GLTFMesh.h"
+#include "../Renderer/Models/GLTFMesh.h"
 
 static PxFilterFlags BlackHoleFilterShader(
     PxFilterObjectAttributes attributes0, PxFilterData filterData0,

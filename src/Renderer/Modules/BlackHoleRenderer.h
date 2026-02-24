@@ -3,8 +3,8 @@
 #include "AccelerationLUTGenerator.h"
 #include "HRDiagramLUTGenerator.h"
 #include "KerrGeodesicLUTGenerator.h"
-#include "Shader.h"
-#include "Image.h"
+#include "../Interface/Shader.h"
+#include "../Interface/Image.h"
 
 class GLTFMesh;
 class Scene;

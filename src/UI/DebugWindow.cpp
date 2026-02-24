@@ -7,7 +7,7 @@
 #include "UI.h"
 #include "../Application/Application.h"
 #include "../Application/Parameters.h"
-#include "../Renderer/PhysicsDebugRenderer.h"
+#include "../Renderer/Modules/PhysicsDebugRenderer.h"
 #include "imgui.h"
 
 #ifndef _DEBUG

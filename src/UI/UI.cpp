@@ -12,7 +12,7 @@
 #include "AnimationGraphWindow.h"
 #include "GeneralRelativityWindow.h"
 #include <nfd.h>
-#include "../Renderer/ExportRenderer.h"
+#include "../Renderer/Modules/ExportRenderer.h"
 
 
 

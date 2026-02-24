@@ -1,6 +1,6 @@
 #pragma once
-#include "Shader.h"
-#include "Buffer.h"
+#include "../Interface/Shader.h"
+#include "../Interface/Buffer.h"
 
 class Scene;
 class Camera;

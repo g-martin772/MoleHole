@@ -1,6 +1,6 @@
 #include "PhysicsDebugRenderer.h"
-#include "Shader.h"
-#include "Camera.h"
+#include "Renderer/Interface/Shader.h"
+#include "Renderer/Interface/Camera.h"
 #include <glad/gl.h>
 
 void PhysicsDebugRenderer::Init() {

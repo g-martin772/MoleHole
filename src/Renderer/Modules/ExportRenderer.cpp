@@ -1,7 +1,7 @@
 #include "ExportRenderer.h"
 #include <glad/gl.h>
 #include "Simulation/Scene.h"
-#include "Camera.h"
+#include "../Interface/Camera.h"
 #include "Application/Application.h"
 #include "Application/Parameters.h"
 #include <stb_image_write.h>

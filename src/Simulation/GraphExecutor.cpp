@@ -1,5 +1,5 @@
 #include "GraphExecutor.h"
-#include "Renderer/Camera.h"
+#include "../Renderer/Interface/Camera.h"
 
 GraphExecutor::GraphExecutor(AnimationGraph* graph, Scene* scene)
     : m_pGraph(graph), m_pScene(scene) {

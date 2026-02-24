@@ -58,7 +58,7 @@ endif()
 set(PX_COPY_EXTERNAL_DLL OFF CACHE BOOL "Copy external DLLs" FORCE)
 
 if(NOT MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=mismatched-new-delete -Wno-error=restrict -Wno-error=class-memaccess")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=mismatched-new-delete -Wno-error=restrict -Wno-error=class-memaccess -Wno-cpp")
     include(CheckCXXCompilerFlag)
     check_cxx_compiler_flag("-Wno-error=template-id-cdtor" COMPILER_SUPPORTS_TEMPLATE_ID_CDTOR)
     if(COMPILER_SUPPORTS_TEMPLATE_ID_CDTOR)
@@ -89,6 +89,9 @@ file(GLOB SOURCES
         src/Application/*.cpp
         src/Simulation/*.cpp
         src/Renderer/*.cpp
+        src/Renderer/Interface/*.cpp
+        src/Renderer/Models/*.cpp
+        src/Renderer/Modules/*.cpp
         src/UI/*.cpp)
 
 if(WIN32)

@@ -1,5 +1,5 @@
 #include "GLTFMesh.h"
-#include "Shader.h"
+#include "Renderer/Interface/Shader.h"
 #include <glad/gl.h>
 #include <tiny_gltf.h>
 #include <Application/Profiler.h>

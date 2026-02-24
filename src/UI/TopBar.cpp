@@ -8,7 +8,7 @@
 #include "../Application/Parameters.h"
 #include "../Simulation/Scene.h"
 #include "../Renderer/Renderer.h"
-#include "../Renderer/Screenshot.h"
+#include "../Renderer/Modules/Screenshot.h"
 #include <nfd.h>
 
 namespace TopBar {

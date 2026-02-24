@@ -1,23 +1,14 @@
 #pragma once
-#include "Shader.h"
-#include "BlackHoleRenderer.h"
-#include "GLTFMesh.h"
+#include "Interface/Shader.h"
+#include "Modules/BlackHoleRenderer.h"
+#include "Models/GLTFMesh.h"
 #include "Application/Window.h"
-#include "Image.h"
-#include "Camera.h"
-#include "Input.h"
-#include "GravityGridRenderer.h"
-#include "ObjectPathsRenderer.h"
-#include "PhysicsDebugRenderer.h"
-
-enum class RenderAPI
-{
-    None = 0,
-    OpenGL = 1,
-    DirectX = 2,
-    Vulkan = 3
-};
-
+#include "Interface/Image.h"
+#include "Interface/Camera.h"
+#include "Interface/Input.h"
+#include "Modules/GravityGridRenderer.h"
+#include "Modules/ObjectPathsRenderer.h"
+#include "Modules/PhysicsDebugRenderer.h"
 
 class Renderer {
 public:
@@ -51,8 +42,8 @@ public:
     ViewportMode GetSelectedViewport() const { return selectedViewport; }
     void SetSelectedViewport(ViewportMode mode) { selectedViewport = mode; }
 
-    GravityGridRenderer* GetGravityGridRenderer() const { return gravityGridRenderer.get(); }
-    ObjectPathsRenderer* GetObjectPathsRenderer() const { return objectPathsRenderer.get(); }
+    GravityGridRenderer* GetGravityGridRenderer() const { return m_GravityGridRenderer.get(); }
+    ObjectPathsRenderer* GetObjectPathsRenderer() const { return m_ObjectPathsRenderer.get(); }
     PhysicsDebugRenderer* GetPhysicsDebugRenderer() const { return m_physicsDebugRenderer.get(); }
 
     void SetPhysicsDebugEnabled(bool enabled);
@@ -101,7 +92,7 @@ private:
     unsigned int m_SphereEBO = 0;
     int m_SphereIndexCount = 0;
 
-    std::unique_ptr<GravityGridRenderer> gravityGridRenderer;
-    std::unique_ptr<ObjectPathsRenderer> objectPathsRenderer;
+    std::unique_ptr<GravityGridRenderer> m_GravityGridRenderer;
+    std::unique_ptr<ObjectPathsRenderer> m_ObjectPathsRenderer;
     std::unique_ptr<PhysicsDebugRenderer> m_physicsDebugRenderer;
 };

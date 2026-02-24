@@ -1,6 +1,6 @@
 #include "IntroAnimation.h"
 #include <glad/gl.h>
-#include "Renderer/Shader.h"
+#include "../Renderer/Interface/Shader.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
