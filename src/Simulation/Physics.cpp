@@ -623,3 +623,32 @@ void Physics::SetVisualizationScale(float scale) {
     }
 }
 
+void Physics::ApplyDebugVisualizationFlags(uint32_t flags, float scale) {
+    SetVisualizationScale(scale);
+
+    static constexpr PxVisualizationParameter::Enum k_FlagMap[] = {
+        PxVisualizationParameter::eWORLD_AXES,
+        PxVisualizationParameter::eBODY_AXES,
+        PxVisualizationParameter::eBODY_MASS_AXES,
+        PxVisualizationParameter::eBODY_LIN_VELOCITY,
+        PxVisualizationParameter::eBODY_ANG_VELOCITY,
+        PxVisualizationParameter::eCONTACT_POINT,
+        PxVisualizationParameter::eCONTACT_NORMAL,
+        PxVisualizationParameter::eCONTACT_ERROR,
+        PxVisualizationParameter::eCONTACT_FORCE,
+        PxVisualizationParameter::eACTOR_AXES,
+        PxVisualizationParameter::eCOLLISION_AABBS,
+        PxVisualizationParameter::eCOLLISION_SHAPES,
+        PxVisualizationParameter::eCOLLISION_AXES,
+        PxVisualizationParameter::eCOLLISION_COMPOUNDS,
+        PxVisualizationParameter::eCOLLISION_FNORMALS,
+        PxVisualizationParameter::eCOLLISION_EDGES,
+        PxVisualizationParameter::eCOLLISION_STATIC,
+        PxVisualizationParameter::eCOLLISION_DYNAMIC,
+    };
+
+    for (uint32_t i = 0; i < std::size(k_FlagMap); ++i) {
+        SetVisualizationParameter(k_FlagMap[i], (flags & (1u << i)) ? 1.0f : 0.0f);
+    }
+}
+

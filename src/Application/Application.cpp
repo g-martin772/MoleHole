@@ -1,15 +1,6 @@
 #include "Application.h"
-#include <GLFW/glfw3.h>
 #include "../Platform/Linux/LinuxGtkInit.h"
 #include "Parameters.h"
-#include "Renderer/PhysicsDebugRenderer.h"
-
-#ifndef _DEBUG
-#define _DEBUG
-#endif
-#include <PxPhysicsAPI.h>
-
-using namespace physx;
 
 Application& Application::Instance() {
     static Application instance;
@@ -75,7 +66,9 @@ bool Application::Initialize() {
         }
 
         m_initialized = true;
-        m_lastFrameTime = glfwGetTime();
+        if (auto* window = m_renderer.GetWindowAbstraction()) {
+            m_lastFrameTime = window->GetTime();
+        }
 
         spdlog::info("Application initialized successfully");
         return true;
@@ -95,7 +88,8 @@ void Application::Run() {
     spdlog::info("Starting main application loop");
 
     while (!ShouldClose() && m_running) {
-        double currentTime = glfwGetTime();
+        auto* window = m_renderer.GetWindowAbstraction();
+        double currentTime = window ? window->GetTime() : 0.0;
         m_deltaTime = static_cast<float>(currentTime - m_lastFrameTime);
         m_lastFrameTime = currentTime;
         m_totalTime += m_deltaTime;
@@ -168,14 +162,20 @@ void Application::RunHeadless() {
 
     // Main export loop
     m_running = true;
-    m_lastFrameTime = glfwGetTime();
+    {
+        auto* window = m_renderer.GetWindowAbstraction();
+        m_lastFrameTime = window ? window->GetTime() : 0.0;
+    }
 
     while (m_running && m_exportRenderer.IsExporting()) {
-        double currentTime = glfwGetTime();
+        auto* window = m_renderer.GetWindowAbstraction();
+        double currentTime = window ? window->GetTime() : 0.0;
         m_deltaTime = static_cast<float>(currentTime - m_lastFrameTime);
         m_lastFrameTime = currentTime;
 
-        glfwPollEvents();
+        if (window) {
+            window->PollEvents();
+        }
 
         m_exportRenderer.Update();
 
@@ -307,8 +307,8 @@ bool Application::ShouldClose() const {
     return window ? window->ShouldClose() : true;
 }
 
-GLFWwindow* Application::GetWindow() const {
-    return m_renderer.GetNativeWindow();
+Window* Application::GetWindow() const {
+    return m_renderer.GetWindowAbstraction();
 }
 
 void Application::SetWindowTitle(const std::string& title) const {
@@ -417,34 +417,13 @@ void Application::InitializeSimulation() {
 
     auto* physics = m_simulation.GetPhysics();
     if (physics) {
-        physics->SetVisualizationScale(Application::Params().Get(Params::RenderingPhysicsDebugScale, 1.0f));
-
-        uint32_t flags = static_cast<uint32_t>(Application::Params().Get(Params::RenderingPhysicsDebugFlags, 0));
-        physics->SetVisualizationParameter(PxVisualizationParameter::eWORLD_AXES, (flags & (1 << 0)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eBODY_AXES, (flags & (1 << 1)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eBODY_MASS_AXES, (flags & (1 << 2)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eBODY_LIN_VELOCITY, (flags & (1 << 3)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eBODY_ANG_VELOCITY, (flags & (1 << 4)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eCONTACT_POINT, (flags & (1 << 5)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eCONTACT_NORMAL, (flags & (1 << 6)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eCONTACT_ERROR, (flags & (1 << 7)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eCONTACT_FORCE, (flags & (1 << 8)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eACTOR_AXES, (flags & (1 << 9)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_AABBS, (flags & (1 << 10)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_SHAPES, (flags & (1 << 11)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_AXES, (flags & (1 << 12)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_COMPOUNDS, (flags & (1 << 13)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_FNORMALS, (flags & (1 << 14)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_EDGES, (flags & (1 << 15)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_STATIC, (flags & (1 << 16)) ? 1.0f : 0.0f);
-        physics->SetVisualizationParameter(PxVisualizationParameter::eCOLLISION_DYNAMIC, (flags & (1 << 17)) ? 1.0f : 0.0f);
+        uint32_t flags = static_cast<uint32_t>(Params().Get(Params::RenderingPhysicsDebugFlags, 0));
+        float scale = Params().Get(Params::RenderingPhysicsDebugScale, 1.0f);
+        physics->ApplyDebugVisualizationFlags(flags, scale);
     }
 
-    auto* physicsDebugRenderer = m_renderer.GetPhysicsDebugRenderer();
-    if (physicsDebugRenderer) {
-        physicsDebugRenderer->SetEnabled(Application::Params().Get(Params::RenderingPhysicsDebugEnabled, false));
-        physicsDebugRenderer->SetDepthTestEnabled(Application::Params().Get(Params::RenderingPhysicsDebugDepthTest, true));
-    }
+    m_renderer.SetPhysicsDebugEnabled(Params().Get(Params::RenderingPhysicsDebugEnabled, false));
+    m_renderer.SetPhysicsDebugDepthTestEnabled(Params().Get(Params::RenderingPhysicsDebugDepthTest, true));
 }
 
 void Application::UpdateWindowState() {

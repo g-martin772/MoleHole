@@ -2,14 +2,13 @@
 #include "Shader.h"
 #include "BlackHoleRenderer.h"
 #include "GLTFMesh.h"
-#include "../Application/Window.h"
-
-#include "Simulation/Scene.h"
+#include "Application/Window.h"
 #include "Image.h"
 #include "Camera.h"
 #include "Input.h"
 #include "GravityGridRenderer.h"
 #include "ObjectPathsRenderer.h"
+#include "PhysicsDebugRenderer.h"
 
 enum class RenderAPI
 {
@@ -19,8 +18,6 @@ enum class RenderAPI
     Vulkan = 3
 };
 
-class PhysicsDebugRenderer;
-struct GLFWwindow;
 
 class Renderer {
 public:
@@ -49,8 +46,6 @@ public:
 
     void RenderToFramebuffer(unsigned int fbo, int width, int height, Scene* scene, Camera* cam);
 
-    GLFWwindow* GetWindow() const { return m_window ? m_window->GetNativeWindow() : nullptr; }
-    GLFWwindow* GetNativeWindow() const { return m_window ? m_window->GetNativeWindow() : nullptr; }
     Window* GetWindowAbstraction() const { return m_window; }
 
     ViewportMode GetSelectedViewport() const { return selectedViewport; }
@@ -59,6 +54,9 @@ public:
     GravityGridRenderer* GetGravityGridRenderer() const { return gravityGridRenderer.get(); }
     ObjectPathsRenderer* GetObjectPathsRenderer() const { return objectPathsRenderer.get(); }
     PhysicsDebugRenderer* GetPhysicsDebugRenderer() const { return m_physicsDebugRenderer.get(); }
+
+    void SetPhysicsDebugEnabled(bool enabled);
+    void SetPhysicsDebugDepthTestEnabled(bool enabled);
 
     Window* m_window = nullptr;
     int last_img_width = 800;

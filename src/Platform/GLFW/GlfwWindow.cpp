@@ -253,6 +253,10 @@ public:
         return reinterpret_cast<void*>(glfwGetProcAddress(name));
     }
 
+    double GetTime() const override {
+        return glfwGetTime();
+    }
+
 private:
     GLFWwindow* m_window;
     bool m_vsyncEnabled;

@@ -914,3 +914,16 @@ std::shared_ptr<GLTFMesh> Renderer::GetOrLoadMesh(const std::string& path) {
 
     return nullptr;
 }
+
+void Renderer::SetPhysicsDebugEnabled(bool enabled) {
+    if (m_physicsDebugRenderer) {
+        m_physicsDebugRenderer->SetEnabled(enabled);
+    }
+}
+
+void Renderer::SetPhysicsDebugDepthTestEnabled(bool enabled) {
+    if (m_physicsDebugRenderer) {
+        m_physicsDebugRenderer->SetDepthTestEnabled(enabled);
+    }
+}
+

@@ -39,6 +39,7 @@ public:
     void SetScene(Scene* scene);
     void Apply();
     void SetRenderer(Renderer* renderer) { m_Renderer = renderer; }
+    void ApplyDebugVisualizationFlags(uint32_t flags, float scale);
 
     void onConstraintBreak(PxConstraintInfo* constraints, PxU32 count) override {}
     void onWake(PxActor** actors, PxU32 count) override {}

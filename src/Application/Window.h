@@ -73,6 +73,7 @@ public:
 
     virtual GLFWwindow* GetNativeWindow() const = 0;
     virtual void* GetProcAddress(const char* name) const = 0;
+    virtual double GetTime() const = 0;
 };
 
 void TerminateWindowSystem();

@@ -1,15 +1,14 @@
 #pragma once
 
 #include "AppState.h"
-#include "../UI/UI.h"
+#include "UI/UI.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/ExportRenderer.h"
 #include "Simulation/Simulation.h"
 #include "FpsCounter.h"
-#include "../UI/IntroAnimation.h"
+#include "UI/IntroAnimation.h"
 #include "CommandLineArgs.h"
 
-struct GLFWwindow;
 
 class Application {
 public:
@@ -40,7 +39,7 @@ public:
     AppState& GetState() { return m_state; }
     const AppState& GetState() const { return m_state; }
 
-    GLFWwindow* GetWindow() const;
+    Window* GetWindow() const;
     void SetWindowTitle(const std::string& title) const;
     void RequestClose() const;
 
@@ -62,7 +61,7 @@ public:
 
     UI& GetUI() { return m_ui; };
     ExportRenderer& GetExportRenderer() { return m_exportRenderer; }
-    IntroAnimation* GetIntroAnimation() { return m_introAnimation.get(); }
+    IntroAnimation* GetIntroAnimation() const { return m_introAnimation.get(); }
 
 private:
     Application() = default;
