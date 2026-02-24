@@ -19,7 +19,8 @@ VulkanFence::VulkanFence(VulkanDevice *device, bool isSignaled) {
 }
 
 VulkanFence::~VulkanFence() {
-    m_Device->GetDevice().destroyFence(m_Fence);
+    if (m_Fence && m_Device)
+        m_Device->GetDevice().destroyFence(m_Fence);
 }
 
 void VulkanFence::Reset() const {
@@ -55,5 +56,6 @@ VulkanSemaphore::VulkanSemaphore(VulkanDevice *device) {
 }
 
 VulkanSemaphore::~VulkanSemaphore() {
-    m_Device->GetDevice().destroySemaphore(m_Semaphore);
+    if (m_Semaphore && m_Device)
+        m_Device->GetDevice().destroySemaphore(m_Semaphore);
 }

@@ -20,9 +20,13 @@ void VulkanSwapChain::AcquireNextImage(vk::Semaphore semaphore, vk::Fence fence,
             acquireNextImageKHR(m_SwapChain, timeout, semaphore, fence, &m_CurrentFrame);
 
     if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR)
-        Update(m_Size); // TODO: Get current framebuffer size!
+        Update(m_Size);
     else if (result != vk::Result::eSuccess)
         spdlog::error("Failed to acquire next image from vulkan swapchain: {}", vk::to_string(result));
+}
+
+void VulkanSwapChain::AdvanceSemaphoreIndex() {
+    m_SemaphoreIndex = (m_SemaphoreIndex + 1) % static_cast<uint32_t>(m_Images.size());
 }
 
 void VulkanSwapChain::Present(vk::Queue graphicsQueue, vk::Queue presentQueue, vk::Semaphore waitSemaphore) {
@@ -110,6 +114,7 @@ void VulkanSwapChain::CreateSwapChain() {
     spdlog::trace("Created vulkan swapchain: succesful");
 
     m_CurrentFrame = 0;
+    m_SemaphoreIndex = 0;
     m_Images = m_Device->GetDevice().getSwapchainImagesKHR(m_SwapChain);
     m_Views.clear();
     for (const auto &image: m_Images) {

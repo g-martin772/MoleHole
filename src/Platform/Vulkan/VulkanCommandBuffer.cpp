@@ -33,7 +33,7 @@ void VulkanCommandBuffer::End() const {
     }
 }
 
-void VulkanCommandBuffer::Submit(const vk::Queue target) // TODO: Add sync objects
+void VulkanCommandBuffer::Submit(vk::Queue target)
 {
     vk::SubmitInfo submitInfo;
     submitInfo.commandBufferCount = 1;
@@ -53,6 +53,32 @@ void VulkanCommandBuffer::Submit(const vk::Queue target) // TODO: Add sync objec
     if (m_IsSingleUse) {
         target.waitIdle();
         Free();
+    }
+}
+
+void VulkanCommandBuffer::Submit(vk::Queue target,
+                                 vk::Semaphore waitSemaphore,
+                                 vk::Semaphore signalSemaphore,
+                                 vk::Fence fence,
+                                 vk::PipelineStageFlags waitStage)
+{
+    vk::SubmitInfo submitInfo;
+    submitInfo.waitSemaphoreCount   = 1;
+    submitInfo.pWaitSemaphores      = &waitSemaphore;
+    submitInfo.pWaitDstStageMask    = &waitStage;
+    submitInfo.commandBufferCount   = 1;
+    submitInfo.pCommandBuffers      = &m_CommandBuffer;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores    = &signalSemaphore;
+
+    try {
+        vk::Result result = target.submit(1, &submitInfo, fence);
+        if (result != vk::Result::eSuccess) {
+            spdlog::error("Failed to submit vulkan command buffer: {}", vk::to_string(result));
+            return;
+        }
+    } catch (const vk::SystemError &err) {
+        spdlog::error("Failed to submit vulkan command buffer: {}", err.what());
     }
 }
 

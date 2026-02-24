@@ -45,7 +45,7 @@ public:
             return false;
         }
 
-        glfwMakeContextCurrent(m_window);
+        // glfwMakeContextCurrent(m_window);
 
         SetVSync(props.vsync);
 
@@ -110,7 +110,7 @@ public:
 
     void MakeContextCurrent() override {
         if (m_window) {
-            glfwMakeContextCurrent(m_window);
+            //glfwMakeContextCurrent(m_window);
         }
     }
 
@@ -204,7 +204,7 @@ public:
 
     void SetVSync(bool enabled) override {
         m_vsyncEnabled = enabled;
-        glfwSwapInterval(enabled ? 1 : 0);
+        // glfwSwapInterval(enabled ? 1 : 0); TODO Vulkan
     }
 
     void Show() override {

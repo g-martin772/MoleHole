@@ -14,6 +14,7 @@ public:
     void AcquireNextImage(vk::Semaphore semaphore, vk::Fence fence, uint64_t timeout = UINT64_MAX);
     void Present(vk::Queue graphicsQueue, vk::Queue presentQueue, vk::Semaphore waitSemaphore);
     void Update(glm::vec2 size);
+    void AdvanceSemaphoreIndex();
 
     std::vector<vk::Image> GetImages() const { return m_Images; }
     std::vector<vk::ImageView> GetImageViews() const { return m_Views; }
@@ -25,6 +26,7 @@ public:
 
     uint32_t GetImageCount() const { return m_Images.size(); }
     uint32_t GetCurrentImageIndex() const { return m_CurrentFrame; }
+    uint32_t GetSemaphoreIndex() const { return m_SemaphoreIndex; }
 
     vk::SwapchainKHR GetSwapChain() const { return m_SwapChain; }
 private:
@@ -33,7 +35,7 @@ private:
 private:
     glm::vec2 m_Size = {0.0f, 0.0f};
     vk::Extent2D m_Extent = {0, 0};
-    uint32_t m_FramesInFlight = 3, m_CurrentFrame = 0;
+    uint32_t m_FramesInFlight = 3, m_CurrentFrame = 0, m_SemaphoreIndex = 0;
     std::vector<vk::Image> m_Images;
     std::vector<vk::ImageView> m_Views;
     VulkanDevice *m_Device = nullptr;

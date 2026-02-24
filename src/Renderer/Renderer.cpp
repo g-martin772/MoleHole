@@ -69,21 +69,23 @@ void Renderer::Init(bool headless) {
 
     RenderCommand::Init();
 
+    input = std::make_unique<Input>(m_window->GetNativeWindow());
+
     // ------
 
-    g_gladWindow = m_window;
-    int version = gladLoadGL(GladGetProcAddress);
-    g_gladWindow = nullptr;
+    // g_gladWindow = m_window;
+    // int version = gladLoadGL(GladGetProcAddress);
+    // g_gladWindow = nullptr;
+    //
+    // if (version == 0) {
+    //     spdlog::error("Failed to initialize GLAD");
+    //     exit(-1);
+    // }
 
-    if (version == 0) {
-        spdlog::error("Failed to initialize GLAD");
-        exit(-1);
-    }
-
-    spdlog::info("Loaded OpenGL {0}.{1}", GLAD_VERSION_MAJOR(version), GLAD_VERSION_MINOR(version));
-    spdlog::info("OpenGL Device: {0}", (const char *) glGetString(GL_RENDERER));
-    spdlog::info("OpenGL Vendor: {0}", (const char *) glGetString(GL_VENDOR));
-    spdlog::info("OpenGL Version: {}", (const char *) glGetString(GL_VERSION));
+    // spdlog::info("Loaded OpenGL {0}.{1}", GLAD_VERSION_MAJOR(version), GLAD_VERSION_MINOR(version));
+    // spdlog::info("OpenGL Device: {0}", (const char *) glGetString(GL_RENDERER));
+    // spdlog::info("OpenGL Vendor: {0}", (const char *) glGetString(GL_VENDOR));
+    // spdlog::info("OpenGL Version: {}", (const char *) glGetString(GL_VERSION));
 
 // #ifndef _WIN32
 //     const char* dri_prime = std::getenv("DRI_PRIME");
@@ -97,16 +99,8 @@ void Renderer::Init(bool headless) {
 
 
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    (void) io;
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(m_window->GetNativeWindow(), true);
-    ImGui_ImplOpenGL3_Init("#version 460");
 
-    image = std::make_shared<Image>(last_img_width, last_img_height);
+    /*image = std::make_shared<Image>(last_img_width, last_img_height);
 
     spdlog::info("Loading shaders");
     quadShader = std::make_unique<Shader>("../shaders/quad.vert", "../shaders/quad.frag");
@@ -124,7 +118,6 @@ void Renderer::Init(bool headless) {
     camera->SetPosition(Application::Params().Get(Params::CameraPosition, glm::vec3(0.0f, 0.0f, 10.0f)));
     camera->SetYawPitch(Application::Params().Get(Params::CameraYaw, -90.0f), Application::Params().Get(Params::CameraPitch, 0.0f));
 
-    input = std::make_unique<Input>(m_window->GetNativeWindow());
 
     m_GravityGridRenderer = std::make_unique<GravityGridRenderer>();
     m_GravityGridRenderer->Init();
@@ -135,14 +128,10 @@ void Renderer::Init(bool headless) {
     m_physicsDebugRenderer = std::make_unique<PhysicsDebugRenderer>();
     m_physicsDebugRenderer->Init();
 
-    InitSphereGeometry();
+    InitSphereGeometry();*/
 }
 
 void Renderer::Shutdown() {
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
-
     RenderCommand::Shutdown();
 
     if (m_window) {
@@ -154,31 +143,31 @@ void Renderer::Shutdown() {
 }
 
 void Renderer::BeginFrame() {
-    int vsyncVal = Application::Params().Get(Params::WindowVSync, true) ? 1 : 0;
-    if (vsyncVal != lastVsync) {
-        m_window->SetVSync(vsyncVal == 1);
-        lastVsync = vsyncVal;
-    }
+    // int vsyncVal = Application::Params().Get(Params::WindowVSync, true) ? 1 : 0;
+    // if (vsyncVal != lastVsync) {
+    //     m_window->SetVSync(vsyncVal == 1);
+    //     lastVsync = vsyncVal;
+    // }
     m_window->PollEvents();
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
+    RenderCommand::BeginFrame();
     ImGuizmo::BeginFrame();
 }
 
 void Renderer::EndFrame(bool clearScreen) {
-    int display_w, display_h;
-    m_window->GetFramebufferSize(display_w, display_h);
-    glViewport(0, 0, display_w, display_h);
+    // int display_w, display_h;
+    // m_window->GetFramebufferSize(display_w, display_h);
+    // glViewport(0, 0, display_w, display_h);
+    //
+    // if (clearScreen) {
+    //     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    //     glClear(GL_COLOR_BUFFER_BIT);
+    // }
+    //
+    // ImGui::Render();
+    // ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    // m_window->SwapBuffers();
 
-    if (clearScreen) {
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
-
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    m_window->SwapBuffers();
+    RenderCommand::EndFrame();
 }
 
 void Renderer::RenderScene(Scene *scene) {
@@ -217,7 +206,7 @@ void Renderer::RenderScene(Scene *scene) {
     int img_width = std::max(1, static_cast<int>(imgui_size.x));
     int img_height = std::max(1, static_cast<int>(imgui_size.y));
 
-    if (img_width != last_img_width || img_height != last_img_height) {
+    /*if (img_width != last_img_width || img_height != last_img_height) {
         image = std::make_shared<Image>(img_width, img_height);
         last_img_width = img_width;
         last_img_height = img_height;
@@ -228,7 +217,7 @@ void Renderer::RenderScene(Scene *scene) {
         if (blackHoleRenderer) {
             blackHoleRenderer->Resize(img_width, img_height);
         }
-    }
+    }*/
 
     bool viewport_focused = ImGui::IsWindowFocused();
     bool viewport_hovered = ImGui::IsWindowHovered();
@@ -251,7 +240,7 @@ void Renderer::RenderScene(Scene *scene) {
         input->SetCursorEnabled(true);
     }
 
-    unsigned int fbo;
+    /*unsigned int fbo;
     glGenFramebuffers(1, &fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, image->textureID, 0);
@@ -266,7 +255,7 @@ void Renderer::RenderScene(Scene *scene) {
         spdlog::error("Framebuffer is not complete!");
     }
 
-    glViewport(0, 0, image->width, image->height);
+    glViewport(0, 0, image->width, image->height);*/
 
     switch (selectedViewport) {
         case ViewportMode::Demo1:
@@ -280,14 +269,14 @@ void Renderer::RenderScene(Scene *scene) {
             break;
     }
 
-    glDeleteRenderbuffers(1, &depthRBO);
-    glDeleteFramebuffers(1, &fbo);
+    // glDeleteRenderbuffers(1, &depthRBO);
+    // glDeleteFramebuffers(1, &fbo);
 
     ImVec2 cursor_pos = ImGui::GetCursorScreenPos();
 
-    ImGui::Image((void *)(intptr_t)image->textureID,
-                 ImVec2((float)image->width, (float)image->height),
-                 ImVec2(0, 1), ImVec2(1, 0));
+    // ImGui::Image((void *)(intptr_t)image->textureID,
+    //              ImVec2((float)image->width, (float)image->height),
+    //              ImVec2(0, 1), ImVec2(1, 0));
 
     bool image_hovered = ImGui::IsItemHovered();
     bool image_active = ImGui::IsItemActive();
@@ -497,7 +486,7 @@ void Renderer::Render2DRays(Scene *scene) {
 }
 
 void Renderer::Render3DSimulation(Scene *scene) {
-    glEnable(GL_DEPTH_TEST);
+    /*glEnable(GL_DEPTH_TEST);
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     if (!scene || !blackHoleRenderer) return;
@@ -553,7 +542,7 @@ void Renderer::Render3DSimulation(Scene *scene) {
     RenderMeshes(scene);
     //RenderSpheres(scene);
 
-    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_DEPTH_TEST);*/
 }
 
 void Renderer::UpdateCamera(float deltaTime) {

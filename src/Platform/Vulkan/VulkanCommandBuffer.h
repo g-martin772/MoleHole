@@ -12,6 +12,11 @@ public:
     void Begin() const;
     void End() const;
     void Submit(vk::Queue target);
+    void Submit(vk::Queue target,
+                vk::Semaphore waitSemaphore,
+                vk::Semaphore signalSemaphore,
+                vk::Fence fence,
+                vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput);
     void Free();
 
     vk::CommandBuffer GetCommandBuffer() const { return m_CommandBuffer; }

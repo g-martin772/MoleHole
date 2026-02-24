@@ -28,6 +28,7 @@ private:
     VulkanInstance m_Instance;
     VulkanDevice m_Device;
     vk::SurfaceKHR m_Surface;
+    vk::DescriptorPool m_ImGuiDescriptorPool;
     VulkanRenderPass m_MainRenderPass;
     VulkanSwapChain m_SwapChain;
     VulkanCommandPool m_GraphicsCommandPool;
