@@ -169,7 +169,7 @@ void Render(UI* ui, bool* showSettingsWindow) {
 
                             if (result == NFD_OKAY && outPath) {
                                 std::filesystem::path sourcePath(outPath);
-                                std::filesystem::path destPath = "../font/" + sourcePath.filename().string();
+                                std::filesystem::path destPath = "../assets/font/" + sourcePath.filename().string();
 
                                 try {
                                     std::filesystem::copy_file(sourcePath, destPath,

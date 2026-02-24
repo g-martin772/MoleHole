@@ -251,7 +251,7 @@ void UI::Style() {
     
     // Load all available fonts into the atlas
     for (const auto& fontFile : availableFonts) {
-        std::string fontPath = "../font/" + fontFile;
+        std::string fontPath = "../assets/font/" + fontFile;
         ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), fontSize);
         if (font) {
             m_loadedFonts[fontFile] = font;
@@ -290,7 +290,7 @@ void UI::Style() {
     //icons_config.PixelSnapH = true;
     //icons_config.GlyphMinAdvanceX = 24.0f;
     
-    m_iconFont = io.Fonts->AddFontFromFileTTF("../font/fa-solid-900.ttf", 24.0f, &icons_config, icons_ranges);
+    m_iconFont = io.Fonts->AddFontFromFileTTF("../assets/font/fa-solid-900.ttf", 24.0f, &icons_config, icons_ranges);
     if (m_iconFont) {
         spdlog::info("Font Awesome icon font loaded successfully");
     } else {

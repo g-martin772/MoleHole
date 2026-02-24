@@ -1,0 +1,35 @@
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+endif()
+
+if(POLICY CMP0153)
+    cmake_policy(SET CMP0153 OLD)
+endif()
+set(CMAKE_POLICY_DEFAULT_CMP0153 OLD)
+
+if(MSVC)
+    set(CMAKE_POLICY_DEFAULT_CMP0091 NEW)
+    set(USE_MSVC_RUNTIME_LIBRARY_DLL OFF CACHE BOOL "" FORCE)
+    foreach(flag_var
+            CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
+            CMAKE_C_FLAGS_MINSIZEREL CMAKE_C_FLAGS_RELWITHDEBINFO)
+        string(REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
+    endforeach()
+    set(NV_USE_STATIC_WINCRT ON CACHE BOOL "Use static CRT")
+    set(NV_USE_DEBUG_WINCRT ON CACHE BOOL "Use debug CRT")
+    set(PX_FLOAT_POINT_PRECISE_MATH OFF CACHE BOOL "Precise math")
+    set(PX_WARNINGS_AS_ERRORS OFF CACHE BOOL "Treat warnings as errors")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3" CACHE STRING "CXX flags" FORCE)
+endif()
+
+if(NOT MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=mismatched-new-delete -Wno-error=restrict -Wno-error=class-memaccess -Wno-cpp")
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-Wno-error=template-id-cdtor" COMPILER_SUPPORTS_TEMPLATE_ID_CDTOR)
+    if(COMPILER_SUPPORTS_TEMPLATE_ID_CDTOR)
+        add_compile_options(-Wno-error=template-id-cdtor)
+    endif()
+endif()
+
