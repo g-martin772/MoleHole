@@ -75,7 +75,7 @@ bool VulkanApi::BeginFrame() {
                                  m_InFlightFences[frameIndex].GetFence());
     Ref<VulkanCommandBuffer> commandBuffer = m_RenderCommandBuffers[frameIndex];
     commandBuffer->Begin();
-    m_MainRenderPass.Begin(m_MainFrameBuffer.GetFrameBuffer(frameIndex), Application::Current()->GetWindow()->GetSize(),
+    m_MainRenderPass.Begin(m_MainFrameBuffer.GetFrameBuffer(frameIndex), Application::Instance().GetWindow()->GetSize(),
                            commandBuffer->GetCommandBuffer());
 
     return true;

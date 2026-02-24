@@ -1,7 +1,7 @@
 #include "VulkanFramebuffer.h"
 
 #include "VulkanRenderPass.h"
-#include "VulkanSwapChain.h"
+#include "VulkanSwapchain.h"
 #include "VulkanDevice.h"
 #include <spdlog/spdlog.h>
 
@@ -28,7 +28,7 @@ void VulkanFrameBuffer::Create(VulkanDevice *device, glm::vec2 size, std::vector
             spdlog::error("Failed to create vulkan frame buffer: {}", err.what());
             return;
         }
-        spdlog::trace("Created vulkan frame buffer: succesful");
+        spdlog::trace("Created vulkan frame buffer: successful");
     }
 }
 
@@ -56,7 +56,7 @@ void VulkanFrameBuffer::CreateFromSwapchain(VulkanDevice *device, VulkanSwapChai
             spdlog::error("Failed to create vulkan frame buffer: {}", err.what());
             return;
         }
-        spdlog::trace("Created vulkan frame buffer: succesful");
+        spdlog::trace("Created vulkan frame buffer: successful");
     }
 }
 

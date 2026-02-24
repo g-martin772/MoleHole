@@ -75,6 +75,8 @@ PACMAN_PACKAGES = [
     # curl
     "curl",
     "xz",
+    # Vulkan
+    "vulkan-validation-layers",
 ]
 
 DNF_PACKAGES = [

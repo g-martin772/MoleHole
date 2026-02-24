@@ -10,7 +10,6 @@
 #include "VulkanRenderPass.h"
 #include "VulkanSwapchain.h"
 #include "VulkanSyncObjects.h"
-#include "Renderer/Renderer.h"
 
 class VulkanApi {
 public:

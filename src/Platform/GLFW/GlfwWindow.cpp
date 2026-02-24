@@ -23,12 +23,14 @@ public:
             });
         }
 
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, props.contextVersionMajor);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, props.contextVersionMinor);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, props.coreProfile ? GLFW_OPENGL_CORE_PROFILE : GLFW_OPENGL_COMPAT_PROFILE);
+        // glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, props.contextVersionMajor);
+        // glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, props.contextVersionMinor);
+        // glfwWindowHint(GLFW_OPENGL_PROFILE, props.coreProfile ? GLFW_OPENGL_CORE_PROFILE : GLFW_OPENGL_COMPAT_PROFILE);
         glfwWindowHint(GLFW_VISIBLE, props.visible ? GLFW_TRUE : GLFW_FALSE);
         glfwWindowHint(GLFW_RESIZABLE, props.resizable ? GLFW_TRUE : GLFW_FALSE);
         glfwWindowHint(GLFW_DECORATED, props.decorated ? GLFW_TRUE : GLFW_FALSE);
+
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
         m_window = glfwCreateWindow(
             static_cast<int>(props.width),
@@ -270,6 +272,12 @@ private:
 
     static inline bool s_glfwInitialized = false;
 };
+
+glm::ivec2 Window::GetSize() const {
+    glm::ivec2 size;
+    GetFramebufferSize(size.x, size.y);
+    return size;
+}
 
 Window* Window::Create(const WindowProperties& props) {
     auto* window = new GLFWWindow();

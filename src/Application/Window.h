@@ -27,6 +27,8 @@ public:
     Window() = default;
     virtual ~Window() = default;
 
+    glm::ivec2 GetSize() const;
+
     Window(const Window&) = delete;
     Window& operator=(const Window&) = delete;
     Window(Window&&) = delete;

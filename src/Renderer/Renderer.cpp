@@ -5,6 +5,7 @@
 #include "ImGuizmo.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include "RenderCommand.h"
 #include "Interface/Shader.h"
 #include "Interface/Camera.h"
 #include "Interface/Input.h"
@@ -65,6 +66,10 @@ void Renderer::Init(bool headless) {
         spdlog::error("Failed to create window");
         exit(-1);
     }
+
+    RenderCommand::Init();
+
+    // ------
 
     g_gladWindow = m_window;
     int version = gladLoadGL(GladGetProcAddress);
@@ -137,6 +142,8 @@ void Renderer::Shutdown() {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+
+    RenderCommand::Shutdown();
 
     if (m_window) {
         delete m_window;
