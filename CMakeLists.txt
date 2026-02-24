@@ -45,7 +45,17 @@ target_compile_definitions(MoleHole PRIVATE
     $<$<CONFIG:MinSizeRel>:NDEBUG>
 )
 
+# ── Dependencies ──────────────────────────────────────────────────────────────
+
 include(scripts/vulkan.cmake)
 include(scripts/dependencies.cmake)
 include(scripts/platform.cmake)
 include(scripts/ffmpeg.cmake)
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
+
+option(MOLEHOLE_BUILD_TESTS "Build unit tests and benchmarks" OFF)
+if(MOLEHOLE_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

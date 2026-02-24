@@ -37,3 +37,6 @@
 	url = https://github.com/g-martin772/PhysX5
 	branch = mai
 	n
+[submodule "dependencies/catch2"]
+	path = dependencies/catch2
+	url = https://github.com/catchorg/Catch2.git
