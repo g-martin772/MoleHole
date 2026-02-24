@@ -32,7 +32,8 @@ void VulkanApi::Init() {
     m_GraphicsCommandPool.Init(&m_Device, m_Device.GetQueueIndices().Graphics);
     m_MainCommandBuffer = m_GraphicsCommandPool.AllocateCommandBuffer();
 
-    glm::vec2 size = Application::Current()->GetWindow()->GetSize();
+    glm::ivec2 size;
+    Application::Instance().GetWindow()->GetFramebufferSize(size.x, size.y);
     m_SwapChain.Init(&m_Device, size, 3);
 
     m_MainRenderPass.Init(&m_Device, &m_SwapChain, glm::vec4(0.0f, 0.0f, size.x, size.y), {1.0f, 0.0f, 0.0f, 1.0f});
@@ -72,7 +73,7 @@ bool VulkanApi::BeginFrame() {
 
     m_SwapChain.AcquireNextImage(m_ImageAvailableSemaphores[frameIndex].GetSemaphore(),
                                  m_InFlightFences[frameIndex].GetFence());
-    Shared<VulkanCommandBuffer> commandBuffer = m_RenderCommandBuffers[frameIndex];
+    Ref<VulkanCommandBuffer> commandBuffer = m_RenderCommandBuffers[frameIndex];
     commandBuffer->Begin();
     m_MainRenderPass.Begin(m_MainFrameBuffer.GetFrameBuffer(frameIndex), Application::Current()->GetWindow()->GetSize(),
                            commandBuffer->GetCommandBuffer());
@@ -82,7 +83,7 @@ bool VulkanApi::BeginFrame() {
 
 void VulkanApi::EndFrame() {
     const uint32_t frameIndex = m_SwapChain.GetCurrentImageIndex();
-    Shared<VulkanCommandBuffer> commandBuffer = m_RenderCommandBuffers[frameIndex];
+    Ref<VulkanCommandBuffer> commandBuffer = m_RenderCommandBuffers[frameIndex];
 
 
     m_MainRenderPass.End(commandBuffer->GetCommandBuffer());
