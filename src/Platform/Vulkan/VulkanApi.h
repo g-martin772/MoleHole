@@ -21,6 +21,7 @@ public:
 
     void OnResize(glm::vec2 newSize);
     void SetClearColor(glm::vec4 color);
+    void SetVSync(bool enabled);
 
     VulkanInstance GetInstance() const { return m_Instance; }
     VulkanDevice GetDevice() const { return m_Device; }

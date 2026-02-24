@@ -144,7 +144,17 @@ void VulkanApi::EndFrame() {
 }
 
 void VulkanApi::OnResize(glm::vec2 newSize) {
+    m_Device.WaitIdle();
+    m_SwapChain.Update(newSize);
+    m_MainFrameBuffer.Rebuild();
 }
 
 void VulkanApi::SetClearColor(glm::vec4 color) {
 }
+
+void VulkanApi::SetVSync(bool enabled) {
+    m_Device.WaitIdle();
+    m_SwapChain.SetVSync(enabled);
+    m_MainFrameBuffer.Rebuild();
+}
+

@@ -143,11 +143,11 @@ void Renderer::Shutdown() {
 }
 
 void Renderer::BeginFrame() {
-    // int vsyncVal = Application::Params().Get(Params::WindowVSync, true) ? 1 : 0;
-    // if (vsyncVal != lastVsync) {
-    //     m_window->SetVSync(vsyncVal == 1);
-    //     lastVsync = vsyncVal;
-    // }
+    const bool vsync = Application::Params().Get(Params::WindowVSync, true);
+    if (vsync != m_vsync) {
+        m_vsync = vsync;
+        RenderCommand::SetVSync(vsync);
+    }
     m_window->PollEvents();
     RenderCommand::BeginFrame();
     ImGuizmo::BeginFrame();

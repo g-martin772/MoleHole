@@ -36,6 +36,7 @@ void VulkanFrameBuffer::CreateFromSwapchain(VulkanDevice *device, VulkanSwapChai
                                             VulkanRenderPass *renderPass) {
     m_RenderPass = renderPass;
     m_Device = device;
+    m_SwapChain = swapChain;
 
     const auto imageViews = swapChain->GetImageViews();
 
@@ -60,7 +61,14 @@ void VulkanFrameBuffer::CreateFromSwapchain(VulkanDevice *device, VulkanSwapChai
     }
 }
 
+void VulkanFrameBuffer::Rebuild() {
+    Destroy();
+    if (m_SwapChain)
+        CreateFromSwapchain(m_Device, m_SwapChain, m_RenderPass);
+}
+
 void VulkanFrameBuffer::Destroy() {
     for (vk::Framebuffer framebuffer: m_FrameBuffers)
         m_Device->GetDevice().destroyFramebuffer(framebuffer);
+    m_FrameBuffers.clear();
 }

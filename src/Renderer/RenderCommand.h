@@ -11,4 +11,5 @@ public:
 
     static void Resize(glm::vec2 newSize);
     static void SetClearColor(glm::vec4 color);
+    static void SetVSync(bool enabled);
 };

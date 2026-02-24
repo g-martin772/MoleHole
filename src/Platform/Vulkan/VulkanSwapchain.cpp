@@ -29,6 +29,13 @@ void VulkanSwapChain::AdvanceSemaphoreIndex() {
     m_SemaphoreIndex = (m_SemaphoreIndex + 1) % static_cast<uint32_t>(m_Images.size());
 }
 
+void VulkanSwapChain::SetVSync(bool enabled) {
+    if (m_VSync == enabled)
+        return;
+    m_VSync = enabled;
+    Update(m_Size);
+}
+
 void VulkanSwapChain::Present(vk::Queue graphicsQueue, vk::Queue presentQueue, vk::Semaphore waitSemaphore) {
     vk::PresentInfoKHR presentInfo = {};
     presentInfo.waitSemaphoreCount = 1;
@@ -65,11 +72,20 @@ void VulkanSwapChain::CreateSwapChain() {
     if (!found)
         m_Format = m_Device->GetSurfaceFormats()[0].format;
 
-    vk::PresentModeKHR presentMode = vk::PresentModeKHR::eFifo;
-    for (auto &mode: m_Device->GetSurfacePresentModes()) {
-        if (mode == vk::PresentModeKHR::eMailbox) {
-            presentMode = mode;
-            break;
+    vk::PresentModeKHR presentMode = vk::PresentModeKHR::eFifo; // always supported, vsync on
+    if (!m_VSync) {
+        for (const auto &mode: m_Device->GetSurfacePresentModes()) {
+            if (mode == vk::PresentModeKHR::eImmediate) {
+                presentMode = mode;
+                break;
+            }
+        }
+    } else {
+        for (const auto &mode: m_Device->GetSurfacePresentModes()) {
+            if (mode == vk::PresentModeKHR::eMailbox) {
+                presentMode = mode;
+                break;
+            }
         }
     }
 
@@ -156,6 +172,7 @@ void VulkanSwapChain::DestroySwapChain() {
     m_DepthImage.Destroy();
     for (const auto &view: m_Views)
         m_Device->GetDevice().destroyImageView(view);
-    // The m_Images get destroyed by the swapchain itself
+    m_Views.clear();
+    m_Images.clear();
     m_Device->GetDevice().destroySwapchainKHR(m_SwapChain);
 }

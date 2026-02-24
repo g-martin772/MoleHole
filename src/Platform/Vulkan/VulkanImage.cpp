@@ -66,6 +66,7 @@ void VulkanImage2D::Create(const VulkanImageSpec &spec, VulkanDevice *device) {
 void VulkanImage2D::Destroy() {
     for (const auto &view: m_ImageViews)
         m_Device->GetDevice().destroyImageView(view);
+    m_ImageViews.clear();
     m_Device->GetDevice().freeMemory(m_Memory);
     m_Device->GetDevice().destroyImage(m_Image);
 }

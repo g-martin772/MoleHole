@@ -15,6 +15,7 @@ public:
     void Present(vk::Queue graphicsQueue, vk::Queue presentQueue, vk::Semaphore waitSemaphore);
     void Update(glm::vec2 size);
     void AdvanceSemaphoreIndex();
+    void SetVSync(bool enabled);
 
     std::vector<vk::Image> GetImages() const { return m_Images; }
     std::vector<vk::ImageView> GetImageViews() const { return m_Views; }
@@ -36,6 +37,7 @@ private:
     glm::vec2 m_Size = {0.0f, 0.0f};
     vk::Extent2D m_Extent = {0, 0};
     uint32_t m_FramesInFlight = 3, m_CurrentFrame = 0, m_SemaphoreIndex = 0;
+    bool m_VSync = true;
     std::vector<vk::Image> m_Images;
     std::vector<vk::ImageView> m_Views;
     VulkanDevice *m_Device = nullptr;

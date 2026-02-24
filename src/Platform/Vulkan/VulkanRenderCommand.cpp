@@ -29,3 +29,8 @@ void RenderCommand::Resize(glm::vec2 newSize) {
 void RenderCommand::SetClearColor(glm::vec4 color) {
     s_Api->SetClearColor(color);
 }
+
+void RenderCommand::SetVSync(bool enabled) {
+    s_Api->SetVSync(enabled);
+}
+

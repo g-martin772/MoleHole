@@ -59,7 +59,7 @@ public:
     std::unique_ptr<BlackHoleRenderer> blackHoleRenderer;
     std::unique_ptr<Camera> camera;
     std::unique_ptr<Input> input;
-    int lastVsync = -1;
+    bool m_vsync = true;
     void UpdateCamera(float deltaTime);
 
     struct QuadInstance {
