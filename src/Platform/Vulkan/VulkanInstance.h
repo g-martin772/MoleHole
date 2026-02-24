@@ -11,6 +11,6 @@ public:
     vk::Instance GetInstance() const { return m_Instance; }
 private:
     vk::Instance m_Instance;
-    vk::DispatchLoaderDynamic m_DynamicInstanceDispatcher;
+    vk::detail::DispatchLoaderDynamic m_DynamicInstanceDispatcher;
     vk::DebugUtilsMessengerEXT m_DebugMessenger;
 };
