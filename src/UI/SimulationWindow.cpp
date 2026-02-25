@@ -185,7 +185,7 @@ void RenderObjectTypeSection(UI* ui, Scene* scene, const std::string& objectType
         // --- Object row: [Chevron + Name (left)]  [Select btn] [Delete btn] (right) ---
         float rowHeight = ImGui::GetFrameHeight();
         float availWidth = ImGui::GetContentRegionAvail().x;
-        constexpr float iconBtnSize = 28.0f;
+        constexpr float iconBtnSize = 24.0f;
         constexpr float iconBtnSpacing = 4.0f;
         float buttonsWidth = iconBtnSize * 2 + iconBtnSpacing;
 
@@ -204,7 +204,7 @@ void RenderObjectTypeSection(UI* ui, Scene* scene, const std::string& objectType
         std::string rowLabel;
         if (iconFont) {
             // We'll draw the chevron manually over the button so it uses the icon font
-            rowLabel = "      " + objectName; // reserve space for chevron
+            rowLabel = "         " + objectName; // reserve space for chevron
         } else {
             rowLabel = std::string(isExpanded ? "v " : "> ") + objectName;
         }
@@ -225,11 +225,18 @@ void RenderObjectTypeSection(UI* ui, Scene* scene, const std::string& objectType
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(3);
 
-        // Place icon buttons on the same line, right-aligned
-        ImGui::SameLine(nameAreaWidth + iconBtnSpacing);
+        // Place icon buttons on the same line, right-aligned and vertically centered
+        ImGui::SameLine(nameAreaWidth + 2.5 * iconBtnSpacing);
 
-        // Select button (crosshairs icon)
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+        // Compute padding to vertically center icon text inside a button matching rowHeight
+        bool hasIconFont = ui->GetIconFont() != nullptr;
+        if (hasIconFont) ImGui::PushFont(ui->GetIconFont());
+        float iconTextHeight = ImGui::GetFontSize();
+        if (hasIconFont) ImGui::PopFont();
+        float vertPad = (rowHeight - iconTextHeight) * 0.5f;
+        float horizPad = (iconBtnSize - iconTextHeight) * 0.5f;
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(horizPad, vertPad));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
 
         if (isSelected) {
@@ -242,11 +249,10 @@ void RenderObjectTypeSection(UI* ui, Scene* scene, const std::string& objectType
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 0.8f));
         }
 
-        bool hasIconFont = ui->GetIconFont() != nullptr;
         if (hasIconFont) ImGui::PushFont(ui->GetIconFont());
 
-        // Select button with icon
-        if (ImGui::Button(hasIconFont ? ICON_FA_CROSSHAIRS : "S", ImVec2(iconBtnSize, iconBtnSize))) {
+        // Select button with icon — height matches expansion button
+        if (ImGui::Button(hasIconFont ? ICON_FA_CROSSHAIRS : "S", ImVec2(iconBtnSize, rowHeight))) {
             if (isSelected) {
                 scene->ClearSelection();
             } else {
@@ -258,12 +264,12 @@ void RenderObjectTypeSection(UI* ui, Scene* scene, const std::string& objectType
 
         ImGui::SameLine(0, iconBtnSpacing);
 
-        // Delete button (trash icon) - red tint
+        // Delete button (trash icon) - red tint — height matches expansion button
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 0.6f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.7f, 0.15f, 0.15f, 0.8f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.15f, 0.15f, 1.0f));
 
-        bool removeClicked = ImGui::Button(hasIconFont ? ICON_FA_TRASH_CAN : "X", ImVec2(iconBtnSize, iconBtnSize));
+        bool removeClicked = ImGui::Button(hasIconFont ? ICON_FA_TRASH_CAN : "X", ImVec2(iconBtnSize, rowHeight));
         ImGui::PopStyleColor(3);
         bool deleteHovered = ImGui::IsItemHovered();
 

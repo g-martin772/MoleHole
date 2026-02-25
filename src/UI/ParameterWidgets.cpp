@@ -369,18 +369,20 @@ bool RenderObjectParameter(SceneObject* object, const ParameterHandle& handle, c
                 float displayValue = value / meta.scaleValues[currentScaleIdx];
                 float dragSpeedScaled = (meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f) / meta.scaleValues[currentScaleIdx];
 
-                ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.65f);
+                // Label
+                ImGui::Text("%s", meta.displayName.c_str());
+
+                // Value field (full width)
+                ImGui::SetNextItemWidth(-1);
                 if (ImGui::DragFloat(("##value_" + meta.name).c_str(), &displayValue, dragSpeedScaled,
                                     0.0f, 0.0f, "%.6g")) {
-                    // Convert back to base units
                     float newValue = displayValue * meta.scaleValues[currentScaleIdx];
                     object->SetParameter(handle, newValue);
                     valueChanged = true;
                 }
-                ImGui::PopItemWidth();
 
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                // Unit selector on next line (full width)
+                ImGui::SetNextItemWidth(-1);
                 if (ImGui::BeginCombo(("##scale_" + meta.name).c_str(),
                                      meta.scaleValueNames[currentScaleIdx].c_str())) {
                     for (size_t i = 0; i < meta.scaleValues.size(); ++i) {
@@ -395,8 +397,6 @@ bool RenderObjectParameter(SceneObject* object, const ParameterHandle& handle, c
                     }
                     ImGui::EndCombo();
                 }
-                ImGui::SameLine();
-                ImGui::Text("%s", meta.displayName.c_str());
             } else if (meta.minValue != 0.0f || meta.maxValue != 0.0f) {
                 if (ImGui::DragFloat(meta.displayName.c_str(), &value,
                                     meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f,
@@ -490,18 +490,20 @@ bool RenderObjectParameter(SceneObject* object, const ParameterHandle& handle, c
                 glm::vec3 displayValue = value / meta.scaleValues[currentScaleIdx];
                 float dragSpeedScaled = (meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f) / meta.scaleValues[currentScaleIdx];
 
-                ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.65f);
+                // Label
+                ImGui::Text("%s", meta.displayName.c_str());
+
+                // Value field (full width)
+                ImGui::SetNextItemWidth(-1);
                 if (ImGui::DragFloat3(("##value_" + meta.name).c_str(), &displayValue[0], dragSpeedScaled,
                                      0.0f, 0.0f, "%.6g")) {
-                    // Convert back to base units
                     glm::vec3 newValue = displayValue * meta.scaleValues[currentScaleIdx];
                     object->SetParameter(handle, newValue);
                     valueChanged = true;
                 }
-                ImGui::PopItemWidth();
 
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                // Unit selector on next line (full width)
+                ImGui::SetNextItemWidth(-1);
                 if (ImGui::BeginCombo(("##scale_" + meta.name).c_str(),
                                      meta.scaleValueNames[currentScaleIdx].c_str())) {
                     for (size_t i = 0; i < meta.scaleValues.size(); ++i) {
@@ -516,8 +518,6 @@ bool RenderObjectParameter(SceneObject* object, const ParameterHandle& handle, c
                     }
                     ImGui::EndCombo();
                 }
-                ImGui::SameLine();
-                ImGui::Text("%s", meta.displayName.c_str());
             } else {
                 if (ImGui::DragFloat3(meta.displayName.c_str(), &value[0],
                                      meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f)) {
@@ -610,7 +610,6 @@ void RenderSceneObjectParameters(SceneObject* object, WidgetStyle style) {
 
         groupedParams[group].push_back({id, meta});
     }
-
     bool firstGroup = true;
     for (auto& [groupName, params] : groupedParams) {
         std::sort(params.begin(), params.end(),
@@ -618,25 +617,32 @@ void RenderSceneObjectParameters(SceneObject* object, WidgetStyle style) {
                      return a.second.name < b.second.name;
                  });
 
-        // Section divider and orange uppercase header (matching design: border-t border-zinc-800, text-orange-500 uppercase)
+        // Extra spacing between sections
         if (!firstGroup) {
-            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.12f, 0.12f, 0.12f, 1.0f)); // border-zinc-800
-            ImGui::Separator();
-            ImGui::PopStyleColor();
+            ImGui::Spacing();
+            ImGui::Spacing();
             ImGui::Spacing();
         }
 
         // Orange uppercase section header
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 1.0f)); // text-orange-500
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 1.0f));
         ImGui::TextUnformatted(groupName.c_str());
         ImGui::PopStyleColor();
 
+        // Orange divider line under the section header
+        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 0.6f));
+        ImGui::Separator();
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
         ImGui::Spacing();
 
         for (const auto& [id, meta] : params) {
             RenderObjectParameter(object, ParameterHandle(id), meta, style);
 
+            // More spacing between individual settings for readability
             if (style != WidgetStyle::Compact) {
+                ImGui::Spacing();
                 ImGui::Spacing();
             }
         }
