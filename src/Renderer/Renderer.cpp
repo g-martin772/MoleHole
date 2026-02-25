@@ -80,6 +80,10 @@ void Renderer::Init(bool headless) {
     spdlog::info("OpenGL Vendor: {0}", (const char *) glGetString(GL_VENDOR));
     spdlog::info("OpenGL Version: {}", (const char *) glGetString(GL_VERSION));
 
+    m_gpuName = (const char*) glGetString(GL_RENDERER);
+    m_gpuVendor = (const char*) glGetString(GL_VENDOR);
+    m_glVersion = (const char*) glGetString(GL_VERSION);
+
 // #ifndef _WIN32
 //     const char* dri_prime = std::getenv("DRI_PRIME");
 //     const char* vk_icd = std::getenv("VK_ICD_FILENAMES");

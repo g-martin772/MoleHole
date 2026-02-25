@@ -611,25 +611,37 @@ void RenderSceneObjectParameters(SceneObject* object, WidgetStyle style) {
         groupedParams[group].push_back({id, meta});
     }
 
+    bool firstGroup = true;
     for (auto& [groupName, params] : groupedParams) {
         std::sort(params.begin(), params.end(),
                  [](const auto& a, const auto& b) {
                      return a.second.name < b.second.name;
                  });
 
-        bool shouldRender = ImGui::TreeNodeEx(groupName.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
-
-        if (shouldRender) {
-            for (const auto& [id, meta] : params) {
-                RenderObjectParameter(object, ParameterHandle(id), meta, style);
-
-                if (style != WidgetStyle::Compact) {
-                    ImGui::Spacing();
-                }
-            }
-
-            ImGui::TreePop();
+        // Section divider and orange uppercase header (matching design: border-t border-zinc-800, text-orange-500 uppercase)
+        if (!firstGroup) {
+            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.12f, 0.12f, 0.12f, 1.0f)); // border-zinc-800
+            ImGui::Separator();
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
         }
+
+        // Orange uppercase section header
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 1.0f)); // text-orange-500
+        ImGui::TextUnformatted(groupName.c_str());
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
+
+        for (const auto& [id, meta] : params) {
+            RenderObjectParameter(object, ParameterHandle(id), meta, style);
+
+            if (style != WidgetStyle::Compact) {
+                ImGui::Spacing();
+            }
+        }
+
+        firstGroup = false;
     }
 }
 

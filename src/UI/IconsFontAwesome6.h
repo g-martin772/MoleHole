@@ -18,6 +18,10 @@
 #define ICON_FA_CAMERA "\xef\x80\xb0"         // U+F030
 #define ICON_FA_BUG "\xef\x86\x88"            // U+F188
 #define ICON_FA_ATOM "\xef\x97\x92"           // U+F5D2 (atomic structure - for General Relativity)
+#define ICON_FA_CROSSHAIRS "\xef\x81\x9b"     // U+F05B (crosshairs - for selecting objects)
+#define ICON_FA_TRASH_CAN "\xef\x8b\xad"      // U+F2ED (trash can - for deleting objects)
+#define ICON_FA_CHEVRON_DOWN "\xef\x81\xb8"   // U+F078 (chevron down - accordion open)
+#define ICON_FA_CHEVRON_RIGHT "\xef\x81\x94"  // U+F054 (chevron right - accordion closed)
 
 // Font Awesome 6 Unicode range for ImGui font loading
 #define ICON_MIN_FA 0xe000

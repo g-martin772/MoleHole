@@ -96,7 +96,7 @@ void RenderMainMenuBar(UI* ui, Scene* scene, bool& doSave, bool& doOpen,
                       bool& doTakeScreenshot, bool& doTakeScreenshotViewport) {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("New")) {
+            if (ImGui::MenuItem("New Scene")) {
                 Application::Instance().NewScene();
             }
 
@@ -117,6 +117,8 @@ void RenderMainMenuBar(UI* ui, Scene* scene, bool& doSave, bool& doOpen,
                     }
                 }
             }
+
+            ImGui::Separator();
 
             if (ImGui::BeginMenu("From Template")) {
                 namespace fs = std::filesystem;
@@ -164,57 +166,47 @@ void RenderMainMenuBar(UI* ui, Scene* scene, bool& doSave, bool& doOpen,
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Edit")) {
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("View")) {
-            ImGui::MenuItem("Show Demo Window", nullptr, ui->GetShowDemoWindowPtr());
-            ImGui::MenuItem("Show Animation Graph", nullptr, ui->GetShowAnimationGraphPtr());
-            ImGui::MenuItem("Show Export Window", nullptr, ui->GetShowExportWindowPtr());
-
+        if (ImGui::BeginMenu("Export")) {
+            if (ImGui::MenuItem("Export as Video")) {
+                *ui->GetShowExportWindowPtr() = true;
+            }
             ImGui::Separator();
-            auto& renderer = Application::GetRenderer();
-            auto currentMode = renderer.GetSelectedViewport();
-
-            bool selectedDemo1 = (currentMode == Renderer::ViewportMode::Demo1);
-            bool selectedRays2D = (currentMode == Renderer::ViewportMode::Rays2D);
-            bool selectedSim3D = (currentMode == Renderer::ViewportMode::Simulation3D);
-
-            if (ImGui::MenuItem("Demo1 Viewport", nullptr, selectedDemo1)) {
-                renderer.SetSelectedViewport(Renderer::ViewportMode::Demo1);
+            if (ImGui::MenuItem("Export as Image (choose location)", "F12")) {
+                doTakeScreenshotViewportDialog = true;
             }
-            if (ImGui::MenuItem("2D Rays Viewport", nullptr, selectedRays2D)) {
-                renderer.SetSelectedViewport(Renderer::ViewportMode::Rays2D);
+            if (ImGui::MenuItem("Export as Image (default path)", "Ctrl+F12")) {
+                doTakeScreenshotViewport = true;
             }
-            if (ImGui::MenuItem("3D Simulation Viewport", nullptr, selectedSim3D)) {
-                renderer.SetSelectedViewport(Renderer::ViewportMode::Simulation3D);
+            ImGui::Separator();
+            if (ImGui::MenuItem("Export Full Window (choose location)", "F11")) {
+                doTakeScreenshotDialog = true;
+            }
+            if (ImGui::MenuItem("Export Full Window (default path)", "Ctrl+F11")) {
+                doTakeScreenshot = true;
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Export Scene Data")) {
+                if (scene) {
+                    auto path = Scene::ShowFileDialog(true);
+                    if (!path.empty()) {
+                        scene->Serialize(path);
+                        spdlog::info("Scene data exported to: {}", path.string());
+                    }
+                }
             }
             ImGui::EndMenu();
         }
 
         if (ImGui::BeginMenu("Help")) {
-            if (ImGui::MenuItem("Help", "F1")) {
+            if (ImGui::MenuItem("Documentation", "F1")) {
                 *ui->GetShowHelpWindowPtr() = true;
             }
+            if (ImGui::MenuItem("Tutorials")) {
+                *ui->GetShowHelpWindowPtr() = true;
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("About")) {
-
-            }
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("Image")) {
-            if (ImGui::MenuItem("Take Screenshot (choose location)", "F12")) {
-                doTakeScreenshotViewportDialog = true;
-            }
-            if (ImGui::MenuItem("Take Screenshot from whole screen (choose location)", "F11")) {
-                doTakeScreenshotDialog = true;
-            }
-            if (ImGui::MenuItem("Take Screenshot (default path)", "F12 + S")) {
-                doTakeScreenshotViewport = true;
-            }
-            if (ImGui::MenuItem("Take Screenshot from whole screen (default path)", "F11 + S")) {
-                doTakeScreenshot = true;
+                *ui->GetShowSettingsWindowPtr() = true;
             }
             ImGui::EndMenu();
         }

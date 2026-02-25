@@ -49,6 +49,10 @@ public:
     ViewportMode GetSelectedViewport() const { return selectedViewport; }
     void SetSelectedViewport(ViewportMode mode) { selectedViewport = mode; }
 
+    const std::string& GetGPUName() const { return m_gpuName; }
+    const std::string& GetGPUVendor() const { return m_gpuVendor; }
+    const std::string& GetGLVersion() const { return m_glVersion; }
+
     GravityGridRenderer* GetGravityGridRenderer() { return gravityGridRenderer.get(); }
     ObjectPathsRenderer* GetObjectPathsRenderer() { return objectPathsRenderer.get(); }
     PhysicsDebugRenderer* GetPhysicsDebugRenderer() { return m_physicsDebugRenderer.get(); }
@@ -99,4 +103,8 @@ private:
     std::unique_ptr<GravityGridRenderer> gravityGridRenderer;
     std::unique_ptr<ObjectPathsRenderer> objectPathsRenderer;
     std::unique_ptr<PhysicsDebugRenderer> m_physicsDebugRenderer;
+
+    std::string m_gpuName;
+    std::string m_gpuVendor;
+    std::string m_glVersion;
 };

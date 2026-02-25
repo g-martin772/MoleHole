@@ -12,368 +12,308 @@
 #include <nfd.h>
 #include <filesystem>
 #include <algorithm>
+#include <cstring>
 
 namespace SettingsPopUp {
 
+static void RenderSectionHeader(const char* title) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 1.0f));
+    ImGui::Text("%s", title);
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+    ImGui::Spacing();
+}
+
 void Render(UI* ui, Scene* scene, bool* showSettingsWindow) {
-    // Open the popup when the window flag is set
     if (*showSettingsWindow && !ImGui::IsPopupOpen("Settings")) {
         ImGui::OpenPopup("Settings");
     }
 
-    // Center the popup
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(800, 700), ImGuiCond_Appearing);
 
-    // Popup styling
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 20));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
 
-    // ------------------------------------------------------------------------------------------
-    // Main Settings PopUp
-    // ------------------------------------------------------------------------------------------
     if (ImGui::BeginPopupModal("Settings", showSettingsWindow, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
-        ImGui::TextWrapped("Configure application settings and parameters");
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 1.0f));
+        ImGui::Text("Settings");
         ImGui::PopStyleColor();
         ImGui::Spacing();
 
-        // ------------------------------------------------------------------------------------------
-        // Main Settings Tab Bar (for easier navigation)
-        // ------------------------------------------------------------------------------------------
         if (ImGui::BeginTabBar("SettingsTabs", ImGuiTabBarFlags_None)) {
 
-            ImGui::Separator();
-
-            // Display Tab
-            if (ImGui::BeginTabItem("Display")) {
-
-                ImGui::Spacing();
-                if (ImGui::BeginChild("Display Settings", ImVec2(0, -30), false))
-                {
-                    ParameterWidgets::RenderParameterGroup(
-                        ParameterGroup::Window,
-                        ui,
-                        ParameterWidgets::WidgetStyle::Detailed, true
-                    );
-                }
-                ImGui::EndChild();
-
-                ImGui::EndTabItem();
-            }
-
-            // Camera Tab
-            if (ImGui::BeginTabItem("Camera")) {
-
-                ImGui::Spacing();
-                if (ImGui::BeginChild("Camera Settings", ImVec2(0, -30), false))
-                {
-                    ParameterWidgets::RenderParameterGroupWithFilter(
-                        ParameterGroup::Camera, ui,
-                        [](const ParameterMetadata& meta) {
-                            return meta.name != "Camera.Position" &&
-                                   meta.name != "Camera.Front" &&
-                                   meta.name != "Camera.Up" &&
-                                   meta.name != "Camera.Pitch" &&
-                                   meta.name != "Camera.Yaw";
-                        },
-                        ParameterWidgets::WidgetStyle::Detailed, true
-                    );
-                }
-                ImGui::EndChild();
-
-                ImGui::EndTabItem();
-            }
-
-            // Rendering Tab
-            if (ImGui::BeginTabItem("Rendering")) {
-                ImGui::Spacing();
-
-                if (ImGui::BeginChild("Rendering Settings", ImVec2(0, -30), false)) {
-                    ParameterWidgets::RenderParameterGroupWithFilter(
-                        ParameterGroup::Rendering, ui,
-                        [](const ParameterMetadata& meta) {
-                            return meta.name.find("Bloom") == std::string::npos &&
-                                   meta.name.find("Acc") == std::string::npos &&
-                                   meta.name.find("Doppler") == std::string::npos;
-                        },
-                        ParameterWidgets::WidgetStyle::Detailed, true
-                    );
-                }
-                ImGui::EndChild();
-
-                ImGui::EndTabItem();
-            }
-
-            // Application Tab
             if (ImGui::BeginTabItem("Application")) {
-
                 ImGui::Spacing();
-                if (ImGui::BeginChild("Application Settings", ImVec2(0, -30), false))
-                {
-                    static std::vector<std::string> availableFonts;
-                    static int selectedFontIndex = -1;
-                    static bool fontsLoaded = false;
+                if (ImGui::BeginChild("AppSettingsScroll", ImVec2(0, -60), false)) {
 
-                    if (ImGui::CollapsingHeader("Scene Configuration"), ImGuiTreeNodeFlags_DefaultOpen)
-                    {
-                        if (scene)
-                        {
-                            ImGui::Indent();
+                    RenderSectionHeader("BACKGROUND");
 
-                            static int selectedBackgroundIndex = -1;
-                            const std::string currentBackground = Application::Params().Get(Params::AppBackgroundImage, std::string("space.hdr"));
-                            const std::vector<std::string> backgroundPaths = ui->GetAvailableBackgrounds();
+                    if (scene) {
+                        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Background Image (.hdr)");
+                        const std::string currentBackground = Application::Params().Get(Params::AppBackgroundImage, std::string("space.hdr"));
+                        const std::vector<std::string> backgroundPaths = ui->GetAvailableBackgrounds();
 
-                            if (ImGui::BeginCombo("Background Image", currentBackground.c_str())) {
-                                for (size_t i = 0; i < backgroundPaths.size(); ++i) {
-                                    const bool isSelected = (backgroundPaths[i] == currentBackground);
-                                    if (ImGui::Selectable(backgroundPaths[i].c_str(), isSelected)) {
-                                        selectedBackgroundIndex = static_cast<int>(i);
-                                        Application::Params().Set(Params::AppBackgroundImage, backgroundPaths[i]);
-                                        ui->MarkConfigDirty();
-                                        scene->reloadSkybox = true;
-                                    }
-                                    if (isSelected) {
-                                        ImGui::SetItemDefaultFocus();
-                                    }
-                                }
-                                ImGui::EndCombo();
-                            }
-
-                            if (ImGui::Button("Add custom background image (.hdr)", ImVec2(-1, 0))) {
-                                nfdchar_t* outPath = nullptr;
-                                nfdfilteritem_t filterItems[] = {
-                                    { "High Dynamic Range", "hdr" }
-                                };
-
-                                if (nfdresult_t result = NFD_OpenDialog(&outPath, filterItems, 1, nullptr); result == NFD_OKAY && outPath) {
-                                    std::filesystem::path sourcePath(outPath);
-                                    std::filesystem::path destPath = "../assets/backgrounds/" + sourcePath.filename().string();
-
-                                    try {
-                                        std::filesystem::copy_file(sourcePath, destPath,
-                                                                   std::filesystem::copy_options::overwrite_existing);
-
-                                        Application::Params().Set(Params::AppBackgroundImage, sourcePath.filename().string());
-                                        ui->MarkConfigDirty();
-                                        scene->reloadSkybox = true;
-
-                                        spdlog::info("Custom background image added successfully: {}", sourcePath.filename().string());
-                                    } catch (const std::exception& e) {
-                                        spdlog::error("Failed to copy background image file: {}", e.what());
-                                    }
-
-                                    free(outPath);
-                                }
-                            }
-
-                            ImGui::Unindent();
-                        }
-                    }
-
-                    if (ImGui::CollapsingHeader("Font Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-                        ImGui::TextWrapped("Customize the application's font and size");
-                        ImGui::PopStyleColor();
-                        ImGui::Separator();
-                        ImGui::Spacing();
-
-                        const std::string defaultFont = "Roboto-Regular.ttf";
-                        std::string currentFont = Application::Params().Get(Params::UIMainFont, defaultFont);
-
-                        ImGui::Text("Current Font: %s", currentFont.c_str());
-                        ImGui::Spacing();
-
-                        if (!fontsLoaded) {
-                            availableFonts = ui->GetAvailableFonts();
-                            for (size_t i = 0; i < availableFonts.size(); ++i) {
-                                if (availableFonts[i] == currentFont) {
-                                    selectedFontIndex = static_cast<int>(i);
-                                    break;
-                                }
-                            }
-                            fontsLoaded = true;
-                        }
-
-                        if (ImGui::BeginCombo("Select Font", currentFont.c_str())) {
-                            for (size_t i = 0; i < availableFonts.size(); ++i) {
-                                bool isSelected = (selectedFontIndex == static_cast<int>(i));
-                                if (ImGui::Selectable(availableFonts[i].c_str(), isSelected)) {
-                                    selectedFontIndex = static_cast<int>(i);
-                                    Application::Params().Set(Params::UIMainFont, availableFonts[i]);
+                        ImGui::SetNextItemWidth(-1);
+                        if (ImGui::BeginCombo("##BackgroundImage", currentBackground.c_str())) {
+                            for (size_t i = 0; i < backgroundPaths.size(); ++i) {
+                                const bool isSelected = (backgroundPaths[i] == currentBackground);
+                                if (ImGui::Selectable(backgroundPaths[i].c_str(), isSelected)) {
+                                    Application::Params().Set(Params::AppBackgroundImage, backgroundPaths[i]);
                                     ui->MarkConfigDirty();
-                                    ui->ReloadFonts();
+                                    scene->reloadSkybox = true;
                                 }
                                 if (isSelected) {
                                     ImGui::SetItemDefaultFocus();
                                 }
                             }
+
+                            if (ImGui::Selectable("Custom Import...")) {
+                                nfdchar_t* outPath = nullptr;
+                                nfdfilteritem_t filterItems[] = { { "High Dynamic Range", "hdr" } };
+                                if (nfdresult_t result = NFD_OpenDialog(&outPath, filterItems, 1, nullptr); result == NFD_OKAY && outPath) {
+                                    std::filesystem::path sourcePath(outPath);
+                                    std::filesystem::path destPath = "../assets/backgrounds/" + sourcePath.filename().string();
+                                    try {
+                                        std::filesystem::copy_file(sourcePath, destPath, std::filesystem::copy_options::overwrite_existing);
+                                        Application::Params().Set(Params::AppBackgroundImage, sourcePath.filename().string());
+                                        ui->MarkConfigDirty();
+                                        scene->reloadSkybox = true;
+                                    } catch (const std::exception& e) {
+                                        spdlog::error("Failed to copy background image file: {}", e.what());
+                                    }
+                                    free(outPath);
+                                }
+                            }
                             ImGui::EndCombo();
                         }
+                        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "HDR image for environment lighting and reflections");
+                    }
 
-                        ImGui::Spacing();
-                        ParameterWidgets::RenderParameter(Params::UIFontSize, ui, ParameterWidgets::WidgetStyle::Detailed);
+                    RenderSectionHeader("FONT");
 
-                        ImGui::Spacing();
-                        ImGui::Separator();
-                        ImGui::Spacing();
+                    static std::vector<std::string> availableFonts;
+                    static int selectedFontIndex = -1;
+                    static bool fontsLoaded = false;
 
-                        if (ImGui::Button("Add Custom Font (.ttf)...", ImVec2(-1, 0))) {
+                    const std::string defaultFont = "Roboto-Regular.ttf";
+                    std::string currentFont = Application::Params().Get(Params::UIMainFont, defaultFont);
+
+                    if (!fontsLoaded) {
+                        availableFonts = ui->GetAvailableFonts();
+                        for (size_t i = 0; i < availableFonts.size(); ++i) {
+                            if (availableFonts[i] == currentFont) {
+                                selectedFontIndex = static_cast<int>(i);
+                                break;
+                            }
+                        }
+                        fontsLoaded = true;
+                    }
+
+                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Font Family");
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::BeginCombo("##FontFamily", currentFont.c_str())) {
+                        for (size_t i = 0; i < availableFonts.size(); ++i) {
+                            bool isSelected = (selectedFontIndex == static_cast<int>(i));
+                            if (ImGui::Selectable(availableFonts[i].c_str(), isSelected)) {
+                                selectedFontIndex = static_cast<int>(i);
+                                Application::Params().Set(Params::UIMainFont, availableFonts[i]);
+                                ui->MarkConfigDirty();
+                                ui->ReloadFonts();
+                            }
+                            if (isSelected) {
+                                ImGui::SetItemDefaultFocus();
+                            }
+                        }
+
+                        if (ImGui::Selectable("Custom Import...")) {
                             nfdchar_t* outPath = nullptr;
-                            nfdfilteritem_t filterItems[] = {
-                                { "TrueType Font", "ttf" }
-                            };
-
+                            nfdfilteritem_t filterItems[] = { { "TrueType Font", "ttf" } };
                             nfdresult_t result = NFD_OpenDialog(&outPath, filterItems, 1, nullptr);
-
                             if (result == NFD_OKAY && outPath) {
                                 std::filesystem::path sourcePath(outPath);
                                 std::filesystem::path destPath = "../font/" + sourcePath.filename().string();
-
                                 try {
-                                    std::filesystem::copy_file(sourcePath, destPath,
-                                                               std::filesystem::copy_options::overwrite_existing);
-
+                                    std::filesystem::copy_file(sourcePath, destPath, std::filesystem::copy_options::overwrite_existing);
                                     Application::Params().Set(Params::UIMainFont, sourcePath.filename().string());
                                     ui->MarkConfigDirty();
-
                                     fontsLoaded = false;
                                     availableFonts = ui->GetAvailableFonts();
                                     ui->ReloadFonts();
-
-                                    spdlog::info("Custom font added successfully: {}", sourcePath.filename().string());
                                 } catch (const std::exception& e) {
                                     spdlog::error("Failed to copy font file: {}", e.what());
                                 }
-
                                 free(outPath);
                             }
                         }
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-                        ImGui::TextWrapped("Choose a .ttf file to add to your font collection");
-                        ImGui::PopStyleColor();
+                        ImGui::EndCombo();
                     }
 
                     ImGui::Spacing();
-                    ImGui::Separator();
-                    ImGui::Spacing();
+                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Font Size");
+                    ParameterWidgets::RenderParameter(Params::UIFontSize, ui, ParameterWidgets::WidgetStyle::Compact);
 
-                    // Media Export Settings Section
-                    if (ImGui::CollapsingHeader("Media Export Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-                        ImGui::TextWrapped("Configure default export location for screenshots and videos");
-                        ImGui::PopStyleColor();
-                        ImGui::Separator();
-                        ImGui::Spacing();
+                    RenderSectionHeader("EXPORT");
 
-                        const std::string defaultPath = ".";
-                        std::string exportPath = Application::Params().Get(Params::UIDefaultExportPath, defaultPath);
+                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Default Export Path");
+                    const std::string defaultPath = ".";
+                    std::string exportPath = Application::Params().Get(Params::UIDefaultExportPath, defaultPath);
 
-                        ImGui::Text("Default Export Path:");
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.9f, 0.7f, 1.0f));
-                        ImGui::TextWrapped("%s", exportPath.c_str());
-                        ImGui::PopStyleColor();
-                        ImGui::Spacing();
+                    if (ImGui::BeginTable("ExportPathGrid", 2, ImGuiTableFlags_None)) {
+                        ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
+                        ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 80.0f);
 
-                        if (ImGui::Button("Change Export Path...", ImVec2(-1, 0))) {
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        char pathBuf[512];
+                        std::strncpy(pathBuf, exportPath.c_str(), sizeof(pathBuf));
+                        pathBuf[sizeof(pathBuf) - 1] = '\0';
+                        ImGui::SetNextItemWidth(-1);
+                        if (ImGui::InputText("##ExportPath", pathBuf, sizeof(pathBuf))) {
+                            Application::Params().Set(Params::UIDefaultExportPath, std::string(pathBuf));
+                            ui->MarkConfigDirty();
+                        }
+
+                        ImGui::TableNextColumn();
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+                        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
+                        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+                        if (ImGui::Button("Browse", ImVec2(-1, 0))) {
                             nfdchar_t* outPath = nullptr;
                             nfdresult_t result = NFD_PickFolder(&outPath, exportPath.c_str());
-
                             if (result == NFD_OKAY && outPath) {
                                 Application::Params().Set(Params::UIDefaultExportPath, std::string(outPath));
                                 ui->MarkConfigDirty();
-                                spdlog::info("Default export path set to: {}", outPath);
                                 free(outPath);
                             }
                         }
+                        ImGui::PopStyleColor(3);
 
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-                        ImGui::TextWrapped("Screenshots and videos will be saved here by default");
-                        ImGui::PopStyleColor();
-
-                        ImGui::Spacing();
-
-                        if (ImGui::Button("Reset to Current Directory", ImVec2(-1, 0))) {
-                            Application::Params().Set(Params::UIDefaultExportPath, std::string("."));
-                            ui->MarkConfigDirty();
-                        }
+                        ImGui::EndTable();
                     }
 
-                    ImGui::Spacing();
+                    RenderSectionHeader("USER INTERFACE");
 
-                    // Other Application Settings
-                    ParameterWidgets::RenderParameter(Params::AppShowDemoWindow, ui, ParameterWidgets::WidgetStyle::Detailed);
-                    ParameterWidgets::RenderParameter(Params::AppUseKerrDistortion, ui, ParameterWidgets::WidgetStyle::Detailed);
-                    ParameterWidgets::RenderParameter(Params::AppIntroAnimationEnabled, ui, ParameterWidgets::WidgetStyle::Detailed);
+                    bool introEnabled = Application::Params().Get(Params::AppIntroAnimationEnabled, true);
+                    if (ImGui::BeginTable("UIToggles", 2, ImGuiTableFlags_None)) {
+                        ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch);
+                        ImGui::TableSetupColumn("Toggle", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Intro Animation");
+                        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "Show animated intro when app starts");
+                        ImGui::TableNextColumn();
+                        if (ImGui::Checkbox("##IntroAnim", &introEnabled)) {
+                            Application::Params().Set(Params::AppIntroAnimationEnabled, introEnabled);
+                            ui->MarkConfigDirty();
+                        }
+
+                        ImGui::EndTable();
+                    }
+
+                    RenderSectionHeader("PERFORMANCE");
+
+                    ParameterWidgets::RenderParameterGroup(
+                        ParameterGroup::Window, ui,
+                        ParameterWidgets::WidgetStyle::Standard, true
+                    );
+
                 }
                 ImGui::EndChild();
-
                 ImGui::EndTabItem();
             }
 
-            // About Tab
             if (ImGui::BeginTabItem("About")) {
-
                 ImGui::Spacing();
-                if (ImGui::BeginChild("Display Settings", ImVec2(0, -30), false))
-                {
+                if (ImGui::BeginChild("AboutScroll", ImVec2(0, -60), false)) {
+
+                    ImGui::Spacing();
+
                     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 1.0f, 1.0f));
-                    ImGui::TextWrapped("MoleHole - Black Hole Simulation");
+                    ImGui::Text("MoleHole - Black Hole Simulation");
                     ImGui::PopStyleColor();
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Version 1.0.0");
+
+                    RenderSectionHeader("ABOUT");
+
+                    ImGui::TextWrapped(
+                        "An advanced black hole and gravitational physics simulator for researchers, "
+                        "educators, and space enthusiasts. Explore the fascinating phenomena of "
+                        "gravitational lensing, accretion disks, and spacetime curvature in real-time."
+                    );
+
+                    RenderSectionHeader("FEATURES");
+
+                    ImGui::TextColored(ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 1.0f), " * ");
+                    ImGui::SameLine();
+                    ImGui::Text("Real-time gravitational lensing simulation");
+
+                    ImGui::TextColored(ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 1.0f), " * ");
+                    ImGui::SameLine();
+                    ImGui::Text("Accurate black hole physics and accretion disk rendering");
+
+                    ImGui::TextColored(ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 1.0f), " * ");
+                    ImGui::SameLine();
+                    ImGui::Text("Customizable animation graphs for complex simulations");
+
+                    ImGui::TextColored(ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 1.0f), " * ");
+                    ImGui::SameLine();
+                    ImGui::Text("Advanced camera controls and third-person perspectives");
+
+                    ImGui::TextColored(ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 1.0f), " * ");
+                    ImGui::SameLine();
+                    ImGui::Text("Physics-based object interactions and collisions");
+
+                    RenderSectionHeader("CREDITS");
+
+                    ImGui::TextWrapped("Developed with passion for astrophysics and simulation.");
                     ImGui::Spacing();
-                    ImGui::Text("Version: 1.0.0");
-                    ImGui::Spacing();
-                    ImGui::Separator();
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                        "Built with C++23, OpenGL 4.6, and advanced compute shader rendering.");
+
+                    RenderSectionHeader("LICENSE");
+
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "MIT License");
                     ImGui::Spacing();
 
-                    ImGui::TextWrapped("Developed using:");
-                    ImGui::BulletText("OpenGL 4.6");
-                    ImGui::BulletText("GLFW - Window and input");
-                    ImGui::BulletText("ImGui - User interface");
-                    ImGui::BulletText("GLM - Mathematics");
-                    ImGui::BulletText("spdlog - Logging");
-                    ImGui::BulletText("yaml-cpp - Configuration");
-                    ImGui::BulletText("stb_image - Image loading");
-                    ImGui::BulletText("PhysX - Physics simulation");
-                    ImGui::BulletText("FFmpeg - Video export (Linux)");
-
-                    ImGui::Spacing();
-                    ImGui::Separator();
-                    ImGui::Spacing();
-
-                    ImGui::TextWrapped("Special thanks to all open-source contributors!");
-
-                    ImGui::Spacing();
-
-                    if (ImGui::Button("View License (MIT)", ImVec2(-1, 0))) {
-                        spdlog::info("Opening license file...");
+                    if (ImGui::Button("View License", ImVec2(-1, 0))) {
 #ifdef __linux__
                         system("xdg-open ../LICENSE &");
 #endif
                     }
                 }
                 ImGui::EndChild();
-
                 ImGui::EndTabItem();
             }
 
             ImGui::EndTabBar();
         }
 
-        // Bottom buttons
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
-        
-        float buttonWidth = 120.0f;
+
+        float totalButtonWidth = 250.0f;
         float availWidth = ImGui::GetContentRegionAvail().x;
-        ImGui::SetCursorPosX((availWidth - buttonWidth) * 0.5f);
-        
-        if (ImGui::Button("Close", ImVec2(buttonWidth, 0))) {
+        ImGui::SetCursorPosX((availWidth - totalButtonWidth) * 0.5f + ImGui::GetCursorPosX());
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+        if (ImGui::Button("Close", ImVec2(120, 0))) {
             *showSettingsWindow = false;
             ImGui::CloseCurrentPopup();
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Save Settings", ImVec2(120, 0))) {
+            Application::Instance().SaveState();
+            ui->MarkConfigDirty();
         }
 
         ImGui::EndPopup();

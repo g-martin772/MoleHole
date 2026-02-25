@@ -122,6 +122,6 @@ private:
     } m_videoConfig;
 
     // Sidebar animation
-    float m_sidebarHoverAnim[7] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    float m_sidebarHoverAnim[8] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     int m_hoveredSidebarItem = -1;
 };
