@@ -11,6 +11,7 @@
 #include "../UI/SimulationWindow.h"
 #include "../UI/AnimationGraphWindow.h"
 #include "../UI/GeneralRelativityWindow.h"
+#include "UI/ScienceWindow.h"
 #include "imgui.h"
 #include "spdlog/spdlog.h"
 #include <nfd.h>
@@ -242,6 +243,11 @@ void UI::RenderMainUI(float fps, Scene* scene) {
     {
         bool* p_open = nullptr;
         GeneralRelativityWindow::Render(p_open, this);
+    }
+
+    if (m_showScienceWindow)
+    {
+        ScienceWindow::Render(this);
     }
 }
 

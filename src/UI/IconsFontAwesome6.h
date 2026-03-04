@@ -14,6 +14,7 @@
 #define ICON_FA_SIM "\xef\x95\xbd"            // U+F57D
 #define ICON_FA_IMAGE "\xef\x80\xbe"          // U+F03E
 #define ICON_FA_GEAR "\xef\x80\x93"           // U+F013
+#define ICON_FA_BRAIN "\xef\x97\x9c"          // U+F5DC (used for science window)
 #define ICON_FA_CIRCLE_DOT "\xef\x86\x92"     // U+F192 (used for app icon - black hole)
 #define ICON_FA_CAMERA "\xef\x80\xb0"         // U+F030
 #define ICON_FA_BUG "\xef\x86\x88"            // U+F188

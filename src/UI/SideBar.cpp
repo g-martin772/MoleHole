@@ -49,6 +49,7 @@ void Render(UI* ui) {
             { ICON_FA_SIM, "Simulation", ui->GetShowSimulationWindowPtr(), 4 },
             { ICON_FA_CHART_LINE, "Animation Graph", ui->GetShowAnimationGraphPtr(), 5 },
             { ICON_FA_ATOM, "General Relativity", ui->GetShowGeneralRelativityWindowPtr(), 6 },
+            { ICON_FA_BRAIN, "Science", ui->GetShowScienceWindowPtr(), 7 }
         };
 
         SidebarButton settingsButton = { ICON_FA_GEAR, "Settings", ui->GetShowSettingsWindowPtr(), 7 };
@@ -58,7 +59,7 @@ void Render(UI* ui) {
 
         ImGui::SetCursorPosY(12.0f);
 
-        for (int i = 0; i < 7; ++i) {
+        for (int i = 0; i < 8; ++i) {
             ImGui::PushID(i);
 
             bool isActive = *topButtons[i].activePtr;
