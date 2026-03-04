@@ -255,22 +255,6 @@ parameters:
     defaultValue: true
     showInUI: true
 
-  - name: "Rendering.GravitationalLensingEnabled"
-    displayName: "Gravitational Lensing"
-    tooltip: "Enable gravitational lensing effect"
-    type: bool
-    group: Rendering
-    defaultValue: true
-    showInUI: true
-
-  - name: "Rendering.GravitationalRedshiftEnabled"
-    displayName: "Gravitational Redshift"
-    tooltip: "Enable gravitational redshift effect"
-    type: bool
-    group: Rendering
-    defaultValue: true
-    showInUI: true
-
   - name: "Rendering.AccretionDiskEnabled"
     displayName: "Accretion Disk"
     tooltip: "Enable accretion disk rendering"
@@ -434,63 +418,44 @@ parameters:
     defaultValue: true
     showInUI: true
 
-  - name: "GeneralRelativity.UseKerrDeflectionLUT"
-    displayName: "Use Kerr Deflection LUT"
-    tooltip: "Use lookup table for Kerr metric light deflection"
+  - name: "GeneralRelativity.PhotonRingEnabled"
+    displayName: "Photon Ring"
+    tooltip: "Enable the photon ring"
     type: bool
     group: GeneralRelativity
     defaultValue: true
     showInUI: true
 
-  - name: "GeneralRelativity.UseKerrRedshiftLUT"
-    displayName: "Use Kerr Redshift LUT"
-    tooltip: "Use lookup table for Kerr metric gravitational redshift"
+  - name: "GeneralRelativity.AngularMomentumEnabled"
+    displayName: "AngularMomentum"
+    tooltip: "Enable Angular Momentum"
     type: bool
     group: GeneralRelativity
     defaultValue: true
     showInUI: true
 
-  - name: "GeneralRelativity.UsePhotonSphereLUT"
-    displayName: "Use Photon Sphere LUT"
-    tooltip: "Use lookup table for photon sphere calculations"
+  - name: "GeneralRelativity.FrameDraggingEnabled"
+    displayName: "Frame Dragging"
+    tooltip: "Enable Frame Dragging"
     type: bool
     group: GeneralRelativity
     defaultValue: true
     showInUI: true
 
-  - name: "GeneralRelativity.UseISCOLUT"
-    displayName: "Use ISCO LUT"
-    tooltip: "Use lookup table for Innermost Stable Circular Orbit calculations"
+  - name: "GeneralRelativity.GravitationalLensingEnabled"
+    displayName: "Gravitational Lensing"
+    tooltip: "Enable Gravitational Lensing"
     type: bool
     group: GeneralRelativity
     defaultValue: true
     showInUI: true
 
-  - name: "GeneralRelativity.ShowEinsteinRings"
-    displayName: "Show Einstein Rings"
-    tooltip: "Visualize Einstein ring formations"
+  - name: "GeneralRelativity.GravitationalRedshiftEnabled"
+    displayName: "Gravitational Redshift"
+    tooltip: "Enable gravitational redshift effect"
     type: bool
     group: GeneralRelativity
     defaultValue: true
-    showInUI: true
-
-  - name: "GeneralRelativity.ShowSecondaryImages"
-    displayName: "Show Secondary Images"
-    tooltip: "Enable rendering of secondary gravitational lensing images"
-    type: bool
-    group: GeneralRelativity
-    defaultValue: true
-    showInUI: true
-
-  - name: "GeneralRelativity.SecondaryImageBrightness"
-    displayName: "Secondary Image Brightness"
-    tooltip: "Brightness multiplier for secondary gravitational lensing images"
-    type: float
-    group: GeneralRelativity
-    defaultValue: 0.5
-    minValue: 0.0
-    maxValue: 2.0
-    dragSpeed: 0.1
     showInUI: true
 
   # Application Parameters

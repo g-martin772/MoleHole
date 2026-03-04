@@ -573,7 +573,7 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene, const std::unordered_
     }
 
     // Rendering settings from AppState
-    m_computeShader->SetInt("u_gravitationalLensingEnabled", Application::Params().Get(Params::RenderingGravitationalLensingEnabled, true) ? 1 : 0);
+    m_computeShader->SetInt("u_gravitationalLensingEnabled", Application::Params().Get(Params::GRGravitationalLensingEnabled, true) ? 1 : 0);
     m_computeShader->SetInt("u_accretionDiskEnabled", Application::Params().Get(Params::RenderingAccretionDiskEnabled, true) ? 1 : 0);
     m_computeShader->SetInt("u_accretionDiskVolumetric", Application::Params().Get(Params::RenderingAccretionDiskVolumetric, false) ? 1 : 0);
     m_computeShader->SetInt("u_renderBlackHoles", Application::Params().Get(Params::RenderingBlackHolesEnabled, true) ? 1 : 0);
@@ -583,7 +583,7 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene, const std::unordered_
     m_computeShader->SetFloat("u_accDiskSpeed", Application::Params().Get(Params::RenderingAccDiskSpeed, 1.0f));
     m_computeShader->SetFloat("u_dopplerBeamingEnabled", Application::Params().Get(Params::RenderingDopplerBeamingEnabled, true) ? 1.0f : 0.0f);
     m_computeShader->SetFloat("u_accDiskTemp", 2000.0f);
-    m_computeShader->SetInt("u_gravitationalRedshiftEnabled", Application::Params().Get(Params::RenderingGravitationalRedshiftEnabled, true) ? 1 : 0);
+    m_computeShader->SetInt("u_gravitationalRedshiftEnabled", Application::Params().Get(Params::GRGravitationalRedshiftEnabled, true) ? 1 : 0);
 
     // Ray marching quality settings - only set during export mode
     if (m_isExportMode) {

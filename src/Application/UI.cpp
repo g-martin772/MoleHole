@@ -241,7 +241,7 @@ void UI::RenderMainUI(float fps, Scene* scene) {
     if (m_showGeneralRelativityWindow)
     {
         bool* p_open = nullptr;
-        GeneralRelativityWindow::Render(p_open);
+        GeneralRelativityWindow::Render(p_open, this);
     }
 }
 

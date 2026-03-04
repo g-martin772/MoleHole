@@ -22,6 +22,7 @@ const char* GetGroupDisplayName(ParameterGroup group) {
         case ParameterGroup::Simulation: return "Simulation";
         case ParameterGroup::Application: return "Application";
         case ParameterGroup::Export: return "Export";
+        case ParameterGroup::GeneralRelativity: return "General Relativity";
         default: return "Unknown";
     }
 }

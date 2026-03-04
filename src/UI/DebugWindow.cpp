@@ -31,11 +31,6 @@ static void RenderSectionHeader(const char* title) {
 void RenderDebugModeCombo(UI* ui) {
     const char* debugModeItems[] = {
         "Normal Rendering",
-        "Influence Zones",
-        "Deflection Magnitude",
-        "Gravitational Field",
-        "Spherical Shape",
-        "LUT Visualization",
         "Gravity Grid",
         "Object Paths"
     };
@@ -96,8 +91,8 @@ void Render(UI* ui) {
     RenderSectionHeader("RENDERING");
 
     ParameterWidgets::RenderParameter(Params::RenderingBlackHolesEnabled, ui);
-    ParameterWidgets::RenderParameter(Params::RenderingGravitationalLensingEnabled, ui);
-    ParameterWidgets::RenderParameter(Params::RenderingGravitationalRedshiftEnabled, ui);
+    ParameterWidgets::RenderParameter(Params::GRGravitationalLensingEnabled, ui);
+    ParameterWidgets::RenderParameter(Params::GRGravitationalRedshiftEnabled, ui);
     ParameterWidgets::RenderParameter(Params::RenderingAccretionDiskEnabled, ui);
     ParameterWidgets::RenderParameter(Params::RenderingAccretionDiskVolumetric, ui);
 
