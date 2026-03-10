@@ -56,13 +56,8 @@ struct ParameterHandle {
 
 enum class DebugMode {
     Normal = 0,
-    InfluenceZones = 1,
-    DeflectionMagnitude = 2,
-    GravitationalField = 3,
-    SphericalShape = 4,
-    DebugLUT = 5,
-    GravityGrid = 6,
-    ObjectPaths = 7
+    GravityGrid = 1,
+    ObjectPaths = 2
 };
 
 enum class ParameterGroup {

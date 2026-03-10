@@ -64,7 +64,7 @@ parameters:
     type: vec3
     group: Camera
     defaultValue: [0.0, 0.0, 5.0]
-    showInUI: false
+    showInUI: true
 
   - name: "Camera.Front"
     displayName: "Camera Front"
@@ -90,7 +90,7 @@ parameters:
     defaultValue: 0.0
     minValue: -89.0
     maxValue: 89.0
-    showInUI: false
+    showInUI: true
 
   - name: "Camera.Yaw"
     displayName: "Camera Yaw"
@@ -98,7 +98,7 @@ parameters:
     type: float
     group: Camera
     defaultValue: -90.0
-    showInUI: false
+    showInUI: true
 
   - name: "Camera.Speed"
     displayName: "Camera Speed"

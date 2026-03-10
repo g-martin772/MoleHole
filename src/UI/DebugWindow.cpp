@@ -28,6 +28,18 @@ static void RenderSectionHeader(const char* title) {
     ImGui::Spacing();
 }
 
+static void TableNextColumnPreserveSpacing() {
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::NewLine();
+}
+
+static void Separate() {
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::Spacing();
+}
+
 void RenderDebugModeCombo(UI* ui) {
     const char* debugModeItems[] = {
         "Normal Rendering",
@@ -55,24 +67,9 @@ void RenderDebugModeTooltip(int debugMode) {
             tooltip = "Normal rendering with no debug visualization";
             break;
         case 1:
-            tooltip = "Red zones showing gravitational influence areas\nBrighter red = closer to black hole\nOnly shows outside event horizon safety zone";
-            break;
-        case 2:
-            tooltip = "Yellow/orange visualization of deflection strength\nBrightness indicates how much light rays are bent\nHelps visualize Kerr distortion effects";
-            break;
-        case 3:
-            tooltip = "Green visualization of gravitational field strength\nBrighter green = stronger gravitational effects\nShows field within 10x Schwarzschild radius";
-            break;
-        case 4:
-            tooltip = "Blue gradient showing black hole's spherical shape\nBlack interior = event horizon (no escape)\nBlue gradient = distance from event horizon\nHelps verify proper sphere geometry";
-            break;
-        case 5:
-            tooltip = "Visualize the distortion lookup table (LUT)\n2D slice of the 3D LUT used for ray deflection\nHue encodes deflection direction, brightness encodes distance\nMagenta tint indicates invalid/overflow entries";
-            break;
-        case 6:
             tooltip = "Gravity Grid overlay on ground plane\nColor shows dominant black hole per cell (by mass/distance^2)\nGrid helps visualize regions of influence";
             break;
-        case 7:
+        case 2:
             tooltip = "Visualize object trajectories and paths\nShows the motion paths of objects in the scene\nHelps track object movement over time";
             break;
         default:
@@ -95,67 +92,48 @@ void Render(UI* ui) {
     ParameterWidgets::RenderParameter(Params::GRGravitationalRedshiftEnabled, ui);
     ParameterWidgets::RenderParameter(Params::RenderingAccretionDiskEnabled, ui);
     ParameterWidgets::RenderParameter(Params::RenderingAccretionDiskVolumetric, ui);
-
-    ImGui::Separator();
+    Separate();
 
     RenderSectionHeader("ACCRETION DISK");
 
     if (ImGui::BeginTable("AccDiskGrid", 2, ImGuiTableFlags_None)) {
         ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Height");
+        TableNextColumnPreserveSpacing();
         ParameterWidgets::RenderParameter(Params::RenderingAccDiskHeight, ui, ParameterWidgets::WidgetStyle::Compact);
-        ImGui::TableNextColumn();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Rotation Speed");
+        TableNextColumnPreserveSpacing();
         ParameterWidgets::RenderParameter(Params::RenderingAccDiskSpeed, ui, ParameterWidgets::WidgetStyle::Compact);
-
         ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Noise Scale");
+        TableNextColumnPreserveSpacing();
         ParameterWidgets::RenderParameter(Params::RenderingAccDiskNoiseScale, ui, ParameterWidgets::WidgetStyle::Compact);
-        ImGui::TableNextColumn();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Noise LOD");
+        TableNextColumnPreserveSpacing();
         ParameterWidgets::RenderParameter(Params::RenderingAccDiskNoiseLOD, ui, ParameterWidgets::WidgetStyle::Compact);
         ImGui::EndTable();
     }
-
-    ImGui::Separator();
+    Separate();
 
     RenderSectionHeader("EFFECTS");
 
     ParameterWidgets::RenderParameter(Params::RenderingDopplerBeamingEnabled, ui);
     ParameterWidgets::RenderParameter(Params::RenderingBloomEnabled, ui);
     ParameterWidgets::RenderParameter(Params::RenderingAntiAliasingEnabled, ui);
-
-    ImGui::Separator();
+    Separate();
 
     RenderSectionHeader("BLOOM SETTINGS");
 
-    if (ImGui::BeginTable("BloomGrid", 3, ImGuiTableFlags_None)) {
+    if (ImGui::BeginTable("BloomGrid", 2, ImGuiTableFlags_None)) {
         ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Threshold");
+        TableNextColumnPreserveSpacing();
         ParameterWidgets::RenderParameter(Params::RenderingBloomThreshold, ui, ParameterWidgets::WidgetStyle::Compact);
-        ImGui::TableNextColumn();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Passes");
+        TableNextColumnPreserveSpacing();
         ParameterWidgets::RenderParameter(Params::RenderingBloomBlurPasses, ui, ParameterWidgets::WidgetStyle::Compact);
-        ImGui::TableNextColumn();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Intensity");
+        ImGui::TableNextRow();
+        TableNextColumnPreserveSpacing();
         ParameterWidgets::RenderParameter(Params::RenderingBloomIntensity, ui, ParameterWidgets::WidgetStyle::Compact);
+        TableNextColumnPreserveSpacing();
         ImGui::EndTable();
     }
-
     ParameterWidgets::RenderParameter(Params::RenderingBloomDebug, ui);
-
-    ImGui::Separator();
-
-    RenderSectionHeader("LENS FLARE");
-
-    ParameterWidgets::RenderParameter(Params::RenderingLensFlareEnabled, ui);
-    ParameterWidgets::RenderParameter(Params::RenderingLensFlareThreshold, ui, ParameterWidgets::WidgetStyle::Compact);
-    ParameterWidgets::RenderParameter(Params::RenderingLensFlareIntensity, ui, ParameterWidgets::WidgetStyle::Compact);
-
-    ImGui::Separator();
+    Separate();
 
     RenderSectionHeader("DEBUG RENDERING");
 

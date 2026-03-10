@@ -20,6 +20,18 @@ static void RenderSectionHeader(const char* title) {
     ImGui::Spacing();
 }
 
+static void TableNextColumnPreserveSpacing() {
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::NewLine();
+}
+
+static void Separate() {
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::Spacing();
+}
+
 void Render(UI* ui, Scene* scene) {
     if (!ImGui::Begin("Camera")) {
         ImGui::End();
@@ -29,104 +41,35 @@ void Render(UI* ui, Scene* scene) {
     auto& renderer = Application::GetRenderer();
     auto& camera = renderer.camera;
 
-    RenderSectionHeader("CAMERA CONTROLS");
+    RenderSectionHeader("GENERAL SETTINGS");
 
     if (ImGui::BeginTable("CameraSpeedGrid", 2, ImGuiTableFlags_None)) {
         ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::Text("Speed");
-        float speed = Application::Params().Get(Params::CameraSpeed, 1.0f);
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::DragFloat("##Speed", &speed, 0.1f, 0.01f, 100.0f)) {
-            Application::Params().Set(Params::CameraSpeed, speed);
-            ui->MarkConfigDirty();
-        }
-
-        ImGui::TableNextColumn();
-        ImGui::Text("Mouse Sensitivity");
-        float sensitivity = Application::Params().Get(Params::CameraMouseSensitivity, 0.05f);
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::DragFloat("##Sensitivity", &sensitivity, 0.005f, 0.001f, 1.0f, "%.3f")) {
-            Application::Params().Set(Params::CameraMouseSensitivity, sensitivity);
-            ui->MarkConfigDirty();
-        }
-
+        TableNextColumnPreserveSpacing();
+        ParameterWidgets::RenderParameter(Params::CameraSpeed, ui, ParameterWidgets::WidgetStyle::Compact);
+        TableNextColumnPreserveSpacing();
+        ParameterWidgets::RenderParameter(Params::CameraMouseSensitivity, ui, ParameterWidgets::WidgetStyle::Compact);
         ImGui::EndTable();
     }
+    Separate();
 
-    if (camera) {
-        ImGui::Spacing();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Camera Position");
+    RenderSectionHeader("POSITION");
 
-        glm::vec3 position = camera->GetPosition();
-        if (ImGui::BeginTable("PosGrid", 3, ImGuiTableFlags_None)) {
+    if (camera)
+    {
+        ParameterWidgets::RenderParameter(Params::CameraPosition, ui, ParameterWidgets::WidgetStyle::Compact);
+        if (ImGui::BeginTable("CameraPositionGrid", 3, ImGuiTableFlags_None)) {
             ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "X");
-            ImGui::SetNextItemWidth(-1);
-            bool posChanged = ImGui::DragFloat("##PosX", &position.x, 0.1f);
-            ImGui::TableNextColumn();
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Y");
-            ImGui::SetNextItemWidth(-1);
-            posChanged |= ImGui::DragFloat("##PosY", &position.y, 0.1f);
-            ImGui::TableNextColumn();
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Z");
-            ImGui::SetNextItemWidth(-1);
-            posChanged |= ImGui::DragFloat("##PosZ", &position.z, 0.1f);
-            ImGui::EndTable();
-
-            if (posChanged) {
-                camera->SetPosition(position);
-                Application::Params().Set(Params::CameraPosition, position);
-                Application::Params().Set(Params::CameraFront, camera->GetFront());
-                Application::Params().Set(Params::CameraUp, camera->GetUp());
-                Application::Params().Set(Params::CameraPitch, camera->GetPitch());
-                Application::Params().Set(Params::CameraYaw, camera->GetYaw());
-                ui->MarkConfigDirty();
-            }
-        }
-
-        float yaw = camera->GetYaw();
-        float pitch = camera->GetPitch();
-        float fov = Application::Params().Get(Params::RenderingFOV, 45.0f);
-        bool angleChanged = false;
-
-        if (ImGui::BeginTable("AngleGrid", 3, ImGuiTableFlags_None)) {
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Yaw");
-            ImGui::SetNextItemWidth(-1);
-            if (ImGui::DragFloat("##Yaw", &yaw, 0.5f, -180.0f, 180.0f)) {
-                angleChanged = true;
-            }
-            ImGui::TableNextColumn();
-            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Pitch");
-            ImGui::SetNextItemWidth(-1);
-            if (ImGui::DragFloat("##Pitch", &pitch, 0.5f, -89.0f, 89.0f)) {
-                angleChanged = true;
-            }
-            ImGui::TableNextColumn();
-            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "FOV");
-            ImGui::SetNextItemWidth(-1);
-            if (ImGui::DragFloat("##FOV", &fov, 0.5f, 1.0f, 179.0f)) {
-                Application::Params().Set(Params::RenderingFOV, fov);
-                camera->SetFov(fov);
-                ui->MarkConfigDirty();
-            }
+            TableNextColumnPreserveSpacing();
+            ParameterWidgets::RenderParameter(Params::CameraYaw, ui, ParameterWidgets::WidgetStyle::Compact);
+            TableNextColumnPreserveSpacing();
+            ParameterWidgets::RenderParameter(Params::CameraPitch, ui, ParameterWidgets::WidgetStyle::Compact);
+            TableNextColumnPreserveSpacing();
+            ParameterWidgets::RenderParameter(Params::RenderingFOV, ui, ParameterWidgets::WidgetStyle::Compact);
             ImGui::EndTable();
         }
+        Separate();
 
-        if (angleChanged) {
-            camera->SetYawPitch(yaw, pitch);
-            Application::Params().Set(Params::CameraPosition, camera->GetPosition());
-            Application::Params().Set(Params::CameraFront, camera->GetFront());
-            Application::Params().Set(Params::CameraUp, camera->GetUp());
-            Application::Params().Set(Params::CameraPitch, pitch);
-            Application::Params().Set(Params::CameraYaw, yaw);
-            ui->MarkConfigDirty();
-        }
-
-        ImGui::Spacing();
         if (ImGui::Button("Reset Camera Position", ImVec2(-1, 0))) {
             glm::vec3 resetPos(0.0f, 20.0f, 100.0f);
             camera->SetPosition(resetPos);
@@ -139,8 +82,8 @@ void Render(UI* ui, Scene* scene) {
             ui->MarkConfigDirty();
         }
     }
+    Separate();
 
-    ImGui::Separator();
     RenderSectionHeader("CAMERA MODES");
 
     bool thirdPerson = Application::Params().Get(Params::RenderingThirdPerson, false);
@@ -205,26 +148,12 @@ void Render(UI* ui, Scene* scene) {
 
     ImGui::Spacing();
 
-    if (ImGui::BeginTable("TPGrid", 2, ImGuiTableFlags_None)) {
+    if (ImGui::BeginTable("ThirdPersonGrid", 2, ImGuiTableFlags_None)) {
         ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Third Person Height");
-        float tpHeight = Application::Params().Get(Params::ThirdPersonHeight, 2.0f);
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::DragFloat("##TPHeight", &tpHeight, 0.1f, 0.0f, 100.0f)) {
-            Application::Params().Set(Params::ThirdPersonHeight, tpHeight);
-            ui->MarkConfigDirty();
-        }
-
-        ImGui::TableNextColumn();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Third Person Distance");
-        float tpDist = Application::Params().Get(Params::ThirdPersonDistance, 5.0f);
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::DragFloat("##TPDist", &tpDist, 0.1f, 0.0f, 1000.0f)) {
-            Application::Params().Set(Params::ThirdPersonDistance, tpDist);
-            ui->MarkConfigDirty();
-        }
-
+        TableNextColumnPreserveSpacing();
+        ParameterWidgets::RenderParameter(Params::ThirdPersonDistance, ui, ParameterWidgets::WidgetStyle::Compact);
+        TableNextColumnPreserveSpacing();
+        ParameterWidgets::RenderParameter(Params::ThirdPersonHeight, ui, ParameterWidgets::WidgetStyle::Compact);
         ImGui::EndTable();
     }
 

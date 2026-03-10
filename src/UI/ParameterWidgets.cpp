@@ -10,6 +10,10 @@
 #include <functional>
 #include <nfd.h>
 
+#include "imgui_internal.h"
+
+struct ImGuiWindow;
+
 namespace ParameterWidgets {
 
 const char* GetGroupDisplayName(ParameterGroup group) {
@@ -25,6 +29,53 @@ const char* GetGroupDisplayName(ParameterGroup group) {
         case ParameterGroup::GeneralRelativity: return "General Relativity";
         default: return "Unknown";
     }
+}
+
+static void PushMultiItemsWidthsAndLabels(const char* labels[], int components, float w_full)
+{
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    const ImGuiStyle& style = GImGui->Style;
+    if(w_full <= 0.0f)
+        w_full = ImGui::GetWindowWidth();
+
+    const float w_item_one =
+        ImMax(1.0f, (w_full - (style.ItemInnerSpacing.x * 2.0f) * (components - 1)) / static_cast<float>(components)) -
+        style.ItemInnerSpacing.x;
+    for(int i = 0; i < components; i++)
+        window->DC.ItemWidthStack.push_back(w_item_one - ImGui::CalcTextSize(labels[i]).x);
+    window->DC.ItemWidth = window->DC.ItemWidthStack.back();
+}
+
+bool DragFloatNEx(const char* labels[], float* v, int components, float v_speed) {
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    if(window->SkipItems)
+        return false;
+
+    ImGuiContext& g = *GImGui;
+    bool value_changed = false;
+    PushMultiItemsWidthsAndLabels(labels, components, 0.0f);
+    if (ImGui::BeginTable("Vec3", 3, ImGuiTableFlags_None))
+    {
+        ImGui::TableNextRow();
+        for(int i = 0; i < components; i++)
+        {
+            ImGui::TableNextColumn();
+            ImGui::NewLine();
+            ImGui::PushID(labels[i]);
+            ImGui::PushID(i);
+            const float availWidth = ImGui::GetContentRegionAvail().x;
+            const float textWidth = ImGui::CalcTextSize(labels[i], ImGui::FindRenderedTextEnd(labels[i])).x;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availWidth - textWidth) * 0.5f);
+            ImGui::TextUnformatted(labels[i], ImGui::FindRenderedTextEnd(labels[i]));
+            ImGui::SetNextItemWidth(-1);
+            value_changed |= ImGui::DragFloat("", &v[i], v_speed);
+            ImGui::PopID();
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+
+    return value_changed;
 }
 
 void RenderParameter(const ParameterHandle& handle, UI* ui, WidgetStyle style) {
@@ -52,6 +103,7 @@ void RenderParameter(const ParameterHandle& handle, UI* ui, WidgetStyle style) {
     switch (meta.type) {
         case ParameterType::Bool: {
             bool value = registry.Get(handle, std::get<bool>(meta.defaultValue));
+
             if (ImGui::Checkbox(meta.displayName.c_str(), &value)) {
                 registry.Set(handle, value);
                 ui->MarkConfigDirty();
@@ -90,7 +142,13 @@ void RenderParameter(const ParameterHandle& handle, UI* ui, WidgetStyle style) {
                     ImGui::EndCombo();
                 }
             } else if (meta.minValue != 0.0f || meta.maxValue != 0.0f) {
-                if (ImGui::SliderInt(meta.displayName.c_str(), &value,
+                const float availWidth = ImGui::GetContentRegionAvail().x;
+                const float textWidth = ImGui::CalcTextSize(meta.displayName.c_str()).x;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availWidth - textWidth) * 0.5f);
+                ImGui::TextUnformatted(meta.displayName.c_str());
+
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderInt(("##slider_" + meta.name).c_str(), &value,
                                     static_cast<int>(meta.minValue),
                                     static_cast<int>(meta.maxValue))) {
                     registry.Set(handle, value);
@@ -98,7 +156,13 @@ void RenderParameter(const ParameterHandle& handle, UI* ui, WidgetStyle style) {
                     valueChanged = true;
                 }
             } else {
-                if (ImGui::DragInt(meta.displayName.c_str(), &value)) {
+                const float availWidth = ImGui::GetContentRegionAvail().x;
+                const float textWidth = ImGui::CalcTextSize(meta.displayName.c_str()).x;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availWidth - textWidth) * 0.5f);
+                ImGui::TextUnformatted(meta.displayName.c_str());
+
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragInt(("##drag_" + meta.name).c_str(), &value)) {
                     registry.Set(handle, value);
                     ui->MarkConfigDirty();
                     valueChanged = true;
@@ -134,14 +198,26 @@ void RenderParameter(const ParameterHandle& handle, UI* ui, WidgetStyle style) {
                 }
             } else if (meta.minValue != 0.0f || meta.maxValue != 0.0f) {
                 if (style == WidgetStyle::Compact) {
-                    if (ImGui::SliderFloat(meta.displayName.c_str(), &value,
+                    const float availWidth = ImGui::GetContentRegionAvail().x;
+                    const float textWidth = ImGui::CalcTextSize(meta.displayName.c_str()).x;
+                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availWidth - textWidth) * 0.5f);
+                    ImGui::TextUnformatted(meta.displayName.c_str());
+
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::SliderFloat(("##slider_" + meta.name).c_str(), &value,
                                           meta.minValue, meta.maxValue, "%.3f")) {
                         registry.Set(handle, value);
                         ui->MarkConfigDirty();
                         valueChanged = true;
                     }
                 } else {
-                    if (ImGui::DragFloat(meta.displayName.c_str(), &value,
+                    const float availWidth = ImGui::GetContentRegionAvail().x;
+                    const float textWidth = ImGui::CalcTextSize(meta.displayName.c_str()).x;
+                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availWidth - textWidth) * 0.5f);
+                    ImGui::TextUnformatted(meta.displayName.c_str());
+
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat(("##drag" + meta.name).c_str(), &value,
                                         meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f,
                                         meta.minValue, meta.maxValue, "%.3f")) {
                         registry.Set(handle, value);
@@ -150,7 +226,13 @@ void RenderParameter(const ParameterHandle& handle, UI* ui, WidgetStyle style) {
                     }
                 }
             } else {
-                if (ImGui::DragFloat(meta.displayName.c_str(), &value,
+                const float availWidth = ImGui::GetContentRegionAvail().x;
+                const float textWidth = ImGui::CalcTextSize(meta.displayName.c_str()).x;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availWidth - textWidth) * 0.5f);
+                ImGui::TextUnformatted(meta.displayName.c_str());
+
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat(("##drag" + meta.name).c_str(), &value,
                                     meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f)) {
                     registry.Set(handle, value);
                     ui->MarkConfigDirty();
@@ -190,8 +272,8 @@ void RenderParameter(const ParameterHandle& handle, UI* ui, WidgetStyle style) {
         case ParameterType::Vec3: {
             glm::vec3 value = registry.Get(handle, std::get<glm::vec3>(meta.defaultValue));
 
-            if (ImGui::DragFloat3(meta.displayName.c_str(), &value[0],
-                                 meta.dragSpeed > 0 ? meta.dragSpeed : 0.1f)) {
+            const char* names[] = {"X-Value", "Y-Value", "Z-Value"};
+            if (DragFloatNEx(names, &value[0], 3, 0.05f)){
                 registry.Set(handle, value);
                 ui->MarkConfigDirty();
                 valueChanged = true;

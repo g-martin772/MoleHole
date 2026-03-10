@@ -238,11 +238,14 @@ void Renderer::RenderScene(Scene *scene) {
     lastTime = currentTime;
     input->Update();
 
-    if (viewport_focused && viewport_hovered && !gizmoUsing && !gizmoOver) {
-        UpdateCamera(deltaTime);
+    // removed because of no realtime parameter changes
+    /*if (viewport_focused && viewport_hovered && !gizmoUsing && !gizmoOver) {
+
     } else {
         input->SetCursorEnabled(true);
-    }
+    }*/
+
+    UpdateCamera(deltaTime);
 
     unsigned int fbo;
     glGenFramebuffers(1, &fbo);
@@ -585,6 +588,16 @@ void Renderer::UpdateCamera(float deltaTime) {
         Application::Params().Set(Params::CameraUp, camera->GetUp());
         Application::Params().Set(Params::CameraPitch, camera->GetPitch());
         Application::Params().Set(Params::CameraYaw, camera->GetYaw());
+    } else {
+        glm::vec3 paramPos = Application::Params().Get(Params::CameraPosition, glm::vec3(0.0f, 0.0f, 10.0f));
+        if (paramPos != camera->GetPosition()) {
+            camera->SetPosition(paramPos);
+        }
+        float paramYaw = Application::Params().Get(Params::CameraYaw, -90.0f);
+        float paramPitch = Application::Params().Get(Params::CameraPitch, 0.0f);
+        if (paramYaw != camera->GetYaw() || paramPitch != camera->GetPitch()) {
+            camera->SetYawPitch(paramYaw, paramPitch);
+        }
     }
 
     if (camera->GetFov() != Application::Params().Get(Params::RenderingFOV, 45.0f)) {
