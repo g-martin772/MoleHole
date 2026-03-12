@@ -201,8 +201,8 @@ void RenderMainMenuBar(UI* ui, Scene* scene, bool& doSave, bool& doOpen,
             if (ImGui::MenuItem("Documentation", "F1")) {
                 *ui->GetShowHelpWindowPtr() = true;
             }
-            if (ImGui::MenuItem("Tutorials")) {
-                *ui->GetShowHelpWindowPtr() = true;
+            if (ImGui::MenuItem("Interactive Tutorial")) {
+                ui->StartTutorial();
             }
             ImGui::Separator();
             if (ImGui::MenuItem("About")) {

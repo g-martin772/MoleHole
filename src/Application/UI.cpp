@@ -12,6 +12,7 @@
 #include "../UI/AnimationGraphWindow.h"
 #include "../UI/GeneralRelativityWindow.h"
 #include "UI/ScienceWindow.h"
+#include "../UI/TutorialOverlay.h"
 #include "imgui.h"
 #include "spdlog/spdlog.h"
 #include <nfd.h>
@@ -30,6 +31,7 @@
 #include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtx/quaternion.hpp>
 
+#include "imgui_internal.h"
 #include "Parameters.h"
 #include "Renderer/PhysicsDebugRenderer.h"
 
@@ -60,6 +62,11 @@ void UI::Initialize() {
 
     Style();
     
+    bool tutorialDone = Application::Params().Get(Params::AppTutorialCompleted, false);
+    if (!tutorialDone) {
+        TutorialOverlay::Start(this);
+    }
+
     m_initialized = true;
     spdlog::info("UI initialized successfully");
 }
@@ -191,7 +198,40 @@ void UI::RenderDockspace(Scene* scene) {
                                       ImGuiWindowFlags_NoNavFocus;
 
     ImGui::Begin("##DockSpace", nullptr, dockspace_flags);
-    ImGui::DockSpace(ImGui::GetID("DockSpace"), ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+    const ImGuiID dockspaceId = ImGui::GetID("DockSpace");
+    ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+
+    static bool s_firstRunLayoutApplied = false;
+    if (const bool tutorialCompleted = Application::Params().Get(Params::AppTutorialCompleted, false); !tutorialCompleted && !s_firstRunLayoutApplied) {
+        s_firstRunLayoutApplied = true;
+
+        ImGui::DockBuilderRemoveNode(dockspaceId);
+        ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_PassthruCentralNode);
+        ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
+
+        ImGuiID dockRight, dockCenter;
+        ImGui::DockBuilderSplitNode(dockspaceId, ImGuiDir_Right, 0.28f, &dockRight, &dockCenter);
+
+        ImGuiID dockRightTop, dockRightBottom;
+        ImGui::DockBuilderSplitNode(dockRight, ImGuiDir_Up, 0.5f, &dockRightTop, &dockRightBottom);
+
+        ImGuiID dockBottom;
+        ImGui::DockBuilderSplitNode(dockCenter, ImGuiDir_Down, 0.30f, &dockBottom, &dockCenter);
+
+        ImGui::DockBuilderDockWindow("System", dockRightTop);
+        ImGui::DockBuilderDockWindow("Camera", dockRightTop);
+        ImGui::DockBuilderDockWindow("Scene", dockRightBottom);
+        ImGui::DockBuilderDockWindow("Simulation", dockRightBottom);
+        ImGui::DockBuilderDockWindow("Debug", dockRightBottom);
+        ImGui::DockBuilderDockWindow("Animation Graph", dockBottom);
+        ImGui::DockBuilderDockWindow("Viewport - 3D Simulation", dockBottom);
+        ImGui::DockBuilderDockWindow("General Relativity Settings", dockBottom);
+        ImGui::DockBuilderDockWindow("Science", dockBottom);
+
+        ImGui::DockBuilderFinish(dockspaceId);
+        spdlog::info("Applied first-run docking layout");
+    }
+
     ImGui::End();
     ImGui::PopStyleVar(3);
 }
@@ -249,6 +289,9 @@ void UI::RenderMainUI(float fps, Scene* scene) {
     {
         ScienceWindow::Render(this);
     }
+
+    if (IsTutorialActive())
+        TutorialOverlay::Render(this);
 }
 
 
@@ -775,6 +818,14 @@ void UI::RenderExportProgress() {
     } else {
         ImGui::TextDisabled("No export in progress");
     }
+}
+
+void UI::StartTutorial() {
+    TutorialOverlay::Start(this);
+}
+
+bool UI::IsTutorialActive() const {
+    return TutorialOverlay::IsActive();
 }
 
 void UI::ReloadFonts() {

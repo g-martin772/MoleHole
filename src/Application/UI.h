@@ -67,6 +67,9 @@ public:
     bool* GetShowGeneralRelativityWindowPtr() { return &m_showGeneralRelativityWindow; }
     bool* GetShowScienceWindowPtr() { return &m_showScienceWindow; }
 
+    void StartTutorial();
+    bool IsTutorialActive() const;
+
 private:
     // Window rendering (kept for special cases like HelpWindow and export)
     void RenderHelpWindow();

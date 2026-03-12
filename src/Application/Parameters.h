@@ -71,6 +71,7 @@ namespace Params {
     inline constexpr ParameterHandle AppUseKerrDistortion("App.UseKerrDistortion");
     inline constexpr ParameterHandle AppIntroAnimationEnabled("App.IntroAnimationEnabled");
     inline constexpr ParameterHandle AppBackgroundImage("App.BackgroundImage");
+    inline constexpr ParameterHandle AppTutorialCompleted("App.TutorialCompleted");
 
     // UI Parameters
     inline constexpr ParameterHandle UIFontSize("UI.FontSize");
