@@ -8,6 +8,7 @@
 #include "Parameters.h"
 #include "Renderer/PhysicsDebugRenderer.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 
 #ifndef _DEBUG
 #define _DEBUG
@@ -274,7 +275,9 @@ void Application::Render() {
     m_ui.RenderDockspace(scene);
     m_ui.RenderMainUI(GetFPS(), scene);
     m_renderer.RenderScene(scene);
-    m_ui.RenderSimulationControls(); // Delegates to SimulationWindow namespace
+    if (const ImGuiWindow* window = ImGui::FindWindowByName("Viewport - 3D Simulation"); !window->Hidden) {
+        m_ui.RenderSimulationControls();
+    }
 
     for (const auto& [name, callback] : m_renderCallbacks) {
         try {
