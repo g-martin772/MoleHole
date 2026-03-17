@@ -277,6 +277,7 @@ void Application::Render() {
     m_renderer.RenderScene(scene);
     if (const ImGuiWindow* window = ImGui::FindWindowByName("Viewport - 3D Simulation"); !window->Hidden) {
         m_ui.RenderSimulationControls();
+        m_ui.RenderViewportHUD(scene);
     }
 
     for (const auto& [name, callback] : m_renderCallbacks) {

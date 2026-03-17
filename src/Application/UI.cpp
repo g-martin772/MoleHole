@@ -13,6 +13,7 @@
 #include "../UI/GeneralRelativityWindow.h"
 #include "UI/ScienceWindow.h"
 #include "../UI/TutorialOverlay.h"
+#include "../UI/ViewportHUD.h"
 #include "imgui.h"
 #include "spdlog/spdlog.h"
 #include <nfd.h>
@@ -483,6 +484,12 @@ void UI::Style() {
 
 void UI::RenderSimulationControls() {
     SimulationWindow::RenderSimulationControls(this);
+}
+
+void UI::RenderViewportHUD(Scene* scene) {
+    if (m_showViewportHUD) {
+        ViewportHUD::Render(this, scene);
+    }
 }
 
 void UI::RenderHelpWindow() {

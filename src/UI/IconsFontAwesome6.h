@@ -28,6 +28,7 @@
 #define ICON_FA_CIRCLE_INFO "\xef\x81\x9a"    // U+F05A (info circle - tutorial info)
 #define ICON_FA_GRADUATION_CAP "\xef\x86\x9d" // U+F19D (graduation cap - tutorial)
 #define ICON_FA_XMARK "\xef\x80\x8d"          // U+F00D (xmark - close/skip)
+#define ICON_FA_GAUGE "\xef\x98\xa4"          // U+F624 (gauge - viewport HUD telemetry)
 
 // Font Awesome 6 Unicode range for ImGui font loading
 #define ICON_MIN_FA 0xe000

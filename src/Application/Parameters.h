@@ -77,6 +77,7 @@ namespace Params {
     inline constexpr ParameterHandle UIFontSize("UI.FontSize");
     inline constexpr ParameterHandle UIMainFont("UI.MainFont");
     inline constexpr ParameterHandle UIDefaultExportPath("UI.DefaultExportPath");
+    inline constexpr ParameterHandle UIViewportHUDEnabled("UI.ViewportHUDEnabled");
 
     // Config
     inline constexpr ParameterHandle AdditionalObjectClassSources("Config.AdditionalObjectClassSources");

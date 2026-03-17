@@ -49,17 +49,18 @@ void Render(UI* ui) {
             { ICON_FA_SIM, "Simulation", ui->GetShowSimulationWindowPtr(), 4 },
             { ICON_FA_CHART_LINE, "Animation Graph", ui->GetShowAnimationGraphPtr(), 5 },
             { ICON_FA_ATOM, "General Relativity", ui->GetShowGeneralRelativityWindowPtr(), 6 },
-            { ICON_FA_BRAIN, "Science", ui->GetShowScienceWindowPtr(), 7 }
+            { ICON_FA_BRAIN, "Science", ui->GetShowScienceWindowPtr(), 7 },
+            { ICON_FA_GAUGE, "Viewport HUD", ui->GetShowViewportHUDPtr(), 8 }
         };
 
-        SidebarButton settingsButton = { ICON_FA_GEAR, "Settings", ui->GetShowSettingsWindowPtr(), 7 };
+        SidebarButton settingsButton = { ICON_FA_GEAR, "Settings", ui->GetShowSettingsWindowPtr(), 8 };
 
         int hoveredItem = -1;
         float* sidebarHoverAnim = ui->GetSidebarHoverAnim();
 
         ImGui::SetCursorPosY(12.0f);
 
-        for (int i = 0; i < 8; ++i) {
+        for (int i = 0; i < 9; ++i) {
             ImGui::PushID(i);
 
             bool isActive = *topButtons[i].activePtr;
@@ -151,7 +152,7 @@ void Render(UI* ui) {
         }
 
         {
-            int i = 7;
+            int i = 8;
             ImGui::PushID(i);
 
             bool isActive = *settingsButton.activePtr;

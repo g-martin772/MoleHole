@@ -551,6 +551,14 @@ parameters:
     defaultValue: "."
     showInUI: true
 
+  - name: "UI.ViewportHUDEnabled"
+    displayName: "Viewport HUD"
+    tooltip: "Show viewport heads-up display with camera info and performance stats"
+    type: bool
+    group: Application
+    defaultValue: false
+    showInUI: true
+
 # Scene Object Parameters
 scene_parameters:
   # Entity Parameters
