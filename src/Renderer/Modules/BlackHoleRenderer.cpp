@@ -130,7 +130,8 @@ void BlackHoleRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPass,
     GenerateHRDiagramLUT();
     GenerateKerrGeodesicLUTs();
     
-    LoadSkybox("../assets/backgrounds/space.hdr");
+    std::string bgName = Application::Params().Get<std::string>(Params::AppBackgroundImage, "space.hdr");
+    LoadSkybox("../assets/backgrounds/" + bgName);
 
     // Load shaders
     m_computeShader = std::make_unique<VulkanShader>(
@@ -309,6 +310,7 @@ spdlog::info("BlackHoleRenderer::Init - Allocated Compute Descriptor Set: {}", (
     CreateMeshBuffers();
 
     UpdateDisplayDescriptorSet();
+    UpdateComputeDescriptorSet();
 
     spdlog::info("BlackHoleRenderer::Init - Initialization complete");
 }
@@ -729,6 +731,131 @@ void BlackHoleRenderer::UpdateDisplayDescriptorSet() {
     m_Device->GetDevice().updateDescriptorSets(2, std::array<vk::WriteDescriptorSet, 2>{imageWrite, bufferWrite}.data(), 0, nullptr);
 }
 
+void BlackHoleRenderer::CreateFallbackSkybox() {
+    spdlog::info("CreateFallbackSkybox: Creating fallback skybox");
+    float data[] = { 1.0f, 0.0f, 1.0f, 1.0f }; // Magenta
+    int width = 1, height = 1;
+
+    // Destroy old if exists
+    if (m_skyboxTexture) m_skyboxTexture.reset();
+
+    VulkanImageSpec spec{
+        glm::vec3(width, height, 1.0f),
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        vk::Format::eR32G32B32A32Sfloat,
+        true,
+        vk::ImageAspectFlagBits::eColor
+    };
+
+    m_skyboxTexture = std::make_shared<VulkanImage>();
+    m_skyboxTexture->Create(spec, m_Device);
+
+    // Staging buffer
+    VulkanBuffer stagingBuffer;
+    VulkanBufferSpec bufferSpec{
+        sizeof(data),
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    };
+    stagingBuffer.Create(bufferSpec, m_Device);
+    stagingBuffer.Write(data, sizeof(data));
+
+    // Transition & Copy (reusing logic from LoadSkybox would be cleaner but inline for now)
+    m_skyboxTexture->TransitionLayout(
+        vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+        vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer
+    );
+
+    m_skyboxTexture->CopyBufferToImage(stagingBuffer.GetBuffer(), width, height);
+
+    m_skyboxTexture->TransitionLayout(
+        vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eComputeShader
+    );
+
+    VulkanSamplerSpec samplerSpec{
+        vk::Filter::eNearest, vk::Filter::eNearest, vk::SamplerMipmapMode::eNearest,
+        vk::SamplerAddressMode::eRepeat, vk::SamplerAddressMode::eRepeat, vk::SamplerAddressMode::eRepeat
+    };
+    m_skyboxTexture->CreateSampler(samplerSpec);
+    
+    stagingBuffer.Destroy();
+    spdlog::warn("Created fallback skybox texture (Magenta)");
+}
+
+void BlackHoleRenderer::UpdateComputeDescriptorSet() {
+    if (!m_ComputeDescriptorSet) {
+        spdlog::warn("UpdateComputeDescriptorSet: Descriptor Set not yet allocated");
+        return;
+    }
+
+    std::vector<vk::WriteDescriptorSet> writes;
+
+    // 0: Storage Image
+    vk::DescriptorImageInfo storageImageInfo{
+        {}, m_computeTexture->GetImageView(), vk::ImageLayout::eGeneral
+    };
+    writes.push_back({m_ComputeDescriptorSet, 0, 0, 1, vk::DescriptorType::eStorageImage, &storageImageInfo, nullptr, nullptr});
+
+    // 1: Uniform Buffer
+    vk::DescriptorBufferInfo bufferInfo = m_CommonUBO->GetDescriptorInfo();
+    writes.push_back({m_ComputeDescriptorSet, 1, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &bufferInfo, nullptr});
+
+    // 2: Skybox
+    vk::DescriptorImageInfo skyboxInfo{};
+    if (m_skyboxTexture) {
+        spdlog::info("UpdateComputeDescriptorSet: Updating binding 2 (Skybox) with valid texture");
+        skyboxInfo = {m_skyboxTexture->GetSampler(), m_skyboxTexture->GetImageView(), vk::ImageLayout::eShaderReadOnlyOptimal};
+        writes.push_back({m_ComputeDescriptorSet, 2, 0, 1, vk::DescriptorType::eCombinedImageSampler, &skyboxInfo, nullptr, nullptr});
+    } else {
+        spdlog::error("UpdateComputeDescriptorSet: Skybox texture is NULL! Binding 2 not updated.");
+    }
+
+    // 3-9: LUTs
+    std::vector<vk::DescriptorImageInfo> lutInfos;
+    std::vector<std::shared_ptr<VulkanImage>> luts{
+        m_blackbodyLUT, m_accelerationLUT, m_hrDiagramLUT,
+        m_kerrDeflectionLUT, m_kerrRedshiftLUT, m_kerrPhotonSphereLUT, m_kerrISCOLUT
+    };
+    
+    // We need to keep lutInfos alive until updateDescriptorSets call!
+    // Reserve to prevent reallocation
+    lutInfos.reserve(luts.size());
+
+    for (size_t i = 0; i < luts.size(); i++) {
+        if (luts[i]) {
+            lutInfos.push_back({luts[i]->GetSampler(), luts[i]->GetImageView(), vk::ImageLayout::eShaderReadOnlyOptimal});
+        } else {
+            // Create a dummy info or skip? If shader expects it, we must bind something valid or enable robust buffer access.
+            // For now, assuming null descriptor updates are ignored or cause crash if accessed.
+            // Better to bind a dummy image if null.
+            // But let's just skip and hope the shader handles it (or we don't access it).
+            // Actually, pushing back empty info is bad.
+            // Let's create a placeholder info if null (using blackbodyLUT as fallback)
+            if (m_blackbodyLUT) {
+                 lutInfos.push_back({m_blackbodyLUT->GetSampler(), m_blackbodyLUT->GetImageView(), vk::ImageLayout::eShaderReadOnlyOptimal});
+            } else {
+                 lutInfos.push_back({}); // Will likely crash validation
+            }
+        }
+    }
+
+    for (size_t i = 0; i < lutInfos.size(); i++) {
+        writes.push_back({m_ComputeDescriptorSet, 3 + (uint32_t)i, 0, 1, vk::DescriptorType::eCombinedImageSampler, &lutInfos[i], nullptr, nullptr});
+    }
+
+    // 10: Mesh SSBO
+    vk::DescriptorBufferInfo meshBufferInfo{};
+    if (m_triangleSSBO) {
+        meshBufferInfo = m_triangleSSBO->GetDescriptorInfo();
+        writes.push_back({m_ComputeDescriptorSet, 10, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &meshBufferInfo, nullptr});
+    }
+
+    m_Device->GetDevice().updateDescriptorSets(writes, nullptr);
+}
+
 void BlackHoleRenderer::RenderToScreen(vk::CommandBuffer cmd) {
     if (!m_displayPipeline) return;
 
@@ -857,117 +984,6 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
 
     // Write to UBO
     m_CommonUBO->Write(&ubo, sizeof(CommonUBO), 0);
-
-    // Update descriptor set with current resources
-    std::vector<vk::WriteDescriptorSet> writes;
-
-    // Storage image
-    vk::DescriptorImageInfo storageImageInfo{
-        {},
-        m_computeTexture->GetImageView(),
-        vk::ImageLayout::eGeneral
-    };
-    writes.push_back(vk::WriteDescriptorSet{
-        m_ComputeDescriptorSet,
-        0,
-        0,
-        1,
-        vk::DescriptorType::eStorageImage,
-        &storageImageInfo,
-        nullptr,
-        nullptr
-    });
-
-    // Uniform buffer
-    vk::DescriptorBufferInfo bufferInfo = m_CommonUBO->GetDescriptorInfo();
-    writes.push_back(vk::WriteDescriptorSet{
-        m_ComputeDescriptorSet,
-        1,
-        0,
-        1,
-        vk::DescriptorType::eUniformBuffer,
-        nullptr,
-        &bufferInfo,
-        nullptr
-    });
-
-    // Skybox texture (if available)
-    vk::DescriptorImageInfo skyboxInfo{};
-    if (m_skyboxTexture) {
-        skyboxInfo = vk::DescriptorImageInfo{
-            m_skyboxTexture->GetSampler(),
-            m_skyboxTexture->GetImageView(),
-            vk::ImageLayout::eShaderReadOnlyOptimal
-        };
-        writes.push_back(vk::WriteDescriptorSet{
-            m_ComputeDescriptorSet,
-            2,
-            0,
-            1,
-            vk::DescriptorType::eCombinedImageSampler,
-            &skyboxInfo,
-            nullptr,
-            nullptr
-        });
-    }
-
-    // LUT textures
-    std::vector<vk::DescriptorImageInfo> lutInfos;
-    std::vector<std::shared_ptr<VulkanImage>> luts{
-        m_blackbodyLUT,
-        m_accelerationLUT,
-        m_hrDiagramLUT,
-        m_kerrDeflectionLUT,
-        m_kerrRedshiftLUT,
-        m_kerrPhotonSphereLUT,
-        m_kerrISCOLUT
-    };
-
-    for (size_t i = 0; i < luts.size(); i++) {
-        if (luts[i]) {
-            lutInfos.push_back(vk::DescriptorImageInfo{
-                luts[i]->GetSampler(),
-                luts[i]->GetImageView(),
-                vk::ImageLayout::eShaderReadOnlyOptimal
-            });
-        } else {
-             // Handle missing LUTs gracefully if needed, though they should be init'd
-             lutInfos.push_back(vk::DescriptorImageInfo{});
-        }
-    }
-
-    for (size_t i = 0; i < lutInfos.size(); i++) {
-        if (!luts[i]) continue;
-        writes.push_back(vk::WriteDescriptorSet{
-            m_ComputeDescriptorSet,
-            3 + static_cast<uint32_t>(i),
-            0,
-            1,
-            vk::DescriptorType::eCombinedImageSampler,
-            &lutInfos[i],
-            nullptr,
-            nullptr
-        });
-    }
-
-    // Mesh SSBO (Binding 10)
-    vk::DescriptorBufferInfo meshBufferInfo{};
-    if (m_triangleSSBO) {
-        meshBufferInfo = m_triangleSSBO->GetDescriptorInfo();
-        writes.push_back(vk::WriteDescriptorSet{
-            m_ComputeDescriptorSet,
-            10,
-            0,
-            1,
-            vk::DescriptorType::eStorageBuffer,
-            nullptr,
-            &meshBufferInfo,
-            nullptr
-        });
-    }
-
-    // Update descriptors
-    m_Device->GetDevice().updateDescriptorSets(writes, nullptr);
 }
 
 struct ShaderTriangle {
@@ -1130,6 +1146,8 @@ void BlackHoleRenderer::LoadSkybox(const std::string& path) {
     // Check if path exists
     if (!std::filesystem::exists(path)) {
         spdlog::error("Skybox file does not exist: {}", path);
+        CreateFallbackSkybox();
+        UpdateComputeDescriptorSet();
         return;
     }
 
@@ -1138,6 +1156,8 @@ void BlackHoleRenderer::LoadSkybox(const std::string& path) {
 
     if (!data) {
         spdlog::error("Failed to load skybox texture: {}", path);
+        CreateFallbackSkybox();
+        UpdateComputeDescriptorSet();
         return;
     }
 
@@ -1208,23 +1228,7 @@ void BlackHoleRenderer::LoadSkybox(const std::string& path) {
     
     stagingBuffer.Destroy();
     
-    // Update descriptor set
-    if (m_ComputeDescriptorSet) {
-        vk::DescriptorImageInfo skyboxInfo{};
-        skyboxInfo.imageView = m_skyboxTexture->GetImageView();
-        skyboxInfo.sampler = m_skyboxTexture->GetSampler();
-        skyboxInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        
-        vk::WriteDescriptorSet descriptorWrite{};
-        descriptorWrite.dstSet = m_ComputeDescriptorSet;
-        descriptorWrite.dstBinding = 2; // Binding 2 is skybox
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pImageInfo = &skyboxInfo;
-        
-        m_Device->GetDevice().updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
-    }
+    UpdateComputeDescriptorSet();
 }
 
 void BlackHoleRenderer::Resize(int width, int height) {
@@ -1255,6 +1259,7 @@ void BlackHoleRenderer::Resize(int width, int height) {
     CreateBloomTextures();
     if (m_ImGuiDescriptorSet) { m_ImGuiDescriptorSet = VK_NULL_HANDLE; }
     UpdateDisplayDescriptorSet();
+    UpdateComputeDescriptorSet();
 
     spdlog::info("BlackHoleRenderer::Resize - Resize complete");
 }

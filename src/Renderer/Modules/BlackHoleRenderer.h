@@ -102,6 +102,8 @@ private:
     std::unique_ptr<VulkanBuffer> m_DisplayUBO;
 
     void UpdateDisplayDescriptorSet();
+    void UpdateComputeDescriptorSet();
+    void CreateFallbackSkybox();
 
     // Mesh geometry SSBOs
     std::unique_ptr<VulkanBuffer> m_meshDataSSBO;

@@ -1,4 +1,3 @@
-#include <iostream>
 #include "VulkanShader.h"
 
 #include <ranges>
@@ -37,7 +36,7 @@ public:
         
         std::string content = ShaderUtils::ReadFile(fullPath.string().c_str());
         std::string pathStr = fullPath.string();
-        std::cout << "[FileIncluder] Request: " << requestPath << " -> Full: " << fullPath << " Exists: " << std::filesystem::exists(fullPath) << std::endl;
+        spdlog::debug("[FileIncluder] Request: {} -> Full: {} Exists: {}", requestPath.string(), fullPath.string(), std::filesystem::exists(fullPath));
 
         if (content.empty() && !std::filesystem::exists(fullPath)) {
              // Return error

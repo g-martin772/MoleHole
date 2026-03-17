@@ -138,10 +138,10 @@ void VulkanDevice::Init(const DeviceRequirements &requirements, VulkanInstance *
     deviceCreateInfo.queueCreateInfoCount = deviceQueueInfos.size();
     deviceCreateInfo.pQueueCreateInfos = deviceQueueInfos.data();
 
-    vk::PhysicalDeviceFeatures deviceFeatures;
-    deviceFeatures.fillModeNonSolid = VK_TRUE;
-    deviceFeatures.samplerAnisotropy = VK_TRUE;
-    deviceFeatures.wideLines = VK_TRUE;
+    vk::PhysicalDeviceFeatures deviceFeatures{};
+    if (m_PhysicalDevice.getFeatures().fillModeNonSolid) deviceFeatures.fillModeNonSolid = VK_TRUE;
+    if (m_PhysicalDevice.getFeatures().samplerAnisotropy) deviceFeatures.samplerAnisotropy = VK_TRUE;
+    if (m_PhysicalDevice.getFeatures().wideLines) deviceFeatures.wideLines = VK_TRUE;
     deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
 
     std::vector deviceExtensions = {
