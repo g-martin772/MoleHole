@@ -385,8 +385,12 @@ void Renderer::UpdateCamera(float deltaTime) {
     double x, y;
     input->GetMouseDelta(x, y);
 
-    if (input->IsMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT) || /*input->IsCursorDisabled()*/ false) {
-        camera->ProcessMouse((float)x, (float)y);
+    if (input->IsMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT)) {
+        input->SetCursorEnabled(false);
+        // User reported inverted look direction, flipping Y axis
+        camera->ProcessMouse((float)x, -(float)y);
+    } else {
+        input->SetCursorEnabled(true);
     }
 }
 

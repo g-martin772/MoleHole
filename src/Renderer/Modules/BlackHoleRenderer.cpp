@@ -131,7 +131,8 @@ void BlackHoleRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPass,
     GenerateKerrGeodesicLUTs();
     
     std::string bgName = Application::Params().Get<std::string>(Params::AppBackgroundImage, "space.hdr");
-    LoadSkybox("../assets/backgrounds/" + bgName);
+    // LoadSkybox will search for the file
+    LoadSkybox(bgName);
 
     // Load shaders
     m_computeShader = std::make_unique<VulkanShader>(
@@ -903,6 +904,8 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
     // spdlog::debug("UpdateUniforms: Start");
     CommonUBO ubo{};
 
+    const float GEOMETRIC_UNIT_METERS = 1477.0f;
+
     // Camera Matrices
     ubo.view = camera.GetViewMatrix();
     ubo.projection = camera.GetProjectionMatrix();
@@ -912,7 +915,7 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
     const float SOLAR_MASS_KG = 1.98847e30f;
 
     // Camera Vectors
-    ubo.cameraPos = glm::vec4(camera.GetPosition(), time);
+    ubo.cameraPos = glm::vec4(camera.GetPosition() / GEOMETRIC_UNIT_METERS, time);
     ubo.cameraFront = glm::vec4(camera.GetFront(), 0.0f);
     ubo.cameraUp = glm::vec4(camera.GetUp(), 0.0f);
     ubo.cameraRight = glm::vec4(camera.GetRight(), 0.0f);
@@ -978,7 +981,7 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
             float spin = obj.GetParameter<float>(spinHandle).value_or(0.0f);
             glm::vec3 axis = obj.GetParameter<glm::vec3>(axisHandle).value_or(glm::vec3(0,1,0));
 
-            ubo.blackHolePositions[bhCount] = glm::vec4(pos, 0.0f);
+            ubo.blackHolePositions[bhCount] = glm::vec4(pos / GEOMETRIC_UNIT_METERS, 0.0f);
             ubo.blackHoleMasses[bhCount].x = massSM;
             ubo.blackHoleSpins[bhCount].x = spin;
             ubo.blackHoleSpinAxes[bhCount] = glm::vec4(axis, 0.0f);
@@ -990,7 +993,7 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
             float massKg = obj.GetParameter<float>(massHandle).value_or(0.0f); // Use Physics.Mass
             float massSM = massKg / SOLAR_MASS_KG;
 
-            ubo.spherePositions[sphereCount] = glm::vec4(pos, radius); // w = radius
+            ubo.spherePositions[sphereCount] = glm::vec4(pos / GEOMETRIC_UNIT_METERS, radius / GEOMETRIC_UNIT_METERS); // w = radius
             ubo.sphereColors[sphereCount] = glm::vec4(color, massSM); // w = mass in SM
             
             if (doDebug) {
@@ -1170,20 +1173,39 @@ void BlackHoleRenderer::CreateFullscreenQuad() {
 
 void BlackHoleRenderer::LoadSkybox(const std::string& path) {
     if (path.empty()) return;
+
+    std::string filename = std::filesystem::path(path).filename().string();
+    std::vector<std::string> searchPaths = {
+        path,
+        "assets/backgrounds/" + filename,
+        "../assets/backgrounds/" + filename,
+        "../../assets/backgrounds/" + filename
+    };
+
+    std::string validPath;
+    for (const auto& p : searchPaths) {
+        if (std::filesystem::exists(p)) {
+            validPath = p;
+            break;
+        }
+    }
     
     // Check if path exists
-    if (!std::filesystem::exists(path)) {
-        spdlog::error("Skybox file does not exist: {}", path);
+    if (validPath.empty()) {
+        spdlog::error("Skybox file does not exist. Searched in:");
+        for (const auto& p : searchPaths) spdlog::error(" - {}", p);
         CreateFallbackSkybox();
         UpdateComputeDescriptorSet();
         return;
     }
 
+    spdlog::info("Loading Skybox from: {}", validPath);
+
     int width, height, channels;
-    float* data = stbi_loadf(path.c_str(), &width, &height, &channels, 4);
+    float* data = stbi_loadf(validPath.c_str(), &width, &height, &channels, 4);
 
     if (!data) {
-        spdlog::error("Failed to load skybox texture: {}", path);
+        spdlog::error("Failed to load skybox texture: {}", validPath);
         CreateFallbackSkybox();
         UpdateComputeDescriptorSet();
         return;

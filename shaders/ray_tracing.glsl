@@ -292,8 +292,12 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDir) {
                 return color + hit.color;
             }
 
-            // If we didn't hit anything and we are far from influence zones, hit skybox
+            // If we didn't hit anything and we are far from influence zones, check for distant objects one last time, then hit skybox
             if (minDistToInfluence > 1000.0) {
+                HitRecord hit = rayTraceNormalSpace(currentOrigin, currentDir, 1e20);
+                if (hit.hit) {
+                    return color + hit.color;
+                }
                 return color + texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
             }
 
