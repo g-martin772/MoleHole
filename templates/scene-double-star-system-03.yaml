@@ -5,9 +5,9 @@ objects:
       - Sphere
       - Physics
     parameters:
-      Physics.Mass: 1e+14
-      Physics.Velocity: [12, 0, 0]
       Entity.Position: [0, 0, 38]
+      Physics.Velocity: [12, 0, 0]
+      Physics.Mass: 1e+14
   - classes:
       - Entity
       - Sphere

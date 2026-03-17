@@ -121,7 +121,7 @@ void Render(UI* ui, Scene* scene) {
         }
 
         if (auto massParam = obj.GetParameter(Field::Physics::Mass); std::holds_alternative<float>(massParam))
-            lines.push_back({"Spin", FloatStr(std::get<float>(massParam))});
+            lines.push_back({"Mass", FloatStr(std::get<float>(massParam))});
 
         if (obj.HasClass("BlackHole")) {
             if (auto spinParam = obj.GetParameter(Field::BlackHole::Spin); std::holds_alternative<float>(spinParam))
