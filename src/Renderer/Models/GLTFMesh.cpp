@@ -1,50 +1,26 @@
 #include "GLTFMesh.h"
-#include "Renderer/Interface/Shader.h"
-#include <glad/gl.h>
 #include <tiny_gltf.h>
-#include <Application/Profiler.h>
-
-namespace {
-struct MeshCacheHeader {
-    char magic[8];      // "MHMESH\0"
-    uint32_t version;   // 1
-    uint64_t srcSize;   // bytes of source .gltf/.glb
-    uint64_t srcMTimeNs; // last write time ns
-    uint32_t primCount; // number of primitives
-};
-
-inline uint64_t FileSize(const std::filesystem::path& p) {
-    std::error_code ec;
-    auto sz = std::filesystem::file_size(p, ec);
-    return ec ? 0ULL : static_cast<uint64_t>(sz);
-}
-
-inline uint64_t FileMTimeNs(const std::filesystem::path& p) {
-    std::error_code ec;
-    auto tp = std::filesystem::last_write_time(p, ec);
-    if (ec) return 0ULL;
-    return static_cast<uint64_t>(tp.time_since_epoch().count());
-}
-}
+#include <spdlog/spdlog.h>
+#include <glm/gtc/type_ptr.hpp>
+#include "Platform/Vulkan/VulkanDevice.h"
+#include "Platform/Vulkan/VulkanCommandBuffer.h"
 
 GLTFPrimitive::GLTFPrimitive()
-        : m_VAO(0), m_VBO(0), m_EBO(0), m_indexCount(0), m_indexType(GL_UNSIGNED_INT),
-            m_indexOffsetBytes(0), m_baseVertex(0), m_materialIndex(-1) {}
+    : m_indexCount(0), m_indexType(0),
+      m_indexOffsetBytes(0), m_baseVertex(0), m_materialIndex(-1) {}
 
 GLTFPrimitive::~GLTFPrimitive() {
     Cleanup();
 }
 
 GLTFPrimitive::GLTFPrimitive(GLTFPrimitive&& other) noexcept
-        : m_VAO(other.m_VAO), m_VBO(other.m_VBO), m_EBO(other.m_EBO),
-            m_indexCount(other.m_indexCount), m_indexType(other.m_indexType),
-            m_indexOffsetBytes(other.m_indexOffsetBytes), m_baseVertex(other.m_baseVertex),
-            m_materialIndex(other.m_materialIndex) {
-    other.m_VAO = 0;
-    other.m_VBO = 0;
-    other.m_EBO = 0;
+    : m_VertexBuffer(std::move(other.m_VertexBuffer)),
+      m_IndexBuffer(std::move(other.m_IndexBuffer)),
+      m_indexCount(other.m_indexCount), m_indexType(other.m_indexType),
+      m_indexOffsetBytes(other.m_indexOffsetBytes), m_baseVertex(other.m_baseVertex),
+      m_materialIndex(other.m_materialIndex) {
     other.m_indexCount = 0;
-    other.m_indexType = GL_UNSIGNED_INT;
+    other.m_indexType = 0;
     other.m_indexOffsetBytes = 0;
     other.m_baseVertex = 0;
     other.m_materialIndex = -1;
@@ -53,20 +29,16 @@ GLTFPrimitive::GLTFPrimitive(GLTFPrimitive&& other) noexcept
 GLTFPrimitive& GLTFPrimitive::operator=(GLTFPrimitive&& other) noexcept {
     if (this != &other) {
         Cleanup();
-        m_VAO = other.m_VAO;
-        m_VBO = other.m_VBO;
-        m_EBO = other.m_EBO;
+        m_VertexBuffer = std::move(other.m_VertexBuffer);
+        m_IndexBuffer = std::move(other.m_IndexBuffer);
         m_indexCount = other.m_indexCount;
         m_indexType = other.m_indexType;
-    m_indexOffsetBytes = other.m_indexOffsetBytes;
-    m_baseVertex = other.m_baseVertex;
+        m_indexOffsetBytes = other.m_indexOffsetBytes;
+        m_baseVertex = other.m_baseVertex;
         m_materialIndex = other.m_materialIndex;
 
-        other.m_VAO = 0;
-        other.m_VBO = 0;
-        other.m_EBO = 0;
         other.m_indexCount = 0;
-        other.m_indexType = GL_UNSIGNED_INT;
+        other.m_indexType = 0;
         other.m_indexOffsetBytes = 0;
         other.m_baseVertex = 0;
         other.m_materialIndex = -1;
@@ -75,19 +47,15 @@ GLTFPrimitive& GLTFPrimitive::operator=(GLTFPrimitive&& other) noexcept {
 }
 
 void GLTFPrimitive::Cleanup() {
-    if (m_VAO) glDeleteVertexArrays(1, &m_VAO);
-    if (m_VBO) glDeleteBuffers(1, &m_VBO);
-    if (m_EBO) glDeleteBuffers(1, &m_EBO);
-    m_VAO = m_VBO = m_EBO = 0;
+    m_VertexBuffer.reset();
+    m_IndexBuffer.reset();
 }
 
 GLTFMaterial::GLTFMaterial()
     : m_baseColorFactor(1.0f), m_metallicFactor(1.0f), m_roughnessFactor(1.0f),
-      m_baseColorTexture(0), m_hasBaseColorTexture(false), m_hasTransparency(false) {}
+      m_hasBaseColorTexture(false), m_hasTransparency(false) {}
 
-GLTFMesh::GLTFMesh()
-    : m_position(0.0f), m_rotation(glm::quat(1.0f, 0.0f, 0.0f, 0.0f)),
-      m_scale(1.0f), m_loaded(false) {}
+GLTFMesh::GLTFMesh() : m_position(0.0f), m_rotation(glm::identity<glm::quat>()), m_scale(1.0f) {}
 
 GLTFMesh::~GLTFMesh() {
     Cleanup();
@@ -95,121 +63,16 @@ GLTFMesh::~GLTFMesh() {
 
 void GLTFMesh::Cleanup() {
     m_primitives.clear();
-    for (auto& mat : m_materials) {
-        if (mat.m_baseColorTexture) {
-            glDeleteTextures(1, &mat.m_baseColorTexture);
-        }
-    }
     m_materials.clear();
-    if (m_sharedVAO) glDeleteVertexArrays(1, &m_sharedVAO);
-    if (m_sharedVBO) glDeleteBuffers(1, &m_sharedVBO);
-    if (m_sharedEBO) glDeleteBuffers(1, &m_sharedEBO);
-    m_sharedVAO = m_sharedVBO = m_sharedEBO = 0;
-    m_useSharedBuffers = false;
-    m_loaded = false;
+    if (m_DescriptorPool) {
+        m_Device->GetDevice().destroyDescriptorPool(m_DescriptorPool);
+        m_DescriptorPool = nullptr;
+    }
 }
 
-bool GLTFMesh::Load(const std::string& path) {
-    PROFILE_FUNCTION();
-    Cleanup();
-
-    // Try geometry cache first
-    std::filesystem::path srcPath(path);
-    std::filesystem::path cachePath = srcPath;
-    cachePath += ".mhmesh";
-    bool loadedGeometryFromCache = false;
-    if (std::filesystem::exists(cachePath)) {
-        std::ifstream in(cachePath, std::ios::binary);
-        MeshCacheHeader hdr{};
-        if (in.read(reinterpret_cast<char*>(&hdr), sizeof(hdr))) {
-            if (std::memcmp(hdr.magic, "MHMESH\0", 8) == 0 && hdr.version == 1) {
-                if (hdr.srcSize == FileSize(srcPath) && hdr.srcMTimeNs == FileMTimeNs(srcPath)) {
-                    std::vector<TempCachePrim> cachePrims;
-                    cachePrims.reserve(hdr.primCount);
-                    for (uint32_t i = 0; i < hdr.primCount; ++i) {
-                        TempCachePrim cp;
-                        int32_t materialIndex;
-                        uint32_t indexType;
-                        uint32_t indexCount;
-                        uint32_t vertexFloatCount;
-                        if (!in.read(reinterpret_cast<char*>(&materialIndex), sizeof(materialIndex))) break;
-                        if (!in.read(reinterpret_cast<char*>(&indexType), sizeof(indexType))) break;
-                        if (!in.read(reinterpret_cast<char*>(&indexCount), sizeof(indexCount))) break;
-                        if (!in.read(reinterpret_cast<char*>(&vertexFloatCount), sizeof(vertexFloatCount))) break;
-
-                        cp.materialIndex = materialIndex;
-                        cp.indexType = indexType;
-                        cp.indexCount = indexCount;
-                        cp.vertex.resize(vertexFloatCount);
-                        if (!in.read(reinterpret_cast<char*>(cp.vertex.data()), vertexFloatCount * sizeof(float))) break;
-
-                        uint32_t indexByteCount;
-                        if (!in.read(reinterpret_cast<char*>(&indexByteCount), sizeof(indexByteCount))) break;
-                        cp.indices.resize(indexByteCount);
-                        if (!in.read(reinterpret_cast<char*>(cp.indices.data()), indexByteCount)) break;
-
-                        cachePrims.push_back(std::move(cp));
-                    }
-
-                    if (cachePrims.size() == hdr.primCount) {
-                        // Build shared buffers
-                        m_useSharedBuffers = true;
-                        std::vector<float> allVertices;
-                        std::vector<unsigned char> allIndices;
-                        allVertices.reserve( std::accumulate(cachePrims.begin(), cachePrims.end(), size_t{0},
-                            [](size_t s, const TempCachePrim& c){ return s + c.vertex.size(); }) );
-                        allIndices.reserve( std::accumulate(cachePrims.begin(), cachePrims.end(), size_t{0},
-                            [](size_t s, const TempCachePrim& c){ return s + c.indices.size(); }) );
-
-                        m_primitives.clear();
-                        m_primitives.reserve(cachePrims.size());
-
-                        size_t vertexFloatsSoFar = 0; // floats count; 8 floats per vertex
-                        size_t indexBytesSoFar = 0;
-                        for (const auto& cp : cachePrims) {
-                            GLTFPrimitive prim;
-                            prim.m_materialIndex = cp.materialIndex;
-                            prim.m_indexType = cp.indexType;
-                            prim.m_indexCount = cp.indexCount;
-                            prim.m_baseVertex = static_cast<int>(vertexFloatsSoFar / 8);
-                            prim.m_indexOffsetBytes = static_cast<unsigned int>(indexBytesSoFar);
-
-                            allVertices.insert(allVertices.end(), cp.vertex.begin(), cp.vertex.end());
-                            allIndices.insert(allIndices.end(), cp.indices.begin(), cp.indices.end());
-
-                            indexBytesSoFar += cp.indices.size();
-                            vertexFloatsSoFar += cp.vertex.size();
-                            m_primitives.push_back(std::move(prim));
-                        }
-
-                        glGenVertexArrays(1, &m_sharedVAO);
-                        glGenBuffers(1, &m_sharedVBO);
-                        glGenBuffers(1, &m_sharedEBO);
-
-                        glBindVertexArray(m_sharedVAO);
-                        glBindBuffer(GL_ARRAY_BUFFER, m_sharedVBO);
-                        glBufferData(GL_ARRAY_BUFFER, allVertices.size() * sizeof(float), allVertices.data(), GL_STATIC_DRAW);
-                        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_sharedEBO);
-                        glBufferData(GL_ELEMENT_ARRAY_BUFFER, allIndices.size(), allIndices.data(), GL_STATIC_DRAW);
-
-                        glEnableVertexAttribArray(0);
-                        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-                        glEnableVertexAttribArray(1);
-                        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-                        glEnableVertexAttribArray(2);
-                        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-                        glBindVertexArray(0);
-
-                        loadedGeometryFromCache = true;
-                        spdlog::info("Loaded GLTF geometry from cache (shared buffers): {} ({} primitives)", path, hdr.primCount);
-                    } else {
-                        m_primitives.clear();
-                    }
-                }
-            }
-        }
-    }
-
+bool GLTFMesh::Load(const std::string& path, VulkanDevice* device, vk::DescriptorSetLayout textureLayout) {
+    m_Device = device;
+    m_TextureLayout = textureLayout;
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
     std::string err, warn;
@@ -224,15 +87,11 @@ bool GLTFMesh::Load(const std::string& path) {
         return false;
     }
 
-    if (!warn.empty()) {
-        spdlog::warn("GLTF Warning: {}", warn);
-    }
-
+    if (!warn.empty()) spdlog::warn("GLTF Warning: {}", warn);
     if (!err.empty()) {
         spdlog::error("GLTF Error: {}", err);
         return false;
     }
-
     if (!ret) {
         spdlog::error("Failed to load GLTF: {}", path);
         return false;
@@ -240,70 +99,71 @@ bool GLTFMesh::Load(const std::string& path) {
 
     LoadMaterials(model);
 
-    if (!loadedGeometryFromCache) {
-        const tinygltf::Scene& scene = model.scenes[model.defaultScene >= 0 ? model.defaultScene : 0];
-        for (int nodeIdx : scene.nodes) {
-            ProcessNode(model, model.nodes[nodeIdx], glm::mat4(1.0f));
-        }
-        // Save geometry cache
-        if (!m_tempCache.empty()) {
-            std::ofstream out(cachePath, std::ios::binary | std::ios::trunc);
-            if (out) {
-                MeshCacheHeader hdr{};
-                std::memset(&hdr, 0, sizeof(hdr));
-                std::memcpy(hdr.magic, "MHMESH\0", 8);
-                hdr.version = 1;
-                hdr.srcSize = FileSize(srcPath);
-                hdr.srcMTimeNs = FileMTimeNs(srcPath);
-                hdr.primCount = static_cast<uint32_t>(m_tempCache.size());
-                out.write(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
+    // Create Descriptor Pool for materials
+    if (!m_materials.empty()) {
+        std::vector<vk::DescriptorPoolSize> poolSizes = {
+            { vk::DescriptorType::eCombinedImageSampler, static_cast<uint32_t>(m_materials.size()) }
+        };
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.maxSets = static_cast<uint32_t>(m_materials.size());
+        
+        m_DescriptorPool = m_Device->GetDevice().createDescriptorPool(poolInfo);
 
-                for (const auto& cp : m_tempCache) {
-                    int32_t materialIndex = cp.materialIndex;
-                    uint32_t indexType = cp.indexType;
-                    uint32_t indexCount = cp.indexCount;
-                    uint32_t vertexFloatCount = static_cast<uint32_t>(cp.vertex.size());
-                    out.write(reinterpret_cast<const char*>(&materialIndex), sizeof(materialIndex));
-                    out.write(reinterpret_cast<const char*>(&indexType), sizeof(indexType));
-                    out.write(reinterpret_cast<const char*>(&indexCount), sizeof(indexCount));
-                    out.write(reinterpret_cast<const char*>(&vertexFloatCount), sizeof(vertexFloatCount));
-                    out.write(reinterpret_cast<const char*>(cp.vertex.data()), cp.vertex.size() * sizeof(float));
-                    uint32_t indexByteCount = static_cast<uint32_t>(cp.indices.size());
-                    out.write(reinterpret_cast<const char*>(&indexByteCount), sizeof(indexByteCount));
-                    out.write(reinterpret_cast<const char*>(cp.indices.data()), cp.indices.size());
-                }
-                spdlog::info("Wrote GLTF geometry cache: {} ({} primitives)", cachePath.string(), m_tempCache.size());
+        // Allocate and Update Descriptor Sets
+        for (auto& mat : m_materials) {
+            if (mat.m_hasBaseColorTexture && mat.m_baseColorTexture) {
+                vk::DescriptorSetAllocateInfo allocInfo{};
+                allocInfo.descriptorPool = m_DescriptorPool;
+                allocInfo.descriptorSetCount = 1;
+                allocInfo.pSetLayouts = &m_TextureLayout;
+                
+                auto sets = m_Device->GetDevice().allocateDescriptorSets(allocInfo);
+                mat.m_descriptorSet = sets[0];
+
+                vk::DescriptorImageInfo imageInfo{};
+                imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                imageInfo.imageView = mat.m_baseColorTexture->GetImageView();
+                imageInfo.sampler = mat.m_baseColorTexture->GetSampler();
+
+                vk::WriteDescriptorSet descriptorWrite{};
+                descriptorWrite.dstSet = mat.m_descriptorSet;
+                descriptorWrite.dstBinding = 0;
+                descriptorWrite.dstArrayElement = 0;
+                descriptorWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+                descriptorWrite.descriptorCount = 1;
+                descriptorWrite.pImageInfo = &imageInfo;
+
+                m_Device->GetDevice().updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
             }
-            m_tempCache.clear();
         }
     }
 
-    m_shader = std::make_unique<Shader>("../shaders/mesh.vert", "../shaders/mesh.frag");
+    const tinygltf::Scene& scene = model.scenes[model.defaultScene >= 0 ? model.defaultScene : 0];
+    for (int nodeIdx : scene.nodes) {
+        ProcessNode(model, model.nodes[nodeIdx], glm::mat4(1.0f));
+    }
+
     m_path = path;
     m_loaded = true;
-
     spdlog::info("Successfully loaded GLTF mesh: {}", path);
     return true;
 }
 
 void GLTFMesh::ProcessNode(const tinygltf::Model& model, const tinygltf::Node& node, const glm::mat4& parentTransform) {
     glm::mat4 localTransform(1.0f);
-
     if (node.matrix.size() == 16) {
         localTransform = glm::make_mat4(node.matrix.data());
     } else {
-        if (node.translation.size() == 3) {
-            localTransform = glm::translate(localTransform,
-                glm::vec3(node.translation[0], node.translation[1], node.translation[2]));
-        }
+        if (node.translation.size() == 3)
+            localTransform = glm::translate(localTransform, glm::vec3(node.translation[0], node.translation[1], node.translation[2]));
         if (node.rotation.size() == 4) {
             glm::quat rot(node.rotation[3], node.rotation[0], node.rotation[1], node.rotation[2]);
             localTransform *= glm::mat4_cast(rot);
         }
-        if (node.scale.size() == 3) {
-            localTransform = glm::scale(localTransform,
-                glm::vec3(node.scale[0], node.scale[1], node.scale[2]));
-        }
+        if (node.scale.size() == 3)
+            localTransform = glm::scale(localTransform, glm::vec3(node.scale[0], node.scale[1], node.scale[2]));
     }
 
     glm::mat4 transform = parentTransform * localTransform;
@@ -318,7 +178,6 @@ void GLTFMesh::ProcessNode(const tinygltf::Model& model, const tinygltf::Node& n
 }
 
 void GLTFMesh::ProcessMesh(const tinygltf::Model& model, int meshIndex, const glm::mat4& transform) {
-    PROFILE_FUNCTION();
     const tinygltf::Mesh& mesh = model.meshes[meshIndex];
 
     for (const auto& primitive : mesh.primitives) {
@@ -332,432 +191,204 @@ void GLTFMesh::ProcessMesh(const tinygltf::Model& model, int meshIndex, const gl
         const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
 
         prim.m_indexCount = indexAccessor.count;
+        prim.m_indexType = indexAccessor.componentType; // 5123 (USHORT) or 5125 (UINT)
 
-    std::vector<float> vertexData;
-        int positionAccessorIdx = primitive.attributes.count("POSITION") ? primitive.attributes.at("POSITION") : -1;
-        int normalAccessorIdx = primitive.attributes.count("NORMAL") ? primitive.attributes.at("NORMAL") : -1;
-        int texcoordAccessorIdx = primitive.attributes.count("TEXCOORD_0") ? primitive.attributes.at("TEXCOORD_0") : -1;
+        std::vector<uint32_t> indices;
+        // Extract indices
+        const void* indexDataPtr = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
+        if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+            const uint16_t* buf = static_cast<const uint16_t*>(indexDataPtr);
+            for (size_t i = 0; i < indexAccessor.count; ++i) indices.push_back(buf[i]);
+        } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
+            const uint32_t* buf = static_cast<const uint32_t*>(indexDataPtr);
+            for (size_t i = 0; i < indexAccessor.count; ++i) indices.push_back(buf[i]);
+        } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
+             const uint8_t* buf = static_cast<const uint8_t*>(indexDataPtr);
+             for (size_t i = 0; i < indexAccessor.count; ++i) indices.push_back(buf[i]);
+        }
 
-        if (positionAccessorIdx < 0) continue;
+        // Create Index Buffer
+        vk::DeviceSize indexBufferSize = indices.size() * sizeof(uint32_t);
+        VulkanBufferSpec indexSpec{};
+        indexSpec.Size = indexBufferSize;
+        indexSpec.Usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        indexSpec.MemoryProperties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        
+        prim.m_IndexBuffer = std::make_unique<VulkanBuffer>();
+        prim.m_IndexBuffer->Create(indexSpec, m_Device);
+        prim.m_IndexBuffer->Write(indices.data(), indexBufferSize);
 
-        const tinygltf::Accessor& posAccessor = model.accessors[positionAccessorIdx];
-        const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
-        const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
+        // Extract Vertex Attributes
+        std::vector<float> vertexData;
+        int posIdx = primitive.attributes.count("POSITION") ? primitive.attributes.at("POSITION") : -1;
+        int normIdx = primitive.attributes.count("NORMAL") ? primitive.attributes.at("NORMAL") : -1;
+        int uvIdx = primitive.attributes.count("TEXCOORD_0") ? primitive.attributes.at("TEXCOORD_0") : -1;
 
-        size_t posStride = posBufferView.byteStride ? posBufferView.byteStride : 3 * sizeof(float);
-        const unsigned char* posData = &posBuffer.data[posBufferView.byteOffset + posAccessor.byteOffset];
+        if (posIdx < 0) continue;
+
+        const tinygltf::Accessor& posAcc = model.accessors[posIdx];
+        const tinygltf::BufferView& posView = model.bufferViews[posAcc.bufferView];
+        const unsigned char* posData = &model.buffers[posView.buffer].data[posView.byteOffset + posAcc.byteOffset];
+        int posStride = posAcc.ByteStride(posView);
 
         const unsigned char* normData = nullptr;
-        size_t normStride = 0;
-        if (normalAccessorIdx >= 0) {
-            const tinygltf::Accessor& normAccessor = model.accessors[normalAccessorIdx];
-            const tinygltf::BufferView& normBufferView = model.bufferViews[normAccessor.bufferView];
-            const tinygltf::Buffer& normBuffer = model.buffers[normBufferView.buffer];
-            normStride = normBufferView.byteStride ? normBufferView.byteStride : 3 * sizeof(float);
-            normData = &normBuffer.data[normBufferView.byteOffset + normAccessor.byteOffset];
+        int normStride = 0;
+        if (normIdx >= 0) {
+            const tinygltf::Accessor& normAcc = model.accessors[normIdx];
+            const tinygltf::BufferView& normView = model.bufferViews[normAcc.bufferView];
+            normData = &model.buffers[normView.buffer].data[normView.byteOffset + normAcc.byteOffset];
+            normStride = normAcc.ByteStride(normView);
         }
 
-        const unsigned char* texData = nullptr;
-        size_t texStride = 0;
-        if (texcoordAccessorIdx >= 0) {
-            const tinygltf::Accessor& texAccessor = model.accessors[texcoordAccessorIdx];
-            const tinygltf::BufferView& texBufferView = model.bufferViews[texAccessor.bufferView];
-            const tinygltf::Buffer& texBuffer = model.buffers[texBufferView.buffer];
-            texStride = texBufferView.byteStride ? texBufferView.byteStride : 2 * sizeof(float);
-            texData = &texBuffer.data[texBufferView.byteOffset + texAccessor.byteOffset];
+        const unsigned char* uvData = nullptr;
+        int uvStride = 0;
+        if (uvIdx >= 0) {
+            const tinygltf::Accessor& uvAcc = model.accessors[uvIdx];
+            const tinygltf::BufferView& uvView = model.bufferViews[uvAcc.bufferView];
+            uvData = &model.buffers[uvView.buffer].data[uvView.byteOffset + uvAcc.byteOffset];
+            uvStride = uvAcc.ByteStride(uvView);
         }
 
-        // SPEED
-        vertexData.reserve(vertexData.size() + posAccessor.count * 8);
-
-        for (size_t i = 0; i < posAccessor.count; ++i) {
-            const float* positions = reinterpret_cast<const float*>(posData + i * posStride);
-            // MORE SPEED
-            if (transform == glm::mat4(1.0f)) {
-                vertexData.push_back(positions[0]);
-                vertexData.push_back(positions[1]);
-                vertexData.push_back(positions[2]);
-            } else {
-                glm::vec3 pos(positions[0], positions[1], positions[2]);
-                glm::vec4 transformedPos = transform * glm::vec4(pos, 1.0f);
-                vertexData.push_back(transformedPos.x);
-                vertexData.push_back(transformedPos.y);
-                vertexData.push_back(transformedPos.z);
-            }
+        for (size_t i = 0; i < posAcc.count; i++) {
+            const float* pos = reinterpret_cast<const float*>(posData + i * posStride);
+            vertexData.push_back(pos[0]);
+            vertexData.push_back(pos[1]);
+            vertexData.push_back(pos[2]);
 
             if (normData) {
-                const float* normals = reinterpret_cast<const float*>(normData + i * normStride);
-                if (transform == glm::mat4(1.0f)) {
-                    vertexData.push_back(normals[0]);
-                    vertexData.push_back(normals[1]);
-                    vertexData.push_back(normals[2]);
-                } else {
-                    glm::vec3 normal(normals[0], normals[1], normals[2]);
-                    glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(transform)));
-                    glm::vec3 transformedNormal = glm::normalize(normalMatrix * normal);
-                    vertexData.push_back(transformedNormal.x);
-                    vertexData.push_back(transformedNormal.y);
-                    vertexData.push_back(transformedNormal.z);
-                }
+                const float* norm = reinterpret_cast<const float*>(normData + i * normStride);
+                vertexData.push_back(norm[0]);
+                vertexData.push_back(norm[1]);
+                vertexData.push_back(norm[2]);
             } else {
-                vertexData.push_back(0.0f);
-                vertexData.push_back(1.0f);
-                vertexData.push_back(0.0f);
+                vertexData.push_back(0.0f); vertexData.push_back(0.0f); vertexData.push_back(1.0f);
             }
 
-            if (texData) {
-                const float* texcoords = reinterpret_cast<const float*>(texData + i * texStride);
-                vertexData.push_back(texcoords[0]);
-                vertexData.push_back(1.0f - texcoords[1]);
+            if (uvData) {
+                const float* uv = reinterpret_cast<const float*>(uvData + i * uvStride);
+                vertexData.push_back(uv[0]);
+                vertexData.push_back(uv[1]);
             } else {
-                vertexData.push_back(0.0f);
-                vertexData.push_back(0.0f);
+                vertexData.push_back(0.0f); vertexData.push_back(0.0f);
             }
         }
 
-        glGenVertexArrays(1, &prim.m_VAO);
-        glGenBuffers(1, &prim.m_VBO);
-        glGenBuffers(1, &prim.m_EBO);
+        // Create Vertex Buffer
+        vk::DeviceSize vertexBufferSize = vertexData.size() * sizeof(float);
+        VulkanBufferSpec vertexSpec{};
+        vertexSpec.Size = vertexBufferSize;
+        vertexSpec.Usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        vertexSpec.MemoryProperties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-        glBindVertexArray(prim.m_VAO);
-
-        glBindBuffer(GL_ARRAY_BUFFER, prim.m_VBO);
-        glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(float), vertexData.data(), GL_STATIC_DRAW);
-
-        const unsigned char* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, prim.m_EBO);
-
-        std::vector<unsigned char> indexBytes;
-        indexBytes.reserve(indexAccessor.count * 4); // upper bound
-        if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
-            prim.m_indexType = GL_UNSIGNED_SHORT;
-            size_t bytes = indexAccessor.count * sizeof(unsigned short);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, bytes, indexData, GL_STATIC_DRAW);
-            indexBytes.assign(indexData, indexData + bytes);
-        } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
-            prim.m_indexType = GL_UNSIGNED_INT;
-            size_t bytes = indexAccessor.count * sizeof(unsigned int);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, bytes, indexData, GL_STATIC_DRAW);
-            indexBytes.assign(indexData, indexData + bytes);
-        } else {
-            // Fallback to 8-bit indices
-            prim.m_indexType = GL_UNSIGNED_BYTE;
-            size_t bytes = indexAccessor.count * sizeof(unsigned char);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, bytes, indexData, GL_STATIC_DRAW);
-            indexBytes.assign(indexData, indexData + bytes);
-        }
-
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-
-        glBindVertexArray(0);
-
-        // Save CPU-side data for cache
-        TempCachePrim cachePrim;
-        cachePrim.materialIndex = prim.m_materialIndex;
-        cachePrim.indexType = prim.m_indexType;
-        cachePrim.indexCount = prim.m_indexCount;
-        cachePrim.vertex = vertexData; // copy
-        cachePrim.indices = std::move(indexBytes);
-        m_tempCache.push_back(std::move(cachePrim));
-
+        prim.m_VertexBuffer = std::make_unique<VulkanBuffer>();
+        prim.m_VertexBuffer->Create(vertexSpec, m_Device);
+        prim.m_VertexBuffer->Write(vertexData.data(), vertexBufferSize);
+        
         m_primitives.push_back(std::move(prim));
     }
 }
 
 void GLTFMesh::LoadMaterials(const tinygltf::Model& model) {
-    PROFILE_FUNCTION();
     for (const auto& mat : model.materials) {
         GLTFMaterial material;
-
-        if (mat.pbrMetallicRoughness.baseColorFactor.size() == 4) {
-            material.m_baseColorFactor = glm::vec4(
-                mat.pbrMetallicRoughness.baseColorFactor[0],
-                mat.pbrMetallicRoughness.baseColorFactor[1],
-                mat.pbrMetallicRoughness.baseColorFactor[2],
-                mat.pbrMetallicRoughness.baseColorFactor[3]
-            );
+        if (mat.values.find("baseColorFactor") != mat.values.end()) {
+            material.m_baseColorFactor = glm::make_vec4(mat.values.at("baseColorFactor").ColorFactor().data());
         }
-
-        material.m_metallicFactor = mat.pbrMetallicRoughness.metallicFactor;
-        material.m_roughnessFactor = mat.pbrMetallicRoughness.roughnessFactor;
-
-        material.m_hasTransparency = false;
-
-        if (mat.alphaMode == "BLEND") {
-            material.m_hasTransparency = true;
-        } else if (mat.alphaMode == "MASK") {
-            material.m_hasTransparency = false;
-        }
-
-        if (material.m_baseColorFactor.a < 0.99f) {
-            material.m_hasTransparency = true;
-        }
-
-        if (mat.pbrMetallicRoughness.baseColorTexture.index >= 0) {
-            int texIndex = mat.pbrMetallicRoughness.baseColorTexture.index;
-            material.m_baseColorTexture = LoadTextureFromModel(model, texIndex);
+        if (mat.values.find("baseColorTexture") != mat.values.end()) {
+            material.m_baseColorTexture = LoadTextureFromModel(model, mat.values.at("baseColorTexture").TextureIndex());
             material.m_hasBaseColorTexture = true;
         }
-
         m_materials.push_back(material);
     }
 }
 
-unsigned int GLTFMesh::LoadTextureFromModel(const tinygltf::Model& model, int textureIndex) {
-    PROFILE_FUNCTION();
-    if (textureIndex < 0 || textureIndex >= model.textures.size()) return 0;
+std::shared_ptr<VulkanImage> GLTFMesh::LoadTextureFromModel(const tinygltf::Model& model, int textureIndex) {
+    const tinygltf::Texture& tex = model.textures[textureIndex];
+    const tinygltf::Image& image = model.images[tex.source];
 
-    const tinygltf::Texture& texture = model.textures[textureIndex];
-    const tinygltf::Image& image = model.images[texture.source];
+    VulkanImageSpec spec{};
+    spec.Size = glm::vec3(image.width, image.height, 1.0f);
+    spec.Format = vk::Format::eR8G8B8A8Unorm; // Assumes RGBA 8-bit
+    spec.Tiling = vk::ImageTiling::eOptimal;
+    spec.Usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+    spec.MemoryProperties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+    spec.CreateView = true;
+    spec.ViewAspectFlags = vk::ImageAspectFlagBits::eColor;
+    
+    // Auto-calculate mips? For now 1.
+    spec.MipLevels = 1; 
 
-    unsigned int textureID;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
+    auto vulkanImage = std::make_shared<VulkanImage>();
+    vulkanImage->Create(spec, m_Device);
 
-    GLenum internalFormat;
-    GLenum format;
-    GLenum dataType;
-
-    if (image.bits == 16) {
-        dataType = GL_UNSIGNED_SHORT;
-        if (image.component == 1) {
-            format = GL_RED;
-            internalFormat = GL_R16;
-        } else if (image.component == 3) {
-            format = GL_RGB;
-            internalFormat = GL_RGB16;
-        } else if (image.component == 4) {
-            format = GL_RGBA;
-            internalFormat = GL_RGBA16;
-        } else {
-            format = GL_RGBA;
-            internalFormat = GL_RGBA16;
-        }
-    } else {
-        dataType = GL_UNSIGNED_BYTE;
-        if (image.component == 1) {
-            format = GL_RED;
-            internalFormat = GL_R8;
-        } else if (image.component == 3) {
-            format = GL_RGB;
-            internalFormat = GL_SRGB8;
-        } else if (image.component == 4) {
-            format = GL_RGBA;
-            internalFormat = GL_SRGB8_ALPHA8;
-        } else {
-            format = GL_RGBA;
-            internalFormat = GL_SRGB8_ALPHA8;
-        }
+    // Create Sampler
+    VulkanSamplerSpec samplerSpec{};
+    if (tex.sampler >= 0) {
+        const tinygltf::Sampler& gltfSampler = model.samplers[tex.sampler];
+        // Map GLTF sampler to Vulkan (simplified mapping)
+        samplerSpec.MinFilter = (gltfSampler.minFilter == TINYGLTF_TEXTURE_FILTER_NEAREST) ? vk::Filter::eNearest : vk::Filter::eLinear;
+        samplerSpec.MagFilter = (gltfSampler.magFilter == TINYGLTF_TEXTURE_FILTER_NEAREST) ? vk::Filter::eNearest : vk::Filter::eLinear;
+        samplerSpec.AddressU = vk::SamplerAddressMode::eRepeat; // Default
+        samplerSpec.AddressV = vk::SamplerAddressMode::eRepeat;
     }
+    vulkanImage->CreateSampler(samplerSpec);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, image.width, image.height, 0, format, dataType, image.image.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
+    // Upload image data using staging buffer
+    vk::DeviceSize imageSize = image.width * image.height * 4;
+    VulkanBufferSpec stagingSpec{};
+    stagingSpec.Size = imageSize;
+    stagingSpec.Usage = vk::BufferUsageFlagBits::eTransferSrc;
+    stagingSpec.MemoryProperties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+    
+    VulkanBuffer stagingBuffer;
+    stagingBuffer.Create(stagingSpec, m_Device);
+    stagingBuffer.Write(image.image.data(), imageSize);
 
-    if (texture.sampler >= 0 && texture.sampler < model.samplers.size()) {
-        const tinygltf::Sampler& sampler = model.samplers[texture.sampler];
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, sampler.minFilter >= 0 ? sampler.minFilter : GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, sampler.magFilter >= 0 ? sampler.magFilter : GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, sampler.wrapS);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, sampler.wrapT);
-    } else {
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    }
+    // Transition to TransferDst
+    vulkanImage->TransitionLayout(
+        vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::PipelineStageFlagBits::eTopOfPipe,
+        vk::PipelineStageFlagBits::eTransfer
+    );
 
-    return textureID;
+    // Copy buffer to image
+    vulkanImage->CopyBufferToImage(
+        stagingBuffer.GetBuffer(),
+        static_cast<uint32_t>(image.width),
+        static_cast<uint32_t>(image.height)
+    );
+
+    // Transition to ShaderReadOnlyOptimal
+    vulkanImage->TransitionLayout(
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::PipelineStageFlagBits::eTransfer,
+        vk::PipelineStageFlagBits::eFragmentShader
+    );
+
+    stagingBuffer.Destroy();
+
+    return vulkanImage;
 }
 
-void GLTFMesh::Render(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPos) {
-    if (!m_loaded || !m_shader) return;
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-
-    glm::mat4 model = GetTransform();
-
-    m_shader->Bind();
-    m_shader->SetMat4("uModel", model);
-    m_shader->SetMat4("uView", view);
-    m_shader->SetMat4("uProjection", projection);
-    m_shader->SetVec3("uCameraPos", cameraPos);
-    m_shader->SetVec3("uLightDir", glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f)));
-
-    if (m_useSharedBuffers) {
-        glBindVertexArray(m_sharedVAO);
-    }
-
+void GLTFMesh::Render(vk::CommandBuffer cmd, vk::PipelineLayout layout) {
     for (const auto& prim : m_primitives) {
-        bool hasTransparency = false;
+        if (!prim.m_VertexBuffer || !prim.m_IndexBuffer) continue;
 
+        vk::Buffer vertexBuffers[] = { prim.m_VertexBuffer->GetBuffer() };
+        vk::DeviceSize offsets[] = { 0 };
+        cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+        cmd.bindIndexBuffer(prim.m_IndexBuffer->GetBuffer(), 0, vk::IndexType::eUint32);
+
+        // Bind material textures if needed
         if (prim.m_materialIndex >= 0 && prim.m_materialIndex < m_materials.size()) {
-            const GLTFMaterial& mat = m_materials[prim.m_materialIndex];
-            hasTransparency = mat.m_hasTransparency;
-
-            m_shader->SetVec4("uBaseColorFactor", mat.m_baseColorFactor);
-            m_shader->SetFloat("uMetallicFactor", mat.m_metallicFactor);
-            m_shader->SetFloat("uRoughnessFactor", mat.m_roughnessFactor);
-
-            if (mat.m_hasBaseColorTexture) {
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, mat.m_baseColorTexture);
-                m_shader->SetInt("uBaseColorTexture", 0);
-                m_shader->SetInt("uHasBaseColorTexture", 1);
-            } else {
-                m_shader->SetInt("uHasBaseColorTexture", 0);
-            }
-        } else {
-            m_shader->SetVec4("uBaseColorFactor", glm::vec4(0.8f));
-            m_shader->SetFloat("uMetallicFactor", 0.0f);
-            m_shader->SetFloat("uRoughnessFactor", 0.5f);
-            m_shader->SetInt("uHasBaseColorTexture", 0);
+             const auto& mat = m_materials[prim.m_materialIndex];
+             if (mat.m_hasBaseColorTexture && mat.m_descriptorSet) {
+                 cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 1, 1, &mat.m_descriptorSet, 0, nullptr);
+             }
         }
 
-        if (hasTransparency) {
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            glDepthMask(GL_FALSE);
-        } else {
-            glDisable(GL_BLEND);
-            glDepthMask(GL_TRUE);
-        }
-
-        if (m_useSharedBuffers) {
-            const void* offsetPtr = reinterpret_cast<const void*>(static_cast<uintptr_t>(prim.m_indexOffsetBytes));
-            glDrawElementsBaseVertex(GL_TRIANGLES, prim.m_indexCount, prim.m_indexType, offsetPtr, prim.m_baseVertex);
-        } else {
-            glBindVertexArray(prim.m_VAO);
-            glDrawElements(GL_TRIANGLES, prim.m_indexCount, prim.m_indexType, 0);
-            glBindVertexArray(0);
-        }
+        cmd.drawIndexed(prim.m_IndexBuffer->GetSize() / sizeof(uint32_t), 1, 0, 0, 0);
     }
-
-    glDisable(GL_BLEND);
-    glDepthMask(GL_TRUE);
-    if (m_useSharedBuffers) {
-        glBindVertexArray(0);
-    }
-    m_shader->Unbind();
 }
-
-glm::mat4 GLTFMesh::GetTransform() const {
-    glm::mat4 transform = glm::translate(glm::mat4(1.0f), m_position);
-    transform *= glm::mat4_cast(m_rotation);
-    transform = glm::scale(transform, m_scale);
-    return transform;
-}
-
-GLTFMesh::PhysicsGeometry GLTFMesh::GetPhysicsGeometry() const {
-    PhysicsGeometry result;
-
-    if (!m_loaded) return result;
-
-    if (m_useSharedBuffers && m_sharedVBO && m_sharedEBO) {
-        glBindBuffer(GL_ARRAY_BUFFER, m_sharedVBO);
-        GLint vboSize = 0;
-        glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &vboSize);
-
-        size_t vertexStride = 8 * sizeof(float);
-        size_t vertexCount = vboSize / vertexStride;
-
-        std::vector<float> vertexData(vboSize / sizeof(float));
-        glGetBufferSubData(GL_ARRAY_BUFFER, 0, vboSize, vertexData.data());
-
-        for (size_t i = 0; i < vertexCount; ++i) {
-            size_t baseIndex = i * 8;
-            result.vertices.emplace_back(
-                vertexData[baseIndex + 0],
-                vertexData[baseIndex + 1],
-                vertexData[baseIndex + 2]
-            );
-        }
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_sharedEBO);
-        GLint eboSize = 0;
-        glGetBufferParameteriv(GL_ELEMENT_ARRAY_BUFFER, GL_BUFFER_SIZE, &eboSize);
-
-        if (!m_primitives.empty()) {
-            unsigned int indexType = m_primitives[0].m_indexType;
-
-            if (indexType == GL_UNSIGNED_INT) {
-                std::vector<unsigned int> indices(eboSize / sizeof(unsigned int));
-                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, eboSize, indices.data());
-                result.indices.assign(indices.begin(), indices.end());
-            } else if (indexType == GL_UNSIGNED_SHORT) {
-                std::vector<unsigned short> indices(eboSize / sizeof(unsigned short));
-                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, eboSize, indices.data());
-                for (auto idx : indices) {
-                    result.indices.push_back(static_cast<unsigned int>(idx));
-                }
-            } else if (indexType == GL_UNSIGNED_BYTE) {
-                std::vector<unsigned char> indices(eboSize / sizeof(unsigned char));
-                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, eboSize, indices.data());
-                for (auto idx : indices) {
-                    result.indices.push_back(static_cast<unsigned int>(idx));
-                }
-            }
-        }
-    } else {
-        for (const auto& primitive : m_primitives) {
-            glBindBuffer(GL_ARRAY_BUFFER, primitive.m_VBO);
-            GLint vboSize = 0;
-            glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &vboSize);
-
-            size_t vertexStride = 8 * sizeof(float);
-            size_t vertexCount = vboSize / vertexStride;
-
-            std::vector<float> vertexData(vboSize / sizeof(float));
-            glGetBufferSubData(GL_ARRAY_BUFFER, 0, vboSize, vertexData.data());
-
-            size_t indexOffset = result.vertices.size();
-
-            for (size_t i = 0; i < vertexCount; ++i) {
-                size_t baseIndex = i * 8;
-                result.vertices.emplace_back(
-                    vertexData[baseIndex + 0],
-                    vertexData[baseIndex + 1],
-                    vertexData[baseIndex + 2]
-                );
-            }
-
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, primitive.m_EBO);
-            GLint eboSize = 0;
-            glGetBufferParameteriv(GL_ELEMENT_ARRAY_BUFFER, GL_BUFFER_SIZE, &eboSize);
-
-            if (primitive.m_indexType == GL_UNSIGNED_INT) {
-                std::vector<unsigned int> indices(eboSize / sizeof(unsigned int));
-                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, eboSize, indices.data());
-                for (auto idx : indices) {
-                    result.indices.push_back(static_cast<unsigned int>(indexOffset + idx));
-                }
-            } else if (primitive.m_indexType == GL_UNSIGNED_SHORT) {
-                std::vector<unsigned short> indices(eboSize / sizeof(unsigned short));
-                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, eboSize, indices.data());
-                for (auto idx : indices) {
-                    result.indices.push_back(static_cast<unsigned int>(indexOffset + idx));
-                }
-            } else if (primitive.m_indexType == GL_UNSIGNED_BYTE) {
-                std::vector<unsigned char> indices(eboSize / sizeof(unsigned char));
-                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, eboSize, indices.data());
-                for (auto idx : indices) {
-                    result.indices.push_back(static_cast<unsigned int>(indexOffset + idx));
-                }
-            }
-        }
-    }
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
-    return result;
-}
-

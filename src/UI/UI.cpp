@@ -12,7 +12,7 @@
 #include "AnimationGraphWindow.h"
 #include "GeneralRelativityWindow.h"
 #include <nfd.h>
-#include "../Renderer/Modules/ExportRenderer.h"
+// #include "../Renderer/Modules/ExportRenderer.h"
 
 
 
@@ -632,13 +632,13 @@ void UI::RenderImageExportSettings() {
 
         if (result == NFD_OKAY && outPath) {
             auto& app = Application::Instance();
-            auto& exportRenderer = app.GetExportRenderer();
+            // auto& exportRenderer = app.GetExportRenderer();
             
-            ExportRenderer::ImageConfig config;
-            config.width = m_imageConfig.width;
-            config.height = m_imageConfig.height;
+            // ExportRenderer::ImageConfig config;
+            // config.width = m_imageConfig.width;
+            // config.height = m_imageConfig.height;
 
-            exportRenderer.StartImageExport(config, std::string(outPath), app.GetSimulation().GetScene());
+            // exportRenderer.StartImageExport(config, std::string(outPath), app.GetSimulation().GetScene());
 
             free(outPath);
         }
@@ -723,19 +723,19 @@ void UI::RenderVideoExportSettings() {
 
         if (result == NFD_OKAY && outPath) {
             auto& app = Application::Instance();
-            auto& exportRenderer = app.GetExportRenderer();
+            // auto& exportRenderer = app.GetExportRenderer();
             
-            ExportRenderer::VideoConfig config;
-            config.width = m_videoConfig.width;
-            config.height = m_videoConfig.height;
-            config.length = m_videoConfig.length;
-            config.framerate = m_videoConfig.framerate;
-            config.tickrate = m_videoConfig.tickrate;
-            config.useCustomRaySettings = m_videoConfig.useCustomRaySettings;
-            config.customRayStepSize = m_videoConfig.customRayStepSize;
-            config.customMaxRaySteps = m_videoConfig.customMaxRaySteps;
+            // ExportRenderer::VideoConfig config;
+            // config.width = m_videoConfig.width;
+            // config.height = m_videoConfig.height;
+            // config.length = m_videoConfig.length;
+            // config.framerate = m_videoConfig.framerate;
+            // config.tickrate = m_videoConfig.tickrate;
+            // config.useCustomRaySettings = m_videoConfig.useCustomRaySettings;
+            // config.customRayStepSize = m_videoConfig.customRayStepSize;
+            // config.customMaxRaySteps = m_videoConfig.customMaxRaySteps;
 
-            exportRenderer.StartVideoExport(config, std::string(outPath), app.GetSimulation().GetScene());
+            // exportRenderer.StartVideoExport(config, std::string(outPath), app.GetSimulation().GetScene());
 
             free(outPath);
         }
@@ -745,7 +745,7 @@ void UI::RenderVideoExportSettings() {
 }
 
 void UI::RenderExportProgress() {
-    auto& exportRenderer = Application::Instance().GetExportRenderer();
+    /*auto& exportRenderer = Application::Instance().GetExportRenderer();
     
     if (exportRenderer.IsExporting()) {
         ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Export in Progress");
@@ -754,7 +754,7 @@ void UI::RenderExportProgress() {
         ImGui::TextDisabled("Do not close the application while exporting");
     } else {
         ImGui::TextDisabled("No export in progress");
-    }
+    }*/
 }
 
 void UI::ReloadFonts() {

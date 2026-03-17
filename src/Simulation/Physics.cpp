@@ -429,7 +429,7 @@ PxConvexMesh* Physics::LoadConvexMesh(const std::string& path) {
         return nullptr;
     }
 
-    auto geometry = gltfMesh->GetPhysicsGeometry();
+    /*auto geometry = gltfMesh->GetPhysicsGeometry();
 
     if (geometry.vertices.empty()) {
         spdlog::error("No valid vertex data in mesh: {}", path);
@@ -440,21 +440,21 @@ PxConvexMesh* Physics::LoadConvexMesh(const std::string& path) {
     pxVertices.reserve(geometry.vertices.size());
     for (const auto& v : geometry.vertices) {
         pxVertices.emplace_back(v.x, v.y, v.z);
-    }
+    }*/
 
-    PxConvexMeshDesc convexDesc;
-    convexDesc.points.count = static_cast<PxU32>(pxVertices.size());
-    convexDesc.points.stride = sizeof(PxVec3);
-    convexDesc.points.data = pxVertices.data();
-    convexDesc.flags = PxConvexFlag::eCOMPUTE_CONVEX;
+    // PxConvexMeshDesc convexDesc;
+    // convexDesc.points.count = static_cast<PxU32>(pxVertices.size());
+    // convexDesc.points.stride = sizeof(PxVec3);
+    // convexDesc.points.data = pxVertices.data();
+    // convexDesc.flags = PxConvexFlag::eCOMPUTE_CONVEX;
 
     PxDefaultMemoryOutputStream buf;
     PxConvexMeshCookingResult::Enum result;
 
-    if (!m_Cooking->cookConvexMesh(convexDesc, buf, &result)) {
-        spdlog::error("Failed to cook convex mesh for: {} (result: {})", path, static_cast<int>(result));
-        return nullptr;
-    }
+    // if (!m_Cooking->cookConvexMesh(convexDesc, buf, &result)) {
+    //     spdlog::error("Failed to cook convex mesh for: {} (result: {})", path, static_cast<int>(result));
+    //     return nullptr;
+    // }
 
     PxDefaultMemoryInputData input(buf.getData(), buf.getSize());
     PxConvexMesh* convexMesh = m_Physics->createConvexMesh(input);
@@ -465,8 +465,8 @@ PxConvexMesh* Physics::LoadConvexMesh(const std::string& path) {
     }
 
     m_MeshCache[path] = convexMesh;
-    spdlog::info("Successfully created convex mesh collision: {} ({} input vertices -> {} hull vertices)",
-                 path, pxVertices.size(), convexMesh->getNbVertices());
+    // spdlog::info("Successfully created convex mesh collision: {} ({} input vertices -> {} hull vertices)",
+    //              path, pxVertices.size(), convexMesh->getNbVertices());
 
     return convexMesh;
 }

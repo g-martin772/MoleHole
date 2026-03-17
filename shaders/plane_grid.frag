@@ -4,16 +4,29 @@ layout (location = 0) out vec4 FragColor;
 in vec3 vWorldPos;
 in float vDispplacement;
 
-uniform float u_cellSize;
-uniform float u_lineThickness;
-uniform vec3 u_color;
-uniform float u_opacity;
-uniform int u_numBlackHoles;
-uniform vec3 u_blackHolePositions[8];
-uniform float u_blackHoleMasses[8];
+layout(std140, binding = 0) uniform GravityGridUBO {
+    mat4 uVP;
+    vec4 u_color; // w = opacity
+    vec4 u_params; // x = planeY, y = cellSize, z = lineThickness
+    
+    // Black Holes
+    int u_numBlackHoles;
+    vec4 u_blackHolePositions[8];
+    float u_blackHoleMasses[8];
+    
+    // Spheres
+    int u_numSpheres;
+    vec4 u_spherePositions[16];
+    float u_sphereMasses[16];
+    
+    // Meshes
+    int u_numMeshes;
+    vec4 u_meshPositions[8];
+    float u_meshMasses[8];
+};
 
 void main() {
-    float cell = max(0.0001, u_cellSize);
+    float cell = max(0.0001, u_params.y);
 
     // World position projected onto the XZ plane in cell units
     vec2 uv = vWorldPos.xz / cell;
@@ -22,7 +35,7 @@ void main() {
     vec2 d = abs(fract(uv) - 0.5);
 
     // Anti-aliased half thickness in parametric (cell) units
-    float halfT = clamp(u_lineThickness * 0.5, 0.00025, 0.5);
+    float halfT = clamp(u_params.z * 0.5, 0.00025, 0.5);
     float ax = fwidth(uv.x);
     float ay = fwidth(uv.y);
 
@@ -33,11 +46,11 @@ void main() {
 
     // Gradient color based on effect strength (displacement)
     float effect = clamp(vDispplacement / 10.0, 0.0, 1.0);
-    vec3 base = u_color;
+    vec3 base = u_color.rgb;
     vec3 highlight = vec3(1.0);
     vec3 color = mix(base, highlight, 1.0f);
 
     float fade = 1.0f - clamp(vDispplacement / 80.0f, 0.0, 1.0);
 
-    FragColor = vec4(u_color, u_opacity * line * 1.0f);
+    FragColor = vec4(u_color.rgb, u_color.w * line * 1.0f);
 }

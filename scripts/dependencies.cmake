@@ -5,7 +5,6 @@ set(GLFW_BUILD_EXAMPLES     OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL            OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(dependencies/glfw)
-add_subdirectory(dependencies/glad/cmake)
 add_subdirectory(dependencies/glm)
 add_subdirectory(dependencies/spdlog)
 add_subdirectory(dependencies/yaml-cpp)
@@ -15,13 +14,10 @@ add_subdirectory(dependencies/imgui)
 add_subdirectory(dependencies/nodes)
 add_subdirectory(dependencies/tinygltf)
 
-glad_add_library(glad_gl_core_46 STATIC REPRODUCIBLE LOADER API gl:core=4.6)
-
 target_include_directories(MoleHole PRIVATE
     src
     dependencies
     dependencies/glfw/include
-    dependencies/glad/include
     dependencies/glm
     dependencies/imgui
     dependencies/imgui/backends
@@ -34,9 +30,17 @@ target_include_directories(MoleHole PRIVATE
     dependencies/physx/pxshared/include
 )
 
+if(VULKAN_FOUND)
+    target_include_directories(MoleHole PRIVATE ${VULKAN_INCLUDE_DIRS})
+    target_compile_definitions(MoleHole PRIVATE MOLEHOLE_VULKAN)
+endif()
+
+if(SHADERC_FOUND)
+    target_compile_definitions(MoleHole PRIVATE MOLEHOLE_SHADERC)
+endif()
+
 target_link_libraries(MoleHole
     glfw
-    glad_gl_core_46
     glm
     spdlog::spdlog
     yaml-cpp
@@ -51,6 +55,14 @@ target_link_libraries(MoleHole
     PhysXExtensions
     PhysXCooking
 )
+
+if(VULKAN_FOUND)
+    target_link_libraries(MoleHole Vulkan::Vulkan)
+endif()
+
+if(SHADERC_FOUND)
+    target_link_libraries(MoleHole shaderc::shaderc_combined)
+endif()
 
 if(MSVC)
     target_link_libraries(MoleHole legacy_stdio_definitions.lib)

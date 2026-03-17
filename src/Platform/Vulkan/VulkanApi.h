@@ -24,7 +24,18 @@ public:
     void SetVSync(bool enabled);
 
     VulkanInstance GetInstance() const { return m_Instance; }
-    VulkanDevice GetDevice() const { return m_Device; }
+    VulkanDevice& GetDevice() { return m_Device; }
+    const VulkanDevice& GetDevice() const { return m_Device; }
+    VulkanRenderPass& GetMainRenderPass() { return m_MainRenderPass; }
+    VulkanCommandPool& GetGraphicsCommandPool() { return m_GraphicsCommandPool; }
+    VulkanSwapChain& GetSwapChain() { return m_SwapChain; }
+
+    vk::CommandBuffer GetCurrentCommandBuffer() const {
+        uint32_t currentFrame = m_SwapChain.GetCurrentImageIndex();
+        if (currentFrame < m_RenderCommandBuffers.size())
+            return m_RenderCommandBuffers[currentFrame]->GetCommandBuffer();
+        return nullptr;
+    }
 private:
     VulkanInstance m_Instance;
     VulkanDevice m_Device;

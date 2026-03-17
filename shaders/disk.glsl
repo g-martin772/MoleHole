@@ -1,10 +1,4 @@
-uniform int u_accretionDiskVolumetric = 0;
-uniform float u_accDiskHeight = 0.2;
-uniform float u_accDiskNoiseScale = 1.0;
-uniform float u_accDiskNoiseLOD = 5.0;
-uniform float u_accDiskSpeed = 0.5;
-uniform int u_gravitationalRedshiftEnabled = 1;
-uniform float u_dopplerBeamingEnabled = 1.0;
+// uniform variables replaced by UBO
 uniform float u_time;
 
 // ------------------------------------------------------------------------------------------------------------
@@ -28,7 +22,7 @@ float adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHoriz
 
         // Add rotation animation
         float theta = atan(diskPos.z, diskPos.x);
-        float animatedTheta = theta + u_time * u_accDiskSpeed;
+        float animatedTheta = theta + u_cameraPos.w * u_accDiskSpeed;
         float r = length(diskPos.xz);
         vec3 animatedPos = vec3(
             r * cos(animatedTheta),
@@ -70,9 +64,9 @@ float adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHoriz
         for (int i = 0; i < int(u_accDiskNoiseLOD); i++) {
             float animatedTheta = theta;
             if (i % 2 == 0) {
-                animatedTheta += u_time * u_accDiskSpeed;
+                animatedTheta += u_cameraPos.w * u_accDiskSpeed;
             } else {
-                animatedTheta -= u_time * u_accDiskSpeed;
+                animatedTheta -= u_cameraPos.w * u_accDiskSpeed;
             }
 
             vec3 noiseCoord = vec3(
@@ -97,7 +91,7 @@ float adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHoriz
 
     float doppler = 1.0;
     if (u_dopplerBeamingEnabled > 0.5) {
-        vec3 viewDir = normalize(rayOrigin - (pos + u_cameraPos));
+        vec3 viewDir = normalize(rayOrigin - (pos + u_cameraPos.xyz));
         doppler = calculateDopplerEffect(pos / max(1e-6, eventHorizonRadius), viewDir);
     }
 

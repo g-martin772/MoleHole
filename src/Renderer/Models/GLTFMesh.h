@@ -1,16 +1,17 @@
 #pragma once
+// #include "../Interface/Shader.h"
+#include "Platform/Vulkan/VulkanBuffer.h"
+#include "Platform/Vulkan/VulkanImage.h"
 
 namespace tinygltf {
     class Model;
     class Node;
 }
 
-class Shader;
-
 struct GLTFPrimitive {
-    unsigned int m_VAO;
-    unsigned int m_VBO;
-    unsigned int m_EBO;
+    std::unique_ptr<VulkanBuffer> m_VertexBuffer;
+    std::unique_ptr<VulkanBuffer> m_IndexBuffer;
+    
     unsigned int m_indexCount;
     unsigned int m_indexType; // GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT, or GL_UNSIGNED_INT
     unsigned int m_indexOffsetBytes;
@@ -33,9 +34,10 @@ struct GLTFMaterial {
     glm::vec4 m_baseColorFactor;
     float m_metallicFactor;
     float m_roughnessFactor;
-    unsigned int m_baseColorTexture;
+    std::shared_ptr<VulkanImage> m_baseColorTexture;
     bool m_hasBaseColorTexture;
     bool m_hasTransparency;
+    vk::DescriptorSet m_descriptorSet;
 
     GLTFMaterial();
 };
@@ -45,8 +47,8 @@ public:
     GLTFMesh();
     ~GLTFMesh();
 
-    bool Load(const std::string& path);
-    void Render(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPos);
+    bool Load(const std::string& path, VulkanDevice* device, vk::DescriptorSetLayout textureLayout);
+    void Render(vk::CommandBuffer cmd, vk::PipelineLayout layout);
     void Cleanup();
 
     void SetPosition(const glm::vec3& position) { m_position = position; }
@@ -72,11 +74,12 @@ private:
     void ProcessNode(const tinygltf::Model& model, const tinygltf::Node& node, const glm::mat4& parentTransform);
     void ProcessMesh(const tinygltf::Model& model, int meshIndex, const glm::mat4& transform);
     void LoadMaterials(const tinygltf::Model& model);
-    unsigned int LoadTextureFromModel(const tinygltf::Model& model, int textureIndex);
+    std::shared_ptr<VulkanImage> LoadTextureFromModel(const tinygltf::Model& model, int textureIndex);
 
     std::vector<GLTFPrimitive> m_primitives;
     std::vector<GLTFMaterial> m_materials;
-    std::unique_ptr<Shader> m_shader;
+    // Shader is managed externally or via pipeline
+    // std::unique_ptr<Shader> m_shader; 
 
     glm::vec3 m_position;
     glm::quat m_rotation;
@@ -98,4 +101,8 @@ private:
     unsigned int m_sharedVBO = 0;
     unsigned int m_sharedEBO = 0;
     bool m_useSharedBuffers = false;
+    
+    VulkanDevice* m_Device = nullptr;
+    vk::DescriptorPool m_DescriptorPool;
+    vk::DescriptorSetLayout m_TextureLayout;
 };

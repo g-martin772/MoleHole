@@ -38,7 +38,7 @@ void VulkanApi::Init() {
     Application::Instance().GetWindow()->GetFramebufferSize(size.x, size.y);
     m_SwapChain.Init(&m_Device, size, 3);
 
-    m_MainRenderPass.Init(&m_Device, &m_SwapChain, glm::vec4(0.0f, 0.0f, size.x, size.y), {1.0f, 0.0f, 0.0f, 1.0f});
+    m_MainRenderPass.Init(&m_Device, &m_SwapChain, glm::vec4(0.0f, 0.0f, size.x, size.y), {0.0f, 0.0f, 0.0f, 1.0f});
     m_MainFrameBuffer.CreateFromSwapchain(&m_Device, &m_SwapChain, &m_MainRenderPass);
     m_RenderCommandBuffers.clear();
     for (uint32_t i = 0; i < m_SwapChain.GetImageCount(); i++) {

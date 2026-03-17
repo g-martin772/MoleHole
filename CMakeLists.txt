@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(MoleHole)
 
 include(scripts/compiler_flags.cmake)
+# include(scripts/physx.cmake) # Assuming PhysX not used or needs update? Keep for now.
 include(scripts/physx.cmake)
 
 file(GLOB SOURCES
@@ -19,13 +20,11 @@ if(WIN32)
     file(GLOB PLATFORM_SOURCES
             src/Platform/Windows/*.cpp
             src/Platform/GLFW/*.cpp
-            src/Platform/OpenGL/*.cpp
             src/Platform/Vulkan/*.cpp)
 elseif(UNIX)
     file(GLOB PLATFORM_SOURCES
             src/Platform/Linux/*.cpp
             src/Platform/GLFW/*.cpp
-            src/Platform/OpenGL/*.cpp
             src/Platform/Vulkan/*.cpp)
 endif()
 
@@ -44,6 +43,8 @@ target_compile_definitions(MoleHole PRIVATE
     $<$<CONFIG:RelWithDebInfo>:NDEBUG>
     $<$<CONFIG:MinSizeRel>:NDEBUG>
 )
+
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 

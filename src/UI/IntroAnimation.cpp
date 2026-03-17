@@ -1,3 +1,4 @@
+/*
 #include "IntroAnimation.h"
 #include <glad/gl.h>
 #include "../Renderer/Interface/Shader.h"
@@ -288,4 +289,5 @@ void IntroAnimation::Skip() {
     m_isActive = false;
     m_alpha = 0.0f;
 }
+*/
 

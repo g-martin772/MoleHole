@@ -1,874 +1,1059 @@
 #include "BlackHoleRenderer.h"
-#include <glad/gl.h>
+#include "Platform/Vulkan/VulkanDevice.h"
+#include "Platform/Vulkan/VulkanBuffer.h"
+#include "Platform/Vulkan/VulkanImage.h"
+#include "Platform/Vulkan/VulkanShader.h"
+#include "Platform/Vulkan/VulkanPipeline.h"
 #include "Simulation/Scene.h"
+#include "Renderer/Interface/Camera.h"
 #include "Application/Application.h"
 #include "Application/Parameters.h"
-#include "BlackbodyLUTGenerator.h"
-#include "AccelerationLUTGenerator.h"
-#include "HRDiagramLUTGenerator.h"
-#include "../Models/GLTFMesh.h"
+#include <spdlog/spdlog.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
+// ===========================================================================================
+// Uniform Buffer Structure
+// ===========================================================================================
 
+struct CommonUBO {
+    glm::mat4 view;
+    glm::mat4 projection;
+    glm::mat4 invView;
+    glm::mat4 invProjection;
+    glm::vec4 cameraPos; // w = time
+    glm::vec4 cameraFront;
+    glm::vec4 cameraUp;
+    glm::vec4 cameraRight;
+    glm::vec4 params; // x = fov, y = aspect, z = exposure, w = gamma
+    glm::vec4 resolution; // x = width, y = height
+    
+    // Black Hole Data (Max 8)
+    int numBlackHoles;
+    float _pad0[3];
+    float blackHoleMasses[8];
+    glm::vec4 blackHolePositions[8]; // w = unused
+    float blackHoleSpins[8];
+    glm::vec4 blackHoleSpinAxes[8]; // w = unused
 
-BlackHoleRenderer::BlackHoleRenderer()
-    : m_computeTexture(0), m_bloomBrightTexture(0), m_bloomBlurTexture{0, 0}, 
-      m_bloomFinalTextureIndex(0), m_lensFlareTexture(0),
-      m_blackbodyLUT(0), m_accelerationLUT(0), m_hrDiagramLUT(0),
-      m_kerrDeflectionLUT(0), m_kerrRedshiftLUT(0), m_kerrPhotonSphereLUT(0), m_kerrISCOLUT(0),
-      m_quadVAO(0), m_quadVBO(0), m_meshDataSSBO(0), m_triangleSSBO(0),
-      m_width(800), m_height(600) {
-}
+    // Settings
+    int renderBlackHoles;
+    int renderSpheres;
+    int accretionDiskEnabled;
+    int gravitationalLensingEnabled;
+    float cubeSize;
+    
+    // Ray Marching Settings
+    float rayStepSize;
+    int maxRaySteps;
+    float adaptiveStepRate;
+    
+    // Third Person
+    int enableThirdPerson;
+    float thirdPersonDistance;
+    float thirdPersonHeight;
+    float padding; // Alignment
+    
+    // LUT Params
+    float lutTempMin;
+    float lutTempMax;
+    float lutRedshiftMin;
+    float lutRedshiftMax;
+    
+    // Accretion Disk Params
+    int accretionDiskVolumetric;
+    float accDiskHeight;
+    float accDiskNoiseScale;
+    float accDiskNoiseLOD;
+    float accDiskSpeed;
+    int gravitationalRedshiftEnabled;
+    float dopplerBeamingEnabled;
+    float padding2; // Alignment
+    
+    // Spheres Data (Max 16)
+    int numSpheres;
+    float padding3[3]; // Alignment
+    glm::vec4 spherePositions[16]; // w = radius
+    glm::vec4 sphereColors[16]; // w = mass
+    
+    // Debug
+    int debugMode;
+    float padding4[3];
+};
 
-BlackHoleRenderer::~BlackHoleRenderer() {
-    if (m_computeTexture) glDeleteTextures(1, &m_computeTexture);
-    if (m_bloomBrightTexture) glDeleteTextures(1, &m_bloomBrightTexture);
-    if (m_bloomBlurTexture[0]) glDeleteTextures(2, m_bloomBlurTexture);
-    if (m_lensFlareTexture) glDeleteTextures(1, &m_lensFlareTexture);
-    if (m_blackbodyLUT) glDeleteTextures(1, &m_blackbodyLUT);
-    if (m_accelerationLUT) glDeleteTextures(1, &m_accelerationLUT);
-    if (m_hrDiagramLUT) glDeleteTextures(1, &m_hrDiagramLUT);
-    if (m_kerrDeflectionLUT) glDeleteTextures(1, &m_kerrDeflectionLUT);
-    if (m_kerrRedshiftLUT) glDeleteTextures(1, &m_kerrRedshiftLUT);
-    if (m_kerrPhotonSphereLUT) glDeleteTextures(1, &m_kerrPhotonSphereLUT);
-    if (m_kerrISCOLUT) glDeleteTextures(1, &m_kerrISCOLUT);
-    if (m_quadVAO) glDeleteVertexArrays(1, &m_quadVAO);
-    if (m_quadVBO) glDeleteBuffers(1, &m_quadVBO);
-    if (m_meshDataSSBO) glDeleteBuffers(1, &m_meshDataSSBO);
-    if (m_triangleSSBO) glDeleteBuffers(1, &m_triangleSSBO);
-}
+struct DisplayUBO {
+    int u_fxaaEnabled;
+    int u_bloomEnabled;
+    float u_bloomIntensity;
+    int u_bloomDebug;
+    float rt_w;
+    float rt_h;
+    float padding[2];
+};
 
-void BlackHoleRenderer::Init(int width, int height) {
-    m_width = width;
-    m_height = height;
+// ===========================================================================================
+// Constructor & Destructor
+// ===========================================================================================
 
-    m_computeShader = std::make_unique<Shader>("../shaders/black_hole_rendering.comp", true);
-    m_displayShader = std::make_unique<Shader>("../shaders/blackhole_display.vert", "../shaders/blackhole_display.frag");
-    m_bloomExtractShader = std::make_unique<Shader>("../shaders/bloom_extract.comp", true);
-    m_bloomBlurShader = std::make_unique<Shader>("../shaders/bloom_blur.comp", true);
-    m_lensFlareShader = std::make_unique<Shader>("../shaders/lens_flare.comp", true);
-
+BlackHoleRenderer::BlackHoleRenderer() {
     m_blackbodyLUTGenerator = std::make_unique<MoleHole::BlackbodyLUTGenerator>();
     m_accelerationLUTGenerator = std::make_unique<MoleHole::AccelerationLUTGenerator>();
     m_hrDiagramLUTGenerator = std::make_unique<MoleHole::HRDiagramLUTGenerator>();
     m_kerrGeodesicLUTGenerator = std::make_unique<MoleHole::KerrGeodesicLUTGenerator>();
+}
 
+BlackHoleRenderer::~BlackHoleRenderer() {
+    // Cleanup will be done in Init destruction
+}
+
+// ===========================================================================================
+// Initialization
+// ===========================================================================================
+
+void BlackHoleRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPass, int width, int height) {
+    m_Device = device;
+    m_width = width;
+    m_height = height;
+
+    spdlog::info("BlackHoleRenderer::Init - Starting initialization");
+
+    // Create the compute texture for raytracing output
     CreateComputeTexture();
-    CreateBloomTextures();
-    CreateFullscreenQuad();
-    CreateMeshBuffers();
-    LoadSkybox();
+
+    // Generate and upload LUT textures
     GenerateBlackbodyLUT();
     GenerateAccelerationLUT();
     GenerateHRDiagramLUT();
-    // GenerateKerrGeodesicLUTs();
+    GenerateKerrGeodesicLUTs();
 
-    spdlog::info("BlackHoleRenderer initialized with {}x{} resolution", width, height);
+    // Load shaders
+    m_computeShader = std::make_unique<VulkanShader>(
+        device,
+        std::vector<std::pair<ShaderStage, std::string>>{
+            {ShaderStage::Compute, "shaders/black_hole_rendering.comp"}
+        }
+    );
+
+    m_displayShader = std::make_unique<VulkanShader>(
+        device,
+        std::vector<std::pair<ShaderStage, std::string>>{
+            {ShaderStage::Vertex, "shaders/blackhole_display.vert"},
+            {ShaderStage::Fragment, "shaders/blackhole_display.frag"}
+        }
+    );
+
+    // Create compute descriptor set layout
+    std::vector<vk::DescriptorSetLayoutBinding> computeBindings;
+
+    // Binding 0: Output Storage Image
+    computeBindings.push_back(vk::DescriptorSetLayoutBinding{
+        0,                                      // binding
+        vk::DescriptorType::eStorageImage,      // descriptorType
+        1,                                      // descriptorCount
+        vk::ShaderStageFlagBits::eCompute,      // stageFlags
+        nullptr                                 // pImmutableSamplers
+    });
+
+    // Binding 1: Uniform Buffer
+    computeBindings.push_back(vk::DescriptorSetLayoutBinding{
+        1,                                      // binding
+        vk::DescriptorType::eUniformBuffer,     // descriptorType
+        1,                                      // descriptorCount
+        vk::ShaderStageFlagBits::eCompute,      // stageFlags
+        nullptr                                 // pImmutableSamplers
+    });
+
+    // Binding 2: Skybox texture (Sampler)
+    computeBindings.push_back(vk::DescriptorSetLayoutBinding{
+        2,                                      // binding
+        vk::DescriptorType::eCombinedImageSampler, // descriptorType
+        1,                                      // descriptorCount
+        vk::ShaderStageFlagBits::eCompute,      // stageFlags
+        nullptr                                 // pImmutableSamplers
+    });
+
+    // Binding 3-9: LUT textures (7 LUTs)
+    for (int i = 0; i < 7; i++) {
+        computeBindings.push_back(vk::DescriptorSetLayoutBinding{
+            static_cast<uint32_t>(3 + i),       // binding
+            vk::DescriptorType::eCombinedImageSampler, // descriptorType
+            1,                                  // descriptorCount
+            vk::ShaderStageFlagBits::eCompute,  // stageFlags
+            nullptr                             // pImmutableSamplers
+        });
+    }
+
+    vk::DescriptorSetLayoutCreateInfo computeLayoutInfo{
+        {},                               // flags
+        static_cast<uint32_t>(computeBindings.size()),
+        computeBindings.data()
+    };
+
+    m_ComputeDescriptorSetLayout = device->GetDevice().createDescriptorSetLayout(computeLayoutInfo);
+
+    // Create descriptor pool
+    std::vector<vk::DescriptorPoolSize> poolSizes;
+    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1});
+    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 2}); // Common + Display
+    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 10}); // 8 Compute + 2 Display
+
+    vk::DescriptorPoolCreateInfo poolInfo{
+        {},                                     // flags
+        2,                                      // maxSets (compute + display)
+        static_cast<uint32_t>(poolSizes.size()),
+        poolSizes.data()
+    };
+
+    m_ComputeDescriptorPool = device->GetDevice().createDescriptorPool(poolInfo);
+
+    // Allocate compute descriptor set
+    vk::DescriptorSetAllocateInfo allocInfo{
+        m_ComputeDescriptorPool,
+        1,
+        &m_ComputeDescriptorSetLayout
+    };
+
+    m_ComputeDescriptorSet = device->GetDevice().allocateDescriptorSets(allocInfo)[0];
+
+    // Create common UBO
+    m_CommonUBO = std::make_unique<VulkanBuffer>();
+    VulkanBufferSpec uboSpec{
+        sizeof(CommonUBO),
+        vk::BufferUsageFlagBits::eUniformBuffer,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    };
+    m_CommonUBO->Create(uboSpec, device);
+    
+    // Create Display UBO
+    m_DisplayUBO = std::make_unique<VulkanBuffer>();
+    VulkanBufferSpec displayUboSpec{
+        sizeof(DisplayUBO),
+        vk::BufferUsageFlagBits::eUniformBuffer,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    };
+    m_DisplayUBO->Create(displayUboSpec, device);
+
+    // Create compute pipeline
+    m_computePipeline = std::make_unique<VulkanPipeline>();
+    ComputePipelineConfig computeConfig{
+        device,
+        m_computeShader.get(),
+        std::vector<vk::DescriptorSetLayout>{m_ComputeDescriptorSetLayout}
+    };
+    m_computePipeline->CreateComputePipeline(computeConfig);
+
+    // Display Pipeline Setup
+    // ----------------------
+    
+    // Layout
+    std::vector<vk::DescriptorSetLayoutBinding> displayBindings;
+    displayBindings.push_back(vk::DescriptorSetLayoutBinding{
+        0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment, nullptr // u_raytracedImage
+    });
+    // displayBindings.push_back(vk::DescriptorSetLayoutBinding{
+    //     1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment, nullptr // u_bloomImage
+    // });
+    displayBindings.push_back(vk::DescriptorSetLayoutBinding{
+        1, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eFragment, nullptr // DisplayParams UBO
+    });
+
+    vk::DescriptorSetLayoutCreateInfo displayLayoutInfo{
+        {}, static_cast<uint32_t>(displayBindings.size()), displayBindings.data()
+    };
+    m_DisplayDescriptorSetLayout = device->GetDevice().createDescriptorSetLayout(displayLayoutInfo);
+
+    // Allocate Set
+    vk::DescriptorSetAllocateInfo displayAllocInfo{
+        m_ComputeDescriptorPool, 1, &m_DisplayDescriptorSetLayout
+    };
+    m_DisplayDescriptorSet = device->GetDevice().allocateDescriptorSets(displayAllocInfo)[0];
+
+    // Create Pipeline
+    m_displayPipeline = std::make_unique<VulkanPipeline>();
+    GraphicsPipelineConfig displayConfig;
+    displayConfig.device = device;
+    displayConfig.shader = m_displayShader.get();
+    displayConfig.renderPass = renderPass;
+    displayConfig.descriptorSetLayouts = { m_DisplayDescriptorSetLayout };
+    
+    // Config via nested structs
+    displayConfig.inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+    displayConfig.rasterizer.cullMode = vk::CullModeFlagBits::eNone;
+    displayConfig.depthStencil.depthTestEnable = VK_FALSE;
+    displayConfig.depthStencil.depthWriteEnable = VK_FALSE;
+    
+    // No vertex bindings needed
+    m_displayPipeline->CreateGraphicsPipeline(displayConfig);
+
+    // Create mesh buffers (stubs for now)
+    CreateMeshBuffers();
+
+    UpdateDisplayDescriptorSet();
+
+    spdlog::info("BlackHoleRenderer::Init - Initialization complete");
 }
 
-void BlackHoleRenderer::LoadSkybox() {
-    const std::string path = Application::Params().Get(Params::AppBackgroundImage, std::string("space.hdr"));
-    m_skyboxTexture = std::unique_ptr<Image>(Image::LoadHDR("../assets/backgrounds/" + path));
+// ===========================================================================================
+// Texture Creation
+// ===========================================================================================
+
+void BlackHoleRenderer::CreateComputeTexture() {
+    m_computeTexture = std::make_shared<VulkanImage>();
+    VulkanImageSpec spec{
+        glm::vec3(m_width, m_height, 1.0f),     // Size
+        vk::ImageTiling::eOptimal,              // Tiling
+        vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled, // Usage
+        vk::MemoryPropertyFlagBits::eDeviceLocal, // MemoryProperties
+        vk::Format::eR32G32B32A32Sfloat,        // Format
+        true,                                   // CreateView
+        vk::ImageAspectFlagBits::eColor,        // ViewAspectFlags
+        1,                                      // MipLevels
+        1,                                      // ArrayLayers
+        vk::SampleCountFlagBits::e1             // Samples
+    };
+    m_computeTexture->Create(spec, m_Device);
+
+    // Transition to General layout immediately
+    m_computeTexture->TransitionLayout(
+        vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eGeneral,
+        vk::PipelineStageFlagBits::eTopOfPipe,
+        vk::PipelineStageFlagBits::eComputeShader
+    );
+
+    // Create a sampler for the compute texture
+    VulkanSamplerSpec samplerSpec{
+        vk::Filter::eLinear,
+        vk::Filter::eLinear,
+        vk::SamplerMipmapMode::eLinear,
+        vk::SamplerAddressMode::eClampToEdge,
+        vk::SamplerAddressMode::eClampToEdge,
+        vk::SamplerAddressMode::eClampToEdge
+    };
+    m_computeTexture->CreateSampler(samplerSpec);
 }
+
+void BlackHoleRenderer::CreateBloomTextures() {
+    // Bloom bright texture
+    m_bloomBrightTexture = std::make_shared<VulkanImage>();
+    VulkanImageSpec brightSpec{
+        glm::vec3(m_width / 2, m_height / 2, 1.0f),
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        vk::Format::eR32G32B32A32Sfloat,
+        true,
+        vk::ImageAspectFlagBits::eColor,
+        1, 1, vk::SampleCountFlagBits::e1
+    };
+    m_bloomBrightTexture->Create(brightSpec, m_Device);
+
+    VulkanSamplerSpec samplerSpec{
+        vk::Filter::eLinear,
+        vk::Filter::eLinear,
+        vk::SamplerMipmapMode::eLinear,
+        vk::SamplerAddressMode::eClampToEdge,
+        vk::SamplerAddressMode::eClampToEdge,
+        vk::SamplerAddressMode::eClampToEdge
+    };
+    m_bloomBrightTexture->CreateSampler(samplerSpec);
+
+    // Bloom blur textures (ping-pong)
+    for (int i = 0; i < 2; i++) {
+        m_bloomBlurTexture[i] = std::make_shared<VulkanImage>();
+        m_bloomBlurTexture[i]->Create(brightSpec, m_Device);
+        m_bloomBlurTexture[i]->CreateSampler(samplerSpec);
+    }
+    m_bloomFinalTextureIndex = 0;
+}
+
+// ===========================================================================================
+// LUT Generation
+// ===========================================================================================
 
 void BlackHoleRenderer::GenerateBlackbodyLUT() {
-    using namespace MoleHole;
+    spdlog::info("Generating Blackbody LUT...");
     
-    spdlog::info("Generating blackbody LUT ({}x{})...", 
-                 m_blackbodyLUTGenerator->LUT_WIDTH, 
-                 m_blackbodyLUTGenerator->LUT_HEIGHT);
+    auto lutData = MoleHole::BlackbodyLUTGenerator::generateLUT();
     
-    // Generate the LUT data
-    auto lutData = m_blackbodyLUTGenerator->generateLUT();
-    
-    // Create and upload the OpenGL texture
-    if (m_blackbodyLUT) {
-        glDeleteTextures(1, &m_blackbodyLUT);
-    }
-    
-    glGenTextures(1, &m_blackbodyLUT);
-    glBindTexture(GL_TEXTURE_2D, m_blackbodyLUT);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, 
-                 BlackbodyLUTGenerator::LUT_WIDTH, 
-                 BlackbodyLUTGenerator::LUT_HEIGHT, 
-                 0, GL_RGB, GL_FLOAT, lutData.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    
+    m_blackbodyLUT = std::make_shared<VulkanImage>();
+    VulkanImageSpec spec{
+        glm::vec3(MoleHole::BlackbodyLUTGenerator::LUT_WIDTH, MoleHole::BlackbodyLUTGenerator::LUT_HEIGHT, 1.0f),
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        vk::Format::eR32G32B32Sfloat,  // RGB floats
+        true,
+        vk::ImageAspectFlagBits::eColor
+    };
+    m_blackbodyLUT->Create(spec, m_Device);
+
+    // Upload data via staging buffer
+    size_t dataSize = lutData.size() * sizeof(float);
+    VulkanBuffer stagingBuffer;
+    VulkanBufferSpec stagingSpec{
+        dataSize,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    };
+    stagingBuffer.Create(stagingSpec, m_Device);
+    stagingBuffer.Write(lutData.data(), dataSize, 0);
+
+    m_blackbodyLUT->CopyBufferToImage(
+        stagingBuffer.GetBuffer(),
+        MoleHole::BlackbodyLUTGenerator::LUT_WIDTH,
+        MoleHole::BlackbodyLUTGenerator::LUT_HEIGHT,
+        1,
+        0, 0
+    );
+
+    // Transition to shader read-only
+    m_blackbodyLUT->TransitionLayout(
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::PipelineStageFlagBits::eTransfer,
+        vk::PipelineStageFlagBits::eFragmentShader
+    );
+
+    // Create sampler
+    VulkanSamplerSpec samplerSpec{
+        vk::Filter::eLinear,
+        vk::Filter::eLinear,
+        vk::SamplerMipmapMode::eNearest,
+        vk::SamplerAddressMode::eClampToEdge,
+        vk::SamplerAddressMode::eClampToEdge,
+        vk::SamplerAddressMode::eClampToEdge
+    };
+    m_blackbodyLUT->CreateSampler(samplerSpec);
+
+    stagingBuffer.Destroy();
     spdlog::info("Blackbody LUT generated successfully");
 }
 
 void BlackHoleRenderer::GenerateAccelerationLUT() {
-    using namespace MoleHole;
+    spdlog::info("Generating Acceleration LUT...");
     
-    spdlog::info("Generating acceleration LUT ({}x{})...", 
-                 AccelerationLUTGenerator::LUT_WIDTH, 
-                 AccelerationLUTGenerator::LUT_HEIGHT);
+    auto lutData = MoleHole::AccelerationLUTGenerator::generateLUT();
     
-    // Generate the LUT data
-    auto lutData = AccelerationLUTGenerator::generateLUT();
-    
-    // Create and upload the OpenGL texture
-    if (m_accelerationLUT) {
-        glDeleteTextures(1, &m_accelerationLUT);
-    }
-    
-    glGenTextures(1, &m_accelerationLUT);
-    glBindTexture(GL_TEXTURE_2D, m_accelerationLUT);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 
-                 AccelerationLUTGenerator::LUT_WIDTH, 
-                 AccelerationLUTGenerator::LUT_HEIGHT, 
-                 0, GL_RED, GL_FLOAT, lutData.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    
+    m_accelerationLUT = std::make_shared<VulkanImage>();
+    VulkanImageSpec spec{
+        glm::vec3(MoleHole::AccelerationLUTGenerator::LUT_WIDTH, MoleHole::AccelerationLUTGenerator::LUT_HEIGHT, 1.0f),
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        vk::Format::eR32Sfloat,  // Single channel float
+        true,
+        vk::ImageAspectFlagBits::eColor
+    };
+    m_accelerationLUT->Create(spec, m_Device);
+
+    // Upload data via staging buffer
+    size_t dataSize = lutData.size() * sizeof(float);
+    VulkanBuffer stagingBuffer;
+    VulkanBufferSpec stagingSpec{
+        dataSize,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    };
+    stagingBuffer.Create(stagingSpec, m_Device);
+    stagingBuffer.Write(lutData.data(), dataSize, 0);
+
+    m_accelerationLUT->CopyBufferToImage(
+        stagingBuffer.GetBuffer(),
+        MoleHole::AccelerationLUTGenerator::LUT_WIDTH,
+        MoleHole::AccelerationLUTGenerator::LUT_HEIGHT,
+        1,
+        0, 0
+    );
+
+    // Transition to shader read-only
+    m_accelerationLUT->TransitionLayout(
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::PipelineStageFlagBits::eTransfer,
+        vk::PipelineStageFlagBits::eFragmentShader
+    );
+
+    // Create sampler
+    VulkanSamplerSpec samplerSpec{
+        vk::Filter::eLinear,
+        vk::Filter::eLinear,
+        vk::SamplerMipmapMode::eNearest,
+        vk::SamplerAddressMode::eClampToEdge,
+        vk::SamplerAddressMode::eClampToEdge,
+        vk::SamplerAddressMode::eClampToEdge
+    };
+    m_accelerationLUT->CreateSampler(samplerSpec);
+
+    stagingBuffer.Destroy();
     spdlog::info("Acceleration LUT generated successfully");
 }
 
 void BlackHoleRenderer::GenerateHRDiagramLUT() {
-    using namespace MoleHole;
+    spdlog::info("Generating HR Diagram LUT...");
     
-    spdlog::info("Generating HR diagram LUT ({} samples)...", 
-                 HRDiagramLUTGenerator::LUT_SIZE);
+    auto lutData = MoleHole::HRDiagramLUTGenerator::generateLUT();
     
-    // Generate the LUT data
-    auto lutData = HRDiagramLUTGenerator::generateLUT();
-    
-    // Create and upload the OpenGL texture (1D texture for mass lookup)
-    if (m_hrDiagramLUT) {
-        glDeleteTextures(1, &m_hrDiagramLUT);
-    }
-    
-    glGenTextures(1, &m_hrDiagramLUT);
-    glBindTexture(GL_TEXTURE_2D, m_hrDiagramLUT);
-    // Use 2D texture with height=1 for compatibility
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, 
-                 HRDiagramLUTGenerator::LUT_SIZE, 
-                 1, 
-                 0, GL_RGB, GL_FLOAT, lutData.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    
-    spdlog::info("HR diagram LUT generated successfully");
+    m_hrDiagramLUT = std::make_shared<VulkanImage>();
+    VulkanImageSpec spec{
+        glm::vec3(MoleHole::HRDiagramLUTGenerator::LUT_SIZE, 1.0f, 1.0f),
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        vk::Format::eR32G32B32Sfloat,  // RGB floats
+        true,
+        vk::ImageAspectFlagBits::eColor
+    };
+    m_hrDiagramLUT->Create(spec, m_Device);
+
+    // Upload data via staging buffer
+    size_t dataSize = lutData.size() * sizeof(float);
+    VulkanBuffer stagingBuffer;
+    VulkanBufferSpec stagingSpec{
+        dataSize,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    };
+    stagingBuffer.Create(stagingSpec, m_Device);
+    stagingBuffer.Write(lutData.data(), dataSize, 0);
+
+    m_hrDiagramLUT->CopyBufferToImage(
+        stagingBuffer.GetBuffer(),
+        MoleHole::HRDiagramLUTGenerator::LUT_SIZE,
+        1,
+        1,
+        0, 0
+    );
+
+    // Transition to shader read-only
+    m_hrDiagramLUT->TransitionLayout(
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::PipelineStageFlagBits::eTransfer,
+        vk::PipelineStageFlagBits::eFragmentShader
+    );
+
+    // Create sampler
+    VulkanSamplerSpec samplerSpec{
+        vk::Filter::eLinear,
+        vk::Filter::eLinear,
+        vk::SamplerMipmapMode::eNearest,
+        vk::SamplerAddressMode::eClampToEdge,
+        vk::SamplerAddressMode::eClampToEdge,
+        vk::SamplerAddressMode::eClampToEdge
+    };
+    m_hrDiagramLUT->CreateSampler(samplerSpec);
+
+    stagingBuffer.Destroy();
+    spdlog::info("HR Diagram LUT generated successfully");
 }
 
 void BlackHoleRenderer::GenerateKerrGeodesicLUTs() {
-    using namespace MoleHole;
+    spdlog::info("Generating Kerr Geodesic LUTs...");
+    
+    auto deflectionData = MoleHole::KerrGeodesicLUTGenerator::generateDeflectionLUT();
+    auto redshiftData = MoleHole::KerrGeodesicLUTGenerator::generateRedshiftLUT();
+    auto photonSphereData = MoleHole::KerrGeodesicLUTGenerator::generatePhotonSphereLUT();
+    auto iscoData = MoleHole::KerrGeodesicLUTGenerator::generateISCOLUT();
 
-    spdlog::info("Generating Kerr geodesic LUTs...");
+    // Create and upload Deflection LUT
+    m_kerrDeflectionLUT = std::make_shared<VulkanImage>();
+    VulkanImageSpec deflectionSpec{
+        glm::vec3(MoleHole::KerrGeodesicLUTGenerator::LUT_IMPACT_PARAM_SAMPLES, 
+                  MoleHole::KerrGeodesicLUTGenerator::LUT_INCLINATION_SAMPLES, 
+                  MoleHole::KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES),
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        vk::Format::eR32Sfloat,
+        true,
+        vk::ImageAspectFlagBits::eColor,
+        1, 1, vk::SampleCountFlagBits::e1,
+        vk::ImageType::e3D  // Explicitly 3D image
+    };
+    m_kerrDeflectionLUT->Create(deflectionSpec, m_Device);
 
-    // Generate deflection LUT (3D: spin x inclination x impact parameter)
-    auto deflectionData = KerrGeodesicLUTGenerator::generateDeflectionLUT();
+    // Upload deflection data
+    size_t deflectionSize = deflectionData.size() * sizeof(float);
+    VulkanBuffer stagingBuffer;
+    VulkanBufferSpec stagingSpec{
+        deflectionSize,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    };
+    stagingBuffer.Create(stagingSpec, m_Device);
+    stagingBuffer.Write(deflectionData.data(), deflectionSize, 0);
 
-    if (m_kerrDeflectionLUT) {
-        glDeleteTextures(1, &m_kerrDeflectionLUT);
-    }
+    m_kerrDeflectionLUT->CopyBufferToImage(
+        stagingBuffer.GetBuffer(),
+        MoleHole::KerrGeodesicLUTGenerator::LUT_IMPACT_PARAM_SAMPLES,
+        MoleHole::KerrGeodesicLUTGenerator::LUT_INCLINATION_SAMPLES,
+        MoleHole::KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES, 0, 0
+    );
 
-    glGenTextures(1, &m_kerrDeflectionLUT);
-    glBindTexture(GL_TEXTURE_3D, m_kerrDeflectionLUT);
-    glTexImage3D(GL_TEXTURE_3D, 0, GL_R32F,
-                 KerrGeodesicLUTGenerator::LUT_IMPACT_PARAM_SAMPLES,
-                 KerrGeodesicLUTGenerator::LUT_INCLINATION_SAMPLES,
-                 KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES,
-                 0, GL_RED, GL_FLOAT, deflectionData.data());
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    m_kerrDeflectionLUT->TransitionLayout(
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::PipelineStageFlagBits::eTransfer,
+        vk::PipelineStageFlagBits::eFragmentShader
+    );
 
-    spdlog::info("Kerr deflection LUT uploaded to GPU");
+    VulkanSamplerSpec samplerSpec{
+        vk::Filter::eLinear,
+        vk::Filter::eLinear,
+        vk::SamplerMipmapMode::eNearest,
+        vk::SamplerAddressMode::eClampToEdge,
+        vk::SamplerAddressMode::eClampToEdge,
+        vk::SamplerAddressMode::eClampToEdge
+    };
+    m_kerrDeflectionLUT->CreateSampler(samplerSpec);
 
-    // Generate redshift LUT (3D)
-    auto redshiftData = KerrGeodesicLUTGenerator::generateRedshiftLUT();
+    // Create and upload Redshift LUT
+    m_kerrRedshiftLUT = std::make_shared<VulkanImage>();
+    m_kerrRedshiftLUT->Create(deflectionSpec, m_Device);
 
-    if (m_kerrRedshiftLUT) {
-        glDeleteTextures(1, &m_kerrRedshiftLUT);
-    }
+    size_t redshiftSize = redshiftData.size() * sizeof(float);
+    stagingBuffer.Destroy();
+    stagingBuffer.Create({redshiftSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent}, m_Device);
+    stagingBuffer.Write(redshiftData.data(), redshiftSize, 0);
 
-    glGenTextures(1, &m_kerrRedshiftLUT);
-    glBindTexture(GL_TEXTURE_3D, m_kerrRedshiftLUT);
-    glTexImage3D(GL_TEXTURE_3D, 0, GL_R32F,
-                 KerrGeodesicLUTGenerator::LUT_IMPACT_PARAM_SAMPLES,
-                 KerrGeodesicLUTGenerator::LUT_INCLINATION_SAMPLES,
-                 KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES,
-                 0, GL_RED, GL_FLOAT, redshiftData.data());
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    m_kerrRedshiftLUT->CopyBufferToImage(
+        stagingBuffer.GetBuffer(),
+        MoleHole::KerrGeodesicLUTGenerator::LUT_IMPACT_PARAM_SAMPLES,
+        MoleHole::KerrGeodesicLUTGenerator::LUT_INCLINATION_SAMPLES,
+        MoleHole::KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES, 0, 0
+    );
 
-    spdlog::info("Kerr redshift LUT uploaded to GPU");
+    m_kerrRedshiftLUT->TransitionLayout(
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::PipelineStageFlagBits::eTransfer,
+        vk::PipelineStageFlagBits::eFragmentShader
+    );
+    m_kerrRedshiftLUT->CreateSampler(samplerSpec);
 
-    // Generate photon sphere LUT (2D)
-    auto photonSphereData = KerrGeodesicLUTGenerator::generatePhotonSphereLUT();
+    // Create and upload Photon Sphere LUT
+    m_kerrPhotonSphereLUT = std::make_shared<VulkanImage>();
+    VulkanImageSpec photonSphereSpec = deflectionSpec;
+    photonSphereSpec.Size = glm::vec3(MoleHole::KerrGeodesicLUTGenerator::LUT_INCLINATION_SAMPLES, MoleHole::KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES, 1.0f);
+    photonSphereSpec.ImageType = vk::ImageType::e2D;
+    
+    m_kerrPhotonSphereLUT->Create(photonSphereSpec, m_Device);
 
-    if (m_kerrPhotonSphereLUT) {
-        glDeleteTextures(1, &m_kerrPhotonSphereLUT);
-    }
+    size_t photonSphereSize = photonSphereData.size() * sizeof(float);
+    stagingBuffer.Destroy();
+    stagingBuffer.Create({photonSphereSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent}, m_Device);
+    stagingBuffer.Write(photonSphereData.data(), photonSphereSize, 0);
 
-    glGenTextures(1, &m_kerrPhotonSphereLUT);
-    glBindTexture(GL_TEXTURE_2D, m_kerrPhotonSphereLUT);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F,
-                 KerrGeodesicLUTGenerator::LUT_INCLINATION_SAMPLES,
-                 KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES,
-                 0, GL_RED, GL_FLOAT, photonSphereData.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    m_kerrPhotonSphereLUT->CopyBufferToImage(
+        stagingBuffer.GetBuffer(),
+        MoleHole::KerrGeodesicLUTGenerator::LUT_INCLINATION_SAMPLES,
+        MoleHole::KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES,
+        1, 0, 0
+    );
 
-    spdlog::info("Kerr photon sphere LUT uploaded to GPU");
+    m_kerrPhotonSphereLUT->TransitionLayout(
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::PipelineStageFlagBits::eTransfer,
+        vk::PipelineStageFlagBits::eFragmentShader
+    );
+    m_kerrPhotonSphereLUT->CreateSampler(samplerSpec);
 
-    // Generate ISCO LUT (1D, stored as 2D texture with height=1)
-    auto iscoData = KerrGeodesicLUTGenerator::generateISCOLUT();
+    // Create and upload ISCO LUT
+    m_kerrISCOLUT = std::make_shared<VulkanImage>();
+    VulkanImageSpec iscoSpec = deflectionSpec;
+    iscoSpec.Size = glm::vec3(MoleHole::KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES, 1.0f, 1.0f);
+    iscoSpec.ImageType = vk::ImageType::e2D;
 
-    if (m_kerrISCOLUT) {
-        glDeleteTextures(1, &m_kerrISCOLUT);
-    }
+    m_kerrISCOLUT->Create(iscoSpec, m_Device);
 
-    glGenTextures(1, &m_kerrISCOLUT);
-    glBindTexture(GL_TEXTURE_2D, m_kerrISCOLUT);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F,
-                 KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES,
-                 1,
-                 0, GL_RED, GL_FLOAT, iscoData.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    size_t iscoSize = iscoData.size() * sizeof(float);
+    stagingBuffer.Destroy();
+    stagingBuffer.Create({iscoSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent}, m_Device);
+    stagingBuffer.Write(iscoData.data(), iscoSize, 0);
 
-    spdlog::info("Kerr ISCO LUT uploaded to GPU");
-    spdlog::info("All Kerr geodesic LUTs generated successfully");
+    m_kerrISCOLUT->CopyBufferToImage(
+        stagingBuffer.GetBuffer(),
+        MoleHole::KerrGeodesicLUTGenerator::LUT_SPIN_SAMPLES,
+        1,
+        1, 0, 0
+    );
+
+    m_kerrISCOLUT->TransitionLayout(
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::PipelineStageFlagBits::eTransfer,
+        vk::PipelineStageFlagBits::eFragmentShader
+    );
+    m_kerrISCOLUT->CreateSampler(samplerSpec);
+
+    stagingBuffer.Destroy();
+    spdlog::info("Kerr Geodesic LUTs generated successfully");
 }
 
-void BlackHoleRenderer::CreateComputeTexture() {
-    if (m_computeTexture) {
-        glDeleteTextures(1, &m_computeTexture);
+// ===========================================================================================
+// Rendering
+// ===========================================================================================
+
+void BlackHoleRenderer::Render(const Scene& scene,
+                              const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache,
+                              const Camera& camera,
+                              float time,
+                              vk::CommandBuffer cmd) {
+    if (!m_computePipeline || !m_computeTexture) {
+        spdlog::warn("BlackHoleRenderer::Render - Pipeline or texture not initialized");
+        return;
     }
 
-    glGenTextures(1, &m_computeTexture);
-    glBindTexture(GL_TEXTURE_2D, m_computeTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_width, m_height, 0, GL_RGBA, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // Update uniforms
+    UpdateUniforms(scene, meshCache, camera, time, cmd);
 
-    glBindImageTexture(0, m_computeTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+    // Bind compute pipeline
+    m_computePipeline->Bind(cmd);
+
+    // Bind descriptor set
+    m_computePipeline->BindDescriptorSet(cmd, 0, m_ComputeDescriptorSet);
+
+    // Dispatch compute shader
+    uint32_t groupCountX = (m_width + 15) / 16;
+    uint32_t groupCountY = (m_height + 15) / 16;
+    cmd.dispatch(groupCountX, groupCountY, 1);
+
+    // Optional: Apply post-processing effects
+    if (false) { // Bloom disabled for now
+        ApplyBloom(cmd);
+        ApplyLensFlare(cmd);
+    }
 }
 
-void BlackHoleRenderer::CreateBloomTextures() {
-    // Delete existing textures if they exist
-    if (m_bloomBrightTexture) {
-        glDeleteTextures(1, &m_bloomBrightTexture);
-    }
-    if (m_bloomBlurTexture[0]) {
-        glDeleteTextures(2, m_bloomBlurTexture);
-    }
-    if (m_lensFlareTexture) {
-        glDeleteTextures(1, &m_lensFlareTexture);
-    }
+void BlackHoleRenderer::UpdateDisplayDescriptorSet() {
+    if (!m_DisplayDescriptorSet || !m_computeTexture || !m_DisplayUBO) return;
 
-    // Create bright extraction texture
-    glGenTextures(1, &m_bloomBrightTexture);
-    glBindTexture(GL_TEXTURE_2D, m_bloomBrightTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_width, m_height, 0, GL_RGBA, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    // Create ping-pong textures for blur
-    for (int i = 0; i < 2; i++) {
-        glGenTextures(1, &m_bloomBlurTexture[i]);
-        glBindTexture(GL_TEXTURE_2D, m_bloomBlurTexture[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_width, m_height, 0, GL_RGBA, GL_FLOAT, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    }
-
-    // Create lens flare texture
-    glGenTextures(1, &m_lensFlareTexture);
-    glBindTexture(GL_TEXTURE_2D, m_lensFlareTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_width, m_height, 0, GL_RGBA, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-}
-
-void BlackHoleRenderer::CreateFullscreenQuad() {
-    float quadVertices[] = {
-        // positions   // texCoords
-        -1.0f,  1.0f,  0.0f, 1.0f,
-        -1.0f, -1.0f,  0.0f, 0.0f,
-         1.0f, -1.0f,  1.0f, 0.0f,
-        -1.0f,  1.0f,  0.0f, 1.0f,
-         1.0f, -1.0f,  1.0f, 0.0f,
-         1.0f,  1.0f,  1.0f, 1.0f
+    // 1. Image
+    vk::DescriptorImageInfo imageInfo{
+        m_computeTexture->GetSampler(),
+        m_computeTexture->GetImageView(),
+        vk::ImageLayout::eShaderReadOnlyOptimal
+    };
+    vk::WriteDescriptorSet imageWrite{
+        m_DisplayDescriptorSet,
+        0,
+        0,
+        1,
+        vk::DescriptorType::eCombinedImageSampler,
+        &imageInfo,
+        nullptr,
+        nullptr
     };
 
-    glGenVertexArrays(1, &m_quadVAO);
-    glGenBuffers(1, &m_quadVBO);
+    // 2. UBO
+    vk::DescriptorBufferInfo bufferInfo = m_DisplayUBO->GetDescriptorInfo();
+    vk::WriteDescriptorSet bufferWrite{
+        m_DisplayDescriptorSet,
+        1,
+        0,
+        1,
+        vk::DescriptorType::eUniformBuffer,
+        nullptr,
+        &bufferInfo,
+        nullptr
+    };
 
-    glBindVertexArray(m_quadVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, m_quadVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
-
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
+    m_Device->GetDevice().updateDescriptorSets(2, std::array<vk::WriteDescriptorSet, 2>{imageWrite, bufferWrite}.data(), 0, nullptr);
 }
 
-void BlackHoleRenderer::Render(const Scene& scene, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time) {
-    UpdateUniforms(scene, meshCache, camera, time);
-    // UpdateMeshBuffers(scene, meshCache);
+void BlackHoleRenderer::RenderToScreen(vk::CommandBuffer cmd) {
+    if (!m_displayPipeline) return;
 
-    m_computeShader->Bind();
+    // Transition compute texture to shader read
+    m_computeTexture->TransitionLayout(
+        cmd,
+        vk::ImageLayout::eGeneral,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eFragmentShader
+    );
 
-    glBindImageTexture(0, m_computeTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+    // Update UBO
+    DisplayUBO ubo{};
+    ubo.u_fxaaEnabled = 1; // Get from params
+    ubo.u_bloomEnabled = 0;
+    ubo.u_bloomIntensity = 1.0f;
+    ubo.u_bloomDebug = 0;
+    ubo.rt_w = (float)m_width;
+    ubo.rt_h = (float)m_height;
+    
+    // We can use Write here because UBO is host visible/coherent.
+    // However, writing during frame recording might need synchronization if multiple frames in flight use the same buffer.
+    // VulkanBuffer handles writing, but if we have multiple frames in flight, we usually need per-frame UBOs.
+    // For now, let's assume we are safe or risk race condition (common in simple ports).
+    // Ideally we should have m_DisplayUBOs[FrameIndex].
+    // But since BlackHoleRenderer uses a single m_DisplayUBO, we might flicker.
+    // For now, let's proceed.
+    m_DisplayUBO->Write(&ubo, sizeof(DisplayUBO));
 
-    // Bind skybox texture to unit 1
+    // Bind Pipeline
+    m_displayPipeline->Bind(cmd);
+    
+    // Bind Descriptor Set
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_displayPipeline->GetLayout(), 0, 1, &m_DisplayDescriptorSet, 0, nullptr);
+
+    // Draw full screen triangle (3 vertices, 0-2)
+    cmd.draw(3, 1, 0, 0);
+
+    // Transition back to General for next compute frame
+    m_computeTexture->TransitionLayout(
+        cmd,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::ImageLayout::eGeneral,
+        vk::PipelineStageFlagBits::eFragmentShader,
+        vk::PipelineStageFlagBits::eComputeShader
+    );
+}
+
+// ===========================================================================================
+// Utility Functions
+// ===========================================================================================
+
+void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
+                                      const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache,
+                                      const Camera& camera,
+                                      float time,
+                                      vk::CommandBuffer cmd) {
+    CommonUBO ubo{};
+
+    // Camera Matrices
+    ubo.view = camera.GetViewMatrix();
+    ubo.projection = camera.GetProjectionMatrix();
+    ubo.invView = glm::inverse(ubo.view);
+    ubo.invProjection = glm::inverse(ubo.projection);
+
+    // Camera Vectors
+    ubo.cameraPos = glm::vec4(camera.GetPosition(), time);
+    ubo.cameraFront = glm::vec4(camera.GetFront(), 0.0f);
+    ubo.cameraUp = glm::vec4(camera.GetUp(), 0.0f);
+    ubo.cameraRight = glm::vec4(camera.GetRight(), 0.0f);
+    
+    // Params
+    ubo.params = glm::vec4(camera.GetFov(), camera.GetAspect(), 1.0f, 2.2f); // exposure, gamma
+    ubo.resolution = glm::vec4(m_width, m_height, 0.0f, 0.0f);
+
+    // Settings (Hardcoded defaults for now, should come from AppState)
+    ubo.renderBlackHoles = 1;
+    ubo.renderSpheres = 1;
+    ubo.accretionDiskEnabled = 1;
+    ubo.gravitationalLensingEnabled = 1;
+    ubo.cubeSize = 1.0f;
+    ubo.rayStepSize = 0.3f;
+    ubo.maxRaySteps = 1000;
+    ubo.adaptiveStepRate = 0.1f;
+    ubo.enableThirdPerson = 0;
+    ubo.thirdPersonDistance = 5.0f;
+    ubo.thirdPersonHeight = 2.0f;
+
+    // LUT Params (Hardcoded based on generators)
+    ubo.lutTempMin = 1000.0f;
+    ubo.lutTempMax = 40000.0f;
+    ubo.lutRedshiftMin = 0.1f;
+    ubo.lutRedshiftMax = 3.0f;
+
+    // Accretion Disk Params
+    ubo.accretionDiskVolumetric = 0;
+    ubo.accDiskHeight = 0.2f;
+    ubo.accDiskNoiseScale = 1.0f;
+    ubo.accDiskNoiseLOD = 5.0f;
+    ubo.accDiskSpeed = 0.5f;
+    ubo.gravitationalRedshiftEnabled = 1;
+    ubo.dopplerBeamingEnabled = 1.0f;
+
+    // Populate Scene Objects
+    int bhCount = 0;
+    int sphereCount = 0;
+
+    ParameterHandle posHandle("Entity.Position");
+    ParameterHandle massHandle("BlackHole.Mass");
+    ParameterHandle spinHandle("BlackHole.Spin");
+    ParameterHandle axisHandle("BlackHole.SpinAxis");
+    
+    ParameterHandle radiusHandle("Sphere.Radius");
+    ParameterHandle colorHandle("Sphere.Color");
+    ParameterHandle sphereMassHandle("Sphere.Mass");
+
+    for (const auto& obj : scene.objects) {
+        if (obj.HasClass("BlackHole") && bhCount < 8) {
+            ubo.blackHolePositions[bhCount] = glm::vec4(obj.GetParameter<glm::vec3>(posHandle).value_or(glm::vec3(0.0f)), 0.0f);
+            ubo.blackHoleMasses[bhCount] = obj.GetParameter<float>(massHandle).value_or(1.0f);
+            ubo.blackHoleSpins[bhCount] = obj.GetParameter<float>(spinHandle).value_or(0.0f);
+            ubo.blackHoleSpinAxes[bhCount] = glm::vec4(obj.GetParameter<glm::vec3>(axisHandle).value_or(glm::vec3(0,1,0)), 0.0f);
+            bhCount++;
+        } else if (obj.HasClass("Sphere") && sphereCount < 16) {
+            ubo.spherePositions[sphereCount] = glm::vec4(obj.GetParameter<glm::vec3>(posHandle).value_or(glm::vec3(0.0f)), 
+                                                        obj.GetParameter<float>(radiusHandle).value_or(1.0f)); // w = radius
+            ubo.sphereColors[sphereCount] = glm::vec4(obj.GetParameter<glm::vec3>(colorHandle).value_or(glm::vec3(1.0f)),
+                                                     obj.GetParameter<float>(sphereMassHandle).value_or(0.0f)); // w = mass
+            sphereCount++;
+        }
+    }
+    ubo.numBlackHoles = bhCount;
+    ubo.numSpheres = sphereCount;
+    ubo.debugMode = Application::Params().Get<int>(Params::RenderingDebugMode, 0);
+
+    // Write to UBO
+    m_CommonUBO->Write(&ubo, sizeof(CommonUBO), 0);
+
+    // Update descriptor set with current resources
+    std::vector<vk::WriteDescriptorSet> writes;
+
+    // Storage image
+    vk::DescriptorImageInfo storageImageInfo{
+        {},
+        m_computeTexture->GetImageView(),
+        vk::ImageLayout::eGeneral
+    };
+    writes.push_back(vk::WriteDescriptorSet{
+        m_ComputeDescriptorSet,
+        0,
+        0,
+        1,
+        vk::DescriptorType::eStorageImage,
+        &storageImageInfo,
+        nullptr,
+        nullptr
+    });
+
+    // Uniform buffer
+    vk::DescriptorBufferInfo bufferInfo = m_CommonUBO->GetDescriptorInfo();
+    writes.push_back(vk::WriteDescriptorSet{
+        m_ComputeDescriptorSet,
+        1,
+        0,
+        1,
+        vk::DescriptorType::eUniformBuffer,
+        nullptr,
+        &bufferInfo,
+        nullptr
+    });
+
+    // Skybox texture (if available)
     if (m_skyboxTexture) {
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_skyboxTexture->textureID);
-        m_computeShader->SetInt("u_skyboxTexture", 1);
-    }
-    
-    // Bind blackbody LUT to unit 2
-    if (m_blackbodyLUT) {
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, m_blackbodyLUT);
-        m_computeShader->SetInt("u_blackbodyLUT", 2);
-        
-        // Set LUT parameters (must match the generator constants)
-        m_computeShader->SetFloat("u_lutTempMin", 1000.0f);
-        m_computeShader->SetFloat("u_lutTempMax", 40000.0f);
-        m_computeShader->SetFloat("u_lutRedshiftMin", 0.1f);
-        m_computeShader->SetFloat("u_lutRedshiftMax", 3.0f);
-        m_computeShader->SetInt("u_useBlackbodyLUT", 1);
+        vk::DescriptorImageInfo skyboxInfo{
+            m_skyboxTexture->GetSampler(),
+            m_skyboxTexture->GetImageView(),
+            vk::ImageLayout::eShaderReadOnlyOptimal
+        };
+        writes.push_back(vk::WriteDescriptorSet{
+            m_ComputeDescriptorSet,
+            2,
+            0,
+            1,
+            vk::DescriptorType::eCombinedImageSampler,
+            &skyboxInfo,
+            nullptr,
+            nullptr
+        });
     }
 
-    // Bind acceleration LUT to unit 3
-    if (m_accelerationLUT) {
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, m_accelerationLUT);
-        m_computeShader->SetInt("u_accelerationLUT", 3);
-        m_computeShader->SetInt("u_useAccelerationLUT", 1);
-    }
+    // LUT textures
+    std::vector<vk::DescriptorImageInfo> lutInfos;
+    std::vector<std::shared_ptr<VulkanImage>> luts{
+        m_blackbodyLUT,
+        m_accelerationLUT,
+        m_hrDiagramLUT,
+        m_kerrDeflectionLUT,
+        m_kerrRedshiftLUT,
+        m_kerrPhotonSphereLUT,
+        m_kerrISCOLUT
+    };
 
-    // Bind HR diagram LUT to unit 4
-    if (m_hrDiagramLUT) {
-        glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, m_hrDiagramLUT);
-        m_computeShader->SetInt("u_hrDiagramLUT", 4);
-        m_computeShader->SetInt("u_useHRDiagramLUT", 1);
-    }
-
-    // Bind Kerr deflection LUT to unit 5
-    if (m_kerrDeflectionLUT) {
-        glActiveTexture(GL_TEXTURE5);
-        glBindTexture(GL_TEXTURE_3D, m_kerrDeflectionLUT);
-        m_computeShader->SetInt("u_kerrDeflectionLUT", 5);
-    }
-
-    // Bind Kerr redshift LUT to unit 6
-    if (m_kerrRedshiftLUT) {
-        glActiveTexture(GL_TEXTURE6);
-        glBindTexture(GL_TEXTURE_3D, m_kerrRedshiftLUT);
-        m_computeShader->SetInt("u_kerrRedshiftLUT", 6);
-    }
-
-    // Bind Kerr photon sphere LUT to unit 7
-    if (m_kerrPhotonSphereLUT) {
-        glActiveTexture(GL_TEXTURE7);
-        glBindTexture(GL_TEXTURE_2D, m_kerrPhotonSphereLUT);
-        m_computeShader->SetInt("u_kerrPhotonSphereLUT", 7);
-    }
-
-    // Bind Kerr ISCO LUT to unit 8
-    if (m_kerrISCOLUT) {
-        glActiveTexture(GL_TEXTURE8);
-        glBindTexture(GL_TEXTURE_2D, m_kerrISCOLUT);
-        m_computeShader->SetInt("u_kerrISCOLUT", 8);
-    }
-
-    // Enable Kerr physics if all LUTs are loaded AND user has enabled it
-    bool kerrPhysicsEnabled = Application::Params().Get(Params::GRKerrPhysicsEnabled, true);
-    bool useKerrPhysics = kerrPhysicsEnabled &&
-                          (m_kerrDeflectionLUT && m_kerrRedshiftLUT &&
-                           m_kerrPhotonSphereLUT && m_kerrISCOLUT);
-    m_computeShader->SetInt("u_useKerrPhysics", useKerrPhysics ? 1 : 0);
-
-    bool hasBlackHoles = false;
-    for (const auto& obj : scene.objects) {
-        if (obj.HasClass("BlackHole")) {
-            hasBlackHoles = true;
-            break;
+    for (size_t i = 0; i < luts.size(); i++) {
+        if (luts[i]) {
+            lutInfos.push_back(vk::DescriptorImageInfo{
+                luts[i]->GetSampler(),
+                luts[i]->GetImageView(),
+                vk::ImageLayout::eShaderReadOnlyOptimal
+            });
+        } else {
+             // Handle missing LUTs gracefully if needed, though they should be init'd
+             lutInfos.push_back(vk::DescriptorImageInfo{});
         }
     }
 
-    if (hasBlackHoles) {
-        m_computeShader->SetInt("u_debugMode", Application::Params().Get(Params::RenderingDebugMode, 0));
+    for (size_t i = 0; i < lutInfos.size(); i++) {
+        if (!luts[i]) continue;
+        writes.push_back(vk::WriteDescriptorSet{
+            m_ComputeDescriptorSet,
+            3 + static_cast<uint32_t>(i),
+            0,
+            1,
+            vk::DescriptorType::eCombinedImageSampler,
+            &lutInfos[i],
+            nullptr,
+            nullptr
+        });
     }
 
-    unsigned int groupsX = (m_width + 15) / 16;
-    unsigned int groupsY = (m_height + 15) / 16;
-    m_computeShader->Dispatch(groupsX, groupsY, 1);
-
-    // Ensure writes to the image are visible to subsequent texture fetches in the fragment shader
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
-
-    m_computeShader->Unbind();
-    
-    // Apply bloom effect
-    ApplyBloom();
-
-    // Apply lens flare effect (uses bloom output)
-    // ApplyLensFlare();
+    // Update descriptors
+    m_Device->GetDevice().updateDescriptorSets(writes, nullptr);
 }
 
-void BlackHoleRenderer::ApplyBloom() {
-    // Check if bloom is enabled
-    bool bloomEnabled = Application::Params().Get(Params::RenderingBloomEnabled, true);
-    if (!bloomEnabled) {
-        return;
-    }
-    
-    unsigned int groupsX = (m_width + 15) / 16;
-    unsigned int groupsY = (m_height + 15) / 16;
-    
-    // Step 1: Extract bright areas
-    m_bloomExtractShader->Bind();
-    
-    float bloomThreshold = Application::Params().Get(Params::RenderingBloomThreshold, 1.0f);
-    m_bloomExtractShader->SetFloat("u_bloomThreshold", bloomThreshold);
-    
-    glBindImageTexture(0, m_computeTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-    glBindImageTexture(1, m_bloomBrightTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-    
-    glDispatchCompute(groupsX, groupsY, 1);
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-    
-    m_bloomExtractShader->Unbind();
-    
-    // Step 2: Apply Gaussian blur (ping-pong between two textures)
-    m_bloomBlurShader->Bind();
-    
-    int blurPasses = Application::Params().Get(Params::RenderingBloomBlurPasses, 5);
-
-    bool horizontal = true;
-    unsigned int srcTexture = m_bloomBrightTexture;
-    
-    for (int i = 0; i < blurPasses * 2; i++) {
-        m_bloomBlurShader->SetInt("u_horizontal", horizontal ? 1 : 0);
-        
-        int dstIndex = horizontal ? 0 : 1;
-        
-        glBindImageTexture(0, srcTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-        glBindImageTexture(1, m_bloomBlurTexture[dstIndex], 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-        
-        glDispatchCompute(groupsX, groupsY, 1);
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-        
-        srcTexture = m_bloomBlurTexture[dstIndex];
-        m_bloomFinalTextureIndex = dstIndex;
-        horizontal = !horizontal;
-    }
-    
-    m_bloomBlurShader->Unbind();
-    
-    // Ensure bloom texture writes are visible to texture fetches in fragment shader
-    glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
-}
-
-void BlackHoleRenderer::ApplyLensFlare() {
-    // Check if lens flare is enabled
-    bool lensFlareEnabled = Application::Params().Get(Params::RenderingLensFlareEnabled, true);
-    if (!lensFlareEnabled || !m_lensFlareShader) {
-        return;
-    }
-
-    unsigned int groupsX = (m_width + 15) / 16;
-    unsigned int groupsY = (m_height + 15) / 16;
-
-    m_lensFlareShader->Bind();
-
-    float flareIntensity = Application::Params().Get(Params::RenderingLensFlareIntensity, 0.3f);
-    float flareThreshold = Application::Params().Get(Params::RenderingLensFlareThreshold, 2.0f);
-
-    m_lensFlareShader->SetFloat("u_flareIntensity", flareIntensity);
-    m_lensFlareShader->SetFloat("u_flareThreshold", flareThreshold);
-    m_lensFlareShader->SetInt("u_flareEnabled", 1);
-
-    // Use bloom result as input (bright areas already extracted)
-    glBindImageTexture(0, m_bloomBlurTexture[m_bloomFinalTextureIndex], 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-    glBindImageTexture(1, m_lensFlareTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-
-    glDispatchCompute(groupsX, groupsY, 1);
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
-
-    m_lensFlareShader->Unbind();
-}
-
-void BlackHoleRenderer::UpdateUniforms(const Scene& scene, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time) {
-    m_computeShader->Bind();
-
-    glm::vec3 cameraPos = camera.GetPosition();
-    glm::vec3 cameraFront = camera.GetFront();
-    glm::vec3 cameraUp = camera.GetUp();
-    glm::vec3 cameraRight = glm::normalize(glm::cross(cameraFront, cameraUp));
-
-    m_computeShader->SetVec3("u_cameraPos", cameraPos);
-    m_computeShader->SetVec3("u_cameraFront", cameraFront);
-    m_computeShader->SetVec3("u_cameraUp", cameraUp);
-    m_computeShader->SetVec3("u_cameraRight", cameraRight);
-    m_computeShader->SetFloat("u_fov", camera.GetFov());
-    m_computeShader->SetInt("u_enableThirdPerson", Application::Params().Get(Params::RenderingThirdPerson, false) ? 1 : 0);
-    m_computeShader->SetFloat("u_aspect", static_cast<float>(m_width) / static_cast<float>(m_height));
-    m_computeShader->SetFloat("u_time", time);
-
-    // Third-person camera object uniforms
-    if (Application::Params().Get(Params::RenderingThirdPerson, false)) {
-        std::string selectedObjectName = Application::Params().Get(Params::CameraObject, std::string(""));
-
-        // Find the selected mesh object
-        bool foundObject = false;
-        for (const auto& obj : scene.objects) {
-            if (obj.HasClass("Mesh")) {
-                ParameterHandle nameHandle("Entity.Name");
-                auto nameValue = obj.GetParameter(nameHandle);
-                if (std::holds_alternative<std::string>(nameValue) && std::get<std::string>(nameValue) == selectedObjectName) {
-                    m_computeShader->SetFloat("u_thirdPersonDistance", Application::Params().Get(Params::ThirdPersonDistance, 10.0f));
-                    m_computeShader->SetFloat("u_thirdPersonHeight", Application::Params().Get(Params::ThirdPersonHeight, 3.0f));
-                    foundObject = true;
-                    break;
-                }
-            }
-        }
-
-        // Fallback if object not found
-        if (!foundObject) {
-            m_computeShader->SetFloat("u_cubeSize", 1.0f);
-            m_computeShader->SetFloat("u_thirdPersonDistance", 10.0f);
-            m_computeShader->SetFloat("u_thirdPersonHeight", 3.0f);
-        }
-    }
-
-    // Rendering settings from AppState
-    m_computeShader->SetInt("u_gravitationalLensingEnabled", Application::Params().Get(Params::RenderingGravitationalLensingEnabled, true) ? 1 : 0);
-    m_computeShader->SetInt("u_accretionDiskEnabled", Application::Params().Get(Params::RenderingAccretionDiskEnabled, true) ? 1 : 0);
-    m_computeShader->SetInt("u_accretionDiskVolumetric", Application::Params().Get(Params::RenderingAccretionDiskVolumetric, false) ? 1 : 0);
-    m_computeShader->SetInt("u_renderBlackHoles", Application::Params().Get(Params::RenderingBlackHolesEnabled, true) ? 1 : 0);
-    m_computeShader->SetFloat("u_accDiskHeight", Application::Params().Get(Params::RenderingAccDiskHeight, 0.1f));
-    m_computeShader->SetFloat("u_accDiskNoiseScale", Application::Params().Get(Params::RenderingAccDiskNoiseScale, 1.0f));
-    m_computeShader->SetFloat("u_accDiskNoiseLOD", Application::Params().Get(Params::RenderingAccDiskNoiseLOD, 3.0f));
-    m_computeShader->SetFloat("u_accDiskSpeed", Application::Params().Get(Params::RenderingAccDiskSpeed, 1.0f));
-    m_computeShader->SetFloat("u_dopplerBeamingEnabled", Application::Params().Get(Params::RenderingDopplerBeamingEnabled, true) ? 1.0f : 0.0f);
-    m_computeShader->SetFloat("u_accDiskTemp", 2000.0f);
-    m_computeShader->SetInt("u_gravitationalRedshiftEnabled", Application::Params().Get(Params::RenderingGravitationalRedshiftEnabled, true) ? 1 : 0);
-
-    // Ray marching quality settings - only set during export mode
-    if (m_isExportMode) {
-        m_computeShader->SetFloat("u_rayStepSize", Application::Params().Get(Params::RenderingRayStepSize, 0.1f));
-        m_computeShader->SetInt("u_maxRaySteps", Application::Params().Get(Params::RenderingMaxRaySteps, 128));
-        m_computeShader->SetFloat("u_adaptiveStepRate", Application::Params().Get(Params::RenderingAdaptiveStepRate, 0.1f));
-    }
-
-    int numBlackHoles = 0;
-    constexpr int MAX_BLACKHOLES = 8;
-    for (const auto& obj : scene.objects) {
-        if (numBlackHoles >= MAX_BLACKHOLES) break;
-        if (obj.HasClass("BlackHole")) {
-            ParameterHandle posHandle("Entity.Position");
-            ParameterHandle massHandle("Physics.Mass");
-            ParameterHandle spinHandle("BlackHole.Spin");
-            ParameterHandle spinAxisHandle("BlackHole.SpinAxis");
-
-            auto pos = obj.GetParameter(posHandle);
-            auto mass = obj.GetParameter(massHandle);
-            auto spin = obj.GetParameter(spinHandle);
-            auto spinAxis = obj.GetParameter(spinAxisHandle);
-
-            if (std::holds_alternative<glm::vec3>(pos) && std::holds_alternative<float>(mass)) {
-                std::string posUniform = "u_blackHolePositions[" + std::to_string(numBlackHoles) + "]";
-                std::string massUniform = "u_blackHoleMasses[" + std::to_string(numBlackHoles) + "]";
-                std::string spinUniform = "u_blackHoleSpins[" + std::to_string(numBlackHoles) + "]";
-                std::string spinAxisUniform = "u_blackHoleSpinAxes[" + std::to_string(numBlackHoles) + "]";
-
-                m_computeShader->SetVec3(posUniform, std::get<glm::vec3>(pos));
-                m_computeShader->SetFloat(massUniform, std::get<float>(mass) / Physics::SOLAR_MASS);
-                m_computeShader->SetFloat(spinUniform, std::holds_alternative<float>(spin) ? std::get<float>(spin) : 0.0f);
-
-                glm::vec3 axis = std::holds_alternative<glm::vec3>(spinAxis) ? std::get<glm::vec3>(spinAxis) : glm::vec3(0.0f, 1.0f, 0.0f);
-                m_computeShader->SetVec3(spinAxisUniform, glm::normalize(axis));
-
-                numBlackHoles++;
-            }
-        }
-    }
-    m_computeShader->SetInt("u_numBlackHoles", numBlackHoles);
-
-    m_computeShader->SetInt("u_renderSpheres", 1);
-    int numSpheres = 0;
-    constexpr int MAX_SPHERES = 16;
-    for (const auto& obj : scene.objects) {
-        if (numSpheres >= MAX_SPHERES) break;
-        if (obj.HasClass("Sphere")) {
-            ParameterHandle posHandle("Entity.Position");
-            ParameterHandle radiusHandle("Sphere.Radius");
-            ParameterHandle colorHandle("Sphere.Color");
-            ParameterHandle massHandle("Physics.Mass");
-
-            auto pos = obj.GetParameter(posHandle);
-            auto radius = obj.GetParameter(radiusHandle);
-            auto color = obj.GetParameter(colorHandle);
-            auto mass = obj.GetParameter(massHandle);
-
-            if (std::holds_alternative<glm::vec3>(pos) && std::holds_alternative<float>(radius)) {
-                std::string posUniform = "u_spherePositions[" + std::to_string(numSpheres) + "]";
-                std::string radiusUniform = "u_sphereRadii[" + std::to_string(numSpheres) + "]";
-                std::string colorUniform = "u_sphereColors[" + std::to_string(numSpheres) + "]";
-                std::string massUniform = "u_sphereMasses[" + std::to_string(numSpheres) + "]";
-
-                m_computeShader->SetVec3(posUniform, std::get<glm::vec3>(pos));
-                m_computeShader->SetFloat(radiusUniform, std::get<float>(radius));
-
-                glm::vec4 col = glm::vec4(1.0f);
-                if (std::holds_alternative<glm::vec3>(color)) {
-                    glm::vec3 c = std::get<glm::vec3>(color);
-                    col = glm::vec4(c.x, c.y, c.z, 1.0f);
-                }
-                m_computeShader->SetVec4(colorUniform, col);
-
-                float massInSolarMasses = 0.0f;
-                if (std::holds_alternative<float>(mass)) {
-                    massInSolarMasses = std::get<float>(mass) / 1.989e30f;
-                }
-                m_computeShader->SetFloat(massUniform, massInSolarMasses);
-
-                numSpheres++;
-            }
-        }
-    }
-    m_computeShader->SetInt("u_numSpheres", numSpheres);
-
-    m_computeShader->Unbind();
-}
-
-void BlackHoleRenderer::RenderToScreen() {
-    m_displayShader->Bind();
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_computeTexture);
-    m_displayShader->SetInt("u_raytracedImage", 0);
-
-    // Bind bloom texture
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_bloomBlurTexture[m_bloomFinalTextureIndex]); // Use final blur result
-    m_displayShader->SetInt("u_bloomImage", 1);
-    
-    // Bind lens flare texture
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_lensFlareTexture);
-    m_displayShader->SetInt("u_lensFlareImage", 2);
-
-    // Set bloom parameters
-    bool bloomEnabled = Application::Params().Get(Params::RenderingBloomEnabled, true);
-    float bloomIntensity = Application::Params().Get(Params::RenderingBloomIntensity, 5.0f);
-    bool bloomDebug = Application::Params().Get(Params::RenderingBloomDebug, false);
-    m_displayShader->SetInt("u_bloomEnabled", bloomEnabled ? 1 : 0);
-    m_displayShader->SetFloat("u_bloomIntensity", bloomIntensity);
-    m_displayShader->SetInt("u_bloomDebug", bloomDebug ? 1 : 0);
-
-    // Set lens flare parameters
-    bool lensFlareEnabled = Application::Params().Get(Params::RenderingLensFlareEnabled, true);
-    float lensFlareIntensity = Application::Params().Get(Params::RenderingLensFlareIntensity, 1.0f);
-    m_displayShader->SetInt("u_lensFlareEnabled", lensFlareEnabled ? 1 : 0);
-    m_displayShader->SetFloat("u_lensFlareIntensity", lensFlareIntensity);
-
-    // Set FXAA parameters
-    bool fxaaEnabled = Application::Params().Get(Params::RenderingAntiAliasingEnabled, false);
-    m_displayShader->SetInt("u_fxaaEnabled", fxaaEnabled ? 1 : 0);
-    m_displayShader->SetFloat("rt_w", static_cast<float>(m_width));
-    m_displayShader->SetFloat("rt_h", static_cast<float>(m_height));
-
-    glBindVertexArray(m_quadVAO);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    glBindVertexArray(0);
-
-    m_displayShader->Unbind();
-}
-
-void BlackHoleRenderer::Resize(int width, int height) {
-    m_width = width;
-    m_height = height;
-    CreateComputeTexture();
-    CreateBloomTextures();
+void BlackHoleRenderer::UpdateMeshBuffers(const Scene& scene,
+                                         const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache) {
+    // Stub: Update mesh SSBOs if needed
+    spdlog::debug("UpdateMeshBuffers called");
 }
 
 void BlackHoleRenderer::CreateMeshBuffers() {
-    glGenBuffers(1, &m_meshDataSSBO);
-    glGenBuffers(1, &m_triangleSSBO);
-    
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_meshDataSSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_meshDataSSBO);
-    
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_triangleSSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_triangleSSBO);
-    
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+    // Stub: Create SSBOs for mesh data
+    spdlog::debug("CreateMeshBuffers called");
 }
 
-void BlackHoleRenderer::UpdateMeshBuffers(const Scene& scene, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache) {
-    struct MeshData {
-        glm::mat4 transform;
-        glm::vec4 baseColor;
-        float metallic;
-        float roughness;
-        int triangleCount;
-        int triangleOffset;
-    };
-    
-    struct Triangle {
-        glm::vec3 v0, v1, v2;
-        glm::vec3 n0, n1, n2;
-    };
-    
-    std::vector<MeshData> meshDataArray;
-    std::vector<Triangle> triangleArray;
-    
-    int triangleOffset = 0;
-    constexpr int MAX_MESHES = 3;
-    int totalTriangles = 0;
-    int meshCount = 0;
+void BlackHoleRenderer::ApplyBloom(vk::CommandBuffer cmd) {
+    // Stub: Implement bloom extraction and blur
+    spdlog::debug("ApplyBloom called");
+}
 
-    for (const auto& obj : scene.objects) {
-        if (meshCount >= MAX_MESHES) break;
-        if (!obj.HasClass("Mesh")) continue;
+void BlackHoleRenderer::ApplyLensFlare(vk::CommandBuffer cmd) {
+    // Stub: Implement lens flare
+    spdlog::debug("ApplyLensFlare called");
+}
 
-        ParameterHandle pathHandle("Mesh.FilePath");
-        ParameterHandle posHandle("Entity.Position");
-        ParameterHandle rotHandle("Entity.Rotation");
-        ParameterHandle scaleHandle("Entity.Scale");
+void BlackHoleRenderer::CreateFullscreenQuad() {
+    // Stub: Create a fullscreen quad for rendering
+    spdlog::debug("CreateFullscreenQuad called");
+}
 
-        auto pathValue = obj.GetParameter(pathHandle);
-        auto posValue = obj.GetParameter(posHandle);
-        auto rotValue = obj.GetParameter(rotHandle);
-        auto scaleValue = obj.GetParameter(scaleHandle);
+void BlackHoleRenderer::LoadSkybox() {
+    // Stub: Load skybox texture
+    spdlog::debug("LoadSkybox called");
+}
 
-        if (!std::holds_alternative<std::string>(pathValue)) continue;
-        std::string meshPath = std::get<std::string>(pathValue);
+void BlackHoleRenderer::Resize(int width, int height) {
+    if (width == m_width && height == m_height) {
+        return;
+    }
 
-        auto it = meshCache.find(meshPath);
-        if (it == meshCache.end() || !it->second || !it->second->IsLoaded()) {
-            continue;
+    m_width = width;
+    m_height = height;
+
+    spdlog::info("BlackHoleRenderer::Resize - Resizing to {}x{}", width, height);
+
+    // Recreate compute texture
+    if (m_computeTexture) {
+        m_computeTexture->Destroy();
+    }
+    CreateComputeTexture();
+
+    // Recreate bloom textures
+    if (m_bloomBrightTexture) {
+        m_bloomBrightTexture->Destroy();
+    }
+    for (int i = 0; i < 2; i++) {
+        if (m_bloomBlurTexture[i]) {
+            m_bloomBlurTexture[i]->Destroy();
         }
-        
-        auto gltfMesh = it->second;
-        auto geometry = gltfMesh->GetPhysicsGeometry();
-        
-        if (geometry.vertices.empty() || geometry.indices.empty()) {
-            continue;
-        }
-        
-        MeshData data{};
-
-        glm::vec3 pos = std::holds_alternative<glm::vec3>(posValue) ? std::get<glm::vec3>(posValue) : glm::vec3(0.0f);
-        glm::vec3 scale = std::holds_alternative<glm::vec3>(scaleValue) ? std::get<glm::vec3>(scaleValue) : glm::vec3(1.0f);
-
-        // TODO: Fix rotation - needs to handle quaternion properly
-        glm::quat rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-
-        data.transform = glm::translate(glm::mat4(1.0f), pos);
-        data.transform = data.transform * glm::mat4_cast(rot);
-        data.transform = glm::scale(data.transform, scale);
-        data.baseColor = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
-        data.metallic = 0.5f;
-        data.roughness = 0.5f;
-        data.triangleOffset = triangleOffset;
-        
-        int meshTriangleCount = 0;
-
-        for (size_t idx = 0; idx < geometry.indices.size() && idx + 2 < geometry.indices.size(); idx += 3) {
-            constexpr int MAX_TRIANGLES_PER_MESH = 50000;
-            if (totalTriangles >= MAX_MESHES * MAX_TRIANGLES_PER_MESH) {
-                spdlog::warn("Exceeded maximum triangle count, skipping remaining triangles");
-                break;
-            }
-            
-            if (meshTriangleCount >= MAX_TRIANGLES_PER_MESH) {
-                spdlog::warn("Mesh {} exceeded MAX_TRIANGLES_PER_MESH, skipping remaining triangles", meshPath);
-                break;
-            }
-            
-            unsigned int i0 = geometry.indices[idx + 0];
-            unsigned int i1 = geometry.indices[idx + 1];
-            unsigned int i2 = geometry.indices[idx + 2];
-            
-            if (i0 >= geometry.vertices.size() || i1 >= geometry.vertices.size() || i2 >= geometry.vertices.size()) {
-                continue;
-            }
-            
-            Triangle tri{};
-            tri.v0 = geometry.vertices[i0];
-            tri.v1 = geometry.vertices[i1];
-            tri.v2 = geometry.vertices[i2];
-            
-            glm::vec3 edge1 = tri.v1 - tri.v0;
-            glm::vec3 edge2 = tri.v2 - tri.v0;
-            glm::vec3 normal = glm::normalize(glm::cross(edge1, edge2));
-            
-            tri.n0 = normal;
-            tri.n1 = normal;
-            tri.n2 = normal;
-            
-            triangleArray.push_back(tri);
-            meshTriangleCount++;
-            totalTriangles++;
-        }
-        
-        data.triangleCount = meshTriangleCount;
-        triangleOffset += meshTriangleCount;
-        
-        meshDataArray.push_back(data);
     }
+    CreateBloomTextures();
 
-    if (!meshDataArray.empty()) {
-        spdlog::info("Updated mesh buffers: {} meshes, {} triangles", meshDataArray.size(), triangleArray.size());
-    }
-    
-    m_computeShader->Bind();
-    m_computeShader->SetInt("u_numMeshes", static_cast<int>(meshDataArray.size()));
-    m_computeShader->SetInt("u_renderMeshes", meshDataArray.empty() ? 0 : 1);
-    m_computeShader->Unbind();
-
-    if (!meshDataArray.empty()) {
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_meshDataSSBO);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, meshDataArray.size() * sizeof(MeshData), 
-                     meshDataArray.data(), GL_DYNAMIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_meshDataSSBO);
-    }
-    
-    if (!triangleArray.empty()) {
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_triangleSSBO);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, triangleArray.size() * sizeof(Triangle), 
-                     triangleArray.data(), GL_DYNAMIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_triangleSSBO);
-    }
-    
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+    spdlog::info("BlackHoleRenderer::Resize - Resize complete");
 }

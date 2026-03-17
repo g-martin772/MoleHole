@@ -3,10 +3,10 @@
 #include "AppState.h"
 #include "UI/UI.h"
 #include "Renderer/Renderer.h"
-#include "../Renderer/Modules/ExportRenderer.h"
+// #include "../Renderer/Modules/ExportRenderer.h"
 #include "Simulation/Simulation.h"
 #include "FpsCounter.h"
-#include "UI/IntroAnimation.h"
+// #include "UI/IntroAnimation.h"
 #include "CommandLineArgs.h"
 
 
@@ -60,8 +60,8 @@ public:
     float GetFPS() const { return m_fpsCounter.GetFps(); }
 
     UI& GetUI() { return m_ui; };
-    ExportRenderer& GetExportRenderer() { return m_exportRenderer; }
-    IntroAnimation* GetIntroAnimation() const { return m_introAnimation.get(); }
+    // ExportRenderer& GetExportRenderer() { return m_exportRenderer; }
+    // IntroAnimation* GetIntroAnimation() const { return m_introAnimation.get(); }
 
 private:
     Application() = default;
@@ -73,8 +73,8 @@ private:
     Renderer m_renderer;
     Simulation m_simulation;
     FpsCounter m_fpsCounter;
-    ExportRenderer m_exportRenderer;
-    std::unique_ptr<IntroAnimation> m_introAnimation;
+    // ExportRenderer m_exportRenderer;
+    // std::unique_ptr<IntroAnimation> m_introAnimation;
 
     bool m_initialized = false;
     bool m_running = false;

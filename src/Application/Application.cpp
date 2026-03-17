@@ -37,13 +37,15 @@ bool Application::Initialize() {
         if (!headlessMode) {
             m_ui.Initialize();
 
+/*
             if (m_args.ShouldShowIntro()) {
                 m_introAnimation = std::make_unique<IntroAnimation>();
-                m_introAnimation->Init();
+                //m_introAnimation->Init();
                 spdlog::info("Intro animation enabled");
             } else {
                 spdlog::info("Intro animation disabled via command line");
             }
+*/
         } else {
             spdlog::info("Running in headless mode - skipping UI and intro");
         }
@@ -132,11 +134,11 @@ void Application::RunHeadless() {
     if (exportImagePath.has_value()) {
         spdlog::info("Starting image export: {}x{} -> {}", width, height, exportImagePath.value());
 
-        ExportRenderer::ImageConfig config;
-        config.width = width;
-        config.height = height;
+        // ExportRenderer::ImageConfig config;
+        // config.width = width;
+        // config.height = height;
 
-        m_exportRenderer.StartImageExport(config, exportImagePath.value(), scene);
+        // m_exportRenderer.StartImageExport(config, exportImagePath.value(), scene);
     } else if (exportVideoPath.has_value()) {
         float videoLength = m_args.GetValueFloat("video-length", 10.0f);
         int videoFps = m_args.GetValueInt("video-fps", 60);
@@ -144,20 +146,20 @@ void Application::RunHeadless() {
         spdlog::info("Starting video export: {}x{} {}s @{}fps -> {}",
                     width, height, videoLength, videoFps, exportVideoPath.value());
 
-        ExportRenderer::VideoConfig config;
-        config.width = width;
-        config.height = height;
-        config.length = videoLength;
-        config.framerate = videoFps;
-        config.tickrate = videoFps;
+        // ExportRenderer::VideoConfig config;
+        // config.width = width;
+        // config.height = height;
+        // config.length = videoLength;
+        // config.framerate = videoFps;
+        // config.tickrate = videoFps;
 
         if (m_args.HasFlag("use-custom-ray-settings")) {
-            config.useCustomRaySettings = true;
-            config.customRayStepSize = m_args.GetValueFloat("ray-step-size", 0.01f);
-            config.customMaxRaySteps = m_args.GetValueInt("max-ray-steps", 1000);
+            // config.useCustomRaySettings = true;
+            // config.customRayStepSize = m_args.GetValueFloat("ray-step-size", 0.01f);
+            // config.customMaxRaySteps = m_args.GetValueInt("max-ray-steps", 1000);
         }
 
-        m_exportRenderer.StartVideoExport(config, exportVideoPath.value(), scene);
+        // m_exportRenderer.StartVideoExport(config, exportVideoPath.value(), scene);
     }
 
     // Main export loop
@@ -167,7 +169,7 @@ void Application::RunHeadless() {
         m_lastFrameTime = window ? window->GetTime() : 0.0;
     }
 
-    while (m_running && m_exportRenderer.IsExporting()) {
+    while (m_running /*&& m_exportRenderer.IsExporting()*/) {
         auto* window = m_renderer.GetWindowAbstraction();
         double currentTime = window ? window->GetTime() : 0.0;
         m_deltaTime = static_cast<float>(currentTime - m_lastFrameTime);
@@ -177,26 +179,26 @@ void Application::RunHeadless() {
             window->PollEvents();
         }
 
-        m_exportRenderer.Update();
+        // m_exportRenderer.Update();
 
         static float lastProgressLog = 0.0f;
-        float currentProgress = m_exportRenderer.GetProgress();
-        if (currentProgress - lastProgressLog >= 0.05f) { // Log every 5%
+        // float currentProgress = m_exportRenderer.GetProgress();
+        /*if (currentProgress - lastProgressLog >= 0.05f) { // Log every 5%
             spdlog::info("Export progress: {:.1f}% - {}",
                         currentProgress * 100.0f,
                         m_exportRenderer.GetCurrentTask());
             lastProgressLog = currentProgress;
-        }
+        }*/
 
         // Small sleep to avoid busy-waiting
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    if (m_exportRenderer.IsExporting()) {
+    /*if (m_exportRenderer.IsExporting()) {
         spdlog::warn("Export loop ended but export is still in progress");
     } else {
         spdlog::info("Export completed successfully");
-    }
+    }*/
 
     if (m_args.ShouldExitOnComplete()) {
         spdlog::info("Exiting as requested by --exit-on-complete flag");
@@ -226,7 +228,7 @@ void Application::Shutdown() {
 
 void Application::Update(float deltaTime) {
     // Update intro animation first
-    if (m_introAnimation && m_introAnimation->IsActive()) {
+    /*if (m_introAnimation && m_introAnimation->IsActive()) {
         m_introAnimation->Update(deltaTime);
 
         // Allow skipping intro with Escape or Space
@@ -237,11 +239,11 @@ void Application::Update(float deltaTime) {
 
         // Don't update simulation/UI during intro
         return;
-    }
+    }*/
 
     m_simulation.Update(deltaTime);
     m_ui.Update(deltaTime);
-    m_exportRenderer.Update();
+    // m_exportRenderer.Update();
 
     for (const auto& [name, callback] : m_updateCallbacks) {
         try {
@@ -272,15 +274,15 @@ void Application::Render() {
     m_renderer.BeginFrame();
 
     // If intro animation is active, render only that
-    if (Params().Get(Params::AppIntroAnimationEnabled, true) && m_introAnimation && m_introAnimation->IsActive()) {
+    /*if (Params().Get(Params::AppIntroAnimationEnabled, true) && m_introAnimation && m_introAnimation->IsActive()) {
         int width, height;
         if (auto* window = m_renderer.GetWindowAbstraction()) {
             window->GetFramebufferSize(width, height);
         }
-        m_introAnimation->Render(width, height);
+        //m_introAnimation->Render(width, height);
         m_renderer.EndFrame(false);
         return;
-    }
+    }*/
 
     auto scene = m_simulation.GetScene();
 

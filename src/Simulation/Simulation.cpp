@@ -76,7 +76,7 @@ void Simulation::Stop() {
         
         auto& renderer = Application::GetRenderer();
         if (auto* pathsRenderer = renderer.GetObjectPathsRenderer()) {
-            pathsRenderer->ClearHistories();
+            //pathsRenderer->ClearHistories();
         }
         
         spdlog::info("Simulation stopped and reset to initial state");
@@ -100,7 +100,7 @@ void Simulation::Reset() {
         
         auto& renderer = Application::GetRenderer();
         if (auto* pathsRenderer = renderer.GetObjectPathsRenderer()) {
-            pathsRenderer->ClearHistories();
+            //pathsRenderer->ClearHistories();
         }
         
         spdlog::info("Simulation reset to initial state");
@@ -175,7 +175,7 @@ void Simulation::UpdateSimulation(float deltaTime) const {
     
     auto& renderer = Application::GetRenderer();
     if (auto* pathsRenderer = renderer.GetObjectPathsRenderer()) {
-        pathsRenderer->RecordCurrentPositions(m_Scene.get());
+        //pathsRenderer->RecordCurrentPositions(m_Scene.get());
     }
 }
 

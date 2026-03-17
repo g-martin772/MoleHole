@@ -1,18 +1,6 @@
-uniform sampler2D u_skyboxTexture;
+layout(binding = 2) uniform sampler2D u_skyboxTexture;
 
 const int MAX_BLACK_HOLES = 8;
-uniform int u_numBlackHoles;
-uniform vec3 u_blackHolePositions[MAX_BLACK_HOLES];
-uniform float u_blackHoleMasses[MAX_BLACK_HOLES];
-uniform float u_blackHoleSpins[MAX_BLACK_HOLES];
-uniform vec3 u_blackHoleSpinAxes[MAX_BLACK_HOLES];
-
-uniform int u_renderBlackHoles = 1;
-uniform int u_renderSpheres = 1;
-uniform int u_accretionDiskEnabled = 1;
-uniform int u_gravitationalLensingEnabled = 1;
-
-uniform float u_cubeSize = 1.0;
 
 struct HitRecord {
     bool hit;
@@ -33,7 +21,7 @@ bool isInInfluenceZone(vec3 pos, out int closestBHIndex, out float distanceToBH,
     if (u_renderBlackHoles == 0) return false;
 
     for (int j = 0; j < u_numBlackHoles; j++) {
-        vec3 relativePos = pos - u_blackHolePositions[j];
+        vec3 relativePos = pos - u_blackHolePositions[j].xyz;
         float dist = length(relativePos);
         float r_s = calculateEventHorizonRadius(u_blackHoleMasses[j]);
         float r_i = calculateInfluenceRadius(r_s);
@@ -61,7 +49,7 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
     if (u_renderSpheres == 1) {
         for (int i = 0; i < u_numSpheres; i++) {
             float t;
-            if (intersectSphere(rayOrigin, rayDir, u_spherePositions[i], u_sphereRadii[i], t)) {
+            if (intersectSphere(rayOrigin, rayDir, u_spherePositions[i].xyz, u_spherePositions[i].w, t)) {
                 if (t < record.t) {
                     record.hit = true;
                     record.t = t;
@@ -76,7 +64,7 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
 
     if (u_enableThirdPerson == 1) {
         float t;
-        if (intersectCube(rayOrigin, rayDir, u_cameraPos, u_cubeSize, t)) {
+        if (intersectCube(rayOrigin, rayDir, u_cameraPos.xyz, u_cubeSize, t)) {
             if (t < record.t) {
                 record.hit = true;
                 record.t = t;
@@ -84,7 +72,7 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
                 record.objectIndex = 0;
 
                 vec3 hitPoint = rayOrigin + rayDir * t;
-                vec3 normal = getCubeNormal(hitPoint, u_cameraPos, u_cubeSize);
+                vec3 normal = getCubeNormal(hitPoint, u_cameraPos.xyz, u_cubeSize);
 
                 // Simple Lambertian shading for the cube
                 vec3 cubeColor = vec3(0.7, 0.3, 0.2); // Orange-ish color
@@ -100,9 +88,6 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
 // ------------------------------------------------------------------------------------------------------------
 // Section Ray Marching
 // ------------------------------------------------------------------------------------------------------------
-uniform float u_rayStepSize = 0.3f;
-uniform int u_maxRaySteps = 1000;
-uniform float u_adaptiveStepRate = 0.1f;
 
 vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection) {
     hitEventHorizon = false;
@@ -138,13 +123,13 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
             return color;
         }
 
-        vec3 relativePos = newOrigin - u_blackHolePositions[closestBH];
+        vec3 relativePos = newOrigin - u_blackHolePositions[closestBH].xyz;
 
         // Calculate orbital angular momentum
         vec3 orbitalAngMomentum = cross(relativePos, newDirection);
         vec3 bhAngMomentum = calculateAngularMomentumFromSpin(
             u_blackHoleSpins[closestBH],
-            u_blackHoleSpinAxes[closestBH],
+            u_blackHoleSpinAxes[closestBH].xyz,
             u_blackHoleMasses[closestBH]
         );
         vec3 totalAngMomentum = orbitalAngMomentum + bhAngMomentum * 0.1;
@@ -232,7 +217,7 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
 
             if (u_renderBlackHoles == 1) {
                 for (int j = 0; j < u_numBlackHoles; j++) {
-                    vec3 toCenter = u_blackHolePositions[j] - currentOrigin;
+                    vec3 toCenter = u_blackHolePositions[j].xyz - currentOrigin;
                     float distToCenter = length(toCenter);
                     float r_s = calculateEventHorizonRadius(u_blackHoleMasses[j]);
                     float r_i = calculateInfluenceRadius(r_s);

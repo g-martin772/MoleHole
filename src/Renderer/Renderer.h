@@ -1,14 +1,17 @@
 #pragma once
-#include "Interface/Shader.h"
+// #include "Interface/Shader.h"
 #include "Modules/BlackHoleRenderer.h"
 #include "Models/GLTFMesh.h"
 #include "Application/Window.h"
-#include "Interface/Image.h"
+// #include "Interface/Image.h"
 #include "Interface/Camera.h"
 #include "Interface/Input.h"
 #include "Modules/GravityGridRenderer.h"
 #include "Modules/ObjectPathsRenderer.h"
 #include "Modules/PhysicsDebugRenderer.h"
+#include "Platform/Vulkan/VulkanApi.h"
+#include "Platform/Vulkan/VulkanPipeline.h"
+#include "Platform/Vulkan/VulkanShader.h"
 
 class Renderer {
 public:
@@ -49,14 +52,22 @@ public:
     void SetPhysicsDebugEnabled(bool enabled);
     void SetPhysicsDebugDepthTestEnabled(bool enabled);
 
+    std::unique_ptr<VulkanApi> m_VulkanApi;
+    std::unique_ptr<VulkanPipeline> m_MeshPipeline;
+    std::unique_ptr<VulkanShader> m_MeshShader;
+    std::unique_ptr<VulkanBuffer> m_SceneUBO;
+    
+    vk::DescriptorPool m_DescriptorPool;
+    vk::DescriptorSet m_SceneDescriptorSet;
+    vk::DescriptorSetLayout m_TextureLayout;
+    
     Window* m_window = nullptr;
     int last_img_width = 800;
     int last_img_height = 600;
-    std::shared_ptr<Image> image;
-    std::unique_ptr<Shader> quadShader;
-    std::unique_ptr<Shader> circleShader;
-    std::unique_ptr<Shader> sphereShader;
-    std::unique_ptr<BlackHoleRenderer> blackHoleRenderer;
+    // std::shared_ptr<Image> image;
+    // std::unique_ptr<Shader> quadShader;
+    // std::unique_ptr<Shader> circleShader;
+    // std::unique_ptr<Shader> sphereShader;
     std::unique_ptr<Camera> camera;
     std::unique_ptr<Input> input;
     bool m_vsync = true;
@@ -79,11 +90,11 @@ public:
     std::unordered_map<std::string, std::shared_ptr<GLTFMesh>> m_meshCache;
 
 private:
-    void RenderDemo1(Scene* scene);
-    void Render2DRays(Scene* scene);
-    void Render3DSimulation(Scene *scene);
-    void RenderMeshes(Scene* scene);
-    void RenderSpheres(Scene * scene);
+    void RenderDemo1(Scene* scene, vk::CommandBuffer cmd);
+    void Render2DRays(Scene* scene, vk::CommandBuffer cmd);
+    void Render3DSimulation(Scene *scene, vk::CommandBuffer cmd);
+    void RenderMeshes(Scene* scene, vk::CommandBuffer cmd);
+    void RenderSpheres(Scene * scene, vk::CommandBuffer cmd);
     std::shared_ptr<GLTFMesh> GetOrLoadMesh(const std::string& path);
 
     void InitSphereGeometry();
@@ -92,6 +103,7 @@ private:
     unsigned int m_SphereEBO = 0;
     int m_SphereIndexCount = 0;
 
+    std::unique_ptr<BlackHoleRenderer> blackHoleRenderer;
     std::unique_ptr<GravityGridRenderer> m_GravityGridRenderer;
     std::unique_ptr<ObjectPathsRenderer> m_ObjectPathsRenderer;
     std::unique_ptr<PhysicsDebugRenderer> m_physicsDebugRenderer;

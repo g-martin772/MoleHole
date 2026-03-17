@@ -155,7 +155,7 @@ void VulkanSwapChain::CreateSwapChain() {
     m_DepthFormat = m_Device->GetDepthFormat();
 
     VulkanImageSpec spec;
-    spec.Size = {m_Extent.width, m_Extent.height};
+    spec.Size = glm::vec3(m_Extent.width, m_Extent.height, 1.0f);
     spec.Tiling = vk::ImageTiling::eOptimal;
     spec.Usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
     spec.MemoryProperties = vk::MemoryPropertyFlagBits::eDeviceLocal;

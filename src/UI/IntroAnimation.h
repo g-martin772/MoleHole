@@ -1,6 +1,5 @@
 #pragma once
-
-class Shader;
+#include "Renderer/Interface/Shader.h"
 
 class IntroAnimation {
 public:

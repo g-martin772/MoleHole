@@ -1,19 +1,27 @@
-#version 460 core
-in vec2 TexCoord;
-out vec4 FragColor;
+#version 460
+layout(location = 0) in vec2 TexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D u_raytracedImage;
-uniform sampler2D u_bloomImage;
-uniform int u_fxaaEnabled = 1;
-uniform int u_bloomEnabled = 1;
-uniform float u_bloomIntensity = 5.0;
-uniform int u_bloomDebug = 0; // Debug mode: 0=normal, 1=show bloom only, 2=show extraction only
+layout(binding = 0) uniform sampler2D u_raytracedImage;
+// layout(binding = 1) uniform sampler2D u_bloomImage; // Disabled for now
 
+layout(binding = 1) uniform DisplayParams {
+    int u_fxaaEnabled;
+    int u_bloomEnabled;
+    float u_bloomIntensity;
+    int u_bloomDebug;
+    float rt_w;
+    float rt_h;
+} ubo;
+
+#define u_bloomImage u_raytracedImage // Fallback
+
+/*
 uniform float FXAA_SPAN_MAX = 8.0;
 uniform float FXAA_REDUCE_MUL = 1.0/8.0;
-
-uniform float rt_w = 1920.0;
-uniform float rt_h = 1080.0;
+*/
+const float FXAA_SPAN_MAX = 8.0;
+const float FXAA_REDUCE_MUL = 1.0/8.0;
 
 #define FxaaInt2 ivec2
 #define FxaaFloat2 vec2
@@ -67,26 +75,27 @@ vec3 FxaaPixelShader(
     return rgbB; }
 
 void main() {
-    vec3 bloomColor = texture(u_bloomImage, TexCoord).rgb;
+    // vec3 bloomColor = texture(u_bloomImage, TexCoord).rgb;
+    vec3 bloomColor = vec3(0.0);
 
-    if (u_bloomDebug == 1) {
-        FragColor = vec4(bloomColor * u_bloomIntensity, 1.0);
-    } else if (u_bloomDebug == 2) {
+    if (ubo.u_bloomDebug == 1) {
+        FragColor = vec4(bloomColor * ubo.u_bloomIntensity, 1.0);
+    } else if (ubo.u_bloomDebug == 2) {
         FragColor = vec4(bloomColor * 10.0, 1.0);
     } else {
         vec3 color;
-        if (u_fxaaEnabled == 1) {
+        if (ubo.u_fxaaEnabled == 1) {
             vec4 posPos;
             posPos.xy = TexCoord;
-            vec2 rcpFrame = vec2(1.0/rt_w, 1.0/rt_h);
+            vec2 rcpFrame = vec2(1.0/ubo.rt_w, 1.0/ubo.rt_h);
             posPos.zw = TexCoord - (rcpFrame * (0.5 + 1.0/128.0));
             color = FxaaPixelShader(posPos, u_raytracedImage, rcpFrame);
         } else {
             color = texture(u_raytracedImage, TexCoord).rgb;
         }
 
-        if (u_bloomEnabled == 1) {
-            color += bloomColor * u_bloomIntensity;
+        if (ubo.u_bloomEnabled == 1) {
+            color += bloomColor * ubo.u_bloomIntensity;
         }
 
         FragColor = vec4(color, 1.0);

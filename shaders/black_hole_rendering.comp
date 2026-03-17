@@ -4,24 +4,12 @@ layout(local_size_x = 16, local_size_y = 16) in;
 layout(rgba32f, binding = 0) uniform image2D l_outputImage;
 
 // debug
-uniform int u_debugMode = 0;
+// uniform int u_debugMode = 0; moved to CommonUBO
 
 // constants
 const float EPSILON = 0.01;
 
-// camera
-uniform vec3 u_cameraPos;
-uniform vec3 u_cameraFront;
-uniform vec3 u_cameraUp;
-uniform vec3 u_cameraRight;
-uniform float u_fov;
-uniform float u_aspect;
-
-// third person
-uniform int u_enableThirdPerson = 0;
-uniform float u_thirdPersonDistance = 5.0;
-uniform float u_thirdPersonHeight = 2.0;
-
+#include "common_structures.glsl"
 #include "doppler.glsl"
 #include "noise.glsl"
 #include "sdf.glsl"
@@ -44,7 +32,7 @@ void main() {
     
     vec2 uv = (vec2(texCoords) + 0.5f) / vec2(imageSize);
     uv = uv * 2.0f - 1.0f;
-    uv.x *= u_aspect;
+    uv.x *= u_params.y;
     
     // Calculate ray direction and origin
     vec3 rayOrigin;
@@ -55,29 +43,29 @@ void main() {
     if (u_enableThirdPerson == 1) {
 
         // Third-person camera: position behind and above the cube
-        vec3 cubeRight = normalize(cross(u_cameraFront, u_cameraUp));
-        vec3 actualCubeUp = normalize(cross(cubeRight, u_cameraFront));
+        vec3 cubeRight = normalize(cross(u_cameraFront.xyz, u_cameraUp.xyz));
+        vec3 actualCubeUp = normalize(cross(cubeRight, u_cameraFront.xyz));
 
         // Calculate camera position: behind the cube by u_thirdPersonDistance, above by u_thirdPersonHeight
-        vec3 offsetBack = -u_cameraFront * u_thirdPersonDistance;
+        vec3 offsetBack = -u_cameraFront.xyz * u_thirdPersonDistance;
         vec3 offsetUp = actualCubeUp * u_thirdPersonHeight;
-        rayOrigin = u_cameraPos + offsetBack + offsetUp;
+        rayOrigin = u_cameraPos.xyz + offsetBack + offsetUp;
 
         // Camera looks at the cube (slightly ahead of cube center)
-        vec3 lookAtPoint = u_cameraPos + u_cameraFront * 1.0;
+        vec3 lookAtPoint = u_cameraPos.xyz + u_cameraFront.xyz * 1.0;
         cameraFront = normalize(lookAtPoint - rayOrigin);
         cameraUp = actualCubeUp;
         cameraRight = normalize(cross(cameraFront, cameraUp));
         cameraUp = normalize(cross(cameraRight, cameraFront)); // Recalculate to ensure orthogonality
     } else {
         // First-person camera: use provided camera vectors
-        rayOrigin = u_cameraPos;
-        cameraFront = u_cameraFront;
-        cameraUp = u_cameraUp;
-        cameraRight = u_cameraRight;
+        rayOrigin = u_cameraPos.xyz;
+        cameraFront = u_cameraFront.xyz;
+        cameraUp = u_cameraUp.xyz;
+        cameraRight = u_cameraRight.xyz;
     }
 
-    float tanHalfFov = tan(radians(u_fov) * 0.5);
+    float tanHalfFov = tan(radians(u_params.x) * 0.5);
     vec3 rayDir = normalize(cameraFront + cameraRight * uv.x * tanHalfFov + cameraUp * uv.y * tanHalfFov);
 
     // Perform hybrid raytracing/raymarching to get the color

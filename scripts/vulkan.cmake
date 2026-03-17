@@ -68,6 +68,44 @@ if(VULKAN_INCLUDE_DIR AND VULKAN_LIBRARY)
     message(STATUS "Vulkan: found")
     message(STATUS "  include: ${VULKAN_INCLUDE_DIR}")
     message(STATUS "  library: ${VULKAN_LIBRARY}")
+
+    # ── shaderc ─────────────────────────────────
+    find_library(SHADERC_LIBRARY
+        NAMES shaderc_combined shaderc
+        HINTS ${_vulkan_hints}
+        PATH_SUFFIXES lib lib64
+        NO_DEFAULT_PATH
+    )
+    if(NOT SHADERC_LIBRARY)
+        find_library(SHADERC_LIBRARY NAMES shaderc_combined shaderc)
+    endif()
+
+    find_path(SHADERC_INCLUDE_DIR
+        NAMES shaderc/shaderc.hpp
+        HINTS ${_vulkan_hints}
+        PATH_SUFFIXES include
+        NO_DEFAULT_PATH
+    )
+    if(NOT SHADERC_INCLUDE_DIR)
+        find_path(SHADERC_INCLUDE_DIR NAMES shaderc/shaderc.hpp)
+    endif()
+
+    if(SHADERC_LIBRARY AND SHADERC_INCLUDE_DIR)
+        set(SHADERC_FOUND TRUE)
+        if(NOT TARGET shaderc::shaderc_combined)
+            add_library(shaderc::shaderc_combined UNKNOWN IMPORTED)
+            set_target_properties(shaderc::shaderc_combined PROPERTIES
+                IMPORTED_LOCATION             "${SHADERC_LIBRARY}"
+                INTERFACE_INCLUDE_DIRECTORIES "${SHADERC_INCLUDE_DIR}"
+            )
+        endif()
+        message(STATUS "shaderc: found")
+        message(STATUS "  include: ${SHADERC_INCLUDE_DIR}")
+        message(STATUS "  library: ${SHADERC_LIBRARY}")
+    else()
+        set(SHADERC_FOUND FALSE)
+        message(WARNING "shaderc not found - VulkanShader will not compile GLSL at runtime.")
+    endif()
 else()
     set(VULKAN_FOUND FALSE)
     message(WARNING "Vulkan SDK not found. Run scripts/setup.py to download it automatically.")

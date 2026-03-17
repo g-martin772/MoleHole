@@ -1,14 +1,18 @@
 #pragma once
-#include "../Interface/Shader.h"
-#include "../Interface/Buffer.h"
+#include "Platform/Vulkan/VulkanShader.h"
+#include "Platform/Vulkan/VulkanPipeline.h"
+#include "Platform/Vulkan/VulkanBuffer.h"
+#include <deque>
 
 class Scene;
 class Camera;
 
+#include "Platform/Vulkan/VulkanRenderPass.h"
+
 class ObjectPathsRenderer {
 public:
-    void Init();
-    void Render(const Scene& scene, const Camera& camera, float time);
+    void Init(VulkanDevice* device, VulkanRenderPass* renderPass);
+    void Render(const Scene& scene, const Camera& camera, float time, vk::CommandBuffer cmd);
     void RecordCurrentPositions(Scene* scene);
     void ClearHistories();
 
@@ -31,9 +35,10 @@ private:
 
     void UpdateBuffers();
 
-    std::unique_ptr<Shader> m_shader;
-    std::unique_ptr<VertexArray> m_vao;
-    std::unique_ptr<VertexBuffer> m_vbo;
+    VulkanDevice* m_Device = nullptr;
+    std::unique_ptr<VulkanShader> m_shader;
+    std::unique_ptr<VulkanPipeline> m_pipeline;
+    std::unique_ptr<VulkanBuffer> m_vbo;
     
     std::vector<HistoricalPath> m_meshHistories;
     std::vector<HistoricalPath> m_sphereHistories;

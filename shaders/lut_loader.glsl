@@ -1,12 +1,7 @@
 // ------------------------------------------------------------------------------------------------------------
 // Section Colour
 // ------------------------------------------------------------------------------------------------------------
-uniform float u_lutTempMin = 1000.0;
-uniform float u_lutTempMax = 40000.0;
-uniform float u_lutRedshiftMin = 0.1;
-uniform float u_lutRedshiftMax = 3.0;
-
-uniform sampler2D u_blackbodyLUT;
+layout(binding = 3) uniform sampler2D u_blackbodyLUT;
 
 vec3 getBlackbodyColorLUT(float temperature, float redshiftFactor) {
     float tempRange = u_lutTempMax - u_lutTempMin;
@@ -31,7 +26,7 @@ const float ACC_LUT_ANG_MOM_MAX = 100.0;
 const float ACC_LUT_LOG_R_MIN = log(ACC_LUT_R_MIN);
 const float ACC_LUT_LOG_R_MAX = log(ACC_LUT_R_MAX);
 
-uniform sampler2D u_accelerationLUT;
+layout(binding = 4) uniform sampler2D u_accelerationLUT;
 
 vec3 calculateAccelerationLUT(float angMomentumSqrd, vec3 relPos) {
     float rSqrd = dot(relPos, relPos);
@@ -56,7 +51,7 @@ const float HR_MASS_MAX = 100.0;
 const float HR_LOG_MASS_MIN = log(HR_MASS_MIN);
 const float HR_LOG_MASS_MAX = log(HR_MASS_MAX);
 
-uniform sampler2D u_hrDiagramLUT;
+layout(binding = 5) uniform sampler2D u_hrDiagramLUT;
 
 float getTemperatureFromMass(float mass) {
     float logMass = log(clamp(mass, HR_MASS_MIN, HR_MASS_MAX));

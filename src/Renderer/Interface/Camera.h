@@ -20,6 +20,8 @@ public:
     void SetFov(float newFov);
     glm::vec3 GetFront() const;
     glm::vec3 GetUp() const;
+    glm::vec3 GetRight() const { return right; }
+    float GetAspect() const { return aspect; }
 private:
     void UpdateCameraVectors();
     glm::vec3 position;

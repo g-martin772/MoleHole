@@ -1,11 +1,18 @@
 #version 460 core
+
 layout(location = 0) in vec3 aPos;
 
-uniform mat4 uVP;
+layout(push_constant) uniform PushConstants {
+    mat4 mvp;
+    vec3 color;
+    float opacity;
+} pc;
 
-out vec3 vWorldPos;
+out vec3 vColor;
+out float vOpacity;
 
 void main() {
-    vWorldPos = aPos;
-    gl_Position = uVP * vec4(aPos, 1.0);
+    vColor = pc.color;
+    vOpacity = pc.opacity;
+    gl_Position = pc.mvp * vec4(aPos, 1.0);
 }

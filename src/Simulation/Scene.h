@@ -29,6 +29,17 @@ public:
 
     bool HasParameter(const ParameterHandle& handle) const;
     ParameterValue GetParameter(const ParameterHandle& handle) const;
+    
+    template<typename T>
+    std::optional<T> GetParameter(const ParameterHandle& handle) const {
+        if (!HasParameter(handle)) return std::nullopt;
+        auto val = GetParameter(handle);
+        if (std::holds_alternative<T>(val)) {
+            return std::get<T>(val);
+        }
+        return std::nullopt;
+    }
+
     void SetParameter(const ParameterHandle& handle, const ParameterValue& value);
 
     const std::unordered_map<uint64_t, ParameterValue>& GetAllParameters() const { return m_Parameters; }

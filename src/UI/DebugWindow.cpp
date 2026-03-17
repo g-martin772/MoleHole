@@ -136,7 +136,8 @@ void Render(UI* ui) {
         if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::GravityGrid) {
             auto& renderer = Application::GetRenderer();
             if (auto* grid = renderer.GetGravityGridRenderer()) {
-                ImGui::Separator();
+                // TODO
+                /*ImGui::Separator();
                 ImGui::TextDisabled("Gravity Grid (Plane) Settings");
 
                 float planeY = grid->GetPlaneY();
@@ -167,7 +168,7 @@ void Render(UI* ui) {
                 glm::vec3 color = grid->GetColor();
                 if (ImGui::ColorEdit3("Grid Color", &color[0])) {
                     grid->SetColor(color);
-                }
+                }*/
             }
         }
         

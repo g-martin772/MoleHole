@@ -5,16 +5,22 @@
 #endif
 #include <PxPhysicsAPI.h>
 
+// #include <Renderer/Interface/Shader.h>
+#include "Platform/Vulkan/VulkanShader.h"
+#include "Platform/Vulkan/VulkanPipeline.h"
+#include "Platform/Vulkan/VulkanBuffer.h"
+
 using namespace physx;
 
-class Shader;
 class Camera;
+
+#include "Platform/Vulkan/VulkanRenderPass.h"
 
 class PhysicsDebugRenderer {
 public:
-    void Init();
+    void Init(VulkanDevice* device, VulkanRenderPass* renderPass);
     void Shutdown();
-    void Render(const PxRenderBuffer* renderBuffer, Camera* camera);
+    void Render(const PxRenderBuffer* renderBuffer, Camera* camera, vk::CommandBuffer cmd);
 
     void SetEnabled(bool enabled) { m_Enabled = enabled; }
     bool IsEnabled() const { return m_Enabled; }
@@ -23,17 +29,18 @@ public:
     bool IsDepthTestEnabled() const { return m_DepthTestEnabled; }
 
 private:
-    void RenderLines(const PxDebugLine* lines, uint32_t count, Camera* camera);
-    void RenderTriangles(const PxDebugTriangle* triangles, uint32_t count, Camera* camera);
+    void RenderLines(const PxDebugLine* lines, uint32_t count, Camera* camera, vk::CommandBuffer cmd);
+    void RenderTriangles(const PxDebugTriangle* triangles, uint32_t count, Camera* camera, vk::CommandBuffer cmd);
 
-    std::unique_ptr<Shader> m_LineShader;
-    std::unique_ptr<Shader> m_TriangleShader;
+    VulkanDevice* m_Device = nullptr;
 
-    unsigned int m_LineVAO = 0;
-    unsigned int m_LineVBO = 0;
+    std::unique_ptr<VulkanShader> m_LineShader;
+    std::unique_ptr<VulkanPipeline> m_LinePipeline;
+    std::unique_ptr<VulkanBuffer> m_LineVBO;
 
-    unsigned int m_TriangleVAO = 0;
-    unsigned int m_TriangleVBO = 0;
+    std::unique_ptr<VulkanShader> m_TriangleShader;
+    std::unique_ptr<VulkanPipeline> m_TrianglePipeline;
+    std::unique_ptr<VulkanBuffer> m_TriangleVBO;
 
     bool m_Enabled = true;
     bool m_DepthTestEnabled = true;

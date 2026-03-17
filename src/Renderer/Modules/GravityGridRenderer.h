@@ -1,14 +1,19 @@
 #pragma once
-#include "../Interface/Shader.h"
-#include "../Interface/Buffer.h"
+#include "Platform/Vulkan/VulkanShader.h"
+#include "Platform/Vulkan/VulkanPipeline.h"
+#include "Platform/Vulkan/VulkanBuffer.h"
+#include <glm/glm.hpp>
 
 class Scene;
 class Camera;
 
+#include "Platform/Vulkan/VulkanRenderPass.h"
+
 class GravityGridRenderer {
 public:
-    void Init();
-    void Render(const Scene& scene, const Camera& camera, float time);
+    void Init(VulkanDevice* device, VulkanRenderPass* renderPass);
+    void Render(const Scene& scene, const Camera& camera, float time, vk::CommandBuffer cmd);
+    void Shutdown();
 
     void SetPlaneY(float y) { m_planeY = y; }
     void SetPlaneSize(float size);
@@ -29,11 +34,18 @@ public:
 private:
     void CreatePlane();
 
-    std::unique_ptr<Shader> m_shader;
-    std::unique_ptr<VertexArray> m_vao;
-    std::unique_ptr<VertexBuffer> m_vbo;
-    std::unique_ptr<IndexBuffer> m_ebo;
+    VulkanDevice* m_Device = nullptr;
+    std::unique_ptr<VulkanShader> m_shader;
+    std::unique_ptr<VulkanPipeline> m_pipeline;
+    std::unique_ptr<VulkanBuffer> m_vbo;
+    std::unique_ptr<VulkanBuffer> m_ebo;
+    std::unique_ptr<VulkanBuffer> m_UBO;
     int m_indexCount = 0;
+    
+    // Descriptor set and layout for UBO
+    vk::DescriptorSetLayout m_DescriptorSetLayout;
+    vk::DescriptorPool m_DescriptorPool;
+    vk::DescriptorSet m_DescriptorSet;
 
     float m_planeY = -5.0f;
     float m_planeSize = 200.0f;
