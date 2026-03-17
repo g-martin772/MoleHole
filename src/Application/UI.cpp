@@ -313,42 +313,50 @@ void UI::Style() {
     float fontSize = Application::Params().Get(Params::UIFontSize, 16.0f);
     std::vector<std::string> availableFonts = GetAvailableFonts();
     
+    // Get configured font from settings, default to Roboto-Regular.ttf
+    const std::string defaultFont = "Roboto-Regular.ttf";
+    std::string fontName = Application::Params().Get(Params::UIMainFont, defaultFont);
+
+    static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+
     // Load all available fonts into the atlas
     for (const auto& fontFile : availableFonts) {
         std::string fontPath = "../font/" + fontFile;
         ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), fontSize);
         if (font) {
+            // If this is the chosen main font, merge icons into it immediately
+            if (fontFile == fontName) {
+                ImFontConfig icons_merge_config;
+                icons_merge_config.MergeMode = true;
+                icons_merge_config.PixelSnapH = true;
+                io.Fonts->AddFontFromFileTTF("../font/fa-solid-900.ttf", fontSize, &icons_merge_config, icons_ranges);
+
+                m_mainFont = font;
+                io.FontDefault = m_mainFont;
+                spdlog::info("Loaded main font with icons: {} ({}pt)", fontFile, fontSize);
+            } else {
+                spdlog::info("Loaded font: {} ({}pt)", fontFile, fontSize);
+            }
             m_loadedFonts[fontFile] = font;
-            spdlog::info("Loaded font: {} ({}pt)", fontFile, fontSize);
         } else {
             spdlog::warn("Failed to load font: {}", fontFile);
         }
     }
-    
-    // Get configured font from settings, default to Roboto-Regular.ttf
-    const std::string defaultFont = "Roboto-Regular.ttf";
-    std::string fontName = Application::Params().Get(Params::UIMainFont, defaultFont);
 
-    // Set the configured font as main font
-    if (m_loadedFonts.count(fontName) > 0) {
-        m_mainFont = m_loadedFonts[fontName];
-        io.FontDefault = m_mainFont;
-        spdlog::info("Set main font to: {}", fontName);
-    } else if (!m_loadedFonts.empty()) {
-        // Fallback to first loaded font
-        m_mainFont = m_loadedFonts.begin()->second;
-        io.FontDefault = m_mainFont;
-        spdlog::warn("Font '{}' not found, using fallback: {}", fontName, m_loadedFonts.begin()->first);
-    } else {
-        // Last resort: ImGui default font
-        m_mainFont = io.Fonts->AddFontDefault();
-        io.FontDefault = m_mainFont;
-        spdlog::warn("No fonts loaded, using ImGui default font");
+    // Fallback if main font wasn't found in the loop
+    if (!m_mainFont) {
+        if (!m_loadedFonts.empty()) {
+            m_mainFont = m_loadedFonts.begin()->second;
+            io.FontDefault = m_mainFont;
+            spdlog::warn("Font '{}' not found, using fallback: {}", fontName, m_loadedFonts.begin()->first);
+        } else {
+            m_mainFont = io.Fonts->AddFontDefault();
+            io.FontDefault = m_mainFont;
+            spdlog::warn("No fonts loaded, using ImGui default font");
+        }
     }
     
-    // Load Font Awesome icon font
-    // Font Awesome 6 Free is licensed under SIL OFL 1.1 (https://scripts.sil.org/OFL)
-    static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+    // Load Font Awesome icon font (Large, separate instance for headers)
     ImFontConfig icons_config;
     //icons_config.MergeMode = false;
     //icons_config.PixelSnapH = true;
