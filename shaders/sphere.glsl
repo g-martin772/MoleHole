@@ -9,12 +9,13 @@ bool intersectSphere(vec3 rayOrigin, vec3 rayDir, vec3 sphereCenter, float radiu
     float b = dot(oc, rayDir);
     float c = dot(oc, oc) - radius * radius;
     float discriminant = b * b - c;
-
-    if (discriminant < 0.0) return false;
-
-    float sqrtD = sqrt(discriminant);
-    float t0 = -b - sqrtD;
-    float t1 = -b + sqrtD;
+    
+    if (discriminant < 0.0) {
+        return false;
+    }
+    
+    float t0 = -b - sqrt(discriminant);
+    float t1 = -b + sqrt(discriminant);
 
     if (t0 > EPSILON) {
         t = t0;
@@ -24,6 +25,7 @@ bool intersectSphere(vec3 rayOrigin, vec3 rayDir, vec3 sphereCenter, float radiu
         t = t1;
         return true;
     }
+
     return false;
 }
 vec3 renderSphere(vec3 hitPoint, vec3 rayDir, int sphereIndex, vec3 lightDir) {
@@ -33,7 +35,9 @@ vec3 renderSphere(vec3 hitPoint, vec3 rayDir, int sphereIndex, vec3 lightDir) {
     vec3 baseColor = u_sphereColors[sphereIndex].rgb;
     float mass = u_sphereColors[sphereIndex].w;
 
-    if (mass > 0.0) {
+    // Only apply blackbody radiation if mass is significant (e.g., > 0.05 Solar Masses)
+    // Otherwise treat as a planet/object with baseColor
+    if (mass > 0.05) {
         float temp = getTemperatureFromMass(mass);
         if (temp > 0.0) {
             float tempRange = u_lutTempMax - u_lutTempMin;

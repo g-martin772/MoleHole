@@ -59,7 +59,7 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
 
     if (u_renderSpheres == 1) {
         for (int i = 0; i < u_numSpheres; i++) {
-            float t;
+            float t = 1e10;
             if (intersectSphere(rayOrigin, rayDir, u_spherePositions[i].xyz, u_spherePositions[i].w, t)) {
                 if (t < record.t) {
                     record.hit = true;
@@ -169,6 +169,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         int closestBH;
         float distToBH;
         float influenceR;
+        // In influence zone?
         bool inZone = isInInfluenceZone(newOrigin, closestBH, distToBH, influenceR);
 
         if (!inZone) {
@@ -177,6 +178,13 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         }
 
         vec3 relativePos = newOrigin - u_blackHolePositions[closestBH].xyz;
+        float r_s = calculateEventHorizonRadius(u_blackHoleMasses[closestBH]);
+
+        // Check event horizon
+        if (distToBH < r_s) {
+            hitEventHorizon = true;
+            return color;
+        }
 
         // Calculate orbital angular momentum
         vec3 orbitalAngMomentum = cross(relativePos, newDirection);
@@ -188,10 +196,9 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         vec3 totalAngMomentum = orbitalAngMomentum + bhAngMomentum * 0.1;
         float angMomSqrd = dot(totalAngMomentum, totalAngMomentum);
 
-        float r_s = calculateEventHorizonRadius(u_blackHoleMasses[closestBH]);
 
         // Adaptive step size
-        float currentStepSize = stepSize * min(adaptiveStepRate, distToBH / r_s);
+        float currentStepSize = stepSize * min(adaptiveStepRate, max(0.01, distToBH / r_s));
 
         if (u_gravitationalLensingEnabled == 1) {
             vec3 acceleration = calculateAccelerationLUT(angMomSqrd, relativePos);
@@ -214,16 +221,13 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         }
 
         // Check object intersections within marching step
+        // We only check for spheres/meshes if they are close enough to be relevant inside gravity well
+        // For simplicity, let's assume objects can be inside influence zone
         HitRecord hit = rayTraceNormalSpace(newOrigin, newDirection, currentStepSize);
         if (hit.hit) {
             return color + hit.color;
         }
 
-        // Check event horizon
-        if (distToBH < r_s) {
-            hitEventHorizon = true;
-            return color;
-        }
         newOrigin += newDirection * currentStepSize;
     }
     return color;
@@ -232,26 +236,27 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
 // ------------------------------------------------------------------------------------------------------------
 // Section Hybrid Ray Marching + Tracing
 // ------------------------------------------------------------------------------------------------------------
-vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
+vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDir) {
     vec3 color = vec3(0.0);
     vec3 currentOrigin = rayOrigin;
-    vec3 currentDir = rayDirection;
+    vec3 currentDir = rayDir;
 
-    vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-
-    // Use a fraction of max steps for outer loop to allow for multiple influence zone passes
-    int maxOuterIterations = max(1000, u_maxRaySteps / 2);
-
-    for (int iter = 0; iter < maxOuterIterations; iter++) {
+    // Use a fixed max iteration count to prevent infinite loops
+    for (int iter = 0; iter < 100; iter++) {
         int closestBH;
         float distToBH;
         float influenceR;
+        
         bool inZone = isInInfluenceZone(currentOrigin, closestBH, distToBH, influenceR);
 
         if (inZone) {
-            bool hitHorizon, exited;
-            vec3 newOrigin, newDir;
+            bool hitHorizon;
+            bool exited;
+            vec3 newOrigin;
+            vec3 newDir;
             vec3 marchColor = rayMarchInfluenceZone(closestBH, currentOrigin, currentDir, hitHorizon, exited, newOrigin, newDir);
+            
+            // Add any emission from marching (accretion disk)
             color += marchColor;
 
             if (hitHorizon) {
@@ -266,42 +271,33 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
 
             return color;
         } else {
+            // Ray Tracing in Normal Space (Euclidean)
             float minDistToInfluence = 1e10;
-
             if (u_renderBlackHoles == 1) {
                 for (int j = 0; j < u_numBlackHoles; j++) {
-                    vec3 toCenter = u_blackHolePositions[j].xyz - currentOrigin;
-                    float distToCenter = length(toCenter);
                     float r_s = calculateEventHorizonRadius(u_blackHoleMasses[j]);
                     float r_i = calculateInfluenceRadius(r_s);
-
-                    float distToInfluence = abs(distToCenter - r_i);
-                    minDistToInfluence = min(minDistToInfluence, distToInfluence);
+                    float dist = length(currentOrigin - u_blackHolePositions[j].xyz) - r_i;
+                    if (dist > 0.0) minDistToInfluence = min(minDistToInfluence, dist);
                 }
             }
 
-            HitRecord hit = rayTraceNormalSpace(currentOrigin, currentDir, 1e10);
+            // Check intersections with objects in normal space
+            HitRecord hit = rayTraceNormalSpace(currentOrigin, currentDir, minDistToInfluence);
 
             if (hit.hit) {
-                if (hit.t < minDistToInfluence) {
-                    color += hit.color;
-                    return color;
-                } else {
-                    currentOrigin += currentDir * (minDistToInfluence + EPSILON);
-                    continue;
-                }
+                return color + hit.color;
             }
 
-            if (minDistToInfluence < 1e9) {
-                currentOrigin += currentDir * (minDistToInfluence + EPSILON);
-                continue;
+            // If we didn't hit anything and we are far from influence zones, hit skybox
+            if (minDistToInfluence > 1000.0) {
+                return color + texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
             }
 
-            color += texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
-            return color;
+            // Advance ray to influence zone boundary
+            currentOrigin += currentDir * (minDistToInfluence + EPSILON);
         }
     }
-
-    color += texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
-    return color;
+    
+    return color + texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
 }

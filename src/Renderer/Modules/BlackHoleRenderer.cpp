@@ -32,9 +32,9 @@ struct CommonUBO {
     // Black Hole Data (Max 8)
     int numBlackHoles;
     float _pad0[3];
-    float blackHoleMasses[8];
+    glm::vec4 blackHoleMasses[8]; // .x = mass (std140 float array stride is 16)
     glm::vec4 blackHolePositions[8]; // w = unused
-    float blackHoleSpins[8];
+    glm::vec4 blackHoleSpins[8]; // .x = spin (std140 float array stride is 16)
     glm::vec4 blackHoleSpinAxes[8]; // w = unused
 
     // Settings
@@ -909,6 +909,8 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
     ubo.invView = glm::inverse(ubo.view);
     ubo.invProjection = glm::inverse(ubo.projection);
 
+    const float SOLAR_MASS_KG = 1.98847e30f;
+
     // Camera Vectors
     ubo.cameraPos = glm::vec4(camera.GetPosition(), time);
     ubo.cameraFront = glm::vec4(camera.GetFront(), 0.0f);
@@ -952,26 +954,42 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
     int sphereCount = 0;
 
     ParameterHandle posHandle("Entity.Position");
-    ParameterHandle massHandle("BlackHole.Mass");
+    ParameterHandle massHandle("Physics.Mass"); // Corrected from BlackHole.Mass
     ParameterHandle spinHandle("BlackHole.Spin");
     ParameterHandle axisHandle("BlackHole.SpinAxis");
     
     ParameterHandle radiusHandle("Sphere.Radius");
     ParameterHandle colorHandle("Sphere.Color");
-    ParameterHandle sphereMassHandle("Sphere.Mass");
+
+    static float lastDebugTime = 0.0f;
+    bool doDebug = (time - lastDebugTime > 1.0f);
+    if (doDebug) {
+        lastDebugTime = time;
+        spdlog::info("UpdateUniforms: Processing {} objects", scene.objects.size());
+    }
 
     for (const auto& obj : scene.objects) {
         if (obj.HasClass("BlackHole") && bhCount < 8) {
-            ubo.blackHolePositions[bhCount] = glm::vec4(obj.GetParameter<glm::vec3>(posHandle).value_or(glm::vec3(0.0f)), 0.0f);
-            ubo.blackHoleMasses[bhCount] = obj.GetParameter<float>(massHandle).value_or(1.0f);
-            ubo.blackHoleSpins[bhCount] = obj.GetParameter<float>(spinHandle).value_or(0.0f);
-            ubo.blackHoleSpinAxes[bhCount] = glm::vec4(obj.GetParameter<glm::vec3>(axisHandle).value_or(glm::vec3(0,1,0)), 0.0f);
+            glm::vec3 pos = obj.GetParameter<glm::vec3>(posHandle).value_or(glm::vec3(0.0f));
+            float massKg = obj.GetParameter<float>(massHandle).value_or(SOLAR_MASS_KG);
+            float massSM = massKg / SOLAR_MASS_KG;
+            float spin = obj.GetParameter<float>(spinHandle).value_or(0.0f);
+            glm::vec3 axis = obj.GetParameter<glm::vec3>(axisHandle).value_or(glm::vec3(0,1,0));
+
+            ubo.blackHolePositions[bhCount] = glm::vec4(pos, 0.0f);
+            ubo.blackHoleMasses[bhCount].x = massSM;
+            ubo.blackHoleSpins[bhCount].x = spin;
+            ubo.blackHoleSpinAxes[bhCount] = glm::vec4(axis, 0.0f);
             bhCount++;
         } else if (obj.HasClass("Sphere") && sphereCount < 16) {
-            ubo.spherePositions[sphereCount] = glm::vec4(obj.GetParameter<glm::vec3>(posHandle).value_or(glm::vec3(0.0f)), 
-                                                        obj.GetParameter<float>(radiusHandle).value_or(1.0f)); // w = radius
-            ubo.sphereColors[sphereCount] = glm::vec4(obj.GetParameter<glm::vec3>(colorHandle).value_or(glm::vec3(1.0f)),
-                                                     obj.GetParameter<float>(sphereMassHandle).value_or(0.0f)); // w = mass
+            glm::vec3 pos = obj.GetParameter<glm::vec3>(posHandle).value_or(glm::vec3(0.0f));
+            float radius = obj.GetParameter<float>(radiusHandle).value_or(1.0f);
+            glm::vec3 color = obj.GetParameter<glm::vec3>(colorHandle).value_or(glm::vec3(1.0f));
+            float massKg = obj.GetParameter<float>(massHandle).value_or(0.0f); // Use Physics.Mass
+            float massSM = massKg / SOLAR_MASS_KG;
+
+            ubo.spherePositions[sphereCount] = glm::vec4(pos, radius); // w = radius
+            ubo.sphereColors[sphereCount] = glm::vec4(color, massSM); // w = mass in SM
             sphereCount++;
         }
     }
@@ -997,6 +1015,8 @@ void BlackHoleRenderer::UpdateMeshBuffers(const Scene& scene,
                                          const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache) {
     std::vector<ShaderTriangle> triangles;
     
+    const float GEOMETRIC_UNIT_METERS = 1477.0f;
+
     // Collect triangles from all meshes
     for (const auto& obj : scene.objects) {
          if (!obj.HasClass("Mesh")) continue;
@@ -1040,7 +1060,7 @@ void BlackHoleRenderer::UpdateMeshBuffers(const Scene& scene,
          
          // Helper to transform vec3
          auto transformPoint = [&](const glm::vec3& p) {
-             return glm::vec3(transform * glm::vec4(p, 1.0f));
+             return glm::vec3(transform * glm::vec4(p, 1.0f)) / GEOMETRIC_UNIT_METERS;
          };
          
          for (size_t i = 0; i < geometry.indices.size(); i += 3) {
