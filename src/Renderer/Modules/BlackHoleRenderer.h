@@ -22,8 +22,11 @@ public:
 
     void Init(VulkanDevice* device, VulkanRenderPass* renderPass, int width, int height);
     void Render(const Scene& scene, const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache, const Camera& camera, float time, vk::CommandBuffer cmd);
+    void PrepareDisplay(vk::CommandBuffer cmd);
     void Resize(int width, int height);
     void RenderToScreen(vk::CommandBuffer cmd); // Changed from void RenderToScreen()
+    void Shutdown();
+    vk::DescriptorSet GetImGuiDescriptorSet();
     
     // Getter methods for LUT textures (Returns Vulkan Image View or Descriptor?)
     // For now, let's return shared_ptr to VulkanImage
@@ -103,6 +106,7 @@ private:
     // Mesh geometry SSBOs
     std::unique_ptr<VulkanBuffer> m_meshDataSSBO;
     std::unique_ptr<VulkanBuffer> m_triangleSSBO;
+    vk::DescriptorSet m_ImGuiDescriptorSet = VK_NULL_HANDLE;
 
     int m_width, m_height;
 

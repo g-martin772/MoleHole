@@ -114,7 +114,7 @@ void PhysicsDebugRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPa
         linePipelineConfig.inputAssembly.primitiveRestartEnable = VK_FALSE;
 
         linePipelineConfig.rasterizer.polygonMode = vk::PolygonMode::eLine;
-        linePipelineConfig.rasterizer.lineWidth = 2.0f;
+        linePipelineConfig.rasterizer.lineWidth = 1.0f;
         linePipelineConfig.rasterizer.cullMode = vk::CullModeFlagBits::eNone;
 
         linePipelineConfig.depthStencil.depthTestEnable = VK_TRUE;
@@ -124,7 +124,9 @@ void PhysicsDebugRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPa
         linePipelineConfig.colorBlend.attachments.push_back(ColorBlendAttachmentState{});
 
         m_LinePipeline = std::make_unique<VulkanPipeline>();
-        // Note: CreateGraphicsPipeline will be called when we have the render pass
+        if (!m_LinePipeline->CreateGraphicsPipeline(linePipelineConfig)) {
+            spdlog::error("PhysicsDebugRenderer::Init: Failed to create line pipeline");
+        }
     }
 
     // Create triangle pipeline
@@ -152,7 +154,9 @@ void PhysicsDebugRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPa
         trianglePipelineConfig.colorBlend.attachments.push_back(ColorBlendAttachmentState{});
 
         m_TrianglePipeline = std::make_unique<VulkanPipeline>();
-        // Note: CreateGraphicsPipeline will be called when we have the render pass
+        if (!m_TrianglePipeline->CreateGraphicsPipeline(trianglePipelineConfig)) {
+             spdlog::error("PhysicsDebugRenderer::Init: Failed to create triangle pipeline");
+        }
     }
 
     spdlog::info("PhysicsDebugRenderer initialized");

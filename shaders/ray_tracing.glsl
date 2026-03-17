@@ -1,5 +1,16 @@
 layout(binding = 2) uniform sampler2D u_skyboxTexture;
 
+struct ShaderTriangle {
+    vec4 v0;
+    vec4 v1;
+    vec4 v2;
+    vec4 color;
+};
+
+layout(std140, binding = 10) readonly buffer MeshBuffer {
+    ShaderTriangle triangles[];
+} u_meshBuffer;
+
 const int MAX_BLACK_HOLES = 8;
 
 struct HitRecord {
@@ -60,6 +71,48 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
                 }
             }
         }
+    }
+
+    // Mesh Intersection
+    int numTriangles = u_meshBuffer.triangles.length();
+    for (int i = 0; i < numTriangles; i++) {
+         vec3 v0 = u_meshBuffer.triangles[i].v0.xyz;
+         vec3 v1 = u_meshBuffer.triangles[i].v1.xyz;
+         vec3 v2 = u_meshBuffer.triangles[i].v2.xyz;
+         vec3 triColor = u_meshBuffer.triangles[i].color.rgb;
+         
+         // Moller-Trumbore intersection
+         vec3 e1 = v1 - v0;
+         vec3 e2 = v2 - v0;
+         vec3 h = cross(rayDir, e2);
+         float a = dot(e1, h);
+         
+         if (a > -1e-6 && a < 1e-6) continue;
+         
+         float f = 1.0 / a;
+         vec3 s = rayOrigin - v0;
+         float u = f * dot(s, h);
+         
+         if (u < 0.0 || u > 1.0) continue;
+         
+         vec3 q = cross(s, e1);
+         float v = f * dot(rayDir, q);
+         
+         if (v < 0.0 || u + v > 1.0) continue;
+         
+         float t = f * dot(e2, q);
+         
+         if (t > 1e-4 && t < record.t) {
+             record.hit = true;
+             record.t = t;
+             record.type = 2; // Mesh
+             record.objectIndex = i;
+             
+             // Simple lighting
+             vec3 normal = normalize(cross(e1, e2));
+             float diffuse = max(dot(normal, lightDir), 0.0);
+             record.color = triColor * (0.2 + diffuse * 0.8);
+         }
     }
 
     if (u_enableThirdPerson == 1) {

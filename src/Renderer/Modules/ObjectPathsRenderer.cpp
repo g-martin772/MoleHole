@@ -211,7 +211,7 @@ void ObjectPathsRenderer::UpdateBuffers() {
 }
 
 void ObjectPathsRenderer::Render(const Scene& /*scene*/, const Camera& camera, float /*time*/, vk::CommandBuffer cmd) {
-    if (!m_Device || !m_shader || !m_pipeline || !m_vbo) {
+    if (!m_Device || !m_shader || !m_pipeline || !m_pipeline->GetPipeline() || !m_vbo) {
         return;
     }
     

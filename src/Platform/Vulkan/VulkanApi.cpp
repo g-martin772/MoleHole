@@ -56,13 +56,17 @@ void VulkanApi::Init() {
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui::StyleColorsDark();
 
-    constexpr vk::DescriptorPoolSize poolSizes[] = {
-        { vk::DescriptorType::eCombinedImageSampler, 1 },
+    vk::DescriptorPoolSize poolSizes[] = {
+        { vk::DescriptorType::eCombinedImageSampler, 1000 },
+        { vk::DescriptorType::eUniformBuffer, 1000 },
+        { vk::DescriptorType::eStorageImage, 1000 },
+        { vk::DescriptorType::eSampledImage, 1000 },
+        { vk::DescriptorType::eInputAttachment, 1000 }
     };
     vk::DescriptorPoolCreateInfo poolInfo;
     poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
-    poolInfo.maxSets = 1;
-    poolInfo.poolSizeCount = 1;
+    poolInfo.maxSets = 5000;
+    poolInfo.poolSizeCount = 5;
     poolInfo.pPoolSizes = poolSizes;
     m_ImGuiDescriptorPool = m_Device.GetDevice().createDescriptorPool(poolInfo);
 
@@ -112,15 +116,20 @@ bool VulkanApi::BeginFrame() {
     commandBuffer->GetCommandBuffer().reset();
     commandBuffer->Begin();
 
-    m_MainRenderPass.Begin(m_MainFrameBuffer.GetFrameBuffer(imageIndex),
-                           Application::Instance().GetWindow()->GetSize(),
-                           commandBuffer->GetCommandBuffer());
-
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
     return true;
+}
+
+void VulkanApi::BeginRenderPass() {
+    const uint32_t imageIndex = m_SwapChain.GetCurrentImageIndex();
+    Ref<VulkanCommandBuffer> commandBuffer = m_RenderCommandBuffers[imageIndex];
+
+    m_MainRenderPass.Begin(m_MainFrameBuffer.GetFrameBuffer(imageIndex),
+                           Application::Instance().GetWindow()->GetSize(),
+                           commandBuffer->GetCommandBuffer());
 }
 
 void VulkanApi::EndFrame() {

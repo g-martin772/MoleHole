@@ -1,3 +1,4 @@
+#include <iostream>
 #include "VulkanShader.h"
 
 #include <ranges>
@@ -36,16 +37,18 @@ public:
         
         std::string content = ShaderUtils::ReadFile(fullPath.string().c_str());
         std::string pathStr = fullPath.string();
+        std::cout << "[FileIncluder] Request: " << requestPath << " -> Full: " << fullPath << " Exists: " << std::filesystem::exists(fullPath) << std::endl;
 
         if (content.empty() && !std::filesystem::exists(fullPath)) {
              // Return error
              std::string error = "Cannot find include file: " + pathStr;
-             auto* container = new IncludeResultContainer{error, pathStr}; // Reuse container for error message storage if needed, but shaderc expects specific behavior
-             
-             // Shaderc expects empty content and error message? 
-             // Actually, if we return valid pointer but content is empty/error, it might not fail gracefully.
-             // But let's return what we have.
-             // If content is empty, maybe the file IS empty.
+             auto* container = new IncludeResultContainer{error, pathStr};
+             result->content = container->content.c_str();
+             result->content_length = container->content.size();
+             result->source_name = container->sourceName.c_str();
+             result->source_name_length = container->sourceName.size();
+             result->user_data = container;
+             return result;
         }
 
         auto* container = new IncludeResultContainer{content, pathStr};

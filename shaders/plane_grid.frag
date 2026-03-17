@@ -48,9 +48,9 @@ void main() {
     float effect = clamp(vDispplacement / 10.0, 0.0, 1.0);
     vec3 base = u_color.rgb;
     vec3 highlight = vec3(1.0);
-    vec3 color = mix(base, highlight, 1.0f);
+    vec3 color = mix(base, highlight, effect * 0.5f); // Use effect
 
     float fade = 1.0f - clamp(vDispplacement / 80.0f, 0.0, 1.0);
 
-    FragColor = vec4(u_color.rgb, u_color.w * line * 1.0f);
+    FragColor = vec4(color, u_color.w * line * fade); // Use fade and mixed color
 }

@@ -117,8 +117,8 @@ void Renderer::Init(bool headless) {
     layoutInfo.bindingCount = 1;
     layoutInfo.pBindings = &sceneBinding;
     
-    vk::DescriptorSetLayout sceneLayout = m_VulkanApi->GetDevice().GetDevice().createDescriptorSetLayout(layoutInfo);
-    config.descriptorSetLayouts.push_back(sceneLayout);
+    m_SceneLayout = m_VulkanApi->GetDevice().GetDevice().createDescriptorSetLayout(layoutInfo);
+    config.descriptorSetLayouts.push_back(m_SceneLayout);
 
     // Create Texture Layout (Set 1)
     vk::DescriptorSetLayoutBinding samplerBinding{};
@@ -154,7 +154,7 @@ void Renderer::Init(bool headless) {
     vk::DescriptorSetAllocateInfo allocInfo{};
     allocInfo.descriptorPool = m_DescriptorPool;
     allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &sceneLayout;
+    allocInfo.pSetLayouts = &m_SceneLayout;
     m_SceneDescriptorSet = m_VulkanApi->GetDevice().GetDevice().allocateDescriptorSets(allocInfo)[0];
 
     // Update Descriptor Set
@@ -173,7 +173,9 @@ void Renderer::Shutdown() {
     if (m_VulkanApi) {
         m_VulkanApi->GetDevice().GetDevice().waitIdle();
         
+        if (blackHoleRenderer) blackHoleRenderer->Shutdown();
         blackHoleRenderer.reset();
+        if (m_GravityGridRenderer) m_GravityGridRenderer->Shutdown();
         m_GravityGridRenderer.reset();
         m_ObjectPathsRenderer.reset();
         m_physicsDebugRenderer->Shutdown();
@@ -181,6 +183,7 @@ void Renderer::Shutdown() {
 
         if (m_DescriptorPool) m_VulkanApi->GetDevice().GetDevice().destroyDescriptorPool(m_DescriptorPool);
         if (m_TextureLayout) m_VulkanApi->GetDevice().GetDevice().destroyDescriptorSetLayout(m_TextureLayout);
+        if (m_SceneLayout) m_VulkanApi->GetDevice().GetDevice().destroyDescriptorSetLayout(m_SceneLayout);
         
         if (m_MeshPipeline) m_MeshPipeline->Destroy();
         m_MeshShader.reset();
@@ -198,15 +201,34 @@ void Renderer::Shutdown() {
 void Renderer::BeginFrame() {
     m_window->PollEvents();
     if (m_VulkanApi) m_VulkanApi->BeginFrame();
-    ImGuizmo::BeginFrame();
+    // ImGuizmo::BeginFrame(); // TODO: Re-enable when ImGuizmo is fixed
 }
 
 void Renderer::EndFrame(bool clearScreen) {
-    if (m_VulkanApi) m_VulkanApi->EndFrame();
+    if (m_VulkanApi) {
+        m_VulkanApi->EndFrame();
+        // Wait for device idle to prevent descriptor update race conditions
+        // This is a temporary fix; proper double buffering should be implemented
+        m_VulkanApi->GetDevice().GetDevice().waitIdle();
+    }
 }
 
 void Renderer::RenderScene(Scene *scene) {
     if (scene && camera) scene->camera = camera.get();
+    
+    // Ensure all meshes in the scene are loaded
+    if (scene) {
+        ParameterHandle meshHandle("Mesh");
+        for (const auto& obj : scene->objects) {
+            if (obj.HasClass("Mesh")) {
+                if (auto path = obj.GetParameter<std::string>(meshHandle)) {
+                    if (!path->empty()) {
+                        GetOrLoadMesh(*path);
+                    }
+                }
+            }
+        }
+    }
     
     // ImGui Viewport logic
     int width, height;
@@ -231,15 +253,36 @@ void Renderer::RenderScene(Scene *scene) {
         float time = ImGui::GetTime();
 
         if (selectedViewport == ViewportMode::Simulation3D) {
-            Render3DSimulation(scene, cmd);
+            // Compute pass (outside render pass)
+            if (blackHoleRenderer) {
+                 blackHoleRenderer->Render(*scene, m_meshCache, *camera, time, cmd);
+            }
+            
+            // Transition compute output for display (must be outside render pass)
+            if (blackHoleRenderer) {
+                blackHoleRenderer->PrepareDisplay(cmd);
+            }
+            
+            // Begin Render Pass
+            m_VulkanApi->BeginRenderPass();
+            
+            // Graphics pass
+            if (blackHoleRenderer) {
+                blackHoleRenderer->RenderToScreen(cmd);
+            }
             RenderMeshes(scene, cmd); // Render meshes on top of simulation for now, or integrate
             m_GravityGridRenderer->Render(*scene, *camera, time, cmd);
             m_ObjectPathsRenderer->Render(*scene, *camera, time, cmd);
             // m_physicsDebugRenderer->Render(scene->GetPhysicsScene()->getRenderBuffer(), camera.get(), cmd);
         } else if (selectedViewport == ViewportMode::Demo1) {
-            RenderDemo1(scene, cmd);
+             m_VulkanApi->BeginRenderPass();
+             RenderDemo1(scene, cmd);
         } else if (selectedViewport == ViewportMode::Rays2D) {
-            Render2DRays(scene, cmd);
+             m_VulkanApi->BeginRenderPass();
+             Render2DRays(scene, cmd);
+        } else {
+             // Fallback if no viewport mode selected
+             m_VulkanApi->BeginRenderPass();
         }
     }
 }
@@ -305,10 +348,9 @@ void Renderer::RenderDemo1(Scene* scene, vk::CommandBuffer cmd) {}
 void Renderer::Render2DRays(Scene* scene, vk::CommandBuffer cmd) {}
 
 void Renderer::Render3DSimulation(Scene* scene, vk::CommandBuffer cmd) {
-    if (blackHoleRenderer) {
-        blackHoleRenderer->Render(*scene, m_meshCache, *camera, ImGui::GetTime(), cmd);
-        blackHoleRenderer->RenderToScreen(cmd);
-    }
+    // This function is now partially redundant as logic moved to RenderScene
+    // But we can keep it for organization if needed, or remove it.
+    // For now, let's leave it empty or remove calls to it.
 }
 void Renderer::RenderSpheres(Scene * scene, vk::CommandBuffer cmd) {}
 void Renderer::InitSphereGeometry() {}
@@ -338,7 +380,7 @@ void Renderer::UpdateCamera(float deltaTime) {
 
     if (input->IsMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT)) {
         double xoffset = x - lastX;
-        double yoffset = lastY - y;
+        double yoffset = y - lastY;
         
         camera->ProcessMouse((float)xoffset, (float)yoffset);
     }

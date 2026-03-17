@@ -1,3 +1,4 @@
+#include "imgui_impl_vulkan.h"
 #include "BlackHoleRenderer.h"
 #include "Platform/Vulkan/VulkanDevice.h"
 #include "Platform/Vulkan/VulkanBuffer.h"
@@ -119,12 +120,17 @@ void BlackHoleRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPass,
 
     // Create the compute texture for raytracing output
     CreateComputeTexture();
+    
+    // Create initial mesh buffers
+    CreateMeshBuffers();
 
     // Generate and upload LUT textures
     GenerateBlackbodyLUT();
     GenerateAccelerationLUT();
     GenerateHRDiagramLUT();
     GenerateKerrGeodesicLUTs();
+    
+    LoadSkybox();
 
     // Load shaders
     m_computeShader = std::make_unique<VulkanShader>(
@@ -183,6 +189,15 @@ void BlackHoleRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPass,
         });
     }
 
+    // Binding 10: Mesh Triangles SSBO
+    computeBindings.push_back(vk::DescriptorSetLayoutBinding{
+        10,                                     // binding
+        vk::DescriptorType::eStorageBuffer,     // descriptorType
+        1,                                      // descriptorCount
+        vk::ShaderStageFlagBits::eCompute,      // stageFlags
+        nullptr                                 // pImmutableSamplers
+    });
+
     vk::DescriptorSetLayoutCreateInfo computeLayoutInfo{
         {},                               // flags
         static_cast<uint32_t>(computeBindings.size()),
@@ -195,6 +210,8 @@ void BlackHoleRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPass,
     std::vector<vk::DescriptorPoolSize> poolSizes;
     poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1});
     poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 2}); // Common + Display
+    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 8}); // Skybox + 7 LUTs
+    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 1}); // Mesh Data
     poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 10}); // 8 Compute + 2 Display
 
     vk::DescriptorPoolCreateInfo poolInfo{
@@ -214,6 +231,7 @@ void BlackHoleRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPass,
     };
 
     m_ComputeDescriptorSet = device->GetDevice().allocateDescriptorSets(allocInfo)[0];
+spdlog::info("BlackHoleRenderer::Init - Allocated Compute Descriptor Set: {}", (void*)m_ComputeDescriptorSet);
 
     // Create common UBO
     m_CommonUBO = std::make_unique<VulkanBuffer>();
@@ -240,7 +258,9 @@ void BlackHoleRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPass,
         m_computeShader.get(),
         std::vector<vk::DescriptorSetLayout>{m_ComputeDescriptorSetLayout}
     };
-    m_computePipeline->CreateComputePipeline(computeConfig);
+    if (!m_computePipeline->CreateComputePipeline(computeConfig)) {
+        spdlog::error("BlackHoleRenderer::Init: Failed to create compute pipeline");
+    }
 
     // Display Pipeline Setup
     // ----------------------
@@ -313,12 +333,13 @@ void BlackHoleRenderer::CreateComputeTexture() {
     };
     m_computeTexture->Create(spec, m_Device);
 
-    // Transition to General layout immediately
+    // Transition to ShaderReadOnlyOptimal layout initially
+    // This matches the expected "oldLayout" in the Render() loop
     m_computeTexture->TransitionLayout(
         vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eGeneral,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
         vk::PipelineStageFlagBits::eTopOfPipe,
-        vk::PipelineStageFlagBits::eComputeShader
+        vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eComputeShader
     );
 
     // Create a sampler for the compute texture
@@ -617,13 +638,29 @@ void BlackHoleRenderer::Render(const Scene& scene,
                               const Camera& camera,
                               float time,
                               vk::CommandBuffer cmd) {
-    if (!m_computePipeline || !m_computeTexture) {
-        spdlog::warn("BlackHoleRenderer::Render - Pipeline or texture not initialized");
+    if (!m_computePipeline || !m_computePipeline->GetPipeline() || !m_computeTexture) {
+        // Only warn once per second to avoid flooding logs
+        static float lastWarnTime = 0.0f;
+        if (time - lastWarnTime > 1.0f) {
+            spdlog::warn("BlackHoleRenderer::Render - Pipeline or texture not initialized. Pipeline Ptr: {}, Handle: {}", (void*)m_computePipeline.get(), m_computePipeline ? (void*)VkPipeline(m_computePipeline->GetPipeline()) : nullptr);
+            lastWarnTime = time;
+        }
         return;
     }
 
     // Update uniforms
     UpdateUniforms(scene, meshCache, camera, time, cmd);
+
+    // Ensure texture is in General layout for compute write
+    if (m_computeTexture) {
+         m_computeTexture->TransitionLayout(
+            cmd,
+            vk::ImageLayout::eShaderReadOnlyOptimal, // Assuming it was left in ReadOnly from previous frame
+            vk::ImageLayout::eGeneral,
+            vk::PipelineStageFlagBits::eFragmentShader, // Wait for fragment shader to finish reading
+            vk::PipelineStageFlagBits::eComputeShader
+        );
+    }
 
     // Bind compute pipeline
     m_computePipeline->Bind(cmd);
@@ -641,6 +678,19 @@ void BlackHoleRenderer::Render(const Scene& scene,
         ApplyBloom(cmd);
         ApplyLensFlare(cmd);
     }
+}
+
+void BlackHoleRenderer::PrepareDisplay(vk::CommandBuffer cmd) {
+    if (!m_computeTexture) return;
+
+    // Transition compute texture to shader read (must be outside render pass)
+    m_computeTexture->TransitionLayout(
+        cmd,
+        vk::ImageLayout::eGeneral,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eFragmentShader
+    );
 }
 
 void BlackHoleRenderer::UpdateDisplayDescriptorSet() {
@@ -682,14 +732,7 @@ void BlackHoleRenderer::UpdateDisplayDescriptorSet() {
 void BlackHoleRenderer::RenderToScreen(vk::CommandBuffer cmd) {
     if (!m_displayPipeline) return;
 
-    // Transition compute texture to shader read
-    m_computeTexture->TransitionLayout(
-        cmd,
-        vk::ImageLayout::eGeneral,
-        vk::ImageLayout::eShaderReadOnlyOptimal,
-        vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eFragmentShader
-    );
+    // Transition handled in PrepareDisplay()
 
     // Update UBO
     DisplayUBO ubo{};
@@ -718,14 +761,7 @@ void BlackHoleRenderer::RenderToScreen(vk::CommandBuffer cmd) {
     // Draw full screen triangle (3 vertices, 0-2)
     cmd.draw(3, 1, 0, 0);
 
-    // Transition back to General for next compute frame
-    m_computeTexture->TransitionLayout(
-        cmd,
-        vk::ImageLayout::eShaderReadOnlyOptimal,
-        vk::ImageLayout::eGeneral,
-        vk::PipelineStageFlagBits::eFragmentShader,
-        vk::PipelineStageFlagBits::eComputeShader
-    );
+    // Transition back to General is handled in Render() start
 }
 
 // ===========================================================================================
@@ -737,6 +773,7 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
                                       const Camera& camera,
                                       float time,
                                       vk::CommandBuffer cmd) {
+    // spdlog::debug("UpdateUniforms: Start");
     CommonUBO ubo{};
 
     // Camera Matrices
@@ -815,6 +852,9 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
     ubo.numSpheres = sphereCount;
     ubo.debugMode = Application::Params().Get<int>(Params::RenderingDebugMode, 0);
 
+    // Update mesh SSBO
+    UpdateMeshBuffers(scene, meshCache);
+
     // Write to UBO
     m_CommonUBO->Write(&ubo, sizeof(CommonUBO), 0);
 
@@ -852,8 +892,9 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
     });
 
     // Skybox texture (if available)
+    vk::DescriptorImageInfo skyboxInfo{};
     if (m_skyboxTexture) {
-        vk::DescriptorImageInfo skyboxInfo{
+        skyboxInfo = vk::DescriptorImageInfo{
             m_skyboxTexture->GetSampler(),
             m_skyboxTexture->GetImageView(),
             vk::ImageLayout::eShaderReadOnlyOptimal
@@ -909,19 +950,161 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
         });
     }
 
+    // Mesh SSBO (Binding 10)
+    vk::DescriptorBufferInfo meshBufferInfo{};
+    if (m_triangleSSBO) {
+        meshBufferInfo = m_triangleSSBO->GetDescriptorInfo();
+        writes.push_back(vk::WriteDescriptorSet{
+            m_ComputeDescriptorSet,
+            10,
+            0,
+            1,
+            vk::DescriptorType::eStorageBuffer,
+            nullptr,
+            &meshBufferInfo,
+            nullptr
+        });
+    }
+
     // Update descriptors
     m_Device->GetDevice().updateDescriptorSets(writes, nullptr);
 }
 
+struct ShaderTriangle {
+    alignas(16) glm::vec4 v0;
+    alignas(16) glm::vec4 v1;
+    alignas(16) glm::vec4 v2;
+    alignas(16) glm::vec4 color;
+};
+
 void BlackHoleRenderer::UpdateMeshBuffers(const Scene& scene,
                                          const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache) {
-    // Stub: Update mesh SSBOs if needed
-    spdlog::debug("UpdateMeshBuffers called");
+    std::vector<ShaderTriangle> triangles;
+    
+    // Collect triangles from all meshes
+    for (const auto& obj : scene.objects) {
+         if (!obj.HasClass("Mesh")) continue;
+         
+         // Assuming object has a "Mesh" property which is a path or name
+         std::string meshPath;
+         if (auto val = obj.GetParameter<std::string>(ParameterHandle("Mesh"))) {
+             meshPath = *val;
+         } else {
+             continue;
+         }
+         
+         if (meshPath.empty()) continue;
+         
+         auto it = meshCache.find(meshPath);
+         if (it == meshCache.end() || !it->second) continue;
+         
+         auto mesh = it->second;
+         auto geometry = mesh->GetPhysicsGeometry();
+         
+         glm::mat4 transform = glm::mat4(1.0f);
+         // Get transform from object
+         glm::vec3 pos(0.0f);
+         if (auto val = obj.GetParameter<glm::vec3>(ParameterHandle("Position"))) {
+             pos = *val;
+         }
+         
+         glm::quat rot = glm::identity<glm::quat>();
+         if (auto val = obj.GetParameter<glm::quat>(ParameterHandle("Rotation"))) {
+             rot = *val;
+         }
+         
+         glm::vec3 scale(1.0f);
+         if (auto val = obj.GetParameter<glm::vec3>(ParameterHandle("Scale"))) {
+             scale = *val;
+         }
+         
+         transform = glm::translate(transform, pos);
+         transform *= glm::mat4_cast(rot);
+         transform = glm::scale(transform, scale);
+         
+         // Helper to transform vec3
+         auto transformPoint = [&](const glm::vec3& p) {
+             return glm::vec3(transform * glm::vec4(p, 1.0f));
+         };
+         
+         for (size_t i = 0; i < geometry.indices.size(); i += 3) {
+             if (i + 2 >= geometry.indices.size()) break;
+             
+             unsigned int i0 = geometry.indices[i];
+             unsigned int i1 = geometry.indices[i+1];
+             unsigned int i2 = geometry.indices[i+2];
+             
+             if (i0 >= geometry.vertices.size() || i1 >= geometry.vertices.size() || i2 >= geometry.vertices.size()) continue;
+             
+             ShaderTriangle tri;
+             tri.v0 = glm::vec4(transformPoint(geometry.vertices[i0]), 1.0f);
+             tri.v1 = glm::vec4(transformPoint(geometry.vertices[i1]), 1.0f);
+             tri.v2 = glm::vec4(transformPoint(geometry.vertices[i2]), 1.0f);
+             tri.color = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f); // Default gray color
+             
+             triangles.push_back(tri);
+         }
+    }
+    
+    // Update SSBO
+    // Recreate buffer if size changed or doesn't exist
+    vk::DeviceSize bufferSize = std::max(size_t(1), triangles.size()) * sizeof(ShaderTriangle);
+    
+    // If we have triangles, write them
+    if (!triangles.empty()) {
+        if (!m_triangleSSBO || m_triangleSSBO->GetSize() < bufferSize) {
+            if (m_triangleSSBO) m_triangleSSBO->Destroy();
+            m_triangleSSBO = std::make_unique<VulkanBuffer>();
+            
+            VulkanBufferSpec spec{};
+            spec.Size = bufferSize;
+            spec.Usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            spec.MemoryProperties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent; // For simplicity
+            m_triangleSSBO->Create(spec, m_Device);
+        }
+        
+        m_triangleSSBO->Write(triangles.data(), bufferSize);
+        
+        // Update descriptor set
+        vk::DescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = m_triangleSSBO->GetBuffer();
+        bufferInfo.offset = 0;
+        bufferInfo.range = bufferSize;
+
+        vk::WriteDescriptorSet descriptorWrite{};
+        descriptorWrite.dstSet = m_ComputeDescriptorSet;
+        descriptorWrite.dstBinding = 10;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &bufferInfo;
+
+        m_Device->GetDevice().updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+    }
+    
+    // Update u_numTriangles in UBO?
+    // We need to pass the triangle count to the shader.
+    // The CommonUBO has params block. Let's see where u_numTriangles can go.
+    // Or simpler: put it in the buffer size?
+    // Usually we add a uniform for count.
+    // Let's check CommonUBO structure in BlackHoleRenderer.cpp UpdateUniforms.
 }
 
 void BlackHoleRenderer::CreateMeshBuffers() {
-    // Stub: Create SSBOs for mesh data
-    spdlog::debug("CreateMeshBuffers called");
+    // Initial creation handled in UpdateMeshBuffers or here with empty
+    // Just ensure non-null to avoid crashes if bound
+    VulkanBufferSpec spec{};
+    spec.Size = sizeof(ShaderTriangle) * 1; // At least one
+    spec.Usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+    spec.MemoryProperties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+    
+    m_triangleSSBO = std::make_unique<VulkanBuffer>();
+    m_triangleSSBO->Create(spec, m_Device);
+    
+    // Create dummy data
+    ShaderTriangle dummy;
+    dummy.v0 = glm::vec4(0);
+    m_triangleSSBO->Write(&dummy, sizeof(dummy));
 }
 
 void BlackHoleRenderer::ApplyBloom(vk::CommandBuffer cmd) {
@@ -939,9 +1122,118 @@ void BlackHoleRenderer::CreateFullscreenQuad() {
     spdlog::debug("CreateFullscreenQuad called");
 }
 
+#include <stb_image.h>
+
 void BlackHoleRenderer::LoadSkybox() {
-    // Stub: Load skybox texture
-    spdlog::debug("LoadSkybox called");
+    std::string path = "../assets/backgrounds/space.hdr";
+    int width, height, channels;
+    // Using stbi_loadf directly might require STB_IMAGE_IMPLEMENTATION here if not linked properly
+    // But we added src/Renderer/stb_impl.cpp which defines it.
+    // However, BlackHoleRenderer.cpp needs to see the declaration.
+    // We included <stb_image.h> in the previous edit? No, I put it inside the function body in the edit string!
+    // Wait, the edit string was:
+    // #include <stb_image.h>
+    // 
+    // void BlackHoleRenderer::LoadSkybox() { ...
+    //
+    // But I replaced `void BlackHoleRenderer::LoadSkybox() { ... }` with that block.
+    // So the include is now inside the file, before the function. That's fine.
+    
+    // I need to use stbi_loadf.
+    
+    float* data = stbi_loadf(path.c_str(), &width, &height, &channels, 4);
+
+    if (!data) {
+        spdlog::error("Failed to load skybox texture: {}", path);
+        // Create a fallback 1x1 black texture?
+        // For now, return and let it fail validation if needed, or handle it properly.
+        return;
+    }
+
+    VulkanImageSpec spec{
+        glm::vec3(width, height, 1.0f),
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        vk::Format::eR32G32B32A32Sfloat,
+        true,
+        vk::ImageAspectFlagBits::eColor
+    };
+
+    m_skyboxTexture = std::make_shared<VulkanImage>();
+    m_skyboxTexture->Create(spec, m_Device);
+
+    // Create staging buffer
+    vk::DeviceSize imageSize = width * height * 4 * sizeof(float);
+    VulkanBuffer stagingBuffer;
+    VulkanBufferSpec bufferSpec{
+        imageSize,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    };
+    stagingBuffer.Create(bufferSpec, m_Device);
+    stagingBuffer.Write(data, imageSize);
+
+    stbi_image_free(data);
+
+    // Transition to TransferDst
+    m_skyboxTexture->TransitionLayout(
+        vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::PipelineStageFlagBits::eTopOfPipe,
+        vk::PipelineStageFlagBits::eTransfer
+    );
+
+    // Copy buffer to image
+    m_skyboxTexture->CopyBufferToImage(
+        stagingBuffer.GetBuffer(),
+        width, height
+    );
+
+    // Transition to ShaderReadOnly
+    m_skyboxTexture->TransitionLayout(
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::PipelineStageFlagBits::eTransfer,
+        vk::PipelineStageFlagBits::eComputeShader
+    );
+
+    // Create sampler
+    VulkanSamplerSpec samplerSpec{
+        vk::Filter::eLinear,
+        vk::Filter::eLinear,
+        vk::SamplerMipmapMode::eLinear,
+        vk::SamplerAddressMode::eRepeat,
+        vk::SamplerAddressMode::eRepeat,
+        vk::SamplerAddressMode::eRepeat
+    };
+    m_skyboxTexture->CreateSampler(samplerSpec);
+
+    stagingBuffer.Destroy();
+    
+    spdlog::info("Loaded skybox texture: {}", path);
+
+    // Update descriptor set
+    if (m_ComputeDescriptorSet) {
+        vk::DescriptorImageInfo skyboxInfo{
+            m_skyboxTexture->GetSampler(),
+            m_skyboxTexture->GetImageView(),
+            vk::ImageLayout::eShaderReadOnlyOptimal
+        };
+        
+        vk::WriteDescriptorSet write{
+            m_ComputeDescriptorSet,
+            2,
+            0,
+            1,
+            vk::DescriptorType::eCombinedImageSampler,
+            &skyboxInfo,
+            nullptr,
+            nullptr
+        };
+        
+        m_Device->GetDevice().updateDescriptorSets(1, &write, 0, nullptr);
+    }
 }
 
 void BlackHoleRenderer::Resize(int width, int height) {
@@ -970,6 +1262,61 @@ void BlackHoleRenderer::Resize(int width, int height) {
         }
     }
     CreateBloomTextures();
+    if (m_ImGuiDescriptorSet) { m_ImGuiDescriptorSet = VK_NULL_HANDLE; }
+    UpdateDisplayDescriptorSet();
 
     spdlog::info("BlackHoleRenderer::Resize - Resize complete");
+}
+
+void BlackHoleRenderer::Shutdown() {
+    if (!m_Device) return;
+    auto device = m_Device->GetDevice();
+
+    if (m_ImGuiDescriptorSet) {
+        m_ImGuiDescriptorSet = VK_NULL_HANDLE;
+    }
+
+    if (m_computePipeline) { m_computePipeline->Destroy(); m_computePipeline.reset(); }
+    if (m_displayPipeline) { m_displayPipeline->Destroy(); m_displayPipeline.reset(); }
+    
+    m_computeShader.reset();
+    m_displayShader.reset();
+
+    if (m_ComputeDescriptorPool) {
+        device.destroyDescriptorPool(m_ComputeDescriptorPool);
+        m_ComputeDescriptorPool = nullptr;
+    }
+
+    if (m_ComputeDescriptorSetLayout) {
+        device.destroyDescriptorSetLayout(m_ComputeDescriptorSetLayout);
+        m_ComputeDescriptorSetLayout = nullptr;
+    }
+
+    if (m_DisplayDescriptorSetLayout) {
+        device.destroyDescriptorSetLayout(m_DisplayDescriptorSetLayout);
+        m_DisplayDescriptorSetLayout = nullptr;
+    }
+
+    if (m_CommonUBO) { m_CommonUBO->Destroy(); m_CommonUBO.reset(); }
+    if (m_DisplayUBO) { m_DisplayUBO->Destroy(); m_DisplayUBO.reset(); }
+    if (m_meshDataSSBO) { m_meshDataSSBO->Destroy(); m_meshDataSSBO.reset(); }
+    if (m_triangleSSBO) { m_triangleSSBO->Destroy(); m_triangleSSBO.reset(); }
+
+    m_computeTexture.reset();
+    m_skyboxTexture.reset();
+    m_blackbodyLUT.reset();
+    m_accelerationLUT.reset();
+    m_hrDiagramLUT.reset();
+}
+
+vk::DescriptorSet BlackHoleRenderer::GetImGuiDescriptorSet() {
+    if (!m_computeTexture) return VK_NULL_HANDLE;
+    if (m_ImGuiDescriptorSet) return m_ImGuiDescriptorSet;
+
+    m_ImGuiDescriptorSet = ImGui_ImplVulkan_AddTexture(
+        m_computeTexture->GetSampler(),
+        m_computeTexture->GetImageView(),
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    );
+    return m_ImGuiDescriptorSet;
 }

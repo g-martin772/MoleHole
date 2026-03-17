@@ -285,6 +285,27 @@ void GLTFMesh::ProcessMesh(const tinygltf::Model& model, int meshIndex, const gl
         prim.m_VertexBuffer->Write(vertexData.data(), vertexBufferSize);
         
         m_primitives.push_back(std::move(prim));
+
+        // Store in temp cache for physics geometry
+        TempCachePrim cachePrim;
+        cachePrim.materialIndex = primitive.material;
+        cachePrim.indexType = indexAccessor.componentType;
+        cachePrim.indexCount = indexAccessor.count;
+        cachePrim.vertex = vertexData;
+        
+        // Convert indices to unsigned char format for caching
+        for (const auto& idx : indices) {
+            cachePrim.indices.push_back(static_cast<unsigned char>(idx & 0xFF));
+            if (sizeof(uint32_t) > 1) {
+                cachePrim.indices.push_back(static_cast<unsigned char>((idx >> 8) & 0xFF));
+            }
+            if (sizeof(uint32_t) > 2) {
+                cachePrim.indices.push_back(static_cast<unsigned char>((idx >> 16) & 0xFF));
+                cachePrim.indices.push_back(static_cast<unsigned char>((idx >> 24) & 0xFF));
+            }
+        }
+        
+        m_tempCache.push_back(cachePrim);
     }
 }
 
@@ -408,4 +429,37 @@ void GLTFMesh::Render(vk::CommandBuffer cmd, vk::PipelineLayout layout) {
 
         cmd.drawIndexed(prim.m_IndexBuffer->GetSize() / sizeof(uint32_t), 1, 0, 0, 0);
     }
+}
+
+GLTFMesh::PhysicsGeometry GLTFMesh::GetPhysicsGeometry() const {
+    PhysicsGeometry geometry;
+
+    for (const auto& cachePrim : m_tempCache) {
+        // Convert vertex data to vec3 (position only)
+        // Vertex data format: pos[0,1,2], norm[3,4,5], uv[6,7]
+        // We take every 8 floats and extract the first 3 for position
+        const int VERTEX_STRIDE = 8; // pos(3) + normal(3) + uv(2)
+        
+        for (size_t i = 0; i < cachePrim.vertex.size(); i += VERTEX_STRIDE) {
+            glm::vec3 pos(
+                cachePrim.vertex[i],
+                cachePrim.vertex[i + 1],
+                cachePrim.vertex[i + 2]
+            );
+            geometry.vertices.push_back(pos);
+        }
+
+        // Add indices from cache
+        // Reconstruct uint32_t indices from stored unsigned char data
+        for (size_t i = 0; i < cachePrim.indices.size(); i += 4) {
+            uint32_t idx = 0;
+            if (i < cachePrim.indices.size()) idx |= cachePrim.indices[i];
+            if (i + 1 < cachePrim.indices.size()) idx |= (cachePrim.indices[i + 1] << 8);
+            if (i + 2 < cachePrim.indices.size()) idx |= (cachePrim.indices[i + 2] << 16);
+            if (i + 3 < cachePrim.indices.size()) idx |= (cachePrim.indices[i + 3] << 24);
+            geometry.indices.push_back(idx);
+        }
+    }
+
+    return geometry;
 }

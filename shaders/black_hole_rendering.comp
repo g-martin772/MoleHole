@@ -70,6 +70,7 @@ void main() {
 
     // Perform hybrid raytracing/raymarching to get the color
     vec3 color = hybridRayTrace(rayOrigin, rayDir);
+    // vec3 color = vec3(1.0, 0.0, 0.0);
     
     // Generate Output Image
     imageStore(l_outputImage, texCoords, vec4(color, 1.0f));

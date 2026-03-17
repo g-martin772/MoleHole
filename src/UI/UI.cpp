@@ -8,6 +8,7 @@
 #include "CameraWindow.h"
 #include "DebugWindow.h"
 #include "SceneWindow.h"
+#include "ViewportWindow.h"
 #include "SimulationWindow.h"
 #include "AnimationGraphWindow.h"
 #include "GeneralRelativityWindow.h"
@@ -198,6 +199,7 @@ void UI::RenderMainUI(float fps, Scene* scene) {
 
     if (m_showSceneWindow) {
         SceneWindow::Render(this, scene);
+        ViewportWindow::Render(this, scene);
     }
 
     if (m_showSimulationWindow) {

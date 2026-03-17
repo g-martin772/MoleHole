@@ -139,6 +139,9 @@ void VulkanDevice::Init(const DeviceRequirements &requirements, VulkanInstance *
     deviceCreateInfo.pQueueCreateInfos = deviceQueueInfos.data();
 
     vk::PhysicalDeviceFeatures deviceFeatures;
+    deviceFeatures.fillModeNonSolid = VK_TRUE;
+    deviceFeatures.samplerAnisotropy = VK_TRUE;
+    deviceFeatures.wideLines = VK_TRUE;
     deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
 
     std::vector deviceExtensions = {

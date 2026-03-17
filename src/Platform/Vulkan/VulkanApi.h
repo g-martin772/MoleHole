@@ -17,6 +17,7 @@ public:
     void Shutdown();
 
     bool BeginFrame();
+    void BeginRenderPass();
     void EndFrame();
 
     void OnResize(glm::vec2 newSize);

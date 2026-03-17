@@ -44,6 +44,7 @@ public:
 
     ViewportMode GetSelectedViewport() const { return selectedViewport; }
     void SetSelectedViewport(ViewportMode mode) { selectedViewport = mode; }
+    BlackHoleRenderer* GetBlackHoleRenderer() const { return blackHoleRenderer.get(); }
 
     GravityGridRenderer* GetGravityGridRenderer() const { return m_GravityGridRenderer.get(); }
     ObjectPathsRenderer* GetObjectPathsRenderer() const { return m_ObjectPathsRenderer.get(); }
@@ -60,6 +61,7 @@ public:
     vk::DescriptorPool m_DescriptorPool;
     vk::DescriptorSet m_SceneDescriptorSet;
     vk::DescriptorSetLayout m_TextureLayout;
+    vk::DescriptorSetLayout m_SceneLayout;
     
     Window* m_window = nullptr;
     int last_img_width = 800;
