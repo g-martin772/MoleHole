@@ -7,7 +7,7 @@ void ViewportWindow::Render(UI* ui, Scene* scene) {
     if (!ui) return;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    if (ImGui::Begin("Viewport")) {
+    if (ImGui::Begin("Viewport - 3D Simulation", nullptr, ImGuiWindowFlags_NoCollapse)) {
         
         ImVec2 viewportSize = ImGui::GetContentRegionAvail();
         

@@ -383,20 +383,11 @@ void Renderer::UpdateCamera(float deltaTime) {
     if (input->IsKeyDown(GLFW_KEY_E)) camera->ProcessKeyboard(0.0f, 0.0f, speed, 1.0f);
     
     double x, y;
-    input->GetMousePos(x, y);
-    static double lastX = x;
-    static double lastY = y;
-    static bool firstFrame = true;
-    if (firstFrame) { lastX = x; lastY = y; firstFrame = false; }
+    input->GetMouseDelta(x, y);
 
-    if (input->IsMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT)) {
-        double xoffset = x - lastX;
-        double yoffset = y - lastY;
-        
-        camera->ProcessMouse((float)xoffset, (float)yoffset);
+    if (input->IsMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT) || /*input->IsCursorDisabled()*/ false) {
+        camera->ProcessMouse((float)x, (float)y);
     }
-    lastX = x;
-    lastY = y;
 }
 
 std::shared_ptr<GLTFMesh> Renderer::GetOrLoadMesh(const std::string& path) {

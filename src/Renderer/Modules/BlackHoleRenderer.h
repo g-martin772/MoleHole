@@ -14,6 +14,7 @@ class Scene;
 class Camera;
 
 #include <vulkan/vulkan.hpp>
+#include <memory>
 
 class BlackHoleRenderer {
 public:

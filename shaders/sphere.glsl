@@ -38,6 +38,9 @@ vec3 renderSphere(vec3 hitPoint, vec3 rayDir, int sphereIndex, vec3 lightDir) {
     // Only apply blackbody radiation if mass is significant (e.g., > 0.05 Solar Masses)
     // Otherwise treat as a planet/object with baseColor
     if (mass > 0.05) {
+        // Debug: visualize mass
+        return vec3(1.0, 0.0, 1.0); // Magenta for valid mass
+        /*
         float temp = getTemperatureFromMass(mass);
         if (temp > 0.0) {
             float tempRange = u_lutTempMax - u_lutTempMin;
@@ -49,6 +52,7 @@ vec3 renderSphere(vec3 hitPoint, vec3 rayDir, int sphereIndex, vec3 lightDir) {
 
             baseColor = texture(u_blackbodyLUT, vec2(tempNorm, redshiftNorm)).rgb;
         }
+        */
     }
     return baseColor;
 }

@@ -683,7 +683,7 @@ void BlackHoleRenderer::Render(const Scene& scene,
 }
 
 void BlackHoleRenderer::PrepareDisplay(vk::CommandBuffer cmd) {
-    if (!m_computeTexture) return;
+    if (!m_computeTexture || !m_computePipeline) return;
 
     // Transition compute texture to shader read (must be outside render pass)
     m_computeTexture->TransitionLayout(
@@ -972,7 +972,9 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
         if (obj.HasClass("BlackHole") && bhCount < 8) {
             glm::vec3 pos = obj.GetParameter<glm::vec3>(posHandle).value_or(glm::vec3(0.0f));
             float massKg = obj.GetParameter<float>(massHandle).value_or(SOLAR_MASS_KG);
-            float massSM = massKg / SOLAR_MASS_KG;
+            // Convert kg to Solar Masses
+            // 1 SM = 1.989e30 kg
+            float massSM = massKg / 1.989e30f;
             float spin = obj.GetParameter<float>(spinHandle).value_or(0.0f);
             glm::vec3 axis = obj.GetParameter<glm::vec3>(axisHandle).value_or(glm::vec3(0,1,0));
 
@@ -990,6 +992,12 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
 
             ubo.spherePositions[sphereCount] = glm::vec4(pos, radius); // w = radius
             ubo.sphereColors[sphereCount] = glm::vec4(color, massSM); // w = mass in SM
+            
+            if (doDebug) {
+                spdlog::info("Sphere[{}]: Pos({},{},{}), Radius={}, Mass={} kg ({} SM), Color({},{},{})", 
+                    sphereCount, pos.x, pos.y, pos.z, radius, massKg, massSM, color.x, color.y, color.z);
+            }
+
             sphereCount++;
         }
     }
@@ -1289,6 +1297,7 @@ void BlackHoleRenderer::Shutdown() {
     auto device = m_Device->GetDevice();
 
     if (m_ImGuiDescriptorSet) {
+        ImGui_ImplVulkan_RemoveTexture(m_ImGuiDescriptorSet);
         m_ImGuiDescriptorSet = VK_NULL_HANDLE;
     }
 

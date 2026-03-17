@@ -14,6 +14,7 @@ public:
     void RenderDockspace(Scene* scene);
     void RenderMainUI(float fps, Scene* scene);
     void RenderSimulationControls();
+    void RenderViewportHUD(Scene* scene);
 
     void Update(float deltaTime);
 
@@ -64,6 +65,11 @@ public:
     bool* GetShowHelpWindowPtr() { return &m_showHelpWindow; }
     bool* GetShowExportWindowPtr() { return &m_showExportWindow; }
     bool* GetShowGeneralRelativityWindowPtr() { return &m_showGeneralRelativityWindow; }
+    bool* GetShowScienceWindowPtr() { return &m_showScienceWindow; }
+    bool* GetShowViewportHUDPtr() { return &m_showViewportHUD; }
+
+    void StartTutorial();
+    bool IsTutorialActive() const;
 
 private:
     // Window rendering (kept for special cases like HelpWindow and export)
@@ -85,6 +91,8 @@ private:
     bool m_showCameraWindow = true;
     bool m_showDebugWindow = true;
     bool m_showGeneralRelativityWindow = false;
+    bool m_showScienceWindow = false;
+    bool m_showViewportHUD = false;
     bool m_initialized = false;
     bool m_configDirty = false;
     float m_saveTimer = 0.0f;
@@ -121,6 +129,6 @@ private:
     } m_videoConfig;
 
     // Sidebar animation
-    float m_sidebarHoverAnim[7] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    float m_sidebarHoverAnim[9] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     int m_hoveredSidebarItem = -1;
 };

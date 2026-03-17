@@ -14,10 +14,21 @@
 #define ICON_FA_SIM "\xef\x95\xbd"            // U+F57D
 #define ICON_FA_IMAGE "\xef\x80\xbe"          // U+F03E
 #define ICON_FA_GEAR "\xef\x80\x93"           // U+F013
+#define ICON_FA_BRAIN "\xef\x97\x9c"          // U+F5DC (used for science window)
 #define ICON_FA_CIRCLE_DOT "\xef\x86\x92"     // U+F192 (used for app icon - black hole)
 #define ICON_FA_CAMERA "\xef\x80\xb0"         // U+F030
 #define ICON_FA_BUG "\xef\x86\x88"            // U+F188
 #define ICON_FA_ATOM "\xef\x97\x92"           // U+F5D2 (atomic structure - for General Relativity)
+#define ICON_FA_CROSSHAIRS "\xef\x81\x9b"     // U+F05B (crosshairs - for selecting objects)
+#define ICON_FA_TRASH_CAN "\xef\x8b\xad"      // U+F2ED (trash can - for deleting objects)
+#define ICON_FA_CHEVRON_DOWN "\xef\x81\xb8"   // U+F078 (chevron down - accordion open)
+#define ICON_FA_CHEVRON_RIGHT "\xef\x81\x94"  // U+F054 (chevron right - accordion closed)
+#define ICON_FA_ARROW_RIGHT "\xef\x81\xa1"    // U+F061 (arrow right - tutorial next)
+#define ICON_FA_ARROW_LEFT "\xef\x81\xa0"     // U+F060 (arrow left - tutorial back)
+#define ICON_FA_CIRCLE_INFO "\xef\x81\x9a"    // U+F05A (info circle - tutorial info)
+#define ICON_FA_GRADUATION_CAP "\xef\x86\x9d" // U+F19D (graduation cap - tutorial)
+#define ICON_FA_XMARK "\xef\x80\x8d"          // U+F00D (xmark - close/skip)
+#define ICON_FA_GAUGE "\xef\x98\xa4"          // U+F624 (gauge - viewport HUD telemetry)
 
 // Font Awesome 6 Unicode range for ImGui font loading
 #define ICON_MIN_FA 0xe000

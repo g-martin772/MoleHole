@@ -170,7 +170,7 @@ void Simulation::UpdateSimulation(float deltaTime) const {
     if (m_GraphExecutor && m_AnimationGraph) {
         m_GraphExecutor->ExecuteTickEvent(deltaTime);
     }
-    m_Physics->Update(deltaTime);
+    m_Physics->Update(deltaTime, m_Scene.get());
     m_Physics->Apply();
     
     auto& renderer = Application::GetRenderer();

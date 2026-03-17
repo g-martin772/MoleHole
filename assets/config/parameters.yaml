@@ -64,7 +64,7 @@ parameters:
     type: vec3
     group: Camera
     defaultValue: [0.0, 0.0, 5.0]
-    showInUI: false
+    showInUI: true
 
   - name: "Camera.Front"
     displayName: "Camera Front"
@@ -90,7 +90,7 @@ parameters:
     defaultValue: 0.0
     minValue: -89.0
     maxValue: 89.0
-    showInUI: false
+    showInUI: true
 
   - name: "Camera.Yaw"
     displayName: "Camera Yaw"
@@ -98,7 +98,7 @@ parameters:
     type: float
     group: Camera
     defaultValue: -90.0
-    showInUI: false
+    showInUI: true
 
   - name: "Camera.Speed"
     displayName: "Camera Speed"
@@ -250,22 +250,6 @@ parameters:
   - name: "Rendering.BlackHolesEnabled"
     displayName: "Render Black Holes"
     tooltip: "Enable black hole rendering"
-    type: bool
-    group: Rendering
-    defaultValue: true
-    showInUI: true
-
-  - name: "Rendering.GravitationalLensingEnabled"
-    displayName: "Gravitational Lensing"
-    tooltip: "Enable gravitational lensing effect"
-    type: bool
-    group: Rendering
-    defaultValue: true
-    showInUI: true
-
-  - name: "Rendering.GravitationalRedshiftEnabled"
-    displayName: "Gravitational Redshift"
-    tooltip: "Enable gravitational redshift effect"
     type: bool
     group: Rendering
     defaultValue: true
@@ -434,63 +418,44 @@ parameters:
     defaultValue: true
     showInUI: true
 
-  - name: "GeneralRelativity.UseKerrDeflectionLUT"
-    displayName: "Use Kerr Deflection LUT"
-    tooltip: "Use lookup table for Kerr metric light deflection"
+  - name: "GeneralRelativity.PhotonRingEnabled"
+    displayName: "Photon Ring"
+    tooltip: "Enable the photon ring"
     type: bool
     group: GeneralRelativity
     defaultValue: true
     showInUI: true
 
-  - name: "GeneralRelativity.UseKerrRedshiftLUT"
-    displayName: "Use Kerr Redshift LUT"
-    tooltip: "Use lookup table for Kerr metric gravitational redshift"
+  - name: "GeneralRelativity.AngularMomentumEnabled"
+    displayName: "AngularMomentum"
+    tooltip: "Enable Angular Momentum"
     type: bool
     group: GeneralRelativity
     defaultValue: true
     showInUI: true
 
-  - name: "GeneralRelativity.UsePhotonSphereLUT"
-    displayName: "Use Photon Sphere LUT"
-    tooltip: "Use lookup table for photon sphere calculations"
+  - name: "GeneralRelativity.FrameDraggingEnabled"
+    displayName: "Frame Dragging"
+    tooltip: "Enable Frame Dragging"
     type: bool
     group: GeneralRelativity
     defaultValue: true
     showInUI: true
 
-  - name: "GeneralRelativity.UseISCOLUT"
-    displayName: "Use ISCO LUT"
-    tooltip: "Use lookup table for Innermost Stable Circular Orbit calculations"
+  - name: "GeneralRelativity.GravitationalLensingEnabled"
+    displayName: "Gravitational Lensing"
+    tooltip: "Enable Gravitational Lensing"
     type: bool
     group: GeneralRelativity
     defaultValue: true
     showInUI: true
 
-  - name: "GeneralRelativity.ShowEinsteinRings"
-    displayName: "Show Einstein Rings"
-    tooltip: "Visualize Einstein ring formations"
+  - name: "GeneralRelativity.GravitationalRedshiftEnabled"
+    displayName: "Gravitational Redshift"
+    tooltip: "Enable gravitational redshift effect"
     type: bool
     group: GeneralRelativity
     defaultValue: true
-    showInUI: true
-
-  - name: "GeneralRelativity.ShowSecondaryImages"
-    displayName: "Show Secondary Images"
-    tooltip: "Enable rendering of secondary gravitational lensing images"
-    type: bool
-    group: GeneralRelativity
-    defaultValue: true
-    showInUI: true
-
-  - name: "GeneralRelativity.SecondaryImageBrightness"
-    displayName: "Secondary Image Brightness"
-    tooltip: "Brightness multiplier for secondary gravitational lensing images"
-    type: float
-    group: GeneralRelativity
-    defaultValue: 0.5
-    minValue: 0.0
-    maxValue: 2.0
-    dragSpeed: 0.1
     showInUI: true
 
   # Application Parameters
@@ -544,11 +509,19 @@ parameters:
 
   - name: "App.BackgroundImage"
     displayName: "Background Image"
-    tooltip: "Select a background image for the scene"
+    tooltip: "HDR background image for the skybox"
     type: string
     group: Application
     defaultValue: "space.hdr"
     showInUI: true
+
+  - name: "App.TutorialCompleted"
+    displayName: "Tutorial Completed"
+    tooltip: "Whether the first-run tutorial has been completed or skipped"
+    type: bool
+    group: Application
+    defaultValue: false
+    showInUI: false
 
   # UI Parameters
   - name: "UI.FontSize"
@@ -576,6 +549,14 @@ parameters:
     type: string
     group: Application
     defaultValue: "."
+    showInUI: true
+
+  - name: "UI.ViewportHUDEnabled"
+    displayName: "Viewport HUD"
+    tooltip: "Show viewport heads-up display with camera info and performance stats"
+    type: bool
+    group: Application
+    defaultValue: false
     showInUI: true
 
 # Scene Object Parameters

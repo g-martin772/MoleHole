@@ -117,6 +117,8 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
 
     if (u_enableThirdPerson == 1) {
         float t;
+        // intersectCube and getCubeNormal are missing
+        /*
         if (intersectCube(rayOrigin, rayDir, u_cameraPos.xyz, u_cubeSize, t)) {
             if (t < record.t) {
                 record.hit = true;
@@ -134,6 +136,7 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
                 record.color = cubeColor * (ambient + diffuse * 0.9);
             }
         }
+        */
     }
     return record;
 }

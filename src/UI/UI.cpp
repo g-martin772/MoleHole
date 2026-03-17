@@ -12,12 +12,18 @@
 #include "SimulationWindow.h"
 #include "AnimationGraphWindow.h"
 #include "GeneralRelativityWindow.h"
+#include "ScienceWindow.h"
+#include "TutorialOverlay.h"
+#include "ViewportHUD.h"
+#include "LatexRenderer.h"
+#include "imgui.h"
+#include "imgui_internal.h"
+#include "spdlog/spdlog.h"
 #include <nfd.h>
 // #include "../Renderer/Modules/ExportRenderer.h"
 
-
-
 #include "../Application/Parameters.h"
+#include "../Renderer/Modules/PhysicsDebugRenderer.h"
 
 #ifndef _DEBUG
 #define _DEBUG
@@ -46,6 +52,11 @@ void UI::Initialize() {
 
     Style();
     
+    bool tutorialDone = Application::Params().Get(Params::AppTutorialCompleted, false);
+    if (!tutorialDone) {
+        TutorialOverlay::Start(this);
+    }
+
     m_initialized = true;
     spdlog::info("UI initialized successfully");
 }
@@ -54,6 +65,8 @@ void UI::Shutdown() {
     if (!m_initialized) {
         return;
     }
+
+    LatexRenderer::Instance().Shutdown();
 
     if (m_configDirty) {
         Application::Instance().SaveState();
@@ -90,6 +103,7 @@ void UI::RenderDockspace(Scene* scene) {
     // setup
     ImGuiIO& io = ImGui::GetIO();
     bool ctrl = io.KeyCtrl;
+    bool alt = io.KeyAlt;
     static bool prevCtrlS = false, prevCtrlO = false;
     static bool prevF12 = false, prevF11 = false, prevCtrlF11 = false, prevCtrlF12 = false;
     static bool prevSpace = false, prevP = false, prevS = false, prevR = false;
@@ -103,7 +117,7 @@ void UI::RenderDockspace(Scene* scene) {
     bool ctrlf11 = ctrl && ImGui::IsKeyPressed(ImGuiKey_F11);
     bool spaceKey = ImGui::IsKeyPressed(ImGuiKey_Space);
     bool pKey = ImGui::IsKeyPressed(ImGuiKey_P);
-    bool sKey = ImGui::IsKeyPressed(ImGuiKey_S) && !ctrl;
+    bool AltSKey = alt && ImGui::IsKeyPressed(ImGuiKey_S) && !ctrl;
     bool rKey = ImGui::IsKeyPressed(ImGuiKey_R);
     
     // Screenshot shortcuts
@@ -135,7 +149,7 @@ void UI::RenderDockspace(Scene* scene) {
         }
     }
     if (pKey && !prevP) doSimPause = true;
-    if (sKey && !prevS) doSimStop = true;
+    if (AltSKey && !prevS) doSimStop = true;
     if (rKey && !prevR) doSimResume = true;
 
     prevCtrlS = ctrlS;
@@ -146,7 +160,7 @@ void UI::RenderDockspace(Scene* scene) {
     prevCtrlF11 = ctrlf11;
     prevSpace = spaceKey;
     prevP = pKey;
-    prevS = sKey;
+    prevS = AltSKey;
     prevR = rKey;
 
     TopBar::RenderMainMenuBar(this, scene, doSave, doOpen, doTakeScreenshotDialog, doTakeScreenshotViewportDialog, doTakeScreenshot, doTakeScreenshotViewport);
@@ -158,12 +172,11 @@ void UI::RenderDockspace(Scene* scene) {
     if (doSimStart) simulation.Start();
     if (doSimPause) simulation.Pause();
     if (doSimStop) simulation.Stop();
-    if (doSimResume) simulation.Start(); // Resume is just calling Start() when paused
+    if (doSimResume) simulation.Start();
 
-    ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const float sidebarWidth = 60.0f; // Match the sidebar width from RenderSidebar()
-    
-    // Position dockspace to the right of the sidebar
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    constexpr float sidebarWidth = 60.0f;
+
     ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + sidebarWidth, viewport->Pos.y + ImGui::GetFrameHeight()));
     ImGui::SetNextWindowSize(ImVec2(viewport->Size.x - sidebarWidth, viewport->Size.y - ImGui::GetFrameHeight()));
     ImGui::SetNextWindowViewport(viewport->ID);
@@ -177,7 +190,40 @@ void UI::RenderDockspace(Scene* scene) {
                                       ImGuiWindowFlags_NoNavFocus;
 
     ImGui::Begin("##DockSpace", nullptr, dockspace_flags);
-    ImGui::DockSpace(ImGui::GetID("DockSpace"), ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+    const ImGuiID dockspaceId = ImGui::GetID("DockSpace");
+    ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+
+    static bool s_firstRunLayoutApplied = false;
+    if (const bool tutorialCompleted = Application::Params().Get(Params::AppTutorialCompleted, false); !tutorialCompleted && !s_firstRunLayoutApplied) {
+        s_firstRunLayoutApplied = true;
+
+        ImGui::DockBuilderRemoveNode(dockspaceId);
+        ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_PassthruCentralNode);
+        ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
+
+        ImGuiID dockRight, dockCenter;
+        ImGui::DockBuilderSplitNode(dockspaceId, ImGuiDir_Right, 0.28f, &dockRight, &dockCenter);
+
+        ImGuiID dockRightTop, dockRightBottom;
+        ImGui::DockBuilderSplitNode(dockRight, ImGuiDir_Up, 0.5f, &dockRightTop, &dockRightBottom);
+
+        ImGuiID dockBottom;
+        ImGui::DockBuilderSplitNode(dockCenter, ImGuiDir_Down, 0.30f, &dockBottom, &dockCenter);
+
+        ImGui::DockBuilderDockWindow("System", dockRightTop);
+        ImGui::DockBuilderDockWindow("Camera", dockRightTop);
+        ImGui::DockBuilderDockWindow("Scene", dockRightBottom);
+        ImGui::DockBuilderDockWindow("Simulation", dockRightBottom);
+        ImGui::DockBuilderDockWindow("Debug", dockRightBottom);
+        ImGui::DockBuilderDockWindow("Animation Graph", dockBottom);
+        ImGui::DockBuilderDockWindow("Viewport - 3D Simulation", dockBottom);
+        ImGui::DockBuilderDockWindow("General Relativity Settings", dockBottom);
+        ImGui::DockBuilderDockWindow("Science", dockBottom);
+
+        ImGui::DockBuilderFinish(dockspaceId);
+        spdlog::info("Applied first-run docking layout");
+    }
+
     ImGui::End();
     ImGui::PopStyleVar(3);
 }
@@ -223,14 +269,22 @@ void UI::RenderMainUI(float fps, Scene* scene) {
     }
 
     if (m_showSettingsWindow) {
-        SettingsPopUp::Render(this, &m_showSettingsWindow);
+        SettingsPopUp::Render(this, scene, &m_showSettingsWindow);
     }
 
     if (m_showGeneralRelativityWindow)
     {
         bool* p_open = nullptr;
-        GeneralRelativityWindow::Render(p_open);
+        GeneralRelativityWindow::Render(p_open, this);
     }
+
+    if (m_showScienceWindow)
+    {
+        ScienceWindow::Render(this);
+    }
+
+    if (IsTutorialActive())
+        TutorialOverlay::Render(this);
 }
 
 
@@ -251,42 +305,50 @@ void UI::Style() {
     float fontSize = Application::Params().Get(Params::UIFontSize, 16.0f);
     std::vector<std::string> availableFonts = GetAvailableFonts();
     
+    // Get configured font from settings, default to Roboto-Regular.ttf
+    const std::string defaultFont = "Roboto-Regular.ttf";
+    std::string fontName = Application::Params().Get(Params::UIMainFont, defaultFont);
+
+    static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+
     // Load all available fonts into the atlas
     for (const auto& fontFile : availableFonts) {
         std::string fontPath = "../assets/font/" + fontFile;
         ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), fontSize);
         if (font) {
+            // If this is the chosen main font, merge icons into it immediately
+            if (fontFile == fontName) {
+                ImFontConfig icons_merge_config;
+                icons_merge_config.MergeMode = true;
+                icons_merge_config.PixelSnapH = true;
+                io.Fonts->AddFontFromFileTTF("../font/fa-solid-900.ttf", fontSize, &icons_merge_config, icons_ranges);
+
+                m_mainFont = font;
+                io.FontDefault = m_mainFont;
+                spdlog::info("Loaded main font with icons: {} ({}pt)", fontFile, fontSize);
+            } else {
+                spdlog::info("Loaded font: {} ({}pt)", fontFile, fontSize);
+            }
             m_loadedFonts[fontFile] = font;
-            spdlog::info("Loaded font: {} ({}pt)", fontFile, fontSize);
         } else {
             spdlog::warn("Failed to load font: {}", fontFile);
         }
     }
-    
-    // Get configured font from settings, default to Roboto-Regular.ttf
-    const std::string defaultFont = "Roboto-Regular.ttf";
-    std::string fontName = Application::Params().Get(Params::UIMainFont, defaultFont);
 
-    // Set the configured font as main font
-    if (m_loadedFonts.count(fontName) > 0) {
-        m_mainFont = m_loadedFonts[fontName];
-        io.FontDefault = m_mainFont;
-        spdlog::info("Set main font to: {}", fontName);
-    } else if (!m_loadedFonts.empty()) {
-        // Fallback to first loaded font
-        m_mainFont = m_loadedFonts.begin()->second;
-        io.FontDefault = m_mainFont;
-        spdlog::warn("Font '{}' not found, using fallback: {}", fontName, m_loadedFonts.begin()->first);
-    } else {
-        // Last resort: ImGui default font
-        m_mainFont = io.Fonts->AddFontDefault();
-        io.FontDefault = m_mainFont;
-        spdlog::warn("No fonts loaded, using ImGui default font");
+    // Fallback if main font wasn't found in the loop
+    if (!m_mainFont) {
+        if (!m_loadedFonts.empty()) {
+            m_mainFont = m_loadedFonts.begin()->second;
+            io.FontDefault = m_mainFont;
+            spdlog::warn("Font '{}' not found, using fallback: {}", fontName, m_loadedFonts.begin()->first);
+        } else {
+            m_mainFont = io.Fonts->AddFontDefault();
+            io.FontDefault = m_mainFont;
+            spdlog::warn("No fonts loaded, using ImGui default font");
+        }
     }
     
-    // Load Font Awesome icon font
-    // Font Awesome 6 Free is licensed under SIL OFL 1.1 (https://scripts.sil.org/OFL)
-    static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+    // Load Font Awesome icon font (Large, separate instance for headers)
     ImFontConfig icons_config;
     //icons_config.MergeMode = false;
     //icons_config.PixelSnapH = true;
@@ -422,6 +484,12 @@ void UI::Style() {
 
 void UI::RenderSimulationControls() {
     SimulationWindow::RenderSimulationControls(this);
+}
+
+void UI::RenderViewportHUD(Scene* scene) {
+    if (m_showViewportHUD) {
+        ViewportHUD::Render(this, scene);
+    }
 }
 
 void UI::RenderHelpWindow() {
@@ -757,6 +825,14 @@ void UI::RenderExportProgress() {
     } else {
         ImGui::TextDisabled("No export in progress");
     }*/
+}
+
+void UI::StartTutorial() {
+    TutorialOverlay::Start(this);
+}
+
+bool UI::IsTutorialActive() const {
+    return TutorialOverlay::IsActive();
 }
 
 void UI::ReloadFonts() {

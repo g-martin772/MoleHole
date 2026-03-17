@@ -1,5 +1,8 @@
 #pragma once
 
+#include <vector>
+#include <cmath>
+
 namespace MoleHole {
 
 class BlackbodyLUTGenerator {

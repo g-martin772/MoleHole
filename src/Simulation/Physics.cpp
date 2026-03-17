@@ -1,5 +1,9 @@
 #include "Physics.h"
 
+#include <algorithm>
+#include <spdlog/spdlog.h>
+
+#include "Application/Parameters.h"
 #include "Renderer/Renderer.h"
 #include "../Renderer/Models/GLTFMesh.h"
 
@@ -162,34 +166,45 @@ void Physics::SetScene(Scene *scene) {
         auto &obj = scene->objects[i];
 
         if (obj.HasClass("BlackHole")) {
-            BlackHoleBodyData bhData;
-            bhData.sceneIndex = i;
+            PhysicsBodyData bodyData;
+            bodyData.sceneIndex = i;
+            bodyData.isSphere = false;
 
-            auto posHandle = ParameterHandle("position");
-            auto massHandle = ParameterHandle("mass");
+            auto posHandle = Field::Entity::Position;
+            auto rotHandle = Field::Entity::Rotation;
+            auto radiusHandle = Field::Sphere::Radius;
+            auto massHandle = Field::Physics::Mass;
+            auto velHandle = Field::Physics::Velocity;
 
             if (obj.HasParameter(posHandle)) {
-                bhData.position = std::get<glm::vec3>(obj.GetParameter(posHandle));
+                bodyData.position = std::get<glm::vec3>(obj.GetParameter(Field::Entity::Position));
             }
-
+            if (obj.HasParameter(rotHandle)) {
+                bodyData.rotation = std::get<glm::quat>(obj.GetParameter(Field::Entity::Rotation));
+            }
+            if (obj.HasParameter(radiusHandle)) {
+                bodyData.radius = std::get<float>(obj.GetParameter(Field::Sphere::Radius));
+            }
             if (obj.HasParameter(massHandle)) {
-                float solarMass = std::get<float>(obj.GetParameter(massHandle)) / SOLAR_MASS;
-                bhData.schwarzschildRadius = CalculateSchwarzchildRadius(solarMass);
+                bodyData.mass = std::get<float>(obj.GetParameter(Field::Physics::Mass));
+            }
+            if (obj.HasParameter(velHandle)) {
+                bodyData.initialVelocity = std::get<glm::vec3>(obj.GetParameter(Field::Physics::Velocity));
             }
 
-            CreateBlackHoleBody(bhData);
+            CreatePhysicsBody(bodyData);
         }
         else if (obj.HasClass("Mesh")) {
             PhysicsBodyData bodyData;
             bodyData.sceneIndex = i;
             bodyData.isSphere = false;
 
-            auto posHandle = ParameterHandle("position");
-            auto rotHandle = ParameterHandle("rotation");
-            auto scaleHandle = ParameterHandle("scale");
-            auto massHandle = ParameterHandle("mass");
-            auto pathHandle = ParameterHandle("path");
-            auto velHandle = ParameterHandle("velocity");
+            auto posHandle = Field::Entity::Position;
+            auto rotHandle = Field::Entity::Rotation;
+            auto scaleHandle = Field::Entity::Scale;
+            auto massHandle = Field::Physics::Mass;
+            auto pathHandle = Field::Mesh::FilePath;
+            auto velHandle = Field::Physics::Velocity;
 
             if (obj.HasParameter(posHandle)) {
                 bodyData.position = std::get<glm::vec3>(obj.GetParameter(posHandle));
@@ -219,26 +234,26 @@ void Physics::SetScene(Scene *scene) {
             bodyData.sceneIndex = i;
             bodyData.isSphere = true;
 
-            auto posHandle = ParameterHandle("position");
-            auto rotHandle = ParameterHandle("rotation");
-            auto radiusHandle = ParameterHandle("radius");
-            auto massHandle = ParameterHandle("mass");
-            auto velHandle = ParameterHandle("velocity");
+            auto posHandle = Field::Entity::Position;
+            auto rotHandle = Field::Entity::Rotation;
+            auto radiusHandle = Field::Sphere::Radius;
+            auto massHandle = Field::Physics::Mass;
+            auto velHandle = Field::Physics::Velocity;
 
             if (obj.HasParameter(posHandle)) {
-                bodyData.position = std::get<glm::vec3>(obj.GetParameter(posHandle));
+                bodyData.position = std::get<glm::vec3>(obj.GetParameter(Field::Entity::Position));
             }
             if (obj.HasParameter(rotHandle)) {
-                bodyData.rotation = std::get<glm::quat>(obj.GetParameter(rotHandle));
+                bodyData.rotation = std::get<glm::quat>(obj.GetParameter(Field::Entity::Rotation));
             }
             if (obj.HasParameter(radiusHandle)) {
-                bodyData.radius = std::get<float>(obj.GetParameter(radiusHandle));
+                bodyData.radius = std::get<float>(obj.GetParameter(Field::Sphere::Radius));
             }
             if (obj.HasParameter(massHandle)) {
-                bodyData.mass = std::get<float>(obj.GetParameter(massHandle));
+                bodyData.mass = std::get<float>(obj.GetParameter(Field::Physics::Mass));
             }
             if (obj.HasParameter(velHandle)) {
-                bodyData.initialVelocity = std::get<glm::vec3>(obj.GetParameter(velHandle));
+                bodyData.initialVelocity = std::get<glm::vec3>(obj.GetParameter(Field::Physics::Velocity));
             }
 
             bodyData.scale = glm::vec3(bodyData.radius * 2.0f);
@@ -253,8 +268,8 @@ void Physics::SetScene(Scene *scene) {
 void Physics::Apply() {
     if (!m_CurrentScene) return;
 
-    auto posHandle = ParameterHandle("position");
-    auto rotHandle = ParameterHandle("rotation");
+    constexpr auto posHandle = Field::Entity::Position;
+    constexpr auto rotHandle = Field::Entity::Rotation;
 
     for (auto& body : m_Bodies) {
         if (!body.actor) continue;
@@ -290,9 +305,8 @@ void Physics::Apply() {
     }
 }
 
-void Physics::Update(float deltaTime) {
-    ApplyGravitationalForces();
-    UpdatePhysicsBodies();
+void Physics::Update(const float deltaTime, Scene* scene) {
+    ApplyGravitationalForces(deltaTime, scene);
     m_Scene->simulate(deltaTime);
     m_Scene->fetchResults(true);
     ProcessDeletedBodies();
@@ -356,58 +370,32 @@ void Physics::CreatePhysicsBody(PhysicsBodyData &data) {
 }
 
 
-void Physics::ApplyGravitationalForces() {
+void Physics::ApplyGravitationalForces(const float dt, Scene* scene) const
+{
     for (size_t i = 0; i < m_Bodies.size(); ++i) {
         if (!m_Bodies[i].actor) continue;
 
-        PxVec3 totalForce(0.0f, 0.0f, 0.0f);
-        PxTransform transform_i = m_Bodies[i].actor->getGlobalPose();
-        float mass_i = m_Bodies[i].actor->getMass();
+        PxTransform p_i = m_Bodies[i].actor->getGlobalPose();
+        PxVec3 v_i = m_Bodies[i].actor->getLinearVelocity();
 
         for (size_t j = 0; j < m_Bodies.size(); ++j) {
-            if (i == j || !m_Bodies[j].actor) continue;
+            if (i == j) continue;
 
-            PxTransform transform_j = m_Bodies[j].actor->getGlobalPose();
-            float mass_j = m_Bodies[j].actor->getMass();
+            PxTransform p_j = m_Bodies[j].actor->getGlobalPose();
+            const float m_j = m_Bodies[j].mass;
 
-            PxVec3 direction = transform_j.p - transform_i.p;
-            float distSq = direction.magnitudeSquared();
+            PxVec3 a = G * m_j / (p_j.p - p_i.p).magnitudeSquared() * (p_j.p - p_i.p).getNormalized();
 
-            float minDist = (m_Bodies[i].radius + m_Bodies[j].radius) * 0.5f;
-            if (distSq < minDist * minDist) {
-                distSq = minDist * minDist;
-            }
+            // update velocity
+            v_i = v_i + a * dt;
+            m_Bodies[i].actor->setLinearVelocity(v_i);
+            scene->objects[i].SetParameter(Field::Physics::Velocity, glm::vec3(v_i.x, v_i.y, v_i.z));
 
-            direction = direction.getNormalized();
-
-            // F = G * m1 * m2 / r^2
-            float forceMagnitude = G * mass_i * mass_j / distSq;
-
-            totalForce += direction * forceMagnitude;
+            // update position
+            p_i.p = p_i.p + v_i * dt;
+            m_Bodies[i].actor->setGlobalPose(p_i);
+            scene->objects[i].SetParameter(Field::Entity::Position, glm::vec3(p_i.p.x, p_i.p.y, p_i.p.z));
         }
-
-        for (size_t j = 0; j < m_BlackHoles.size(); ++j) {
-            if (!m_BlackHoles[j].actor) continue;
-
-            PxTransform bhTransform = m_BlackHoles[j].actor->getGlobalPose();
-
-            PxVec3 direction = bhTransform.p - transform_i.p;
-            float distSq = direction.magnitudeSquared();
-
-            float minDist = m_BlackHoles[j].schwarzschildRadius;
-            if (distSq < minDist * minDist) {
-                distSq = minDist * minDist;
-            }
-
-            direction = direction.getNormalized();
-
-            float bhMassKg = (m_BlackHoles[j].schwarzschildRadius * C * C) / (2.0f * G);
-            float forceMagnitude = G * mass_i * bhMassKg / distSq;
-
-            totalForce += direction * forceMagnitude;
-        }
-
-        m_Bodies[i].actor->addForce(totalForce, PxForceMode::eFORCE);
     }
 }
 
@@ -505,7 +493,7 @@ void Physics::CreateBlackHoleBody(BlackHoleBodyData &data) {
     spdlog::debug("Created black hole collision (index: {}, radius: {})", data.sceneIndex, data.schwarzschildRadius);
 }
 
-float Physics::CalculateSchwarzchildRadius(float solarMass) {
+float Physics::CalculateSchwarzschildRadius(float solarMass) {
     float massKg = solarMass * SOLAR_MASS;
     return (2.0f * G * massKg) / (C * C);
 }

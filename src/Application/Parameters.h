@@ -38,8 +38,6 @@ namespace Params {
     inline constexpr ParameterHandle RenderingPhysicsDebugFlags("Rendering.PhysicsDebugFlags");
 
     inline constexpr ParameterHandle RenderingBlackHolesEnabled("Rendering.BlackHolesEnabled");
-    inline constexpr ParameterHandle RenderingGravitationalLensingEnabled("Rendering.GravitationalLensingEnabled");
-    inline constexpr ParameterHandle RenderingGravitationalRedshiftEnabled("Rendering.GravitationalRedshiftEnabled");
     inline constexpr ParameterHandle RenderingAccretionDiskEnabled("Rendering.AccretionDiskEnabled");
     inline constexpr ParameterHandle RenderingAccretionDiskVolumetric("Rendering.AccretionDiskVolumetric");
     inline constexpr ParameterHandle RenderingAccDiskHeight("Rendering.AccDiskHeight");
@@ -59,13 +57,11 @@ namespace Params {
 
     // General Relativity Parameters
     inline constexpr ParameterHandle GRKerrPhysicsEnabled("GeneralRelativity.KerrPhysicsEnabled");
-    inline constexpr ParameterHandle GRUseKerrDeflectionLUT("GeneralRelativity.UseKerrDeflectionLUT");
-    inline constexpr ParameterHandle GRUseKerrRedshiftLUT("GeneralRelativity.UseKerrRedshiftLUT");
-    inline constexpr ParameterHandle GRUsePhotonSphereLUT("GeneralRelativity.UsePhotonSphereLUT");
-    inline constexpr ParameterHandle GRUseISCOLUT("GeneralRelativity.UseISCOLUT");
-    inline constexpr ParameterHandle GRShowEinsteinRings("GeneralRelativity.ShowEinsteinRings");
-    inline constexpr ParameterHandle GRShowSecondaryImages("GeneralRelativity.ShowSecondaryImages");
-    inline constexpr ParameterHandle GRSecondaryImageBrightness("GeneralRelativity.SecondaryImageBrightness");
+    inline constexpr ParameterHandle GRPhotonRingEnabled("GeneralRelativity.PhotonRingEnabled");
+    inline constexpr ParameterHandle GRAngularMomentumEnabled("GeneralRelativity.AngularMomentumEnabled");
+    inline constexpr ParameterHandle GRFrameDraggingEnabled("GeneralRelativity.FrameDraggingEnabled");
+    inline constexpr ParameterHandle GRGravitationalLensingEnabled("GeneralRelativity.GravitationalLensingEnabled");
+    inline constexpr ParameterHandle GRGravitationalRedshiftEnabled("GeneralRelativity.GravitationalRedshiftEnabled");
 
     // Application Parameters
     inline constexpr ParameterHandle AppLastOpenScene("App.LastOpenScene");
@@ -75,11 +71,13 @@ namespace Params {
     inline constexpr ParameterHandle AppUseKerrDistortion("App.UseKerrDistortion");
     inline constexpr ParameterHandle AppIntroAnimationEnabled("App.IntroAnimationEnabled");
     inline constexpr ParameterHandle AppBackgroundImage("App.BackgroundImage");
+    inline constexpr ParameterHandle AppTutorialCompleted("App.TutorialCompleted");
 
     // UI Parameters
     inline constexpr ParameterHandle UIFontSize("UI.FontSize");
     inline constexpr ParameterHandle UIMainFont("UI.MainFont");
     inline constexpr ParameterHandle UIDefaultExportPath("UI.DefaultExportPath");
+    inline constexpr ParameterHandle UIViewportHUDEnabled("UI.ViewportHUDEnabled");
 
     // Config
     inline constexpr ParameterHandle AdditionalObjectClassSources("Config.AdditionalObjectClassSources");
@@ -132,6 +130,7 @@ namespace Field {
         inline constexpr ParameterHandle TexturePath("Sphere.TexturePath");
         inline constexpr ParameterHandle Spin("Sphere.Spin");
         inline constexpr ParameterHandle SpinAxis("Sphere.SpinAxis");
+        inline constexpr ParameterHandle Mass("Sphere.Mass");
     }
 
     namespace BlackHole {

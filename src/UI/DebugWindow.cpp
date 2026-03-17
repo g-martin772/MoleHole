@@ -19,14 +19,30 @@ using namespace physx;
 
 namespace DebugWindow {
 
+static void RenderSectionHeader(const char* title) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(180.0f/255.0f, 100.0f/255.0f, 40.0f/255.0f, 1.0f));
+    ImGui::Text("%s", title);
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+    ImGui::Spacing();
+}
+
+static void TableNextColumnPreserveSpacing() {
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::NewLine();
+}
+
+static void Separate() {
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::Spacing();
+}
+
 void RenderDebugModeCombo(UI* ui) {
     const char* debugModeItems[] = {
         "Normal Rendering",
-        "Influence Zones",
-        "Deflection Magnitude",
-        "Gravitational Field",
-        "Spherical Shape",
-        "LUT Visualization",
         "Gravity Grid",
         "Object Paths"
     };
@@ -51,24 +67,9 @@ void RenderDebugModeTooltip(int debugMode) {
             tooltip = "Normal rendering with no debug visualization";
             break;
         case 1:
-            tooltip = "Red zones showing gravitational influence areas\nBrighter red = closer to black hole\nOnly shows outside event horizon safety zone";
-            break;
-        case 2:
-            tooltip = "Yellow/orange visualization of deflection strength\nBrightness indicates how much light rays are bent\nHelps visualize Kerr distortion effects";
-            break;
-        case 3:
-            tooltip = "Green visualization of gravitational field strength\nBrighter green = stronger gravitational effects\nShows field within 10x Schwarzschild radius";
-            break;
-        case 4:
-            tooltip = "Blue gradient showing black hole's spherical shape\nBlack interior = event horizon (no escape)\nBlue gradient = distance from event horizon\nHelps verify proper sphere geometry";
-            break;
-        case 5:
-            tooltip = "Visualize the distortion lookup table (LUT)\n2D slice of the 3D LUT used for ray deflection\nHue encodes deflection direction, brightness encodes distance\nMagenta tint indicates invalid/overflow entries";
-            break;
-        case 6:
             tooltip = "Gravity Grid overlay on ground plane\nColor shows dominant black hole per cell (by mass/distance^2)\nGrid helps visualize regions of influence";
             break;
-        case 7:
+        case 2:
             tooltip = "Visualize object trajectories and paths\nShows the motion paths of objects in the scene\nHelps track object movement over time";
             break;
         default:
@@ -84,129 +85,133 @@ void Render(UI* ui) {
         return;
     }
 
-    // Rendering Settings Section
-    if (ImGui::CollapsingHeader("Rendering Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-        ImGui::TextWrapped("Configure black hole rendering and visual effects");
-        ImGui::PopStyleColor();
-        ImGui::Separator();
-        ImGui::Spacing();
+    RenderSectionHeader("RENDERING");
 
-        // General rendering flags
-        ImGui::Text("General Settings");
-        ImGui::Separator();
-        
-        ParameterWidgets::RenderParameter(Params::RenderingBlackHolesEnabled, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingGravitationalLensingEnabled, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingGravitationalRedshiftEnabled, ui);
+    ParameterWidgets::RenderParameter(Params::RenderingBlackHolesEnabled, ui);
+    ParameterWidgets::RenderParameter(Params::GRGravitationalLensingEnabled, ui);
+    ParameterWidgets::RenderParameter(Params::GRGravitationalRedshiftEnabled, ui);
+    ParameterWidgets::RenderParameter(Params::RenderingAccretionDiskEnabled, ui);
+    ParameterWidgets::RenderParameter(Params::RenderingAccretionDiskVolumetric, ui);
+    Separate();
 
-        ImGui::Spacing();
-        ImGui::Text("Accretion Disk Settings");
-        ImGui::Separator();
-        
-        ParameterWidgets::RenderParameter(Params::RenderingAccretionDiskEnabled, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingAccretionDiskVolumetric, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingAccDiskHeight, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingAccDiskNoiseScale, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingAccDiskNoiseLOD, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingAccDiskSpeed, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingDopplerBeamingEnabled, ui);
+    RenderSectionHeader("ACCRETION DISK");
 
-        ImGui::Spacing();
-        ImGui::Text("Post-Processing");
-        ImGui::Separator();
-
-        ParameterWidgets::RenderParameter(Params::RenderingBloomEnabled, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingBloomThreshold, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingBloomBlurPasses, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingBloomIntensity, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingBloomDebug, ui);
-        ImGui::Separator();
-        ParameterWidgets::RenderParameter(Params::RenderingAntiAliasingEnabled, ui);
-        ImGui::Separator();
-        ParameterWidgets::RenderParameter(Params::RenderingLensFlareEnabled, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingLensFlareThreshold, ui);
-        ParameterWidgets::RenderParameter(Params::RenderingLensFlareIntensity, ui);
+    if (ImGui::BeginTable("AccDiskGrid", 2, ImGuiTableFlags_None)) {
+        ImGui::TableNextRow();
+        TableNextColumnPreserveSpacing();
+        ParameterWidgets::RenderParameter(Params::RenderingAccDiskHeight, ui, ParameterWidgets::WidgetStyle::Compact);
+        TableNextColumnPreserveSpacing();
+        ParameterWidgets::RenderParameter(Params::RenderingAccDiskSpeed, ui, ParameterWidgets::WidgetStyle::Compact);
+        ImGui::TableNextRow();
+        TableNextColumnPreserveSpacing();
+        ParameterWidgets::RenderParameter(Params::RenderingAccDiskNoiseScale, ui, ParameterWidgets::WidgetStyle::Compact);
+        TableNextColumnPreserveSpacing();
+        ParameterWidgets::RenderParameter(Params::RenderingAccDiskNoiseLOD, ui, ParameterWidgets::WidgetStyle::Compact);
+        ImGui::EndTable();
     }
+    Separate();
 
-    // Debug Visualization Section
-    if (ImGui::CollapsingHeader("Debug Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
-        RenderDebugModeCombo(ui);
+    RenderSectionHeader("EFFECTS");
 
-        if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::GravityGrid) {
-            auto& renderer = Application::GetRenderer();
-            if (auto* grid = renderer.GetGravityGridRenderer()) {
-                // TODO
-                /*ImGui::Separator();
-                ImGui::TextDisabled("Gravity Grid (Plane) Settings");
+    ParameterWidgets::RenderParameter(Params::RenderingDopplerBeamingEnabled, ui);
+    ParameterWidgets::RenderParameter(Params::RenderingBloomEnabled, ui);
+    ParameterWidgets::RenderParameter(Params::RenderingAntiAliasingEnabled, ui);
+    Separate();
 
-                float planeY = grid->GetPlaneY();
-                if (ImGui::DragFloat("Plane Y", &planeY, 0.5f, -10000.0f, 10000.0f)) {
-                    grid->SetPlaneY(planeY);
-                }
-                float size = grid->GetPlaneSize();
-                if (ImGui::DragFloat("Plane Size", &size, 1.0f, 2.0f, 10000.0f)) {
-                    grid->SetPlaneSize(size);
-                }
-                int res = grid->GetResolution();
-                if (ImGui::SliderInt("Resolution", &res, 8, 2048)) {
-                    grid->SetResolution(res);
-                }
-                float cellSize = grid->GetCellSize();
-                if (ImGui::DragFloat("Grid Cell Size", &cellSize, 0.05f, 0.01f, 100.0f)) {
-                    grid->SetCellSize(cellSize);
-                }
-                float lineThickness = grid->GetLineThickness();
-                if (ImGui::DragFloat("Line Thickness (cells)", &lineThickness, 0.005f, 0.001f, 0.5f)) {
-                    grid->SetLineThickness(lineThickness);
-                }
-                float opacity = grid->GetOpacity();
-                if (ImGui::SliderFloat("Opacity", &opacity, 0.05f, 1.0f)) {
-                    grid->SetOpacity(opacity);
-                }
+    RenderSectionHeader("BLOOM SETTINGS");
 
-                glm::vec3 color = grid->GetColor();
-                if (ImGui::ColorEdit3("Grid Color", &color[0])) {
-                    grid->SetColor(color);
-                }*/
+    if (ImGui::BeginTable("BloomGrid", 2, ImGuiTableFlags_None)) {
+        ImGui::TableNextRow();
+        TableNextColumnPreserveSpacing();
+        ParameterWidgets::RenderParameter(Params::RenderingBloomThreshold, ui, ParameterWidgets::WidgetStyle::Compact);
+        TableNextColumnPreserveSpacing();
+        ParameterWidgets::RenderParameter(Params::RenderingBloomBlurPasses, ui, ParameterWidgets::WidgetStyle::Compact);
+        ImGui::TableNextRow();
+        TableNextColumnPreserveSpacing();
+        ParameterWidgets::RenderParameter(Params::RenderingBloomIntensity, ui, ParameterWidgets::WidgetStyle::Compact);
+        TableNextColumnPreserveSpacing();
+        ImGui::EndTable();
+    }
+    ParameterWidgets::RenderParameter(Params::RenderingBloomDebug, ui);
+    Separate();
+
+    RenderSectionHeader("DEBUG RENDERING");
+
+    RenderDebugModeCombo(ui);
+
+    if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::GravityGrid) {
+        auto& renderer = Application::GetRenderer();
+        if (auto* grid = renderer.GetGravityGridRenderer()) {
+            ImGui::Separator();
+            ImGui::TextDisabled("Gravity Grid (Plane) Settings");
+
+            float planeY = grid->GetPlaneY();
+            if (ImGui::DragFloat("Plane Y", &planeY, 0.5f, -10000.0f, 10000.0f)) {
+                grid->SetPlaneY(planeY);
             }
-        }
-        
-        if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::ObjectPaths) {
-            auto& renderer = Application::GetRenderer();
-            if (auto* paths = renderer.GetObjectPathsRenderer()) {
-                ImGui::Separator();
-                ImGui::TextDisabled("Object Paths Settings");
+            float size = grid->GetPlaneSize();
+            if (ImGui::DragFloat("Plane Size", &size, 1.0f, 2.0f, 10000.0f)) {
+                grid->SetPlaneSize(size);
+            }
+            int res = grid->GetResolution();
+            if (ImGui::SliderInt("Resolution", &res, 8, 2048)) {
+                grid->SetResolution(res);
+            }
+            float cellSize = grid->GetCellSize();
+            if (ImGui::DragFloat("Grid Cell Size", &cellSize, 0.05f, 0.01f, 100.0f)) {
+                grid->SetCellSize(cellSize);
+            }
+            float lineThickness = grid->GetLineThickness();
+            if (ImGui::DragFloat("Line Thickness (cells)", &lineThickness, 0.005f, 0.001f, 0.5f)) {
+                grid->SetLineThickness(lineThickness);
+            }
+            float opacity = grid->GetOpacity();
+            if (ImGui::SliderFloat("Opacity", &opacity, 0.05f, 1.0f)) {
+                grid->SetOpacity(opacity);
+            }
 
-                int maxHistorySize = static_cast<int>(paths->GetMaxHistorySize());
-                if (ImGui::DragInt("Max History Size", &maxHistorySize, 10.0f, 100, 1000000)) {
-                    paths->SetMaxHistorySize(static_cast<size_t>(maxHistorySize));
-                }
-                
-                float lineThickness = paths->GetLineThickness();
-                if (ImGui::DragFloat("Line Thickness (px)", &lineThickness, 0.1f, 0.5f, 10.0f)) {
-                    paths->SetLineThickness(lineThickness);
-                }
-                
-                float opacity = paths->GetOpacity();
-                if (ImGui::SliderFloat("Opacity", &opacity, 0.05f, 1.0f)) {
-                    paths->SetOpacity(opacity);
-                }
-
-                glm::vec3 meshColor = paths->GetMeshColor();
-                if (ImGui::ColorEdit3("Mesh Path Color", &meshColor[0])) {
-                    paths->SetMeshColor(meshColor);
-                }
-                
-                glm::vec3 sphereColor = paths->GetSphereColor();
-                if (ImGui::ColorEdit3("Sphere Path Color", &sphereColor[0])) {
-                    paths->SetSphereColor(sphereColor);
-                }
+            glm::vec3 color = grid->GetColor();
+            if (ImGui::ColorEdit3("Grid Color", &color[0])) {
+                grid->SetColor(color);
             }
         }
     }
 
-    // PhysX Visualization Section
+    if (static_cast<DebugMode>(Application::Params().Get(Params::RenderingDebugMode, 0)) == DebugMode::ObjectPaths) {
+        auto& renderer = Application::GetRenderer();
+        if (auto* paths = renderer.GetObjectPathsRenderer()) {
+            ImGui::Separator();
+            ImGui::TextDisabled("Object Paths Settings");
+
+            int maxHistorySize = static_cast<int>(paths->GetMaxHistorySize());
+            if (ImGui::DragInt("Max History Size", &maxHistorySize, 10.0f, 100, 1000000)) {
+                paths->SetMaxHistorySize(static_cast<size_t>(maxHistorySize));
+            }
+
+            float lineThickness = paths->GetLineThickness();
+            if (ImGui::DragFloat("Line Thickness (px)", &lineThickness, 0.1f, 0.5f, 10.0f)) {
+                paths->SetLineThickness(lineThickness);
+            }
+
+            float opacity = paths->GetOpacity();
+            if (ImGui::SliderFloat("Opacity", &opacity, 0.05f, 1.0f)) {
+                paths->SetOpacity(opacity);
+            }
+
+            glm::vec3 meshColor = paths->GetMeshColor();
+            if (ImGui::ColorEdit3("Mesh Path Color", &meshColor[0])) {
+                paths->SetMeshColor(meshColor);
+            }
+
+            glm::vec3 sphereColor = paths->GetSphereColor();
+            if (ImGui::ColorEdit3("Sphere Path Color", &sphereColor[0])) {
+                paths->SetSphereColor(sphereColor);
+            }
+        }
+    }
+
+    ImGui::Separator();
+
     if (ImGui::CollapsingHeader("PhysX Visualization")) {
         auto& renderer = Application::GetRenderer();
         auto* physicsDebugRenderer = renderer.GetPhysicsDebugRenderer();

@@ -1,30 +1,89 @@
 // ------------------------------------------------------------------------------------------------------------
 // Section Crosshair
 // ------------------------------------------------------------------------------------------------------------
-bool intersectCube(vec3 rayOrigin, vec3 rayDir, vec3 cubeCenter, float cubeSize, out float t) {
-    vec3 boxMin = cubeCenter - vec3(cubeSize * 0.5);
-    vec3 boxMax = cubeCenter + vec3(cubeSize * 0.5);
-    vec3 tMin = (boxMin - rayOrigin) / rayDir;
-    vec3 tMax = (boxMax - rayOrigin) / rayDir;
-    vec3 t1 = min(tMin, tMax);
-    vec3 t2 = max(tMin, tMax);
-    float tNear = max(max(t1.x, t1.y), t1.z);
-    float tFar = min(min(t2.x, t2.y), t2.z);
+int intersectCrosshair(vec3 rayOrigin, vec3 rayDir, vec3 crossCenter, float crossSize, out float t) {
+    t = 1e10;
+    int hitAxis = 0;
+    float thickness = 0.01f;
+    vec3 localOrigin = rayOrigin - crossCenter;
 
-    if (tNear > tFar || tFar < EPSILON) return false;
-    t = (tNear > EPSILON) ? tNear : tFar;
-    return t > EPSILON;
-}
-vec3 getCubeNormal(vec3 hitPoint, vec3 cubeCenter, float cubeSize) {
-    vec3 localPos = hitPoint - cubeCenter;
-    vec3 absPos = abs(localPos);
-    float halfSize = cubeSize * 0.5;
+    vec3 oc = localOrigin;
+    float a = rayDir.y * rayDir.y + rayDir.z * rayDir.z;
+    float b = 2.0 * (oc.y * rayDir.y + oc.z * rayDir.z);
+    float c = oc.y * oc.y + oc.z * oc.z - thickness * thickness;
+    float discriminant = b * b - 4.0 * a * c;
 
-    if (absPos.x > absPos.y && absPos.x > absPos.z) {
-        return vec3(sign(localPos.x), 0.0, 0.0);
-    } else if (absPos.y > absPos.z) {
-        return vec3(0.0, sign(localPos.y), 0.0);
-    } else {
-        return vec3(0.0, 0.0, sign(localPos.z));
+    if (discriminant >= 0.0 && a > EPSILON) {
+        float t0 = (-b - sqrt(discriminant)) / (2.0 * a);
+        float t1 = (-b + sqrt(discriminant)) / (2.0 * a);
+        float tHit = (t0 > EPSILON) ? t0 : t1;
+
+        if (tHit > EPSILON) {
+            vec3 hitPos = localOrigin + rayDir * tHit;
+            if (hitPos.x >= 0.0 && hitPos.x <= crossSize) {
+                t = min(t, tHit);
+                hitAxis = 1;
+            }
+        }
     }
+
+    oc = localOrigin;
+    a = rayDir.x * rayDir.x + rayDir.z * rayDir.z;
+    b = 2.0 * (oc.x * rayDir.x + oc.z * rayDir.z);
+    c = oc.x * oc.x + oc.z * oc.z - thickness * thickness;
+    discriminant = b * b - 4.0 * a * c;
+
+    if (discriminant >= 0.0 && a > EPSILON) {
+        float t0 = (-b - sqrt(discriminant)) / (2.0 * a);
+        float t1 = (-b + sqrt(discriminant)) / (2.0 * a);
+        float tHit = (t0 > EPSILON) ? t0 : t1;
+
+        if (tHit > EPSILON) {
+            vec3 hitPos = localOrigin + rayDir * tHit;
+            if (hitPos.y >= 0.0 && hitPos.y <= crossSize) {
+                if (tHit < t) {
+                    t = tHit;
+                    hitAxis = 2;
+                }
+            }
+        }
+    }
+
+    oc = localOrigin;
+    a = rayDir.x * rayDir.x + rayDir.y * rayDir.y;
+    b = 2.0 * (oc.x * rayDir.x + oc.y * rayDir.y);
+    c = oc.x * oc.x + oc.y * oc.y - thickness * thickness;
+    discriminant = b * b - 4.0 * a * c;
+
+    if (discriminant >= 0.0 && a > EPSILON) {
+        float t0 = (-b - sqrt(discriminant)) / (2.0 * a);
+        float t1 = (-b + sqrt(discriminant)) / (2.0 * a);
+        float tHit = (t0 > EPSILON) ? t0 : t1;
+
+        if (tHit > EPSILON) {
+            vec3 hitPos = localOrigin + rayDir * tHit;
+            if (hitPos.z >= 0.0 && hitPos.z <= crossSize) {
+                if (tHit < t) {
+                    t = tHit;
+                    hitAxis = 3;
+                }
+            }
+        }
+    }
+
+    return hitAxis;
+}
+
+vec3 getCrosshairNormal(vec3 hitPoint, vec3 crossCenter, int axis) {
+    vec3 localPos = hitPoint - crossCenter;
+    if (axis == 1) return normalize(vec3(0.0, localPos.y, localPos.z));
+    if (axis == 2) return normalize(vec3(localPos.x, 0.0, localPos.z));
+    return normalize(vec3(localPos.x, localPos.y, 0.0));
+}
+
+vec3 getCrosshairColor(int axis) {
+    if (axis == 1) return vec3(1.0, 0.0, 0.0);
+    if (axis == 2) return vec3(0.0, 1.0, 0.0);
+    if (axis == 3) return vec3(0.0, 0.0, 1.0);
+    return vec3(1.0, 1.0, 1.0);
 }

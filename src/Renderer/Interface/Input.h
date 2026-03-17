@@ -10,6 +10,7 @@ public:
     void GetMouseDelta(double& x, double& y) const;
     void GetMousePos(double& x, double& y) const;
     void SetCursorEnabled(bool enabled);
+    bool IsCursorDisabled() const { return m_CursorDisabled; }
     bool IsViewportFocused() const;
     void SetViewportHovered(bool hovered);
     void SetViewportFocused(bool focused);

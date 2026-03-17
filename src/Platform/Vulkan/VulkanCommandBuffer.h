@@ -39,6 +39,7 @@ public:
     std::shared_ptr<VulkanCommandBuffer> AllocateCommandBuffer(bool renderPassContinue = false,
                                                                bool simultaneousUse = false) const;
     std::shared_ptr<VulkanCommandBuffer> AllocateSingleUseCommandBuffer() const;
+    vk::CommandPool GetPool() const { return m_CommandPool; }
 private:
     VulkanDevice *m_Device = nullptr;
     vk::CommandPool m_CommandPool;
