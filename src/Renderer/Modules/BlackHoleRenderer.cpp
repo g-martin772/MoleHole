@@ -130,7 +130,7 @@ void BlackHoleRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPass,
     GenerateHRDiagramLUT();
     GenerateKerrGeodesicLUTs();
     
-    LoadSkybox();
+    LoadSkybox("../assets/backgrounds/space.hdr");
 
     // Load shaders
     m_computeShader = std::make_unique<VulkanShader>(
@@ -1124,30 +1124,27 @@ void BlackHoleRenderer::CreateFullscreenQuad() {
 
 #include <stb_image.h>
 
-void BlackHoleRenderer::LoadSkybox() {
-    std::string path = "../assets/backgrounds/space.hdr";
+void BlackHoleRenderer::LoadSkybox(const std::string& path) {
+    if (path.empty()) return;
+    
+    // Check if path exists
+    if (!std::filesystem::exists(path)) {
+        spdlog::error("Skybox file does not exist: {}", path);
+        return;
+    }
+
     int width, height, channels;
-    // Using stbi_loadf directly might require STB_IMAGE_IMPLEMENTATION here if not linked properly
-    // But we added src/Renderer/stb_impl.cpp which defines it.
-    // However, BlackHoleRenderer.cpp needs to see the declaration.
-    // We included <stb_image.h> in the previous edit? No, I put it inside the function body in the edit string!
-    // Wait, the edit string was:
-    // #include <stb_image.h>
-    // 
-    // void BlackHoleRenderer::LoadSkybox() { ...
-    //
-    // But I replaced `void BlackHoleRenderer::LoadSkybox() { ... }` with that block.
-    // So the include is now inside the file, before the function. That's fine.
-    
-    // I need to use stbi_loadf.
-    
     float* data = stbi_loadf(path.c_str(), &width, &height, &channels, 4);
 
     if (!data) {
         spdlog::error("Failed to load skybox texture: {}", path);
-        // Create a fallback 1x1 black texture?
-        // For now, return and let it fail validation if needed, or handle it properly.
         return;
+    }
+
+    // Destroy old texture if it exists
+    if (m_skyboxTexture) {
+        // Just reset shared_ptr, VulkanImage destructor handles cleanup
+        m_skyboxTexture.reset();
     }
 
     VulkanImageSpec spec{
@@ -1208,31 +1205,25 @@ void BlackHoleRenderer::LoadSkybox() {
         vk::SamplerAddressMode::eRepeat
     };
     m_skyboxTexture->CreateSampler(samplerSpec);
-
+    
     stagingBuffer.Destroy();
     
-    spdlog::info("Loaded skybox texture: {}", path);
-
     // Update descriptor set
     if (m_ComputeDescriptorSet) {
-        vk::DescriptorImageInfo skyboxInfo{
-            m_skyboxTexture->GetSampler(),
-            m_skyboxTexture->GetImageView(),
-            vk::ImageLayout::eShaderReadOnlyOptimal
-        };
+        vk::DescriptorImageInfo skyboxInfo{};
+        skyboxInfo.imageView = m_skyboxTexture->GetImageView();
+        skyboxInfo.sampler = m_skyboxTexture->GetSampler();
+        skyboxInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         
-        vk::WriteDescriptorSet write{
-            m_ComputeDescriptorSet,
-            2,
-            0,
-            1,
-            vk::DescriptorType::eCombinedImageSampler,
-            &skyboxInfo,
-            nullptr,
-            nullptr
-        };
+        vk::WriteDescriptorSet descriptorWrite{};
+        descriptorWrite.dstSet = m_ComputeDescriptorSet;
+        descriptorWrite.dstBinding = 2; // Binding 2 is skybox
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pImageInfo = &skyboxInfo;
         
-        m_Device->GetDevice().updateDescriptorSets(1, &write, 0, nullptr);
+        m_Device->GetDevice().updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
     }
 }
 

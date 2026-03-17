@@ -296,14 +296,11 @@ void GLTFMesh::ProcessMesh(const tinygltf::Model& model, int meshIndex, const gl
         // Convert indices to unsigned char format for caching
         for (const auto& idx : indices) {
             cachePrim.indices.push_back(static_cast<unsigned char>(idx & 0xFF));
-            if (sizeof(uint32_t) > 1) {
-                cachePrim.indices.push_back(static_cast<unsigned char>((idx >> 8) & 0xFF));
-            }
-            if (sizeof(uint32_t) > 2) {
-                cachePrim.indices.push_back(static_cast<unsigned char>((idx >> 16) & 0xFF));
-                cachePrim.indices.push_back(static_cast<unsigned char>((idx >> 24) & 0xFF));
-            }
+            cachePrim.indices.push_back(static_cast<unsigned char>((idx >> 8) & 0xFF));
+            cachePrim.indices.push_back(static_cast<unsigned char>((idx >> 16) & 0xFF));
+            cachePrim.indices.push_back(static_cast<unsigned char>((idx >> 24) & 0xFF));
         }
+
         
         m_tempCache.push_back(cachePrim);
     }

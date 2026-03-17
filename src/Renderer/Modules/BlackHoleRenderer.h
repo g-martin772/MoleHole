@@ -39,7 +39,7 @@ public:
     void SetExportMode(bool isExporting) { m_isExportMode = isExporting; }
     bool IsExportMode() const { return m_isExportMode; }
 
-    void LoadSkybox();
+    void LoadSkybox(const std::string& path);
     
 private:
     void CreateComputeTexture();

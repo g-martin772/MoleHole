@@ -218,6 +218,17 @@ void Renderer::RenderScene(Scene *scene) {
     
     // Ensure all meshes in the scene are loaded
     if (scene) {
+        // Skybox reloading
+        if (scene->reloadSkybox) {
+             std::string bgName = Application::Params().Get<std::string>(Params::AppBackgroundImage, "space.hdr");
+             std::string bgPath = "../assets/backgrounds/" + bgName;
+             
+             if (blackHoleRenderer) {
+                 blackHoleRenderer->LoadSkybox(bgPath);
+             }
+             scene->reloadSkybox = false;
+        }
+
         ParameterHandle meshHandle("Mesh");
         for (const auto& obj : scene->objects) {
             if (obj.HasClass("Mesh")) {
