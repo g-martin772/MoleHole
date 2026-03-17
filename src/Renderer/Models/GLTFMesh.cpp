@@ -328,13 +328,30 @@ std::shared_ptr<VulkanImage> GLTFMesh::LoadTextureFromModel(const tinygltf::Mode
         // Map GLTF sampler to Vulkan (simplified mapping)
         samplerSpec.MinFilter = (gltfSampler.minFilter == TINYGLTF_TEXTURE_FILTER_NEAREST) ? vk::Filter::eNearest : vk::Filter::eLinear;
         samplerSpec.MagFilter = (gltfSampler.magFilter == TINYGLTF_TEXTURE_FILTER_NEAREST) ? vk::Filter::eNearest : vk::Filter::eLinear;
-        samplerSpec.AddressU = vk::SamplerAddressMode::eRepeat; // Default
-        samplerSpec.AddressV = vk::SamplerAddressMode::eRepeat;
+        samplerSpec.AddressU = (gltfSampler.wrapS == TINYGLTF_TEXTURE_WRAP_REPEAT) ? vk::SamplerAddressMode::eRepeat : 
+                               (gltfSampler.wrapS == TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE) ? vk::SamplerAddressMode::eClampToEdge : vk::SamplerAddressMode::eMirroredRepeat;
+        samplerSpec.AddressV = (gltfSampler.wrapT == TINYGLTF_TEXTURE_WRAP_REPEAT) ? vk::SamplerAddressMode::eRepeat : 
+                               (gltfSampler.wrapT == TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE) ? vk::SamplerAddressMode::eClampToEdge : vk::SamplerAddressMode::eMirroredRepeat;
     }
     vulkanImage->CreateSampler(samplerSpec);
 
-    // Upload image data using staging buffer
+    // Prepare data
+    std::vector<unsigned char> rgbaData;
+    const unsigned char* bufferData = image.image.data();
     vk::DeviceSize imageSize = image.width * image.height * 4;
+
+    if (image.component == 3) {
+        rgbaData.reserve(image.width * image.height * 4);
+        for (size_t i = 0; i < image.width * image.height; i++) {
+            rgbaData.push_back(image.image[i * 3 + 0]);
+            rgbaData.push_back(image.image[i * 3 + 1]);
+            rgbaData.push_back(image.image[i * 3 + 2]);
+            rgbaData.push_back(255);
+        }
+        bufferData = rgbaData.data();
+    }
+
+    // Upload image data using staging buffer
     VulkanBufferSpec stagingSpec{};
     stagingSpec.Size = imageSize;
     stagingSpec.Usage = vk::BufferUsageFlagBits::eTransferSrc;
@@ -342,7 +359,7 @@ std::shared_ptr<VulkanImage> GLTFMesh::LoadTextureFromModel(const tinygltf::Mode
     
     VulkanBuffer stagingBuffer;
     stagingBuffer.Create(stagingSpec, m_Device);
-    stagingBuffer.Write(image.image.data(), imageSize);
+    stagingBuffer.Write(bufferData, imageSize);
 
     // Transition to TransferDst
     vulkanImage->TransitionLayout(

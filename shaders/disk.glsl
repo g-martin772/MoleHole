@@ -1,5 +1,5 @@
 // uniform variables replaced by UBO
-uniform float u_time;
+// uniform float u_time;
 
 // ------------------------------------------------------------------------------------------------------------
 // Section Disk Colour

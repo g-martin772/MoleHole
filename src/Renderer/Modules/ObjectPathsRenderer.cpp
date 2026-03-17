@@ -58,7 +58,7 @@ void ObjectPathsRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPas
     pipelineConfig.rasterizer.cullMode = vk::CullModeFlagBits::eNone;  // No culling for lines
     pipelineConfig.rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
     pipelineConfig.rasterizer.depthBiasEnable = VK_FALSE;
-    pipelineConfig.rasterizer.lineWidth = m_lineThickness;
+    pipelineConfig.rasterizer.lineWidth = 1.0f; // Reset from m_lineThickness to 1.0 to avoid validation error
     
     // Depth stencil: Disable depth test for overlay paths
     pipelineConfig.depthStencil.depthTestEnable = VK_FALSE;

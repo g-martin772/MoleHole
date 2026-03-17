@@ -1,8 +1,8 @@
 #version 460 core
 layout (location = 0) out vec4 FragColor;
 
-in vec3 vWorldPos;
-in float vDispplacement;
+layout(location = 0) in vec3 vWorldPos;
+layout(location = 1) in float vDispplacement;
 
 layout(std140, binding = 0) uniform GravityGridUBO {
     mat4 uVP;

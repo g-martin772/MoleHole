@@ -8,8 +8,8 @@ layout(push_constant) uniform PushConstants {
     float opacity;
 } pc;
 
-out vec3 vColor;
-out float vOpacity;
+layout(location = 0) out vec3 vColor;
+layout(location = 1) out float vOpacity;
 
 void main() {
     vColor = pc.color;

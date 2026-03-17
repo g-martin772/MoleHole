@@ -86,8 +86,8 @@ void Renderer::Init(bool headless) {
 
     // Load Shaders
     m_MeshShader = std::make_unique<VulkanShader>(&m_VulkanApi->GetDevice(), std::initializer_list<std::pair<ShaderStage, std::string>>{
-        { ShaderStage::Vertex, "../shaders/mesh.vert" },
-        { ShaderStage::Fragment, "../shaders/mesh.frag" }
+        { ShaderStage::Vertex, "shaders/mesh.vert" },
+        { ShaderStage::Fragment, "shaders/mesh.frag" }
     });
 
     // Create Pipeline

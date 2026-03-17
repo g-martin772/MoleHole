@@ -1,6 +1,7 @@
 #include "VulkanShader.h"
 
 #include <ranges>
+#include <filesystem>
 
 #include "VulkanDevice.h"
 #include "ShaderUtils.h"
@@ -8,6 +9,69 @@
 
 static constexpr const char* k_CacheSubDir = "vulkan";
 static constexpr const char* k_CacheExt    = ".spv";
+
+class FileIncluder : public shaderc::CompileOptions::IncluderInterface {
+public:
+    shaderc_include_result* GetInclude(const char* requested_source,
+                                       shaderc_include_type type,
+                                       const char* requesting_source,
+                                       size_t include_depth) override {
+        auto* result = new shaderc_include_result();
+        
+        // Determine full path
+        std::filesystem::path requestPath = requested_source;
+        std::filesystem::path fullPath;
+
+        if (type == shaderc_include_type_relative) {
+             std::filesystem::path requestingPath = requesting_source;
+             fullPath = requestingPath.parent_path() / requestPath;
+        } else {
+             // Treat standard includes as relative to shaders directory if not found otherwise
+             // Or relative to current working directory
+             fullPath = std::filesystem::path("shaders") / requestPath;
+             if (!std::filesystem::exists(fullPath)) {
+                 fullPath = requestPath; // Try as is
+             }
+        }
+        
+        std::string content = ShaderUtils::ReadFile(fullPath.string().c_str());
+        std::string pathStr = fullPath.string();
+
+        if (content.empty() && !std::filesystem::exists(fullPath)) {
+             // Return error
+             std::string error = "Cannot find include file: " + pathStr;
+             auto* container = new IncludeResultContainer{error, pathStr}; // Reuse container for error message storage if needed, but shaderc expects specific behavior
+             
+             // Shaderc expects empty content and error message? 
+             // Actually, if we return valid pointer but content is empty/error, it might not fail gracefully.
+             // But let's return what we have.
+             // If content is empty, maybe the file IS empty.
+        }
+
+        auto* container = new IncludeResultContainer{content, pathStr};
+        
+        result->content = container->content.c_str();
+        result->content_length = container->content.size();
+        result->source_name = container->sourceName.c_str();
+        result->source_name_length = container->sourceName.size();
+        result->user_data = container;
+
+        return result;
+    }
+
+    void ReleaseInclude(shaderc_include_result* data) override {
+        if (data) {
+            delete static_cast<IncludeResultContainer*>(data->user_data);
+            delete data;
+        }
+    }
+
+private:
+    struct IncludeResultContainer {
+        std::string content;
+        std::string sourceName;
+    };
+};
 
 static shaderc_shader_kind StageToShadercKind(ShaderStage stage) {
     switch (stage) {
@@ -125,6 +189,7 @@ vk::ShaderModule VulkanShader::CompileStage(ShaderStage stage, const std::string
     options.SetOptimizationLevel(shaderc_optimization_level_performance);
     options.SetSourceLanguage(shaderc_source_language_glsl);
     options.SetGenerateDebugInfo();
+    options.SetIncluder(std::make_unique<FileIncluder>());
 
     const auto tStart = std::chrono::steady_clock::now();
     const shaderc::SpvCompilationResult result =

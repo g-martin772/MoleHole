@@ -25,8 +25,8 @@ layout(std140, binding = 0) uniform GravityGridUBO {
 const float EPSILON = 1e-2f;
 const float SOLAR_MASS = 2e30f;
 
-out vec3 vWorldPos;
-out float vDispplacement;
+layout(location = 0) out vec3 vWorldPos;
+layout(location = 1) out float vDispplacement;
 
 float calculateSpacetimeCurvatureBlackHole(vec3 position, float mass) {
     float r_s = 2.0f * mass;
