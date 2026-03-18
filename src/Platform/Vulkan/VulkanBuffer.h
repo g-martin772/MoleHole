@@ -16,6 +16,12 @@ public:
     VulkanBuffer() = default;
     ~VulkanBuffer();
 
+    VulkanBuffer(const VulkanBuffer&) = delete;
+    VulkanBuffer& operator=(const VulkanBuffer&) = delete;
+
+    VulkanBuffer(VulkanBuffer&&) = default;
+    VulkanBuffer& operator=(VulkanBuffer&&) = default;
+
     /**
      * Create and allocate a Vulkan buffer
      * @param spec Buffer specification (size, usage, memory properties)
@@ -105,6 +111,11 @@ public:
     bool IsDeviceLocal() const {
         return (m_MemoryProperties & vk::MemoryPropertyFlagBits::eDeviceLocal) == vk::MemoryPropertyFlagBits::eDeviceLocal;
     }
+
+    /**
+     * Get the device address of the buffer (required for Ray Tracing)
+     */
+    vk::DeviceAddress GetDeviceAddress() const;
 
 private:
     VulkanDevice *m_Device = nullptr;

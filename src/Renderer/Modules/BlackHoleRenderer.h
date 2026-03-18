@@ -41,8 +41,20 @@ public:
     bool IsExportMode() const { return m_isExportMode; }
 
     void LoadSkybox(const std::string& path);
-    
+    bool IsInitialized() const { return m_Initialized; }
+
 private:
+    bool m_Initialized = false;
+    struct PendingResource {
+        std::shared_ptr<VulkanImage> image;
+        std::unique_ptr<VulkanBuffer> buffer;
+        std::vector<vk::DescriptorSet> descriptorSets;
+        vk::AccelerationStructureKHR accelerationStructure;
+        uint32_t framesUntilDeletion;
+    };
+    std::deque<PendingResource> m_pendingResources;
+    void ProcessPendingResources();
+
     void CreateComputeTexture();
     void CreateBloomTextures();
     void ApplyBloom(vk::CommandBuffer cmd);

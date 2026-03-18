@@ -150,6 +150,38 @@ parameters:
     defaultValue: false
     showInUI: true
 
+  - name: "Video.RayTracingMode"
+    displayName: "Ray Tracing Mode"
+    tooltip: "0 = Euclidean (Straight Rays), 1 = Kerr (Curved Rays)"
+    type: int
+    group: Video
+    defaultValue: 0
+    minValue: 0
+    maxValue: 1
+    showInUI: true
+
+  - name: "Video.RayMarchSteps"
+    displayName: "Max Ray Steps"
+    tooltip: "Maximum number of steps for ray marching"
+    type: int
+    group: Video
+    defaultValue: 100
+    minValue: 10
+    maxValue: 1000
+    dragSpeed: 1.0
+    showInUI: true
+
+  - name: "Video.RayMarchStepSize"
+    displayName: "Step Size"
+    tooltip: "Base step size for ray marching integration"
+    type: float
+    group: Video
+    defaultValue: 0.1
+    minValue: 0.001
+    maxValue: 10.0
+    dragSpeed: 0.01
+    showInUI: true
+
   - name: "Rendering.ThirdPersonDistance"
     displayName: "Third Person Distance"
     tooltip: "Distance of camera behind the object in third-person mode"
@@ -845,5 +877,37 @@ scene_parameters:
     type: vec3
     group: Simulation
     defaultValue: [0.0, 1.0, 0.0]
+    showInUI: true
+
+  - name: "Video.RayTracingMode"
+    displayName: "Ray Tracing Mode"
+    tooltip: "0: Euclidean, 1: Kerr (Bent Rays)"
+    type: int
+    group: Video
+    defaultValue: 0
+    minValue: 0
+    maxValue: 1
+    showInUI: true
+
+  - name: "Video.RayMarchSteps"
+    displayName: "Max Steps"
+    tooltip: "Maximum steps for ray marching"
+    type: int
+    group: Video
+    defaultValue: 100
+    minValue: 10
+    maxValue: 1000
+    dragSpeed: 1
+    showInUI: true
+
+  - name: "Video.RayMarchStepSize"
+    displayName: "Step Size"
+    tooltip: "Base step size for ray marching"
+    type: float
+    group: Video
+    defaultValue: 0.1
+    minValue: 0.01
+    maxValue: 2.0
+    dragSpeed: 0.01
     showInUI: true
 

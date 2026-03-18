@@ -1,6 +1,7 @@
 #pragma once
 // #include "Interface/Shader.h"
 #include "Modules/BlackHoleRenderer.h"
+#include "Modules/RayTracingRenderer.h"
 #include "Models/GLTFMesh.h"
 #include "Application/Window.h"
 // #include "Interface/Image.h"
@@ -18,7 +19,8 @@ public:
     enum class ViewportMode {
         Demo1 = 0,
         Rays2D = 1,
-        Simulation3D = 2
+        Simulation3D = 2,
+        HardwareRayTracing = 3
     };
     void Init();
     void Init(bool headless);
@@ -44,6 +46,7 @@ public:
 
     ViewportMode GetSelectedViewport() const { return selectedViewport; }
     void SetSelectedViewport(ViewportMode mode) { selectedViewport = mode; }
+    RayTracingRenderer* GetRayTracingRenderer() const { return m_rayTracingRenderer.get(); }
     BlackHoleRenderer* GetBlackHoleRenderer() const { return blackHoleRenderer.get(); }
 
     GravityGridRenderer* GetGravityGridRenderer() const { return m_GravityGridRenderer.get(); }
@@ -95,6 +98,7 @@ private:
     void RenderDemo1(Scene* scene, vk::CommandBuffer cmd);
     void Render2DRays(Scene* scene, vk::CommandBuffer cmd);
     void Render3DSimulation(Scene *scene, vk::CommandBuffer cmd);
+    void RenderHardwareRayTracing(Scene *scene, vk::CommandBuffer cmd);
     void RenderMeshes(Scene* scene, vk::CommandBuffer cmd);
     void RenderSpheres(Scene * scene, vk::CommandBuffer cmd);
     std::shared_ptr<GLTFMesh> GetOrLoadMesh(const std::string& path);
@@ -106,6 +110,7 @@ private:
     int m_SphereIndexCount = 0;
 
     std::unique_ptr<BlackHoleRenderer> blackHoleRenderer;
+    std::unique_ptr<RayTracingRenderer> m_rayTracingRenderer;
     std::unique_ptr<GravityGridRenderer> m_GravityGridRenderer;
     std::unique_ptr<ObjectPathsRenderer> m_ObjectPathsRenderer;
     std::unique_ptr<PhysicsDebugRenderer> m_physicsDebugRenderer;

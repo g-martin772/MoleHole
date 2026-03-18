@@ -227,7 +227,7 @@ void VulkanImage::TransitionLayout(
             barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
             break;
         case vk::ImageLayout::eGeneral:
-            barrier.srcAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite;
+            barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
             break;
         default:
             barrier.srcAccessMask = {};
@@ -254,7 +254,7 @@ void VulkanImage::TransitionLayout(
             barrier.dstAccessMask = {};
             break;
         case vk::ImageLayout::eGeneral:
-            barrier.dstAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite;
+            barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
             break;
         default:
             barrier.dstAccessMask = {};
@@ -297,7 +297,7 @@ void VulkanImage::TransitionLayout(
         case vk::ImageLayout::eTransferSrcOptimal: barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead; break;
         case vk::ImageLayout::eTransferDstOptimal: barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite; break;
         case vk::ImageLayout::eShaderReadOnlyOptimal: barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead; break;
-        case vk::ImageLayout::eGeneral: barrier.srcAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite; break;
+        case vk::ImageLayout::eGeneral: barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite; break;
         default: barrier.srcAccessMask = {}; break;
     }
 
@@ -308,7 +308,7 @@ void VulkanImage::TransitionLayout(
         case vk::ImageLayout::eDepthStencilAttachmentOptimal: barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite; break;
         case vk::ImageLayout::eShaderReadOnlyOptimal: barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead; break;
         case vk::ImageLayout::ePresentSrcKHR: barrier.dstAccessMask = {}; break;
-        case vk::ImageLayout::eGeneral: barrier.dstAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite; break;
+        case vk::ImageLayout::eGeneral: barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite; break;
         default: barrier.dstAccessMask = {}; break;
     }
 

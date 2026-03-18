@@ -1,0 +1,235 @@
+#version 460
+#extension GL_EXT_ray_tracing : require
+
+layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
+layout(binding = 1, set = 0, rgba32f) uniform image2D image;
+layout(binding = 2, set = 0) uniform CameraProperties 
+{
+    mat4 viewInverse;
+    mat4 projInverse;
+    vec4 blackHoles[8]; // xyz = pos, w = mass (geom units)
+    vec4 blackHoleSpins[8]; // xyz = axis * magnitude, w = magnitude
+    
+    vec4 spheres[8];      // xyz = pos, w = radius
+    vec4 sphereColors[8]; // rgb = color
+    
+    int numBlackHoles;
+    int numSpheres;
+    int mode;
+    int maxSteps;
+    float stepSize;
+} cam;
+
+layout(location = 0) rayPayloadEXT vec4 hitValue;
+
+// -------------------------------------------------------------------------
+// Physics Helper: Calculate Geodesic Acceleration (Approximation)
+// -------------------------------------------------------------------------
+// Uses a Post-Newtonian expansion + Schwarzschild effective potential
+// to approximate the acceleration of a photon in the Kerr metric.
+// 
+// Approximations:
+// 1. Superposition: Accelerations from multiple black holes are summed linearly.
+// 2. Metric: Uses Schwarzschild effective potential for the dominant monopole term.
+// 3. Spin: Adds a Gravito-Magnetic (Lense-Thirring) force term for frame dragging.
+// 4. Integrator: Symplectic Euler / RK2 (depending on step).
+// -------------------------------------------------------------------------
+vec3 CalculateAcceleration(vec3 pos, vec3 vel, vec3 bhPos, float M, vec3 J) {
+    vec3 rVec = pos - bhPos;
+    float r2 = dot(rVec, rVec);
+    float r = sqrt(r2);
+    vec3 n = rVec / r;
+    
+    // 1. Schwarzschild Acceleration (Effective Potential for Null Geodesics)
+    // Newtonian term: -M/r^2 (but photons don't feel Newtonian gravity directly in this form)
+    // Binet equation term: -1.5 * Rs * h^2 / r^4
+    // Correct relativistic force for photon: f = -3GM/c^2 * (L/r)^2 * 1/r^2 * \hat{r}
+    // In Geom Units (G=c=1): a = -3 * M * (L/r)^2 / r^2
+    
+    vec3 Lvec = cross(rVec, vel); // Angular momentum per unit mass (approx)
+    float L2 = dot(Lvec, Lvec);
+    
+    // This term bends light. For pure Newton, light goes straight (a=0).
+    // The "1.5 * Rs" factor comes from 3M. Rs=2M -> 1.5*Rs = 3M.
+    vec3 a_sch = -3.0 * M * L2 / (r2 * r2 * r) * rVec;
+    
+    // 2. Kerr Spin (Frame Dragging / Lense-Thirring)
+    // Gravito-magnetic force: F_gm = v x B_g
+    // B_g = curl(A_g) ~ curl(J x r / r^3)
+    // This causes the ray to rotate in the direction of spin.
+    // Effect scales as J/r^3.
+    // Simplified interaction term:
+    vec3 a_spin = vec3(0.0);
+    float Jmag = length(J);
+    if (Jmag > 0.001) {
+        // v x (J x r) / r^5 approx
+        vec3 Jxr = cross(J, rVec);
+        a_spin = 2.0 * cross(vel, Jxr) / (r2 * r2 * r); 
+    }
+    
+    return a_sch + a_spin;
+}
+
+bool CheckSpheres(vec3 ro, vec3 rd, float maxDist, out vec3 color, out float tHit) {
+    float tMin = maxDist;
+    int hitIdx = -1;
+    
+    for (int i = 0; i < cam.numSpheres; i++) {
+        vec3 center = cam.spheres[i].xyz;
+        float radius = cam.spheres[i].w;
+        
+        vec3 oc = ro - center;
+        float b = dot(oc, rd);
+        float c = dot(oc, oc) - radius*radius;
+        float h = b*b - c;
+        if (h > 0.0) {
+            float t = -b - sqrt(h);
+            if (t > 0.001 && t < tMin) {
+                tMin = t;
+                hitIdx = i;
+            }
+        }
+    }
+    
+    if (hitIdx >= 0) {
+        color = cam.sphereColors[hitIdx].rgb;
+        // Simple lighting (Ambient + Diffuse)
+        vec3 hitPos = ro + rd * tMin;
+        vec3 normal = normalize(hitPos - cam.spheres[hitIdx].xyz);
+        vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+        float diffuse = max(0.0, dot(normal, lightDir));
+        color *= (0.2 + 0.8 * diffuse);
+        tHit = tMin;
+        return true;
+    }
+    return false;
+}
+
+void main() 
+{
+    const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
+    const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);
+    vec2 d = inUV * 2.0 - 1.0;
+
+    vec4 origin = cam.viewInverse * vec4(0,0,0,1);
+    vec4 target = cam.projInverse * vec4(d.x, d.y, 1, 1);
+    vec4 direction = cam.viewInverse * vec4(normalize(target.xyz), 0);
+    vec3 rayDir = normalize(direction.xyz);
+    vec3 rayOrigin = origin.xyz;
+
+    uint rayFlags = gl_RayFlagsOpaqueEXT;
+    uint cullMask = 0xff;
+    float tmin = 0.001;
+    float tmax = 10000.0;
+
+    if (cam.mode == 0) {
+        // Euclidean Mode
+        traceRayEXT(topLevelAS, rayFlags, cullMask, 0, 0, 0, rayOrigin, tmin, rayDir, tmax, 0);
+        
+        float tMesh = (hitValue.w >= 0.0) ? hitValue.w : 1e10;
+        
+        vec3 sphereColor;
+        float tSphere;
+        if (CheckSpheres(rayOrigin, rayDir, tMesh, sphereColor, tSphere)) {
+             hitValue.rgb = sphereColor;
+             hitValue.w = tSphere;
+        }
+        
+        vec3 color = hitValue.rgb;
+        if (hitValue.w < 0.0) {
+             color = mix(vec3(0.05, 0.05, 0.1), vec3(0.1, 0.1, 0.2), rayDir.y * 0.5 + 0.5);
+        }
+        imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 1.0));
+    } else {
+        // Kerr/Schwarzschild Mode
+        vec3 currentPos = origin.xyz; // Use true world origin
+        vec3 currentDir = rayDir;
+        
+        // Loop state
+        bool hit = false;
+        vec3 finalColor = vec3(0.0);
+
+        for (int i = 0; i < cam.maxSteps; i++) {
+            // 1. Calculate Acceleration and MinDist
+            vec3 acc = vec3(0.0);
+            float minDist = 1e20;
+            
+                // Loop over black holes for force calculation
+                for (int k = 0; k < cam.numBlackHoles; k++) {
+                    vec3 bhPos = cam.blackHoles[k].xyz;
+                    float mass = cam.blackHoles[k].w;
+                    vec3 spin = cam.blackHoleSpins[k].xyz;
+
+                    acc += CalculateAcceleration(currentPos, currentDir, bhPos, mass, spin);
+                    
+                    float d = distance(currentPos, bhPos);
+                    if (d < minDist) minDist = d;
+                    
+                    // Event Horizon check (approx 2M for Schwarzschild)
+                    if (d < 2.0 * mass) {
+                        finalColor = vec3(0.0); // Black hole
+                        hit = true;
+                        break;
+                    }
+                }
+            
+            if (hit) break;
+
+            // 2. Step Size Adaptive
+            float step = cam.stepSize * max(0.1, minDist * 0.1); 
+            
+            // 3. Integration (Symplectic Euler)
+            vec3 nextDir = normalize(currentDir + acc * step);
+            vec3 nextPos = currentPos + currentDir * step;
+            
+            // 4. Trace Segment for Geometry
+            // We trace a ray segment from currentPos to nextPos
+            float segmentLen = distance(currentPos, nextPos);
+            
+            // Reset payload
+            hitValue.w = -1.0; 
+            
+            // Trace against Scene Geometry (TLAS)
+            // tmin=0, tmax=segmentLen
+            traceRayEXT(topLevelAS, rayFlags, cullMask, 0, 0, 0, currentPos, 0.0, currentDir, segmentLen, 0);
+            
+            // Check intersection
+            if (hitValue.w >= 0.0) {
+                finalColor = hitValue.rgb;
+                hit = true;
+                break;
+            }
+            
+            // Check Spheres
+            vec3 sphereColor;
+            float tSphere;
+            // CheckSpheres returns global t, but we need to check if it's within our segment [0, segmentLen]
+            // However, CheckSpheres is designed for global ray. 
+            // We can treat it as local segment check by passing segmentLen as maxDist.
+            if (CheckSpheres(currentPos, currentDir, segmentLen, sphereColor, tSphere)) {
+                finalColor = sphereColor;
+                hit = true;
+                break;
+            }
+            
+            // Advance
+            currentPos = nextPos;
+            currentDir = nextDir;
+            
+            if (minDist > 1000.0) {
+                // Escaped gravity well
+                vec3 skyColor = mix(vec3(0.05, 0.05, 0.1), vec3(0.1, 0.1, 0.2), currentDir.y * 0.5 + 0.5);
+                finalColor = skyColor; // TODO: Sample Skybox Texture
+                hit = true;
+                break; 
+            }
+        }
+        
+        if (!hit) {
+             // Max steps reached, background
+             finalColor = mix(vec3(0.05, 0.05, 0.1), vec3(0.1, 0.1, 0.2), currentDir.y * 0.5 + 0.5);
+        }
+        
+        imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
+    }
+}

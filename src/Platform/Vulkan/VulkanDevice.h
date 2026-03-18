@@ -34,11 +34,14 @@ public:
     vk::Queue GetSparseQueue() const { return m_Queues[m_SparseIndex]; }
     vk::Queue GetPresentQueue() const { return m_Queues[m_PresentIndex]; }
 
+    const vk::detail::DispatchLoaderDynamic& GetDispatcher() const { return m_Dispatcher; }
+
 private:
     DeviceRequirements m_Requirements = {};
     VulkanInstance *m_Instance = nullptr;
     vk::Device m_Device;
     vk::PhysicalDevice m_PhysicalDevice;
+    vk::detail::DispatchLoaderDynamic m_Dispatcher;
     VulkanQueueIndices m_QueueIndices;
     std::vector<vk::Queue> m_Queues;
     uint32_t m_GraphicsIndex = 0, m_TransferIndex = 0, m_ComputeIndex = 0,

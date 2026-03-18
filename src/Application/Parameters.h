@@ -79,6 +79,11 @@ namespace Params {
     inline constexpr ParameterHandle UIDefaultExportPath("UI.DefaultExportPath");
     inline constexpr ParameterHandle UIViewportHUDEnabled("UI.ViewportHUDEnabled");
 
+    // Video Parameters
+    inline constexpr ParameterHandle VideoRayTracingMode("Video.RayTracingMode");
+    inline constexpr ParameterHandle VideoRayMarchSteps("Video.RayMarchSteps");
+    inline constexpr ParameterHandle VideoRayMarchStepSize("Video.RayMarchStepSize");
+
     // Config
     inline constexpr ParameterHandle AdditionalObjectClassSources("Config.AdditionalObjectClassSources");
     inline constexpr ParameterHandle AdditionalSceneObjectDefinitionSources("Config.AdditionalSceneObjectDefinitionSources");

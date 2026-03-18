@@ -48,6 +48,7 @@ struct CommonUBO {
     float rayStepSize;
     int maxRaySteps;
     float adaptiveStepRate;
+    int rayTracingMode;
     
     // Third Person
     int enableThirdPerson;
@@ -124,16 +125,12 @@ void BlackHoleRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPass,
     // Create initial mesh buffers
     CreateMeshBuffers();
 
-    // Generate and upload LUT textures
+    // Generate LUT textures (Images only)
     GenerateBlackbodyLUT();
     GenerateAccelerationLUT();
     GenerateHRDiagramLUT();
     GenerateKerrGeodesicLUTs();
     
-    std::string bgName = Application::Params().Get<std::string>(Params::AppBackgroundImage, "space.hdr");
-    // LoadSkybox will search for the file
-    LoadSkybox(bgName);
-
     // Load shaders
     m_computeShader = std::make_unique<VulkanShader>(
         device,
@@ -206,24 +203,48 @@ void BlackHoleRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPass,
         computeBindings.data()
     };
 
-    m_ComputeDescriptorSetLayout = device->GetDevice().createDescriptorSetLayout(computeLayoutInfo);
+    try {
+        m_ComputeDescriptorSetLayout = device->GetDevice().createDescriptorSetLayout(computeLayoutInfo);
+    } catch (const vk::SystemError& err) {
+        spdlog::error("Failed to create Compute Descriptor Set Layout: {}", err.what());
+        return;
+    }
 
     // Create descriptor pool
     std::vector<vk::DescriptorPoolSize> poolSizes;
-    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1});
-    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 2}); // Common + Display
-    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 8}); // Skybox + 7 LUTs
-    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 1}); // Mesh Data
-    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 10}); // 8 Compute + 2 Display
+    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 100});
+    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 200}); // Common + Display
+    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 800}); // Skybox + 7 LUTs
+    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 100}); // Mesh Data
+    poolSizes.push_back(vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 1000}); // 8 Compute + 2 Display
 
     vk::DescriptorPoolCreateInfo poolInfo{
-        {},                                     // flags
-        2,                                      // maxSets (compute + display)
+        vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, // Allow freeing
+        1000,                                   // maxSets (compute + display)
         static_cast<uint32_t>(poolSizes.size()),
         poolSizes.data()
     };
 
-    m_ComputeDescriptorPool = device->GetDevice().createDescriptorPool(poolInfo);
+    try {
+        m_ComputeDescriptorPool = device->GetDevice().createDescriptorPool(poolInfo);
+    } catch (const vk::SystemError& err) {
+        spdlog::error("Failed to create BlackHoleRenderer Descriptor Pool: {}", err.what());
+        return;
+    }
+
+    if (!m_ComputeDescriptorPool || !m_ComputeDescriptorSetLayout) {
+        spdlog::error("BlackHoleRenderer: Descriptor Pool or Layout is null, aborting init");
+        return;
+    }
+
+    if (!m_ComputeDescriptorPool) {
+         spdlog::error("BlackHoleRenderer: m_ComputeDescriptorPool is null handle!");
+         return;
+    }
+    if (!m_ComputeDescriptorSetLayout) {
+         spdlog::error("BlackHoleRenderer: m_ComputeDescriptorSetLayout is null handle!");
+         return;
+    }
 
     // Allocate compute descriptor set
     vk::DescriptorSetAllocateInfo allocInfo{
@@ -232,8 +253,18 @@ void BlackHoleRenderer::Init(VulkanDevice* device, VulkanRenderPass* renderPass,
         &m_ComputeDescriptorSetLayout
     };
 
-    m_ComputeDescriptorSet = device->GetDevice().allocateDescriptorSets(allocInfo)[0];
-spdlog::info("BlackHoleRenderer::Init - Allocated Compute Descriptor Set: {}", (void*)m_ComputeDescriptorSet);
+    try {
+        auto sets = device->GetDevice().allocateDescriptorSets(allocInfo);
+        if (sets.empty()) {
+            spdlog::error("BlackHoleRenderer: allocateDescriptorSets returned empty vector");
+            return;
+        }
+        m_ComputeDescriptorSet = sets[0];
+        spdlog::info("BlackHoleRenderer::Init - Allocated Compute Descriptor Set: {}", (void*)m_ComputeDescriptorSet);
+    } catch (const vk::SystemError& err) {
+        spdlog::error("Failed to allocate Compute Descriptor Set: {}", err.what());
+        return;
+    }
 
     // Create common UBO
     m_CommonUBO = std::make_unique<VulkanBuffer>();
@@ -282,13 +313,28 @@ spdlog::info("BlackHoleRenderer::Init - Allocated Compute Descriptor Set: {}", (
     vk::DescriptorSetLayoutCreateInfo displayLayoutInfo{
         {}, static_cast<uint32_t>(displayBindings.size()), displayBindings.data()
     };
-    m_DisplayDescriptorSetLayout = device->GetDevice().createDescriptorSetLayout(displayLayoutInfo);
+    try {
+        m_DisplayDescriptorSetLayout = device->GetDevice().createDescriptorSetLayout(displayLayoutInfo);
+    } catch (const vk::SystemError& err) {
+        spdlog::error("Failed to create Display Descriptor Set Layout: {}", err.what());
+        return;
+    }
+
+    if (!m_DisplayDescriptorSetLayout) {
+        spdlog::error("BlackHoleRenderer: Display Descriptor Layout is null");
+        return;
+    }
 
     // Allocate Set
     vk::DescriptorSetAllocateInfo displayAllocInfo{
         m_ComputeDescriptorPool, 1, &m_DisplayDescriptorSetLayout
     };
-    m_DisplayDescriptorSet = device->GetDevice().allocateDescriptorSets(displayAllocInfo)[0];
+    try {
+        m_DisplayDescriptorSet = device->GetDevice().allocateDescriptorSets(displayAllocInfo)[0];
+    } catch (const vk::SystemError& err) {
+        spdlog::error("Failed to allocate Display Descriptor Set: {}", err.what());
+        return;
+    }
 
     // Create Pipeline
     m_displayPipeline = std::make_unique<VulkanPipeline>();
@@ -311,9 +357,14 @@ spdlog::info("BlackHoleRenderer::Init - Allocated Compute Descriptor Set: {}", (
     CreateMeshBuffers();
 
     UpdateDisplayDescriptorSet();
-    UpdateComputeDescriptorSet();
+    // UpdateComputeDescriptorSet(); // Removed: Skybox not loaded yet. LoadSkybox will call it.
+
+    // Load Skybox after descriptors are ready
+    std::string bgName = Application::Params().Get<std::string>(Params::AppBackgroundImage, "space.hdr");
+    LoadSkybox(bgName);
 
     spdlog::info("BlackHoleRenderer::Init - Initialization complete");
+    m_Initialized = true;
 }
 
 // ===========================================================================================
@@ -636,11 +687,42 @@ void BlackHoleRenderer::GenerateKerrGeodesicLUTs() {
 // Rendering
 // ===========================================================================================
 
+void BlackHoleRenderer::ProcessPendingResources() {
+    // Decrement frames for all pending resources
+    for (auto& resource : m_pendingResources) {
+        if (resource.framesUntilDeletion > 0) {
+            resource.framesUntilDeletion--;
+        }
+    }
+
+    // Remove resources that are ready for deletion
+    while (!m_pendingResources.empty() && m_pendingResources.front().framesUntilDeletion == 0) {
+        auto& resource = m_pendingResources.front();
+        
+        // Acceleration structure needs explicit destroy if we manage it raw (but we don't have one here yet? 
+        // Actually Scene object might have one but we don't store it here directly except via potential future changes)
+        if (resource.accelerationStructure) {
+            m_Device->GetDevice().destroyAccelerationStructureKHR(resource.accelerationStructure);
+        }
+
+        // Free descriptor sets
+        if (!resource.descriptorSets.empty()) {
+            m_Device->GetDevice().freeDescriptorSets(m_ComputeDescriptorPool, resource.descriptorSets);
+        }
+
+        // Buffers and Images (shared_ptr/unique_ptr) will be destroyed automatically when popped
+        m_pendingResources.pop_front();
+    }
+}
+
 void BlackHoleRenderer::Render(const Scene& scene,
                               const std::unordered_map<std::string, std::shared_ptr<GLTFMesh>>& meshCache,
                               const Camera& camera,
                               float time,
                               vk::CommandBuffer cmd) {
+    if (!m_Initialized) return;
+    ProcessPendingResources();
+
     if (!m_computePipeline || !m_computePipeline->GetPipeline() || !m_computeTexture) {
         // Only warn once per second to avoid flooding logs
         static float lastWarnTime = 0.0f;
@@ -684,6 +766,7 @@ void BlackHoleRenderer::Render(const Scene& scene,
 }
 
 void BlackHoleRenderer::PrepareDisplay(vk::CommandBuffer cmd) {
+    if (!m_Initialized) return;
     if (!m_computeTexture || !m_computePipeline) return;
 
     // Transition compute texture to shader read (must be outside render pass)
@@ -697,7 +780,25 @@ void BlackHoleRenderer::PrepareDisplay(vk::CommandBuffer cmd) {
 }
 
 void BlackHoleRenderer::UpdateDisplayDescriptorSet() {
-    if (!m_DisplayDescriptorSet || !m_computeTexture || !m_DisplayUBO) return;
+    if (!m_computeTexture || !m_DisplayUBO || !m_ComputeDescriptorPool || !m_DisplayDescriptorSetLayout) {
+        spdlog::debug("BlackHoleRenderer::UpdateDisplayDescriptorSet: Skipping update (not ready)");
+        return;
+    }
+
+    vk::DescriptorSet oldSet = m_DisplayDescriptorSet;
+    vk::DescriptorSetAllocateInfo allocInfo{ m_ComputeDescriptorPool, 1, &m_DisplayDescriptorSetLayout };
+    try {
+        m_DisplayDescriptorSet = m_Device->GetDevice().allocateDescriptorSets(allocInfo)[0];
+    } catch (const std::exception& e) {
+        spdlog::error("UpdateDisplayDescriptorSet: Failed to allocate descriptor set: {}", e.what());
+        return;
+    }
+    if (oldSet) {
+        PendingResource pending;
+        pending.descriptorSets.push_back(oldSet);
+        pending.framesUntilDeletion = 3;
+        m_pendingResources.push_back(std::move(pending));
+    }
 
     // 1. Image
     vk::DescriptorImageInfo imageInfo{
@@ -787,9 +888,34 @@ void BlackHoleRenderer::CreateFallbackSkybox() {
 }
 
 void BlackHoleRenderer::UpdateComputeDescriptorSet() {
-    if (!m_ComputeDescriptorSet) {
-        spdlog::warn("UpdateComputeDescriptorSet: Descriptor Set not yet allocated");
+    if (!m_ComputeDescriptorPool || !m_ComputeDescriptorSetLayout || !m_CommonUBO) {
+        spdlog::debug("BlackHoleRenderer::UpdateComputeDescriptorSet: Skipping update (not ready)");
         return;
+    }
+
+    if (!m_ComputeDescriptorPool) {
+        spdlog::error("BlackHoleRenderer::UpdateComputeDescriptorSet: Pool is null");
+        return;
+    }
+
+    vk::DescriptorSet oldSet = m_ComputeDescriptorSet;
+    vk::DescriptorSetAllocateInfo allocInfo{ m_ComputeDescriptorPool, 1, &m_ComputeDescriptorSetLayout };
+    try {
+        auto sets = m_Device->GetDevice().allocateDescriptorSets(allocInfo);
+        if (sets.empty()) {
+            spdlog::error("BlackHoleRenderer::UpdateComputeDescriptorSet: allocateDescriptorSets returned empty");
+            return;
+        }
+        m_ComputeDescriptorSet = sets[0];
+    } catch (const std::exception& e) {
+        spdlog::error("Failed to allocate descriptor set: {}", e.what());
+        return;
+    }
+    if (oldSet) {
+        PendingResource pending;
+        pending.descriptorSets.push_back(oldSet);
+        pending.framesUntilDeletion = 3;
+        m_pendingResources.push_back(std::move(pending));
     }
 
     std::vector<vk::WriteDescriptorSet> writes;
@@ -858,6 +984,7 @@ void BlackHoleRenderer::UpdateComputeDescriptorSet() {
 }
 
 void BlackHoleRenderer::RenderToScreen(vk::CommandBuffer cmd) {
+    if (!m_Initialized) return;
     if (!m_displayPipeline) return;
 
     // Transition handled in PrepareDisplay()
@@ -930,9 +1057,10 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene,
     ubo.accretionDiskEnabled = 1;
     ubo.gravitationalLensingEnabled = 1;
     ubo.cubeSize = 1.0f;
-    ubo.rayStepSize = 0.3f;
-    ubo.maxRaySteps = 1000;
+    ubo.rayStepSize = Application::Params().Get(Params::VideoRayMarchStepSize, 0.05f);
+    ubo.maxRaySteps = Application::Params().Get(Params::VideoRayMarchSteps, 1000);
     ubo.adaptiveStepRate = 0.1f;
+    ubo.rayTracingMode = Application::Params().Get(Params::VideoRayTracingMode, 1);
     ubo.enableThirdPerson = 0;
     ubo.thirdPersonDistance = 5.0f;
     ubo.thirdPersonHeight = 2.0f;
@@ -1293,17 +1421,26 @@ void BlackHoleRenderer::Resize(int width, int height) {
 
     // Recreate compute texture
     if (m_computeTexture) {
-        m_computeTexture->Destroy();
+        PendingResource pending;
+        pending.image = m_computeTexture;
+        pending.framesUntilDeletion = 3;
+        m_pendingResources.push_back(std::move(pending));
     }
     CreateComputeTexture();
 
     // Recreate bloom textures
     if (m_bloomBrightTexture) {
-        m_bloomBrightTexture->Destroy();
+        PendingResource pending;
+        pending.image = m_bloomBrightTexture;
+        pending.framesUntilDeletion = 3;
+        m_pendingResources.push_back(std::move(pending));
     }
     for (int i = 0; i < 2; i++) {
         if (m_bloomBlurTexture[i]) {
-            m_bloomBlurTexture[i]->Destroy();
+            PendingResource pending;
+            pending.image = m_bloomBlurTexture[i];
+            pending.framesUntilDeletion = 3;
+            m_pendingResources.push_back(std::move(pending));
         }
     }
     CreateBloomTextures();

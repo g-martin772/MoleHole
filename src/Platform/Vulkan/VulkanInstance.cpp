@@ -32,6 +32,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 }
 
 void VulkanInstance::Init() {
+    // Initialize the default dispatcher with the dynamic loader
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
+
     vk::ApplicationInfo appInfo;
     appInfo.pApplicationName = "MoleHole";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -102,6 +105,9 @@ void VulkanInstance::Init() {
         exit(1); // ;)
     }
     spdlog::trace("Created vulkan instance: successful");
+
+    // Initialize the default dispatcher with the instance
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(m_Instance);
 
     m_DynamicInstanceDispatcher = vk::detail::DispatchLoaderDynamic(m_Instance, vkGetInstanceProcAddr);
 

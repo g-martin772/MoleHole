@@ -70,6 +70,8 @@ public:
     };
     PhysicsGeometry GetPhysicsGeometry() const;
 
+    const std::vector<GLTFPrimitive>& GetPrimitives() const { return m_primitives; }
+
 private:
     void ProcessNode(const tinygltf::Model& model, const tinygltf::Node& node, const glm::mat4& parentTransform);
     void ProcessMesh(const tinygltf::Model& model, int meshIndex, const glm::mat4& transform);

@@ -52,6 +52,11 @@ void Renderer::Init(bool headless) {
     m_VulkanApi = std::make_unique<VulkanApi>();
     m_VulkanApi->Init();
 
+    if (!m_VulkanApi->GetDevice().GetDevice()) {
+        spdlog::error("VulkanApi failed to initialize (Device is null). Aborting Renderer initialization.");
+        return;
+    }
+
     blackHoleRenderer = std::make_unique<BlackHoleRenderer>();
     blackHoleRenderer->Init(&m_VulkanApi->GetDevice(), &m_VulkanApi->GetMainRenderPass(), props.width, props.height);
 
@@ -64,6 +69,9 @@ void Renderer::Init(bool headless) {
     m_physicsDebugRenderer = std::make_unique<PhysicsDebugRenderer>();
     m_physicsDebugRenderer->Init(&m_VulkanApi->GetDevice(), &m_VulkanApi->GetMainRenderPass());
 
+    m_rayTracingRenderer = std::make_unique<RayTracingRenderer>();
+    m_rayTracingRenderer->Init(&m_VulkanApi->GetDevice(), props.width, props.height);
+
     // Create Descriptor Pool
     vk::DescriptorPoolSize poolSizes[] = {
         { vk::DescriptorType::eUniformBuffer, 10 },
@@ -73,7 +81,12 @@ void Renderer::Init(bool headless) {
     poolInfo.poolSizeCount = 2;
     poolInfo.pPoolSizes = poolSizes;
     poolInfo.maxSets = 10;
-    m_DescriptorPool = m_VulkanApi->GetDevice().GetDevice().createDescriptorPool(poolInfo);
+    try {
+        m_DescriptorPool = m_VulkanApi->GetDevice().GetDevice().createDescriptorPool(poolInfo);
+    } catch (const vk::SystemError& err) {
+        spdlog::error("Failed to create Renderer DescriptorPool: {}", err.what());
+        return;
+    }
 
     // Create Scene UBO
     VulkanBufferSpec uboSpec{};
@@ -177,6 +190,8 @@ void Renderer::Shutdown() {
         blackHoleRenderer.reset();
         if (m_GravityGridRenderer) m_GravityGridRenderer->Shutdown();
         m_GravityGridRenderer.reset();
+        if (m_rayTracingRenderer) m_rayTracingRenderer->Shutdown();
+        m_rayTracingRenderer.reset();
         m_ObjectPathsRenderer.reset();
         m_physicsDebugRenderer->Shutdown();
         m_physicsDebugRenderer.reset();
@@ -242,9 +257,9 @@ void Renderer::RenderScene(Scene *scene) {
     }
     
     // ImGui Viewport logic
-    int width, height;
-    m_window->GetFramebufferSize(width, height);
-    SetViewportBounds(0, 0, width, height);
+    // int width, height;
+    // m_window->GetFramebufferSize(width, height);
+    // SetViewportBounds(0, 0, width, height);
 
     input->Update();
     UpdateCamera(ImGui::GetIO().DeltaTime);
@@ -291,6 +306,33 @@ void Renderer::RenderScene(Scene *scene) {
         } else if (selectedViewport == ViewportMode::Rays2D) {
              m_VulkanApi->BeginRenderPass();
              Render2DRays(scene, cmd);
+        } else if (selectedViewport == ViewportMode::HardwareRayTracing) {
+             if (m_rayTracingRenderer) {
+                 // Ensure renderer is resized to the viewport size (set by ViewportWindow)
+                 if (m_viewportWidth > 0 && m_viewportHeight > 0) {
+                     m_rayTracingRenderer->Resize((int)m_viewportWidth, (int)m_viewportHeight);
+                 }
+                 // Trace Rays (Updates image, transitions to ShaderReadOnlyOptimal)
+                 m_rayTracingRenderer->Render(*scene, *camera, m_meshCache, cmd);
+                 
+                 // Begin Render Pass for UI and Final Draw
+                 m_VulkanApi->BeginRenderPass();
+                 
+                 // Draw the raytraced image as a full-screen quad
+                 // We reuse the mesh pipeline for now, using a unit plane/quad mesh if available
+                 // OR we should have a dedicated quad pipeline. 
+                 // For now, let's try to use the ImGui descriptor which is already created for UI
+                 // But we want to draw it to the main viewport.
+                 // Actually, the ViewportWindow in UI handles drawing the image via ImGui::Image
+                 // So we DON'T need to draw a quad here if we are using the UI viewport!
+                 // The viewport window gets the texture ID from m_rayTracingRenderer->GetImGuiDescriptorSet()
+                 
+                 // HOWEVER, if we are in "Game Mode" or non-UI mode, we might need to draw it.
+                 // The current architecture seems to rely on ImGui for the viewport.
+                 // Let's check where the viewport texture is used.
+             } else {
+                 m_VulkanApi->BeginRenderPass();
+             }
         } else {
              // Fallback if no viewport mode selected
              m_VulkanApi->BeginRenderPass();
@@ -346,7 +388,10 @@ void Renderer::DrawCircle(const glm::vec2& pos, float radius, const glm::vec3& c
 void Renderer::DrawSphere(const glm::vec3& pos, float radius, const glm::vec3& color) {}
 void Renderer::HandleMousePicking(Scene* scene) {}
 glm::vec3 Renderer::ScreenToWorldRay(float mouseX, float mouseY, glm::vec3& rayOrigin, glm::vec3& rayDirection) { return glm::vec3(0); }
-void Renderer::SetViewportBounds(float x, float y, float width, float height) { m_viewportX = x; m_viewportY = y; m_viewportWidth = width; m_viewportHeight = height; }
+void Renderer::SetViewportBounds(float x, float y, float width, float height) { 
+    m_viewportX = x; m_viewportY = y; m_viewportWidth = width; m_viewportHeight = height;
+    // Defer resize to RenderScene to ensure synchronization
+}
 void Renderer::RenderToFramebuffer(unsigned int fbo, int width, int height, Scene* scene, Camera* cam) {}
 void Renderer::SetPhysicsDebugEnabled(bool enabled) {
     if (m_physicsDebugRenderer) m_physicsDebugRenderer->SetEnabled(enabled);

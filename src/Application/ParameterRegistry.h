@@ -56,7 +56,8 @@ enum class ParameterGroup {
     Simulation,
     Application,
     Export,
-    GeneralRelativity
+    GeneralRelativity,
+    Video
 };
 
 enum class ParameterType {

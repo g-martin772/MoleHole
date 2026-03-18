@@ -38,6 +38,7 @@ set_property(TARGET MoleHole PROPERTY CXX_STANDARD 23)
 set_property(TARGET MoleHole PROPERTY CXX_STANDARD_REQUIRED ON)
 
 target_compile_definitions(MoleHole PRIVATE
+    VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
     $<$<CONFIG:Debug>:_DEBUG>
     $<$<CONFIG:Release>:NDEBUG>
     $<$<CONFIG:RelWithDebInfo>:NDEBUG>

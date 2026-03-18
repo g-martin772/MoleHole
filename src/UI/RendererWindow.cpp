@@ -81,6 +81,32 @@ void Render(UI* ui, float fps) {
     ImGui::PopStyleColor();
 
     ImGui::Spacing();
+    
+    auto& renderer = Application::GetRenderer();
+
+    RenderSectionHeader("VIEWPORT SETTINGS");
+    
+    // Viewport Mode Selector
+    const char* viewportModes[] = {
+        "Demo 1 (Legacy)",
+        "2D Rays",
+        "3D Simulation (Raster + Compute)",
+        "Hardware Ray Tracing (Vulkan RT)"
+    };
+    
+    int currentMode = static_cast<int>(renderer.GetSelectedViewport());
+    if (ImGui::Combo("Viewport Mode", &currentMode, viewportModes, IM_ARRAYSIZE(viewportModes))) {
+        renderer.SetSelectedViewport(static_cast<Renderer::ViewportMode>(currentMode));
+        ui->MarkConfigDirty();
+    }
+    
+    if (renderer.GetSelectedViewport() == Renderer::ViewportMode::HardwareRayTracing) {
+        if (auto rt = renderer.GetRayTracingRenderer()) {
+            rt->RenderUI();
+        }
+    }
+    
+    ImGui::Spacing();
 
     bool vsync = Application::Params().Get(Params::WindowVSync, true);
     if (ImGui::Checkbox("VSync", &vsync)) {
@@ -89,8 +115,6 @@ void Render(UI* ui, float fps) {
     }
 
     RenderSectionHeader("SYSTEM INFO");
-
-    auto& renderer = Application::GetRenderer();
 
     if (ImGui::BeginTable("SystemInfo", 2, ImGuiTableFlags_None)) {
         ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 80.0f);

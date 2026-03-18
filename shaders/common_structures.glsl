@@ -31,6 +31,7 @@ layout(binding = 1) uniform CommonUBO {
     float u_rayStepSize;
     int u_maxRaySteps;
     float u_adaptiveStepRate;
+    int u_rayTracingMode;
     
     // Third Person
     int u_enableThirdPerson;

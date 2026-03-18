@@ -145,6 +145,26 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
 // Section Ray Marching
 // ------------------------------------------------------------------------------------------------------------
 
+vec3 getAcceleration(vec3 pos, vec3 dir, int bhIndex) {
+    vec3 relativePos = pos - u_blackHolePositions[bhIndex].xyz;
+    // Calculate orbital angular momentum L = r x v
+    vec3 orbitalAngMomentum = cross(relativePos, dir);
+    
+    // Approximation: We use the primary BH's spin for the "local" metric influence
+    vec3 bhAngMomentum = calculateAngularMomentumFromSpin(
+        u_blackHoleSpins[bhIndex].x,
+        u_blackHoleSpinAxes[bhIndex].xyz,
+        u_blackHoleMasses[bhIndex]
+    );
+    // 0.1 factor is an empirical scaling for the frame-dragging effect strength in this approximation
+    vec3 totalAngMomentum = orbitalAngMomentum + bhAngMomentum * 0.1;
+    float angMomSqrd = dot(totalAngMomentum, totalAngMomentum);
+
+    // Note: This uses a precomputed LUT which approximates the Kerr metric acceleration.
+    // It is physically based but pre-baked for performance.
+    return calculateAccelerationLUT(angMomSqrd, relativePos);
+}
+
 vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection) {
     hitEventHorizon = false;
     exitedZone = false;
@@ -160,8 +180,8 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
 
     float mass = u_blackHoleMasses[closestHole];
-    stepSize *= 1.0f * mass;
-    maxSteps *= 1.0f * mass;
+    stepSize *= 1.0f * mass; // Scale step size by mass
+    // maxSteps *= 1.0f * mass; // Don't scale steps, just size
     adaptiveStepRate *= 1.0f * mass;
 
     // volumetric
@@ -189,29 +209,41 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
             return color;
         }
 
-        // Calculate orbital angular momentum
-        vec3 orbitalAngMomentum = cross(relativePos, newDirection);
-        vec3 bhAngMomentum = calculateAngularMomentumFromSpin(
-            u_blackHoleSpins[closestBH],
-            u_blackHoleSpinAxes[closestBH].xyz,
-            u_blackHoleMasses[closestBH]
-        );
-        vec3 totalAngMomentum = orbitalAngMomentum + bhAngMomentum * 0.1;
-        float angMomSqrd = dot(totalAngMomentum, totalAngMomentum);
-
-
         // Adaptive step size
         float currentStepSize = stepSize * min(adaptiveStepRate, max(0.01, distToBH / r_s));
+        
+        vec3 startOrigin = newOrigin;
+        vec3 startDirection = newDirection;
+        vec3 nextOrigin;
+        vec3 nextDirection;
 
         if (u_gravitationalLensingEnabled == 1) {
-            vec3 acceleration = calculateAccelerationLUT(angMomSqrd, relativePos);
-            newDirection += acceleration * currentStepSize;
-            newDirection = normalize(newDirection);
+            // RK4 Integration for physically accurate geodesics
+            vec3 k1_v = getAcceleration(newOrigin, newDirection, closestBH);
+            vec3 k1_x = newDirection;
+
+            vec3 k2_v = getAcceleration(newOrigin + k1_x * currentStepSize * 0.5, newDirection + k1_v * currentStepSize * 0.5, closestBH);
+            vec3 k2_x = newDirection + k1_v * currentStepSize * 0.5;
+
+            vec3 k3_v = getAcceleration(newOrigin + k2_x * currentStepSize * 0.5, newDirection + k2_v * currentStepSize * 0.5, closestBH);
+            vec3 k3_x = newDirection + k2_v * currentStepSize * 0.5;
+
+            vec3 k4_v = getAcceleration(newOrigin + k3_x * currentStepSize, newDirection + k3_v * currentStepSize, closestBH);
+            vec3 k4_x = newDirection + k3_v * currentStepSize;
+
+            vec3 dirDelta = (currentStepSize / 6.0) * (k1_v + 2.0*k2_v + 2.0*k3_v + k4_v);
+            vec3 originDelta = (currentStepSize / 6.0) * (k1_x + 2.0*k2_x + 2.0*k3_x + k4_x);
+            
+            nextDirection = normalize(newDirection + dirDelta);
+            nextOrigin = newOrigin + originDelta;
+        } else {
+             nextDirection = newDirection;
+             nextOrigin = newOrigin + newDirection * currentStepSize;
         }
 
         if (u_accretionDiskEnabled == 1) {
             // Get optical depth from the accretion disk at this position
-            float opticalDepth = adiskColor(relativePos, color, alpha, r_s, newOrigin, u_blackHoleMasses[closestBH]);
+            float opticalDepth = adiskColor(relativePos, color, alpha, r_s, startOrigin, u_blackHoleMasses[closestBH]);
 
             // Apply volumetric absorption using Beer-Lambert law
             if (opticalDepth > 0.0) {
@@ -224,14 +256,14 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         }
 
         // Check object intersections within marching step
-        // We only check for spheres/meshes if they are close enough to be relevant inside gravity well
-        // For simplicity, let's assume objects can be inside influence zone
-        HitRecord hit = rayTraceNormalSpace(newOrigin, newDirection, currentStepSize);
+        HitRecord hit = rayTraceNormalSpace(startOrigin, startDirection, currentStepSize);
         if (hit.hit) {
             return color + hit.color;
         }
-
-        newOrigin += newDirection * currentStepSize;
+        
+        // Update state
+        newOrigin = nextOrigin;
+        newDirection = nextDirection;
     }
     return color;
 }
@@ -240,11 +272,22 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
 // Section Hybrid Ray Marching + Tracing
 // ------------------------------------------------------------------------------------------------------------
 vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDir) {
+    // Mode 0: Straight Rays (Euclidean)
+    if (u_rayTracingMode == 0) {
+        // Trace against all objects in the scene with infinite distance
+        HitRecord hit = rayTraceNormalSpace(rayOrigin, rayDir, 1e20);
+        if (hit.hit) {
+            return hit.color;
+        }
+        return texture(u_skyboxTexture, directionToSpherical(rayDir)).rgb;
+    }
+
+    // Mode 1: Curved Rays (Kerr Geodesic via Ray Marching)
     vec3 color = vec3(0.0);
     vec3 currentOrigin = rayOrigin;
     vec3 currentDir = rayDir;
 
-    // Use a fixed max iteration count to prevent infinite loops
+    // Use a fixed max iteration count to prevent infinite loops in the hybrid logic
     for (int iter = 0; iter < 100; iter++) {
         int closestBH;
         float distToBH;

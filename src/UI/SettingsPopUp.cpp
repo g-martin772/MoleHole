@@ -224,6 +224,26 @@ void Render(UI* ui, Scene* scene, bool* showSettingsWindow) {
                 ImGui::EndTabItem();
             }
 
+            if (ImGui::BeginTabItem("Video")) {
+                ImGui::Spacing();
+                if (ImGui::BeginChild("VideoScroll", ImVec2(0, -60), false)) {
+                    RenderSectionHeader("RAY TRACING");
+
+                    ParameterWidgets::RenderParameter(Params::VideoRayTracingMode, ui, ParameterWidgets::WidgetStyle::Detailed);
+                    ImGui::Spacing();
+                    ParameterWidgets::RenderParameter(Params::VideoRayMarchSteps, ui, ParameterWidgets::WidgetStyle::Detailed);
+                    ParameterWidgets::RenderParameter(Params::VideoRayMarchStepSize, ui, ParameterWidgets::WidgetStyle::Detailed);
+
+                    ImGui::Spacing();
+                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), 
+                        "Note: 'Curved Rays' uses a computationally expensive RK4 integrator.\n"
+                        "Adjust Step Size and Max Steps to balance accuracy and performance.");
+
+                }
+                ImGui::EndChild();
+                ImGui::EndTabItem();
+            }
+
             if (ImGui::BeginTabItem("About")) {
                 ImGui::Spacing();
                 if (ImGui::BeginChild("AboutScroll", ImVec2(0, -60), false)) {

@@ -14,36 +14,35 @@ void ViewportWindow::Render(UI* ui, Scene* scene) {
         // Handle resizing
         auto& renderer = Application::Instance().GetRenderer();
         auto* blackHoleRenderer = renderer.GetBlackHoleRenderer();
+        auto* rtRenderer = renderer.GetRayTracingRenderer();
+        auto viewportMode = renderer.GetSelectedViewport();
 
-        if (blackHoleRenderer) {
-            static int lastWidth = 0;
-            static int lastHeight = 0;
-            
-            if (viewportSize.x > 0 && viewportSize.y > 0) {
-                int width = (int)viewportSize.x;
-                int height = (int)viewportSize.y;
+        if (viewportSize.x > 0 && viewportSize.y > 0) {
+            int width = (int)viewportSize.x;
+            int height = (int)viewportSize.y;
 
-                if (lastWidth != width || lastHeight != height) {
-                    // Check if change is significant (to avoid potential thrashing)
-                    if (width > 0 && height > 0) {
-                        blackHoleRenderer->Resize(width, height);
-                        lastWidth = width;
-                        lastHeight = height;
-                    }
-                }
+            // Update Renderer's viewport size, but defer actual resizing to the start of the next frame's render
+            // This prevents invalidating the image that was just rendered and is about to be displayed
+            renderer.SetViewportBounds(0, 0, width, height);
 
-                // Get Texture
-                vk::DescriptorSet descSet = blackHoleRenderer->GetImGuiDescriptorSet();
-                if (descSet) {
-                    // ImGui expects ImTextureID which is void*
-                    // With ImGui Vulkan backend, we cast VkDescriptorSet to ImTextureID
-                    ImGui::Image((ImTextureID)(VkDescriptorSet)descSet, viewportSize);
-                } else {
-                    ImGui::Text("No texture available");
-                }
+            // Get Texture
+            vk::DescriptorSet descSet = VK_NULL_HANDLE;
+            if (viewportMode == Renderer::ViewportMode::HardwareRayTracing && rtRenderer) {
+                descSet = rtRenderer->GetImGuiDescriptorSet();
+            } else if (blackHoleRenderer) {
+                // Legacy renderer might still need explicit resize here if it doesn't handle it in RenderScene
+                if (renderer.GetSelectedViewport() != Renderer::ViewportMode::HardwareRayTracing)
+                    blackHoleRenderer->Resize(width, height);
+                descSet = blackHoleRenderer->GetImGuiDescriptorSet();
             }
-        } else {
-             ImGui::Text("BlackHoleRenderer not available");
+
+            if (descSet) {
+                // ImGui expects ImTextureID which is void*
+                // With ImGui Vulkan backend, we cast VkDescriptorSet to ImTextureID
+                ImGui::Image((ImTextureID)(VkDescriptorSet)descSet, viewportSize);
+            } else {
+                ImGui::Text("No texture available");
+            }
         }
     }
     ImGui::End();

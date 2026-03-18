@@ -22,16 +22,19 @@ void VulkanBuffer::Create(const VulkanBufferSpec &spec, VulkanDevice *device) {
     bufferInfo.usage = spec.Usage;
     bufferInfo.sharingMode = vk::SharingMode::eExclusive;
 
+    // spdlog::info("Creating Buffer: Size={}, Usage={}", spec.Size, vk::to_string(spec.Usage));
+
     try {
         m_Buffer = m_Device->GetDevice().createBuffer(bufferInfo);
     } catch (const vk::SystemError &err) {
         spdlog::error("Failed to create Vulkan Buffer: {}", err.what());
         return;
     }
-    spdlog::trace("Created Vulkan Buffer: successful");
+    // spdlog::trace("Created Vulkan Buffer: successful");
 
     // Get memory requirements
     vk::MemoryRequirements requirements = m_Device->GetDevice().getBufferMemoryRequirements(m_Buffer);
+    // spdlog::info("Buffer Memory Requirements: Size={}, Alignment={}, TypeBits={}", requirements.size, requirements.alignment, requirements.memoryTypeBits);
 
     // Find suitable memory type
     const uint32_t memoryIndex = VulkanMemory::FindMemoryIndex(m_Device, requirements.memoryTypeBits,
@@ -46,6 +49,13 @@ void VulkanBuffer::Create(const VulkanBufferSpec &spec, VulkanDevice *device) {
     vk::MemoryAllocateInfo allocInfo{};
     allocInfo.allocationSize = requirements.size;
     allocInfo.memoryTypeIndex = memoryIndex;
+
+    // Enable device address allocation if requested
+    vk::MemoryAllocateFlagsInfo allocFlagsInfo{};
+    if (spec.Usage & vk::BufferUsageFlagBits::eShaderDeviceAddress) {
+        allocFlagsInfo.flags = vk::MemoryAllocateFlagBits::eDeviceAddress;
+        allocInfo.pNext = &allocFlagsInfo;
+    }
 
     try {
         m_Memory = m_Device->GetDevice().allocateMemory(allocInfo);
@@ -263,4 +273,12 @@ void VulkanBuffer::WriteViaStagingBuffer(const void *data, vk::DeviceSize size, 
     }
 
     stagingBuffer.Destroy();
+}
+
+vk::DeviceAddress VulkanBuffer::GetDeviceAddress() const {
+    if (!m_Device || !m_Buffer) return 0;
+    
+    vk::BufferDeviceAddressInfo info{};
+    info.buffer = m_Buffer;
+    return m_Device->GetDevice().getBufferAddress(info);
 }

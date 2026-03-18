@@ -1,5 +1,8 @@
 #include "VulkanDevice.h"
 
+// Define storage for dynamic dispatcher
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+
 #include <spdlog/spdlog.h>
 #include "VulkanInstance.h"
 
@@ -15,7 +18,7 @@ static void AddQueueToCreateInfo(std::vector<vk::DeviceQueueCreateInfo> &queueIn
     vk::DeviceQueueCreateInfo queueCreateInfo = {};
     queueCreateInfo.queueFamilyIndex = queueFamilyIndex;
     queueCreateInfo.queueCount = 1;
-    constexpr float queuePriority = 1.0f;
+    static float queuePriority = 1.0f;
     queueCreateInfo.pQueuePriorities = &queuePriority;
     queueInfos.push_back(queueCreateInfo);
     *resultIndex = queueInfos.size() - 1;
@@ -145,10 +148,40 @@ void VulkanDevice::Init(const DeviceRequirements &requirements, VulkanInstance *
     deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
 
     std::vector deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+        VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+        VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+        VK_KHR_SPIRV_1_4_EXTENSION_NAME,
+        VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME
     };
     deviceCreateInfo.enabledExtensionCount = deviceExtensions.size();
     deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
+
+    // Enable features using pNext chain
+    vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures;
+    bufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
+
+    vk::PhysicalDeviceAccelerationStructureFeaturesKHR asFeatures;
+    asFeatures.accelerationStructure = VK_TRUE;
+    asFeatures.pNext = &bufferDeviceAddressFeatures;
+
+    vk::PhysicalDeviceRayTracingPipelineFeaturesKHR rtFeatures;
+    rtFeatures.rayTracingPipeline = VK_TRUE;
+    rtFeatures.pNext = &asFeatures;
+
+    vk::PhysicalDeviceFeatures2 deviceFeatures2;
+    if (m_PhysicalDevice.getFeatures().fillModeNonSolid) deviceFeatures2.features.fillModeNonSolid = VK_TRUE;
+    if (m_PhysicalDevice.getFeatures().samplerAnisotropy) deviceFeatures2.features.samplerAnisotropy = VK_TRUE;
+    if (m_PhysicalDevice.getFeatures().wideLines) deviceFeatures2.features.wideLines = VK_TRUE;
+    // Enable shaderInt64 for buffer addresses if needed, but usually implied or separate
+    deviceFeatures2.features.shaderInt64 = VK_TRUE; 
+    
+    deviceFeatures2.pNext = &rtFeatures;
+
+    deviceCreateInfo.pEnabledFeatures = nullptr;
+    deviceCreateInfo.pNext = &deviceFeatures2;
 
     try {
         m_Device = m_PhysicalDevice.createDevice(deviceCreateInfo);
@@ -157,6 +190,11 @@ void VulkanDevice::Init(const DeviceRequirements &requirements, VulkanInstance *
         return;
     }
     spdlog::trace("Created logical device: successful");
+
+    // Initialize Dynamic Dispatcher (Local)
+    m_Dispatcher = vk::detail::DispatchLoaderDynamic(m_Instance->GetInstance(), vkGetInstanceProcAddr, m_Device);
+    // Initialize Default Dispatcher (Global)
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(m_Device);
 
     for (auto &queueInfo: deviceQueueInfos) {
         vk::Queue queue = m_Device.getQueue(queueInfo.queueFamilyIndex, 0);
