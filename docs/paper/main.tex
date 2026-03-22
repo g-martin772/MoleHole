@@ -1,0 +1,63 @@
+\documentclass[twocolumn]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{mathtools}
+\usepackage{physics}
+
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+
+\usepackage[hidelinks]{hyperref}
+\usepackage[style=ieee, backend=biber]{biblatex}
+\addbibresource{references.bib}
+
+\usepackage[acronym,toc]{glossaries}
+\makeglossaries
+\loadglsentries{acronyms}
+
+\usepackage{titlesec}
+\usepackage{blindtext}
+
+\title{\textbf{MoleHole: Real-time Black Hole Simulation}}
+\author{Gabriel Martin and Leonhard Neuhold}
+\date{\today}
+
+\begin{document}
+
+\onecolumn
+\maketitle
+\thispagestyle{empty}
+\begin{abstract}
+    bla bla bla
+\end{abstract}
+\newpage
+
+\thispagestyle{empty}
+\tableofcontents
+\newpage
+
+\twocolumn
+\setcounter{page}{1}
+
+\input{chapters/intro}
+\input{chapters/rendering_theory}
+\input{chapters/physical_theory}
+
+
+
+\printglossary[type=\acronymtype, title=Acronyms]
+
+\nocite{*}
+\printbibliography
+
+\end{document}
