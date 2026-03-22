@@ -2,24 +2,98 @@
 
 \subsection{Raytracing}\label{subsec:raytracing}
 
-\subsubsection{Overview}\label{subsubsec:overview}
+\subsubsection{Overview}\label{subsubsec:rt-overview}
 
 \subsubsection{Acceleration Structures}\label{subsubsec:acceleration-structures}
 
+Acceleration structures are essential for reducing the computational complexity of ray-tracing
+from $O(N \cdot M)$ to a logarithmic scale.
+They utilize spatial or object subdivision to quickly cull geometry that a ray cannot intersect.
+This section is based on lecture 1 of a course from the TU Wien Faculty of Informatics,
+Institute of Visual Computing \& Human-Centered Technology,
+Research Unit of Computer Graphics\cite{tuwien_rendering_2020}.
+
+\paragraph{Bounding Volumes}\label{par:bounding-volumes}
+
+Bounding volumes simplify complex geometry into basic shapes
+that are computationally cheap to test against rays.
+Common types include:
+
 \begin{itemize}
-    \item \textbf{AABB} {
-        asd
+    \item \textbf{\gls{aabb}}: {
+        Defined by minimum and maximum extents along the coordinate axes ($x, y, z$).
+        They are fast to build and test (using the slab method) but may fit underlying geometry poorly
+        if the object is rotated, leading to more false positives during traversal.
     }
-    \item \textbf{OBB} {
-        asd
+    \item \textbf{\gls{obb}}: {
+        Similar to \glspl{aabb} but aligned with the object's principal axes rather than the world axes.
+        They provide a much tighter fit, reducing the number of false positive intersections,
+        but are more expensive to build and test.
+    }
+    \item \textbf{Bounding Sphere}: {
+        Defined by a center point and a radius.
+        They are rotationally invariant and offer the fastest intersection test
+        (procedural spheres work well with way math as described in section~\ref{subsubsec:rt-overview}),
+        but often provide a bad fit for complex objects because the spheres will inevitably overlap.
     }
 \end{itemize}
 
-\begin{table}[h]
+\paragraph{Spatial vs. Object Subdivision}\label{par:subdivision-types}
+
+\begin{itemize}
+    \item \textbf{Spatial Subdivision}:
+        The space itself is divided into cells like Grids, Octrees, or \glspl{kdtree}.
+        Objects that span boundaries must be referenced in multiple nodes, potentially increasing memory usage.
+    \item \textbf{Object Subdivision}:
+        The set of objects is partitioned into a hierarchy, most notably the \gls{bvh}.
+        A \gls{bvh} is a tree structure where each node represents a bounding volume
+        that encompasses all geometry in its children.
+        Unlike spatial subdivision, each geometric primitive belongs to exactly one leaf node.
+        Bounding volumes of sibling nodes can overlap,
+        but memory consumption is generally lower and predictable ($2N-1$ nodes for $N$ primitives).
+\end{itemize}
+
+\paragraph{Building Strategies}\label{par:building-strategies}
+
+Top-down construction is a common approach, particularly for \glspl{bvh}.
+The set of primitives is recursively split into child nodes
+until a leaf criterion (e.g., max triangles per node) is met.
+The quality of the tree depends heavily on the split strategy:
+
+\begin{itemize}
+    \item \textbf{Spatial Median}:
+        Splits the node at the spatial center of its bounding box.
+        Simple but can result in unbalanced trees if geometry is clustered.
+    \item \textbf{Object Median}:
+        Splits the list of objects into two equal halves based on their centroids.
+        Ensures balanced trees but may result in large overlapping bounding boxes.
+    \item \textbf{\gls{sah}}:
+        A greedy algorithm that attempts to minimize the expected traversal cost.
+        It evaluates potential splits based on the probability of a ray hitting a child node
+        (proportional to its surface area) and the cost of traversing it.
+        \[
+        Cost(b) = SA_L(b) \cdot N_L(b) + SA_R(b) \cdot N_R(b)
+        \]
+        where $SA$ is the surface area and $N$ is the number of primitives.
+\end{itemize}
+
+\paragraph{Comparison}\label{par:comparison}
+
+The choice of acceleration structure involves trade-offs between build time, memory usage, and traversal speed,
+as shown in Table~\ref{tab:comparison-of-as}.
+
+\begin{table*}[h]
     \centering
-    \begin{tabular}{ccc}
-        asd & asd & asd \\
-    \end{tabular}
-    \caption{Comparison of AS}
+    \caption{Comparison of Spatial Acceleration Structures\cite{tuwien_rendering_2020}}
     \label{tab:comparison-of-as}
-\end{table}
+    \begin{tabular}{lccc}
+        \toprule
+        \textbf{Structure} & \textbf{Memory} & \textbf{Build Time} & \textbf{Traversal Quality} \\
+        \midrule
+        Regular Grid & Low -- High & Low & Poor (non-uniform) \\
+        Quad/Octree & Low -- High & Low & Good \\
+        \gls{kdtree} & Low -- High & Low -- High & Good -- Excellent \\
+        \gls{bvh} & Low & Low -- High & Good -- Excellent \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
