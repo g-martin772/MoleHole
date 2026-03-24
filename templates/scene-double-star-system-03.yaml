@@ -12,10 +12,184 @@ objects:
       - Entity
       - Sphere
       - Physics
+  - classes:
+      - Entity
+      - BlackHole
+      - Physics
+    parameters:
+      Entity.Name: BlackHole
+      Entity.Position: [0, 0, -5]
+      Physics.Mass: 3.978e+30
 animation_graph:
   variables:
     []
   nodes:
-    []
+    - id: 845313
+      name: Get BlackHole From Scene
+      type: 8
+      subtype: 34
+      scene_object_index: 1
+      inputs:
+        []
+      outputs:
+        - id: 8453130
+          name: BlackHole
+          type: 19
+          is_input: false
+    - id: 846124
+      name: Tick Update
+      type: 0
+      subtype: 32
+      inputs:
+        []
+      outputs:
+        - id: 8461240
+          name: Flow
+          type: 0
+          is_input: false
+        - id: 8461241
+          name: Delta Time
+          type: 2
+          is_input: false
+    - id: 245355
+      name: Vec3
+      type: 3
+      subtype: 0
+      inputs:
+        []
+      outputs:
+        - id: 2453550
+          name: Value
+          type: 4
+          is_input: false
+      value_vec3: [1, 0, 0]
+    - id: 16557
+      name: Get BlackHole
+      type: 4
+      subtype: 34
+      inputs:
+        - id: 165570
+          name: BlackHole
+          type: 19
+          is_input: true
+      outputs:
+        - id: 165571
+          name: Mass
+          type: 2
+          is_input: false
+        - id: 165572
+          name: Position
+          type: 4
+          is_input: false
+        - id: 165573
+          name: Show Disk
+          type: 1
+          is_input: false
+        - id: 165574
+          name: Disk Density
+          type: 2
+          is_input: false
+        - id: 165575
+          name: Disk Size
+          type: 2
+          is_input: false
+        - id: 165576
+          name: Disk Color
+          type: 4
+          is_input: false
+        - id: 165577
+          name: Spin
+          type: 2
+          is_input: false
+        - id: 165578
+          name: Spin Axis
+          type: 4
+          is_input: false
+    - id: 702721
+      name: Add Vec3
+      type: 1
+      subtype: 1
+      inputs:
+        - id: 7027210
+          name: A
+          type: 4
+          is_input: true
+        - id: 7027211
+          name: B
+          type: 4
+          is_input: true
+      outputs:
+        - id: 7027212
+          name: Result
+          type: 4
+          is_input: false
+    - id: 585717
+      name: Set BlackHole
+      type: 5
+      subtype: 34
+      inputs:
+        - id: 5857170
+          name: Flow
+          type: 0
+          is_input: true
+        - id: 5857171
+          name: BlackHole
+          type: 19
+          is_input: true
+        - id: 5857172
+          name: Mass
+          type: 2
+          is_input: true
+        - id: 5857173
+          name: Position
+          type: 4
+          is_input: true
+        - id: 5857174
+          name: Show Disk
+          type: 1
+          is_input: true
+        - id: 5857175
+          name: Disk Density
+          type: 2
+          is_input: true
+        - id: 5857176
+          name: Disk Size
+          type: 2
+          is_input: true
+        - id: 5857177
+          name: Disk Color
+          type: 4
+          is_input: true
+        - id: 5857178
+          name: Spin
+          type: 2
+          is_input: true
+        - id: 5857179
+          name: Spin Axis
+          type: 4
+          is_input: true
+      outputs:
+        - id: 5857180
+          name: Flow
+          type: 0
+          is_input: false
+        - id: 5857181
+          name: BlackHole
+          type: 19
+          is_input: false
   links:
-    []
+    - id: 557201
+      start_pin_id: 8453130
+      end_pin_id: 165570
+    - id: 526028
+      start_pin_id: 165572
+      end_pin_id: 7027210
+    - id: 449725
+      start_pin_id: 2453550
+      end_pin_id: 7027211
+    - id: 552882
+      start_pin_id: 8461240
+      end_pin_id: 5857170
+    - id: 967820
+      start_pin_id: 7027212
+      end_pin_id: 5857173
