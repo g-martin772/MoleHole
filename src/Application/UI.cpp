@@ -34,6 +34,7 @@
 
 #include "imgui_internal.h"
 #include "Parameters.h"
+#include "MathTools/IntegrationMethods.h"
 #include "Renderer/PhysicsDebugRenderer.h"
 
 #ifndef _DEBUG
@@ -60,6 +61,8 @@ void UI::Initialize() {
         spdlog::warn("UI already initialized");
         return;
     }
+
+    num_solve();
 
     Style();
     

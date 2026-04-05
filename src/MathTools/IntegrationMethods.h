@@ -1,0 +1,10 @@
+//
+// Created by leo on 3/25/26.
+//
+
+#ifndef MOLEHOLE_INTEGRATIONMETHODS_H
+#define MOLEHOLE_INTEGRATIONMETHODS_H
+
+void num_solve();
+
+#endif //MOLEHOLE_INTEGRATIONMETHODS_H

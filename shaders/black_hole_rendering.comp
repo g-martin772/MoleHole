@@ -31,6 +31,7 @@ uniform float u_thirdPersonHeight = 2.0;
 #include "sphere.glsl"
 #include "disk.glsl"
 #include "ray_tracing.glsl"
+#include "kerr.glsl"
 
 void main() {
     // Get the pixel coordinates and imageSize
