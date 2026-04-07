@@ -62,8 +62,6 @@ void UI::Initialize() {
         return;
     }
 
-    num_solve();
-
     Style();
     
     bool tutorialDone = Application::Params().Get(Params::AppTutorialCompleted, false);

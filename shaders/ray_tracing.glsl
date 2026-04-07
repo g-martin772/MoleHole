@@ -97,18 +97,65 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
 // ------------------------------------------------------------------------------------------------------------
 // Section Ray Marching
 // ------------------------------------------------------------------------------------------------------------
-uniform float u_rayStepSize = 0.3f;
-uniform int u_maxRaySteps = 1000;
-uniform float u_adaptiveStepRate = 0.1f;
+uniform float u_rayStepSize = 1.0f;
+uniform int u_maxRaySteps = 100;
+uniform float u_adaptiveStepRate = 1.0f;
 
 vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection) {
     hitEventHorizon = false;
     exitedZone = false;
-    vec3 color = vec3(0.0);
-    float alpha = 1.0;
+    float stepSize = u_rayStepSize;
+    float maxSteps = u_maxRaySteps;
+    float adaptiveStepRate = u_adaptiveStepRate;
+    vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+    vec3 color = vec3(0.0f);
+    float alpha = 1.0f;
+    float mass = u_blackHoleMasses[closestHole];
 
     newOrigin = rayOrigin;
     newDirection = rayDirection;
+
+    for (int i = 0; i < maxSteps; i++) {
+
+        int closestBH;
+        float distToBH;
+        float influenceR;
+        bool inZone = isInInfluenceZone(newOrigin, closestBH, distToBH, influenceR);
+
+        if (!inZone) {
+            exitedZone = true;
+            return color;
+        }
+        vec3 bhPos = u_blackHolePositions[closestBH];
+        float r_s = calculateEventHorizonRadius(u_blackHoleMasses[closestBH]);
+
+        vec3 relativePosCart = newOrigin - bhPos;
+        vec3 relativePosSph = toSpherical(relativePosCart);
+        vec3 relativeDirSph = vel_cartesian_to_spherical(relativePosCart, newDirection);
+        distToBH = relativePosSph.x - r_s;
+
+        if (distToBH < r_s) {
+            hitEventHorizon = true;
+            return color;
+        }
+
+        vec4 p = vec4(0.0f, relativePosSph);
+        vec4 v = vec4(1.0f, relativeDirSph);
+        rk4_step(p, v, stepSize);
+
+        relativePosCart = toCartesian(p.yzw);
+        newDirection = vel_spherical_to_cartesian(p.yzw, v.yzw);
+        newOrigin = relativePosCart + bhPos;
+    }
+    return color;
+}
+    /*hitEventHorizon = false;
+    exitedZone = false;
+    vec3 color = vec3(0.0);
+    float alpha = 1.0;
+
+    newOrigin = toSpherical(rayOrigin);
+    newDirection = vel_cartesian_to_spherical(vec4(0.0, rayOrigin), vec4(0.0, rayDirection)).yzw;
 
     float stepSize = u_rayStepSize;
     float maxSteps = u_maxRaySteps;
@@ -135,7 +182,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
             return color;
         }
 
-        vec3 relativePos = newOrigin - u_blackHolePositions[closestBH];
+        vec3 relativePos = newOrigin - toSpherical(u_blackHolePositions[closestBH]);
 
         // Calculate orbital angular momentum
         vec3 orbitalAngMomentum = cross(relativePos, newDirection);
@@ -153,9 +200,11 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         float currentStepSize = stepSize * min(adaptiveStepRate, distToBH / r_s);
 
         if (u_gravitationalLensingEnabled == 1) {
-            vec3 acceleration = calculateAccelerationLUT(angMomSqrd, relativePos);
-            newDirection += acceleration * currentStepSize;
-            newDirection = normalize(newDirection);
+            vec4 p = vec4(0.0f, relativePos);
+            vec4 v = vec4(1.0f, newDirection);
+            rk4_step(p, v, currentStepSize);
+            relativePos = p.yzw;
+            newDirection = v.yzw;
         }
 
         if (u_accretionDiskEnabled == 1) {
@@ -173,7 +222,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         }
 
         // Check object intersections within marching step
-        HitRecord hit = rayTraceNormalSpace(newOrigin, newDirection, currentStepSize);
+        HitRecord hit = rayTraceNormalSpace(toCartesian(newOrigin), vel_spherical_to_cartesian(vec4(0.0, newOrigin), vec4(0.0, newDirection)).yzw, currentStepSize);
         if (hit.hit) {
             return color + hit.color;
         }
@@ -185,8 +234,8 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         }
         newOrigin += newDirection * currentStepSize;
     }
-    return color;
-}
+
+    return color;*/
 
 // ------------------------------------------------------------------------------------------------------------
 // Section Hybrid Ray Marching + Tracing
@@ -197,9 +246,7 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
     vec3 currentDir = rayDirection;
 
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-
-    // Use a fraction of max steps for outer loop to allow for multiple influence zone passes
-    int maxOuterIterations = max(1000, u_maxRaySteps / 2);
+    int maxOuterIterations = max(50, u_maxRaySteps / 2);
 
     for (int iter = 0; iter < maxOuterIterations; iter++) {
         int closestBH;

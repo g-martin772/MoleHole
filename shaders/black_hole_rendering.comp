@@ -22,6 +22,7 @@ uniform int u_enableThirdPerson = 0;
 uniform float u_thirdPersonDistance = 5.0;
 uniform float u_thirdPersonHeight = 2.0;
 
+#include "kerr.glsl"
 #include "doppler.glsl"
 #include "noise.glsl"
 #include "sdf.glsl"
@@ -31,7 +32,6 @@ uniform float u_thirdPersonHeight = 2.0;
 #include "sphere.glsl"
 #include "disk.glsl"
 #include "ray_tracing.glsl"
-#include "kerr.glsl"
 
 void main() {
     // Get the pixel coordinates and imageSize

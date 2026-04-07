@@ -3,7 +3,7 @@ uniform int u_metric_type = 0; // 0 -> schwarschild; 1 -> kerr; 2 -> reissner-no
 const float G = 1.0f;
 const float c = 1.0f;
 const float EPSILON0 = 8.854187817e-12f;
-const float PI = 3.14159265358979323846f;
+const float PI = 3.1415926535;
 
 // ------------------------------------------------------------------------------------------------------------
 // Metric computation
@@ -107,19 +107,21 @@ mat4[4] compute_d_metric(float t, float r, float theta, float phi, float M, floa
 void geodesic_equation(vec4 pos, vec4 vel, out vec4 accel, float M) {
     mat4 g = compute_metric(pos[0], pos[1], pos[2], pos[3], M, 0.0f, 0.0f);
     mat4 g_inv = compute_inv_metric(g);
-    mat4[4] d_g = compute_d_metric(pos[0], pos[1], pos[2], pos[3]);
+    mat4[4] d_g = compute_d_metric(pos[0], pos[1], pos[2], pos[3], M, 0.0f, 0.0f);
+
+    accel = vec4(0.0f);
 
     for (int mu = 0; mu < 4; mu++) {
         for (int nu = 0; nu < 4; nu++) {
             for (int sigma = 0; sigma < 4; sigma++) {
                 for (int rho = 0; rho < 4; rho++) {
-                    accel[mu] -= 0.5f * g_inv[mu][rho] * (d_g[nu][rho][sigma] + d_g[rho][sigma][nu] - d_g[sigma][nu][rho]) * vel[nu] * vel[sigma];
+                    accel[mu] -= 0.5f * g_inv[mu][rho] * (d_g[nu][rho][sigma] + d_g[sigma][nu][rho] - d_g[rho][sigma][nu]) * vel[nu] * vel[sigma];
                 }
             }
         }
     }
 }
-
+/*
 // general geodesic equation for the kerr case
 void geodesic_equation(vec4 pos, vec4 vel, out vec4 accel, float M, float a) {
     mat4 g = compute_metric(pos[0], pos[1], pos[2], pos[3], M, a, 0.0f);
@@ -169,23 +171,28 @@ void geodesic_equation(vec4 pos, vec4 vel, out vec4 accel, float M, float a, flo
             }
         }
     }
-}
+}*/
 
 // ------------------------------------------------------------------------------------------------------------
 // Section Numerical Integration
 // ------------------------------------------------------------------------------------------------------------
-vec4 rk4_step(vec4 p, float dt) {
-    float k1, k2, k3, k4;
-    vec4 a;
-    vec4 v;
+void rk4_step(inout vec4 p, inout vec4 vel, float dt) {
+    vec4 k1_v, k2_v, k3_v, k4_v;
+    vec4 k1_p, k2_p, k3_p, k4_p;
     float M = 1.0f;
 
+    geodesic_equation(p, vel, k1_v, M);
+    k1_p = vel;
 
-    p += dt;
-    geodesic_equation(p, v, k1, M);
-    geodesic_equation(p + 0.5f * dt, v + 0.5f * k1, k2, M);
-    geodesic_equation(p + 0.5f * dt, v + 0.5f * k2, k3, M);
-    geodesic_equation(p + dt, v + dt * k3, k4, M);
+    geodesic_equation(p + 0.5f * dt * k1_p, vel + 0.5f * dt * k1_v, k2_v, M);
+    k2_p = vel + 0.5f * dt * k1_v;
 
-    return p + (dt / 6.0f) * (k1 + 2.0f * k2 + 2.0f * k3 + k4);
+    geodesic_equation(p + 0.5f * dt * k2_p, vel + 0.5f * dt * k2_v, k3_v, M);
+    k3_p = vel + 0.5f * dt * k2_v;
+
+    geodesic_equation(p + dt * k3_p, vel + dt * k3_v, k4_v, M);
+    k4_p = vel + dt * k3_v;
+
+    p += (dt / 6.0f) * (k1_p + 2.0f * k2_p + 2.0f * k3_p + k4_p);
+    vel += (dt / 6.0f) * (k1_v + 2.0f * k2_v + 2.0f * k3_v + k4_v);
 }
