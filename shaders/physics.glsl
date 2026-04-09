@@ -4,7 +4,7 @@ const float BOLTZMANN = 5.670374419e-8;
 // Section Event Horizon
 // ------------------------------------------------------------------------------------------------------------
 float calculateEventHorizonRadius(float mass) {
-    return 2.0f * mass;
+    return 2.0f * mass * G / pow(c, 2);
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -43,7 +43,13 @@ float beerLambert(float abCoeff, float dist) {
 // ------------------------------------------------------------------------------------------------------------
 vec3 toSpherical(vec3 pos) {
     float r = length(pos);
-    float theta = acos(pos.y / r);
+    if (r < EPSILON) r = EPSILON;
+
+    float theta = acos(clamp(pos.y / r, -1.0, 1.0));
+
+    if (theta < EPSILON) theta = EPSILON;
+    if (theta > (PI - EPSILON)) theta = (PI - EPSILON);
+
     float phi = atan(pos.z, pos.x);
     return vec3(r, theta, phi);
 }
@@ -59,18 +65,19 @@ vec3 toCartesian(vec3 spherical) {
     return vec3(x, y, z);
 }
 vec3 vel_cartesian_to_spherical(vec3 p_cart, vec3 v_cart) {
-    float x = p_cart[0];
-    float y = p_cart[1];
-    float z = p_cart[2];
-    float vx = v_cart[0];
-    float vy = v_cart[1];
-    float vz = v_cart[2];
+    float x = p_cart.x;
+    float y = p_cart.y;
+    float z = p_cart.z;
+    float vx = v_cart.x;
+    float vy = v_cart.y;
+    float vz = v_cart.z;
 
     float r = length(p_cart);
+    if (r < EPSILON) r = EPSILON;
+
     float rho = sqrt(x * x + z * z);
 
-    // Safety check for poles
-    if (rho < 0.0001) rho = 0.0001;
+    if (rho < EPSILON) rho = EPSILON;
 
     float vr = (x * vx + y * vy + z * vz) / r;
     float vtheta = (y * (x * vx + z * vz) - rho * rho * vy) / (r * r * rho);
@@ -79,13 +86,13 @@ vec3 vel_cartesian_to_spherical(vec3 p_cart, vec3 v_cart) {
     return vec3(vr, vtheta, vphi);
 }
 vec3 vel_spherical_to_cartesian(vec3 p_sph, vec3 v_sph) {
-    float r = p_sph[0];
-    float theta = p_sph[1];
-    float phi = p_sph[2];
+    float r = p_sph.x;
+    float theta = p_sph.y;
+    float phi = p_sph.z;
 
-    float vr = v_sph[0];
-    float vtheta = v_sph[1];
-    float vphi = v_sph[2];
+    float vr = v_sph.x;
+    float vtheta = v_sph.y;
+    float vphi = v_sph.z;
 
     float st = sin(theta);
     float ct = cos(theta);

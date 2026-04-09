@@ -1,7 +1,7 @@
 uniform int u_metric_type = 0; // 0 -> schwarschild; 1 -> kerr; 2 -> reissner-nordström; 3 ->  kerr-newman
 
-const float G = 1.0f;
-const float c = 1.0f;
+const float G = 6.67430e-11f;
+const float c = 2.99792458e8f;
 const float EPSILON0 = 8.854187817e-12f;
 const float PI = 3.1415926535;
 
@@ -11,7 +11,8 @@ const float PI = 3.1415926535;
 mat4 compute_schwarzschild_metric(float t, float r, float theta, float phi, float M) {
     float rs = 2.0f * G * M / pow(c, 2);
     float r2 = pow(r, 2);
-    float sin2theta = pow(sin(theta), 2);
+    float safe_theta = clamp(theta, EPSILON, PI - EPSILON);
+    float sin2theta = pow(sin(safe_theta), 2);
 
     mat4 g;
     g[0][0] = -(1 - (rs / r));
@@ -26,8 +27,9 @@ mat4 compute_kerr_metric(float t, float r, float theta, float phi, float M, floa
     float rs = 2.0f * G * M / pow(c, 2);
     float r2 = pow(r, 2);
     float a2 = pow(a, 2);
-    float sin2theta = pow(sin(theta), 2);
-    float cos2theta = pow(cos(theta), 2);
+    float safe_theta = clamp(theta, EPSILON, PI - EPSILON);
+    float sin2theta = pow(sin(safe_theta), 2);
+    float cos2theta = pow(cos(safe_theta), 2);
     float Sigma = r2 + a2 * cos2theta;
     float Delta = r2 - rs * r + a2;
 
@@ -46,7 +48,8 @@ mat4 compute_reissner_nordstrom_metric(float t, float r, float theta, float phi,
     float rs = 2.0f * G * M / pow(c, 2);
     float rq2 = (G * pow(Q, 2)) / (4.0f * PI * EPSILON0 * pow(c, 4));
     float r2 = pow(r, 2);
-    float sin2theta = pow(sin(theta), 2);
+    float safe_theta = clamp(theta, EPSILON, PI - EPSILON);
+    float sin2theta = pow(sin(safe_theta), 2);
 
     mat4 g;
     g[0][0] = -(1 - (rs / r) + (rq2 / r2));
@@ -109,15 +112,19 @@ void geodesic_equation(vec4 pos, vec4 vel, out vec4 accel, float M) {
     mat4 g_inv = compute_inv_metric(g);
     mat4[4] d_g = compute_d_metric(pos[0], pos[1], pos[2], pos[3], M, 0.0f, 0.0f);
 
-    accel = vec4(0.0f);
-
-    for (int mu = 0; mu < 4; mu++) {
+    vec4 Gamma = vec4(0.0f);
+    for (int rho = 0; rho < 4; rho++) {
         for (int nu = 0; nu < 4; nu++) {
             for (int sigma = 0; sigma < 4; sigma++) {
-                for (int rho = 0; rho < 4; rho++) {
-                    accel[mu] -= 0.5f * g_inv[mu][rho] * (d_g[nu][rho][sigma] + d_g[sigma][nu][rho] - d_g[rho][sigma][nu]) * vel[nu] * vel[sigma];
-                }
+                Gamma[rho] += 0.5f * (d_g[nu][rho][sigma] + d_g[sigma][nu][rho] - d_g[rho][sigma][nu]) * vel[nu] * vel[sigma];
             }
+        }
+    }
+
+    accel = vec4(0.0f);
+    for (int mu = 0; mu < 4; mu++) {
+        for (int rho = 0; rho < 4; rho++) {
+            accel[mu] -= g_inv[mu][rho] * Gamma[rho];
         }
     }
 }
@@ -176,10 +183,9 @@ void geodesic_equation(vec4 pos, vec4 vel, out vec4 accel, float M, float a, flo
 // ------------------------------------------------------------------------------------------------------------
 // Section Numerical Integration
 // ------------------------------------------------------------------------------------------------------------
-void rk4_step(inout vec4 p, inout vec4 vel, float dt) {
+void rk4_step(inout vec4 p, inout vec4 vel, float dt, float M) {
     vec4 k1_v, k2_v, k3_v, k4_v;
     vec4 k1_p, k2_p, k3_p, k4_p;
-    float M = 1.0f;
 
     geodesic_equation(p, vel, k1_v, M);
     k1_p = vel;

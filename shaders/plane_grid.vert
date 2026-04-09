@@ -6,7 +6,7 @@ uniform mat4 uVP;
 uniform float u_planeY;
 
 const float EPSILON = 1e-2f;
-const float SOLAR_MASS = 2e30f;
+const float SOLAR_MASS = 1.989e30f;
 
 // Black holes
 const int MAX_BLACK_HOLES = 8;

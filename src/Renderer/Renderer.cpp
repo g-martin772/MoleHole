@@ -171,6 +171,7 @@ void Renderer::EndFrame(bool clearScreen) {
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    glFinish();
     glfwSwapBuffers(window);
 }
 
