@@ -98,8 +98,8 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
 // ------------------------------------------------------------------------------------------------------------
 // Section Ray Marching
 // ------------------------------------------------------------------------------------------------------------
-uniform float u_rayStepSize = 0.05f;  // Decreased from 0.1 for finer integration
-uniform int u_maxRaySteps = 2000;     // Increased from 1000 for more detail
+uniform float u_rayStepSize = 0.05f;
+uniform int u_maxRaySteps = 6000;
 uniform float u_adaptiveStepRate = 0.5f;
 
 vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection) {
@@ -179,6 +179,9 @@ vec4 normalize4Velocity(vec4 pos, vec4 vel, float M) {
 // ------------------------------------------------------------------------------------------------------------
 vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
 
+    vec3 colorValue;
+    float alpha = 0.4f;
+
     if (u_blackHoleMasses[0] == 0.0f)
         return texture(u_skyboxTexture, directionToSpherical(rayDirection)).rgb;
 
@@ -202,15 +205,23 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
 
         // check if we've hit the event horizon
         float dist = length(relativePosCart);
-        if (dist < r_s * 1.01f) {
+        if (dist < r_s) {
             return vec3(1.0f, 0.0f, 0.0f);
         }
 
-        // check if we've escaped the influence zone EARLY
-        //float influenceRadius = calculateInfluenceRadius(r_s);
-        //if (dist > influenceRadius) {
-        //    return vec3(1.0f, 1.0f, 0.0f);  // Ray has escaped - lookup final color
-        //}
+        /*if (u_accretionDiskEnabled == 1) {
+            // Get optical depth from the accretion disk at this position
+            float opticalDepth = adiskColor(relativePosCart, colorValue, alpha, r_s, pos, u_blackHoleMasses[0]);
+
+            // Apply volumetric absorption using Beer-Lambert law
+            if (opticalDepth > 0.0) {
+                float transmittance = beerLambert(opticalDepth, stepSize);
+                alpha *= transmittance;
+                if (alpha < 0.01) {
+                    return colorValue;
+                }
+            }
+        }*/
 
         // convert to spherical coordinates
         vec3 relativePosSph = toSpherical(relativePosCart);
@@ -218,36 +229,22 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
 
         // adaptive step size near horizon
         if (dist < r_s * 3.0f) {
-            stepSize = u_rayStepSize * adaptiveStepRate * 0.1f;  // Much smaller near horizon
+            stepSize = u_rayStepSize * adaptiveStepRate * 0.1f;
         } else if (dist < r_s * 10.0f) {
             stepSize = u_rayStepSize * adaptiveStepRate;
         } else {
             stepSize = u_rayStepSize;
         }
 
-        //float r = length(relativePosCart);
-        //dir += -1.5f * stepSize * relativePosCart / pow(r, 5);
-        //dir = normalize(dir);
-        //pos += dir * stepSize;
-
         // geodesic integration (RK4)
         vec4 p = vec4(0.0f, relativePosSph);
         vec4 v = vec4(1.0f, relativeDirSph);
 
-        // Normalize 4-velocity before integration
-        v = normalize4Velocity(p, v, u_blackHoleMasses[0]);
-
         rk4_step(p, v, stepSize, u_blackHoleMasses[0]);
-
-        // Normalize 4-velocity after integration to maintain null geodesic
-        v = normalize4Velocity(p, v, u_blackHoleMasses[0]);
 
         // convert back to Cartesian coordinates
         relativePosCart = toCartesian(p.yzw);
         dir = vel_spherical_to_cartesian(p.yzw, v.yzw);
-
-        // Ensure direction stays normalized
-        dir = normalize(dir);
 
         // update global position
         pos = relativePosCart + u_blackHolePositions[0];

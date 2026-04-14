@@ -90,16 +90,16 @@ float adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHoriz
     }
 
     float grFactor = 1.0;
-    if (u_gravitationalRedshiftEnabled == 1) {
+    /*if (u_gravitationalRedshiftEnabled == 1) {
         grFactor = calculateRedShift(pos / max(1e-6, eventHorizonRadius));
         grFactor = max(grFactor, 1e-6);
-    }
+    }*/
 
     float doppler = 1.0;
-    if (u_dopplerBeamingEnabled > 0.5) {
+    /*if (u_dopplerBeamingEnabled > 0.5) {
         vec3 viewDir = normalize(rayOrigin - (pos + u_cameraPos));
         doppler = calculateDopplerEffect(pos / max(1e-6, eventHorizonRadius), viewDir);
-    }
+    }*/
 
     float dopplerRedshift = 1.0 / mix(1.0, doppler * grFactor, float(u_dopplerBeamingEnabled > 0.5));
 
@@ -111,7 +111,8 @@ float adiskColor(vec3 pos, inout vec3 color, inout float alpha, float eventHoriz
         beamingFactor = pow(max(0.1, doppler), 3.0);
     }
 
-    vec3 emission = bbColor * noise * density * beamingFactor;
+    vec3 emission = bbColor * noise * density;
     color += emission * alpha * 0.5;
+    color = vec3(1.0, 0.5, 0.2);
     return density * 2.0;
 }
