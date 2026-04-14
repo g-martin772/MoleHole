@@ -11,7 +11,7 @@ float calculateEventHorizonRadius(float mass) {
 // Section Influence Radius
 // ------------------------------------------------------------------------------------------------------------
 float calculateInfluenceRadius(float r_s) {
-    return 10.0f * r_s;
+    return 50.0f * r_s;
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -76,12 +76,21 @@ vec3 vel_cartesian_to_spherical(vec3 p_cart, vec3 v_cart) {
     if (r < EPSILON) r = EPSILON;
 
     float rho = sqrt(x * x + z * z);
-
     if (rho < EPSILON) rho = EPSILON;
 
     float vr = (x * vx + y * vy + z * vz) / r;
-    float vtheta = (y * (x * vx + z * vz) - rho * rho * vy) / (r * r * rho);
-    float vphi = (x * vz - z * vx) / (rho * rho);
+
+    // Safety: clamp intermediate calculations to prevent overflow
+    float numerator_vtheta = y * (x * vx + z * vz) - rho * rho * vy;
+    float denominator_vtheta = r * r * rho;
+    float vtheta = numerator_vtheta / max(denominator_vtheta, EPSILON);
+
+    float vphi = (x * vz - z * vx) / max(rho * rho, EPSILON * EPSILON);
+
+    // Safety: clamp extreme values
+    vr = clamp(vr, -1e6, 1e6);
+    vtheta = clamp(vtheta, -1e6, 1e6);
+    vphi = clamp(vphi, -1e6, 1e6);
 
     return vec3(vr, vtheta, vphi);
 }
@@ -102,6 +111,11 @@ vec3 vel_spherical_to_cartesian(vec3 p_sph, vec3 v_sph) {
     float vx = vr * st * cp + r * vtheta * ct * cp - r * st * vphi * sp;
     float vy = vr * ct      - r * vtheta * st;
     float vz = vr * st * sp + r * vtheta * ct * sp + r * st * vphi * cp;
+
+    // Safety: clamp extreme values
+    vx = clamp(vx, -1e6, 1e6);
+    vy = clamp(vy, -1e6, 1e6);
+    vz = clamp(vz, -1e6, 1e6);
 
     return vec3(vx, vy, vz);
 }

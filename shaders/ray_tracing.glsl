@@ -98,8 +98,8 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
 // ------------------------------------------------------------------------------------------------------------
 // Section Ray Marching
 // ------------------------------------------------------------------------------------------------------------
-uniform float u_rayStepSize = 0.1f;
-uniform int u_maxRaySteps = 1000;
+uniform float u_rayStepSize = 0.05f;  // Decreased from 0.1 for finer integration
+uniform int u_maxRaySteps = 2000;     // Increased from 1000 for more detail
 uniform float u_adaptiveStepRate = 0.5f;
 
 vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection) {
@@ -152,6 +152,28 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
     return color;
 }
 
+// Helper to normalize 4-velocity for light-like geodesics (g_uv v^u v^v = 0)
+// For Schwarzschild: -(1-rs/r)*v_t^2 + (1-rs/r)^-1*v_r^2 + r^2*(v_theta^2 + sin^2(theta)*v_phi^2) = 0
+vec4 normalize4Velocity(vec4 pos, vec4 vel, float M) {
+    float r = pos.y;
+    float theta = pos.z;
+    float rs = 2.0f * G * M / (c * c);
+
+    float r_s_factor = 1.0f - rs / r;
+    if (r_s_factor < 0.001f) r_s_factor = 0.001f;  // Avoid singularity
+
+    // For light rays: g_uv v^u v^v = 0
+    // Compute spatial magnitude and adjust temporal component
+    float v_spatial_sq = (vel.y * vel.y) / r_s_factor +
+                         vel.z * vel.z * r * r +
+                         vel.w * vel.w * r * r * sin(theta) * sin(theta);
+
+    // Adjust temporal component to maintain null geodesic
+    vel.x = sqrt(max(v_spatial_sq / r_s_factor, 0.0f));
+
+    return vel;
+}
+
 // ------------------------------------------------------------------------------------------------------------
 // Section Hybrid Ray Marching + Tracing
 // ------------------------------------------------------------------------------------------------------------
@@ -180,39 +202,55 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
 
         // check if we've hit the event horizon
         float dist = length(relativePosCart);
-        if (dist < r_s) {
-            return vec3(1.0f, 0.0f, 0.0f);  // Red for event horizon
+        if (dist < r_s * 1.01f) {
+            return vec3(1.0f, 0.0f, 0.0f);
         }
+
+        // check if we've escaped the influence zone EARLY
+        //float influenceRadius = calculateInfluenceRadius(r_s);
+        //if (dist > influenceRadius) {
+        //    return vec3(1.0f, 1.0f, 0.0f);  // Ray has escaped - lookup final color
+        //}
 
         // convert to spherical coordinates
         vec3 relativePosSph = toSpherical(relativePosCart);
         vec3 relativeDirSph = vel_cartesian_to_spherical(relativePosCart, dir);
 
         // adaptive step size near horizon
-        if (dist < r_s * 2.0f) {
+        if (dist < r_s * 3.0f) {
+            stepSize = u_rayStepSize * adaptiveStepRate * 0.1f;  // Much smaller near horizon
+        } else if (dist < r_s * 10.0f) {
             stepSize = u_rayStepSize * adaptiveStepRate;
         } else {
             stepSize = u_rayStepSize;
         }
 
+        //float r = length(relativePosCart);
+        //dir += -1.5f * stepSize * relativePosCart / pow(r, 5);
+        //dir = normalize(dir);
+        //pos += dir * stepSize;
+
         // geodesic integration (RK4)
         vec4 p = vec4(0.0f, relativePosSph);
         vec4 v = vec4(1.0f, relativeDirSph);
+
+        // Normalize 4-velocity before integration
+        v = normalize4Velocity(p, v, u_blackHoleMasses[0]);
+
         rk4_step(p, v, stepSize, u_blackHoleMasses[0]);
+
+        // Normalize 4-velocity after integration to maintain null geodesic
+        v = normalize4Velocity(p, v, u_blackHoleMasses[0]);
 
         // convert back to Cartesian coordinates
         relativePosCart = toCartesian(p.yzw);
         dir = vel_spherical_to_cartesian(p.yzw, v.yzw);
 
+        // Ensure direction stays normalized
+        dir = normalize(dir);
+
         // update global position
         pos = relativePosCart + u_blackHolePositions[0];
-
-        // check if we've escaped the influence zone
-        float distFromBH = length(pos - u_blackHolePositions[0]);
-        float influenceRadius = calculateInfluenceRadius(r_s);
-        if (distFromBH > influenceRadius) {
-            break;  // Ray has escaped
-        }
     }
 
     // map skybox color from final ray direction

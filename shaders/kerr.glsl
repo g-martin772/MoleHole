@@ -1,7 +1,7 @@
 uniform int u_metric_type = 0; // 0 -> schwarschild; 1 -> kerr; 2 -> reissner-nordström; 3 ->  kerr-newman
 
-const float G = 6.67430e-11f;
-const float c = 2.99792458e8f;
+const float G = 1.0f;
+const float c = 1.0f;
 const float EPSILON0 = 8.854187817e-12f;
 const float PI = 3.1415926535;
 
