@@ -7,7 +7,7 @@ layout(rgba32f, binding = 0) uniform image2D l_outputImage;
 uniform int u_debugMode = 0;
 
 // constants
-const float EPSILON = 0.01f;
+const float EPSILON = 0.005f;
 
 // camera
 uniform vec3 u_cameraPos;
