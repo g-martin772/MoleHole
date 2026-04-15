@@ -458,6 +458,14 @@ parameters:
     defaultValue: true
     showInUI: true
 
+  - name: "GeneralRelativity.MetricType"
+    displayName: "Metric Type"
+    tooltip: "Choose a metric for the spacetime"
+    type: int
+    group: GeneralRelativity
+    defaultValue: 0
+    showInUI: true
+
   # Application Parameters
   - name: "App.LastOpenScene"
     displayName: "Last Opened Scene"
@@ -518,6 +526,14 @@ parameters:
   - name: "App.TutorialCompleted"
     displayName: "Tutorial Completed"
     tooltip: "Whether the first-run tutorial has been completed or skipped"
+    type: bool
+    group: Application
+    defaultValue: false
+    showInUI: false
+
+  - name: "App.IsAccurateRenderingEnabled"
+    displayName: "Enable Accurate Rendering"
+    tooltip: "Determines if the compute shader renders the scene physically accurate or in real time"
     type: bool
     group: Application
     defaultValue: false
@@ -777,6 +793,17 @@ scene_parameters:
     type: vec3
     group: Simulation
     defaultValue: [0.0, 1.0, 0.0]
+    showInUI: true
+
+  - name: "BlackHole.Charge"
+    displayName: "Charge"
+    tooltip: "Charge"
+    type: float
+    group: Simulation
+    defaultValue: 0.0
+    minValue: -1.0
+    maxValue: 1.0
+    dragSpeed: 0.01
     showInUI: true
 
   # Mesh Parameters

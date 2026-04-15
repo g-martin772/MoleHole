@@ -62,6 +62,7 @@ namespace Params {
     inline constexpr ParameterHandle GRFrameDraggingEnabled("GeneralRelativity.FrameDraggingEnabled");
     inline constexpr ParameterHandle GRGravitationalLensingEnabled("GeneralRelativity.GravitationalLensingEnabled");
     inline constexpr ParameterHandle GRGravitationalRedshiftEnabled("GeneralRelativity.GravitationalRedshiftEnabled");
+    inline constexpr ParameterHandle GRMetricType("GeneralRelativity.MetricType");
 
     // Application Parameters
     inline constexpr ParameterHandle AppLastOpenScene("App.LastOpenScene");
@@ -72,6 +73,7 @@ namespace Params {
     inline constexpr ParameterHandle AppIntroAnimationEnabled("App.IntroAnimationEnabled");
     inline constexpr ParameterHandle AppBackgroundImage("App.BackgroundImage");
     inline constexpr ParameterHandle AppTutorialCompleted("App.TutorialCompleted");
+    inline constexpr ParameterHandle AppIsAccurateRenderingEnabled("App.IsAccurateRenderingEnabled");
 
     // UI Parameters
     inline constexpr ParameterHandle UIFontSize("UI.FontSize");
@@ -137,5 +139,6 @@ namespace Field {
         inline constexpr ParameterHandle Mass("Physics.Mass");
         inline constexpr ParameterHandle Spin("BlackHole.Spin");
         inline constexpr ParameterHandle SpinAxis("BlackHole.SpinAxis");
+        inline constexpr ParameterHandle Charge("BlackHole.Charge");
     }
 }

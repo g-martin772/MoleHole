@@ -6,6 +6,7 @@ uniform vec3 u_blackHolePositions[MAX_BLACK_HOLES];
 uniform float u_blackHoleMasses[MAX_BLACK_HOLES];
 uniform float u_blackHoleSpins[MAX_BLACK_HOLES];
 uniform vec3 u_blackHoleSpinAxes[MAX_BLACK_HOLES];
+uniform float u_blackHoleCharges[MAX_BLACK_HOLES];
 
 uniform int u_renderBlackHoles = 1;
 uniform int u_renderSpheres = 1;
@@ -143,7 +144,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         vec4 p = vec4(0.0f, relativePosSph);
         vec4 v = vec4(1.0f, relativeDirSph);
         // compute force of current closest bh to correct trajectories
-        rk4_step(p, v, stepSize, u_blackHoleMasses[closestBH]);
+        rk4_step(p, v, stepSize, u_blackHoleMasses[closestBH], 0.0f, 0.0f);
 
         relativePosCart = toCartesian(p.yzw);
         newDirection = vel_spherical_to_cartesian(p.yzw, v.yzw);
@@ -210,8 +211,8 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
         float dist = relativePosSph.y;
 
         // check if we've hit the event horizon
-        if (dist < r_s + EPSILON) {
-            return vec3(1.0f, 0.0f, 0.0f);
+        if (dist < r_s + 100.0f * EPSILON) {
+            return vec3(0.0f);
         }
 
         // check if we've escaped the influence zone
@@ -228,9 +229,15 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
             stepSize = u_rayStepSize;
         }
 
+        // calculate specific angular momentum from spin parameter
+        float a = u_blackHoleSpins[0] * calculateEventHorizonRadius(u_blackHoleMasses[0]) / 2.0f;
+
+        // set charge
+        float Q = u_blackHoleCharges[0];
+
         // geodesic integration (RK4)
         relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, u_blackHoleMasses[0]);
-        rk4_step(relativePosSph, relativeDirSph, stepSize, u_blackHoleMasses[0]);
+        rk4_step(relativePosSph, relativeDirSph, stepSize, u_blackHoleMasses[0], a, Q);
         relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, u_blackHoleMasses[0]);
     }
 

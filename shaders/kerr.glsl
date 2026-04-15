@@ -1,4 +1,4 @@
-uniform int u_metric_type = 0; // 0 -> schwarschild; 1 -> kerr; 2 -> reissner-nordström; 3 ->  kerr-newman
+uniform int u_metric_type = 1; // 0 -> schwarschild; 1 -> kerr; 2 -> reissner-nordström; 3 ->  kerr-newman
 
 const float G = 1.0f;
 const float c = 1.0f;
@@ -107,7 +107,7 @@ mat4[4] compute_d_metric(float t, float r, float theta, float phi, float M, floa
 // Section Geodesic Equation
 // ------------------------------------------------------------------------------------------------------------
 // general geodesic equation for the schwarzschild case
-void geodesic_equation(vec4 pos, vec4 vel, out vec4 accel, float M) {
+void geodesic_equation_schwarzschild(vec4 pos, vec4 vel, out vec4 accel, float M) {
     mat4 g = compute_metric(pos[0], pos[1], pos[2], pos[3], M, 0.0f, 0.0f);
     mat4 g_inv = compute_inv_metric(g);
     mat4[4] d_g = compute_d_metric(pos[0], pos[1], pos[2], pos[3], M, 0.0f, 0.0f);
@@ -128,76 +128,135 @@ void geodesic_equation(vec4 pos, vec4 vel, out vec4 accel, float M) {
         }
     }
 }
-/*
+
 // general geodesic equation for the kerr case
-void geodesic_equation(vec4 pos, vec4 vel, out vec4 accel, float M, float a) {
+void geodesic_equation_kerr(vec4 pos, vec4 vel, out vec4 accel, float M, float a) {
     mat4 g = compute_metric(pos[0], pos[1], pos[2], pos[3], M, a, 0.0f);
     mat4 g_inv = compute_inv_metric(g);
-    mat4[4] d_g = compute_d_metric(pos[0], pos[1], pos[2], pos[3]);
+    mat4[4] d_g = compute_d_metric(pos[0], pos[1], pos[2], pos[3], M, a, 0.0f);
 
-    for (int mu = 0; mu < 4; mu++) {
+    vec4 Gamma = vec4(0.0f);
+    for (int rho = 0; rho < 4; rho++) {
         for (int nu = 0; nu < 4; nu++) {
             for (int sigma = 0; sigma < 4; sigma++) {
-                for (int rho = 0; rho < 4; rho++) {
-                    accel[mu] -= 0.5f * g_inv[mu][rho] * (d_g[nu][rho][sigma] + d_g[rho][sigma][nu] - d_g[sigma][nu][rho]) * vel[nu] * vel[sigma];
-                }
+                Gamma[rho] += 0.5f * (d_g[nu][rho][sigma] + d_g[sigma][nu][rho] - d_g[rho][sigma][nu]) * vel[nu] * vel[sigma];
             }
+        }
+    }
+
+    accel = vec4(0.0f);
+    for (int mu = 0; mu < 4; mu++) {
+        for (int rho = 0; rho < 4; rho++) {
+            accel[mu] -= g_inv[mu][rho] * Gamma[rho];
         }
     }
 }
 
 // general geodesic equation for the reissner-nordström case
-void geodesic_equation(vec4 pos, vec4 vel, out vec4 accel, float M, float Q) {
+void geodesic_equation_reissner_nordstrom(vec4 pos, vec4 vel, out vec4 accel, float M, float Q) {
     mat4 g = compute_metric(pos[0], pos[1], pos[2], pos[3], M, 0.0f, Q);
     mat4 g_inv = compute_inv_metric(g);
-    mat4[4] d_g = compute_d_metric(pos[0], pos[1], pos[2], pos[3]);
+    mat4[4] d_g = compute_d_metric(pos[0], pos[1], pos[2], pos[3], M, 0.0f, Q);
 
-    for (int mu = 0; mu < 4; mu++) {
+    vec4 Gamma = vec4(0.0f);
+    for (int rho = 0; rho < 4; rho++) {
         for (int nu = 0; nu < 4; nu++) {
             for (int sigma = 0; sigma < 4; sigma++) {
-                for (int rho = 0; rho < 4; rho++) {
-                    accel[mu] -= 0.5f * g_inv[mu][rho] * (d_g[nu][rho][sigma] + d_g[rho][sigma][nu] - d_g[sigma][nu][rho]) * vel[nu] * vel[sigma];
-                }
+                Gamma[rho] += 0.5f * (d_g[nu][rho][sigma] + d_g[sigma][nu][rho] - d_g[rho][sigma][nu]) * vel[nu] * vel[sigma];
             }
+        }
+    }
+
+    accel = vec4(0.0f);
+    for (int mu = 0; mu < 4; mu++) {
+        for (int rho = 0; rho < 4; rho++) {
+            accel[mu] -= g_inv[mu][rho] * Gamma[rho];
         }
     }
 }
 
 // general geodesic equation for the kerr-newman case
-void geodesic_equation(vec4 pos, vec4 vel, out vec4 accel, float M, float a, float Q) {
+void geodesic_equation_kerr_newman(vec4 pos, vec4 vel, out vec4 accel, float M, float a, float Q) {
     mat4 g = compute_metric(pos[0], pos[1], pos[2], pos[3], M, a, Q);
     mat4 g_inv = compute_inv_metric(g);
-    mat4[4] d_g = compute_d_metric(pos[0], pos[1], pos[2], pos[3]);
+    mat4[4] d_g = compute_d_metric(pos[0], pos[1], pos[2], pos[3], M, a, Q);
 
-    for (int mu = 0; mu < 4; mu++) {
+    vec4 Gamma = vec4(0.0f);
+    for (int rho = 0; rho < 4; rho++) {
         for (int nu = 0; nu < 4; nu++) {
             for (int sigma = 0; sigma < 4; sigma++) {
-                for (int rho = 0; rho < 4; rho++) {
-                    accel[mu] -= 0.5f * g_inv[mu][rho] * (d_g[nu][rho][sigma] + d_g[rho][sigma][nu] - d_g[sigma][nu][rho]) * vel[nu] * vel[sigma];
-                }
+                Gamma[rho] += 0.5f * (d_g[nu][rho][sigma] + d_g[sigma][nu][rho] - d_g[rho][sigma][nu]) * vel[nu] * vel[sigma];
             }
         }
     }
-}*/
+
+    accel = vec4(0.0f);
+    for (int mu = 0; mu < 4; mu++) {
+        for (int rho = 0; rho < 4; rho++) {
+            accel[mu] -= g_inv[mu][rho] * Gamma[rho];
+        }
+    }
+}
 
 // ------------------------------------------------------------------------------------------------------------
 // Section Numerical Integration
 // ------------------------------------------------------------------------------------------------------------
-void rk4_step(inout vec4 p, inout vec4 vel, float dt, float M) {
+void rk4_step(inout vec4 p, inout vec4 vel, float dt, float M, float a, float Q) {
     vec4 k1_v, k2_v, k3_v, k4_v;
     vec4 k1_p, k2_p, k3_p, k4_p;
 
-    geodesic_equation(p, vel, k1_v, M);
-    k1_p = vel;
+    if (u_metric_type == 0) {
+        geodesic_equation_schwarzschild(p, vel, k1_v, M);
+        k1_p = vel;
 
-    geodesic_equation(p + 0.5f * dt * k1_p, vel + 0.5f * dt * k1_v, k2_v, M);
-    k2_p = vel + 0.5f * dt * k1_v;
+        geodesic_equation_schwarzschild(p + 0.5f * dt * k1_p, vel + 0.5f * dt * k1_v, k2_v, M);
+        k2_p = vel + 0.5f * dt * k1_v;
 
-    geodesic_equation(p + 0.5f * dt * k2_p, vel + 0.5f * dt * k2_v, k3_v, M);
-    k3_p = vel + 0.5f * dt * k2_v;
+        geodesic_equation_schwarzschild(p + 0.5f * dt * k2_p, vel + 0.5f * dt * k2_v, k3_v, M);
+        k3_p = vel + 0.5f * dt * k2_v;
 
-    geodesic_equation(p + dt * k3_p, vel + dt * k3_v, k4_v, M);
-    k4_p = vel + dt * k3_v;
+        geodesic_equation_schwarzschild(p + dt * k3_p, vel + dt * k3_v, k4_v, M);
+        k4_p = vel + dt * k3_v;
+    }
+    else if (u_metric_type == 1) {
+        geodesic_equation_kerr(p, vel, k1_v, M, a);
+        k1_p = vel;
+
+        geodesic_equation_kerr(p + 0.5f * dt * k1_p, vel + 0.5f * dt * k1_v, k2_v, M, a);
+        k2_p = vel + 0.5f * dt * k1_v;
+
+        geodesic_equation_kerr(p + 0.5f * dt * k2_p, vel + 0.5f * dt * k2_v, k3_v, M, a);
+        k3_p = vel + 0.5f * dt * k2_v;
+
+        geodesic_equation_kerr(p + dt * k3_p, vel + dt * k3_v, k4_v, M, a);
+        k4_p = vel + dt * k3_v;
+    }
+    else if (u_metric_type == 2) {
+        geodesic_equation_reissner_nordstrom(p, vel, k1_v, M, Q);
+        k1_p = vel;
+
+        geodesic_equation_reissner_nordstrom(p + 0.5f * dt * k1_p, vel + 0.5f * dt * k1_v, k2_v, M, Q);
+        k2_p = vel + 0.5f * dt * k1_v;
+
+        geodesic_equation_reissner_nordstrom(p + 0.5f * dt * k2_p, vel + 0.5f * dt * k2_v, k3_v, M, Q);
+        k3_p = vel + 0.5f * dt * k2_v;
+
+        geodesic_equation_reissner_nordstrom(p + dt * k3_p, vel + dt * k3_v, k4_v, M, Q);
+        k4_p = vel + dt * k3_v;
+    }
+    else if (u_metric_type == 3) {
+        geodesic_equation_kerr_newman(p, vel, k1_v, M, a, Q);
+        k1_p = vel;
+
+        geodesic_equation_kerr_newman(p + 0.5f * dt * k1_p, vel + 0.5f * dt * k1_v, k2_v, M, a, Q);
+        k2_p = vel + 0.5f * dt * k1_v;
+
+        geodesic_equation_kerr_newman(p + 0.5f * dt * k2_p, vel + 0.5f * dt * k2_v, k3_v, M, a, Q);
+        k3_p = vel + 0.5f * dt * k2_v;
+
+        geodesic_equation_kerr_newman(p + dt * k3_p, vel + dt * k3_v, k4_v, M, a, Q);
+        k4_p = vel + dt * k3_v;
+    }
 
     p += (dt / 6.0f) * (k1_p + 2.0f * k2_p + 2.0f * k3_p + k4_p);
     vel += (dt / 6.0f) * (k1_v + 2.0f * k2_v + 2.0f * k3_v + k4_v);
