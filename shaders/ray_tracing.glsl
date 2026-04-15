@@ -134,6 +134,16 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         vec3 relativePosCart = newOrigin - bhPos;
         vec3 relativePosSph = toSpherical(relativePosCart);
         vec3 relativeDirSph = vel_cartesian_to_spherical(relativePosCart, newDirection);
+        vec4 p = vec4(0.0f, relativePosSph);
+
+        if (u_accretionDiskEnabled == 1 && closestBH == 0) {
+            float dAlpha = adiskColor(p, color, alpha, r_s, rayOrigin, u_blackHoleMasses[closestBH]);
+            alpha *= (1.0f - clamp(dAlpha, 0.0f, 1.0f));
+            if (alpha < 0.01f) {
+                return color;
+            }
+        }
+
         distToBH = relativePosSph.x - r_s;
 
         if (distToBH < r_s) {
@@ -141,7 +151,6 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
             return color;
         }
 
-        vec4 p = vec4(0.0f, relativePosSph);
         vec4 v = vec4(1.0f, relativeDirSph);
         // compute force of current closest bh to correct trajectories
         rk4_step(p, v, stepSize, u_blackHoleMasses[closestBH], 0.0f, 0.0f);
@@ -180,8 +189,8 @@ vec4 normalize4Velocity(vec4 pos, vec4 vel, float M) {
 // ------------------------------------------------------------------------------------------------------------
 vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
 
-    vec3 colorValue;
-    float alpha = 0.4f;
+    vec3 colorValue = vec3(0.0f);
+    float alpha = 1.0f;
 
     if (u_blackHoleMasses[0] == 0.0f)
         return texture(u_skyboxTexture, directionToSpherical(rayDirection)).rgb;
@@ -209,6 +218,14 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
     for (int i = 0; i < maxSteps; i++) {
 
         float dist = relativePosSph.y;
+
+        if (u_accretionDiskEnabled == 1) {
+            float dAlpha = adiskColor(relativePosSph, colorValue, alpha, r_s, rayOrigin, u_blackHoleMasses[0]);
+            alpha *= (1.0f - clamp(dAlpha, 0.0f, 1.0f));
+            if (alpha < 0.01f) {
+                return colorValue;
+            }
+        }
 
         // check if we've hit the event horizon
         if (dist < r_s + 100.0f * EPSILON) {
