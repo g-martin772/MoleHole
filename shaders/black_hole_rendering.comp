@@ -3,6 +3,9 @@
 layout(local_size_x = 16, local_size_y = 16) in;
 layout(rgba32f, binding = 0) uniform image2D l_outputImage;
 
+// accuracy
+uniform int u_isPhysicallyAccurate = 0;
+
 // debug
 uniform int u_debugMode = 0;
 
@@ -81,8 +84,15 @@ void main() {
     float tanHalfFov = tan(radians(u_fov) * 0.5);
     vec3 rayDir = normalize(cameraFront + cameraRight * uv.x * tanHalfFov + cameraUp * uv.y * tanHalfFov);
 
+    vec3 color;
+
     // Perform hybrid raytracing/raymarching to get the color
-    vec3 color = hybridRayTrace(rayOrigin, rayDir);
+    if (u_isPhysicallyAccurate == 1) {
+        color = rk4RayMarching(rayOrigin, rayDir);
+    }
+    else {
+        color = hybridRayTrace(rayOrigin, rayDir);
+    }
     
     // Generate Output Image
     imageStore(l_outputImage, texCoords, vec4(color, 1.0f));
