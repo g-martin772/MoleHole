@@ -1,0 +1,21 @@
+name: one-bh
+objects:
+  - classes:
+      - Entity
+      - BlackHole
+      - Physics
+  - classes:
+      - Entity
+      - Sphere
+      - Physics
+  - classes:
+      - Entity
+      - Mesh
+      - Physics
+animation_graph:
+  variables:
+    []
+  nodes:
+    []
+  links:
+    []

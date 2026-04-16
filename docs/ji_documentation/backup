@@ -1,0 +1,535 @@
+%! Author = leonh
+%! Date = 31.12.2025
+
+Die Physik hinter schwarzen Löchern besteht aus komplizierten Theorien und Beobachtungen, die
+außergewöhnliche Techniken erfordern~\autocite{Book:General_Relativity,Article:EHT_Imaging_SgrA,Article:EHT_Imaging_M87}.
+Obgleich es schwierig ist, die Mathematik und die Ideen hinter diesen Konzepten zu verstehen, ist es möglich, ein
+allgemeines Verständnis dieser Objekte aufzubauen.
+Dafür setzt das MoleHole Projekt auf eine interaktive Oberfläche, die es Benutzern ermöglicht, schwarze Löcher und deren
+Auswirkungen auf die Umgebung darzustellen und verschiedene Szenarien auszuprobieren.
+Um diese unterschiedlichen Darstellungen zu erreichen, kann man Effekte wie den
+\textit{Gravitationslinseneffekt}, die \textit{Raumzeitkrümmung}, die \textit{Akkretionsscheibe},
+den \textit{Dopplereffekt} und die \textit{Gravitation} beobachten.
+Dieses Dokument schildert die wichtigsten Fakten und Erkenntnisse aus
+dem Projektverlauf.
+Dabei wird auf die Idee der Simulation schwarzer Löcher, die anfängliche Planung und
+das Projektmanagement eingegangen.
+Weiters wird beschrieben, wie dieses Projekt einen bleibenden Eindruck in der Gesellschaft
+hinterlassen kann und wie es die Wissenschaftskommunikation verbessern soll.
+Danach werden einige technische Details erklärt, die im Hintergrund für die Visualisierung
+und Simulation der schwarzen Löcher verantwortlich sind.
+Es werden auch einige Grafiken zu sehen sein, die verdeutlichen sollen, wie die Applikation, die das
+Ergebnis des Projekts bildet, aussieht.
+Damit kann man erkennen, welche verschiedenen Möglichkeiten die Software bietet.
+Ein wichtiger Teil ist außerdem der Ausblick und das Potenzial, das in diesem Projekt steckt.
+Zum Abschluss wird ein Bericht über den Projektverlauf vom Projektkoordinator,
+Gabriel Martin, verfasst.
+
+
+%! Author = leonh
+%! Date = 31.12.2025
+
+\subsection{Projektentstehung und -planung} \label{subsec:project_origin_and_planning}
+
+Der folgende Abschnitt soll sich mit der Phase vor dem Beginn des eigentlichen Projektes und der darauffolgenden
+Planung auseinandersetzen. \\
+
+\begin{figure}[b]
+    \centering
+    \includegraphics[width=0.7\textwidth]{img/01_Planning_Notes}
+    \caption{Originale Notizen bei der Aufstellung der Projektziele}
+    \label{fig:original_notes_project_goals}
+\end{figure}
+
+\subsubsection{Projektentstehung} \label{subsubsec:project_origin} \\
+
+In dieser Sektion werden die Projektidee und das allgemeine Ziel des Projektes behandelt.
+Dabei wird auf die äußeren Umstände sowie die eigenen Ideen eingegangen. \\
+
+\textbf{Projektidee} \\
+
+Im Unterrichtsgegenstand \textit{Informationstechnische-Projekte-Labor (ITPL)} an der
+HTL Krems~\autocite{Website:HTL_Krems} hatte das Projektteam die Aufgabe,
+ein Projekt nach dessen eigenen Vorstellungen zu planen und durchzuführen.
+Die beiden Mitglieder des Projektteams waren frustriert mit dem Verlauf deren früherer Projekte
+und wollten etwas Neuartiges entwickeln.
+Daraus entsprang die Idee, schwarze Löcher virtuell und visuell darzustellen und in Echtzeit zu simulieren.
+Im Zuge der Einigung auf ein Gesamtziel versuchte das Projektteam, diese Vorstellung in einzelne
+Teile zu gliedern.
+In Abbildung~\ref{fig:original_notes_project_goals} sind die originalen Notizen des Projektteams zu
+sehen, die bei der Überlegung der Projektziele entstanden sind.
+Diese Ziele stellen die übergeordneten Gesamtausmaße des Projektes dar, welche das Team erreichen
+möchte.
+Im Zuge der besseren Lesbarkeit und genaueren Dokumentation werden diese sogenannten funktionalen
+Anforderungen nochmals in höherer Genauigkeit aufgelistet:
+\begin{itemize}
+    \item   \textbf{Basis mit Dear ImGui:} Als Basis wird eine \textit{C++ Applikation} aufgesetzt, welche die
+            \textit{Library} Dear ImGui nutzt~\autocite{GitHub:ImGui}, um dem Endnutzer die Möglichkeit zu bieten,
+            verschiedenste \textit{Parameter} einzustellen, als auch sich im drei dimensionalen Raum zu bewegen.
+    \item   \textbf{Visualisierung:} Zum besseren Verständnis schwarzer Löcher trägt vor allem die Visualisierung
+            bei.
+            Deshalb sollen der \textit{Ereignishorizont}, die \textit{Photonensphäre}, die Akkretionsscheibe und die
+            Raumzeitkrümmung dargestellt werden.
+            Zudem sollen auch noch verschiedenste Parameter eines schwarzen Loches angepasst werden können.
+            Das sind die Masse $m$, Position $x^i$, Geschwindigkeit $v^i$ sowie der \textit{Spin-Parameter} $a$.
+            Diese Punkte sollen mithilfe des \textit{Shader-Frameworks OpenGL} erfüllt werden.
+    \item   \textbf{Simulation:} Um über die reine Darstellung hinaus auch die unvorstellbaren Kräfte
+            schwarzer Löcher zu erkennen, soll es auch die Möglichkeit geben, eine Simulation zu konfigurieren
+            und danach anzusehen.
+            In dieser soll es möglich sein, Phänomene wie die Anziehungskräfte zwischen verschiedenen Objekten
+            zu erfahren.
+            Außerdem wird die Möglichkeit, andere Objekte wie z.B.\ Sterne, Planeten und Raumschiffe einzufügen und
+            mit dem schwarzen Loch interagieren zu lassen, einen Teil der Implementierung ausmachen.
+    \item   \textbf{Physikalische Korrektheit:} Damit ein Endnutzer auch lernen kann, wie schwarze Löcher in der
+            realen Welt funktionieren, sollen möglichst genaue Theorien über schwarze Löcher angewendet werden.
+            Zu diesen gehören z.B.\ die \textit{Kerr-Metrik} zur Berechnung der Raumzeitkrümmung in der Nähe rotierender
+            schwarzer Löcher oder der Dopplereffekt zur Veränderung des ausgesandten Lichts.
+\end{itemize} \\
+
+\textbf{Allgemeines Ziel} \\
+
+Weiters bildete sich über diese formulierten funktionalen Anforderungen auch ein allgemeines Ziel, das
+lautet:
+\begin{center}
+    \textbf{Die komplizierte Physik unseres Kosmos sollte jedem Menschen so einfach und gut verständlich
+    wie möglich präsentiert werden!}
+\end{center}
+Um den Worten des Astronomen Florian Freistetter gerecht zu werden~\autocite{Video:Podcast_Science_Communication},
+soll den Menschen Wissenschaft beigebracht werden, indem man sie auf eine Reise einlädt, die Komplexität
+verschiedenster Theorien weglässt und vor allem ein Vertrauen aufbaut.
+Dieses Projekt soll das umsetzen und damit eine Hilfe in der Kommunikation von Wissenschaft mit der allgemeinen
+Bevölkerung darstellen. \\
+
+\textbf{These} \\
+
+Es war nicht nötig, für dieses Projekt eine These zu formulieren, da es sich nicht um eine herkömmliche
+wissenschaftliche Arbeit handelt, bei der eine Hypothese formuliert wird und im weiteren Verlauf der Arbeit
+mithilfe wissenschaftlicher Methoden bestätigt oder wieder verworfen wird.
+Dieses Projekt soll vielmehr ein Produkt hervorbringen, dass es den Menschen ermöglicht, auf einfache Art und
+Weise Wissenschaft zu erfahren.
+In diesem Projekt werden bei Erfüllung der Projektziele große Teile der Errungenschaften der Astronomie und
+Kosmologie der letzten 150 Jahre umgesetzt und versucht, dem Endnutzer möglichst verständlich zu präsentieren. \\
+
+\subsubsection{Recherche und Planung} \label{subsubsec:planning} \\
+
+In dieser Sektion wird die Recherche und Planung des Projektes beschrieben.
+Es wird dafür auf die verschiedenen Quellen eingegangen sowie die Art der Planung erklärt. \\
+
+\textbf{Informationsgewinn} \\
+
+Die Quellen für die Recherche und den Informationsgewinn sind so zahlreich, dass sie nicht in einer Liste aufgeführt
+werden können, ohne den Rahmen dieses Dokumentes zu sprengen oder die Lesbarkeit zu beeinträchtigen.
+Deshalb werden hier nur einige Beispiele aufgeführt werden.
+Als wichtigste Ressourcen zählen einige Projekte, die als Inspiration für die Arbeit dienen.
+Vor allem die Programmierung dieser Projekte war von großer Relevanz, da sie bei der Implementierung
+verschiedener Effekte helfen.
+Die Ressourcen sind:
+\begin{itemize}
+    \item   \textbf{Black Hole Raytracer - Ross Ning}: Dieses Projekt hat anfänglich als hauptsächliche Quelle für die Programmierung
+            der Visualisierung schwarzer Löcher gedient.
+            Es ist eine gute Simulation, auch wenn die Physik nicht perfekt umgesetzt
+            ist~\autocite{Project:Black_Hole_Sim_rossning}.
+    \item   \textbf{Black Hole Raytracer - Hydrogendeuteride}: In diesem Projekt sind vor allem der Dopplereffekt und die
+            \textit{Schwarzkörperstrahlung} genau umgesetzt worden~\autocite{Project:Black_Hole_Sim_hdeu}.
+    \item   \textbf{Thomas Kamminga}: Dieses Projekt ist vor allem aufgrund der korrekten physikalischen
+            Implementierung eine gute Hilfe~\autocite{Project:Black_Hole_Sim_Kamminga}.
+    \item   \textbf{Black Hole Raytracer - Eliot Han}: Die Dokumentation dieser Ressource war eine Hilfestellung, indem
+            auf einer verlinkten Website die Lösung für die Implementierung des Gravitationslinseneffektes
+            gut erklärt ist~\autocite{Project:Black_Hole_Sim_eliot,Website:Eliot_Han}.
+    \item   \textbf{Andere}: Außerdem gibt es auch noch einige andere Projekte oder Beiträge, die von der
+            Visualisierung schwarzer Löcher handeln, sie sind
+            in~\autocite{Project:Black_Hole_Sim_20k,Project:Black_Hole_Sim_bhusie,Project:Black_Hole_Sim_starless,
+            Reddit:Black_Hole_Sim_Burgao,Project:Black_Hole_Sim_sirxemic,Website:Starless} aufgezählt.
+\end{itemize}
+Viele dieser Projekte können auf GitHub betrachtet werden, während auch auf Reddit etwas zu finden war.
+Auch Bücher waren eine ordentliche Hilfestellung bei der Implementierung.
+Diese sind:
+\begin{itemize}
+    \item   \textbf{Spacetime and Geometry: An Introduction to General Relativity}: Dieses Buch ist 
+            eine umfangreiche Einführung in die \textit{Allgemeine Relativitätstheorie (ART)} und erklärt
+            die dafür notwendigen mathematischen Grundlagen~\autocite{Book:General_Relativity}.
+    \item   \textbf{Schwarze Löcher: Der Schlüssel zum Verständnis des Universums}: In diesem Buch werden
+            in populärwissenschaftlicher Weise bestimmte Phänomene und Theorien rund um schwarze Löcher
+            erklärt~\autocite{Book:Black_Holes_bc}.
+    \item   \textbf{Andere}: Es gibt natürlich auch noch viele andere Bücher zu dieser Thematik, allerdings
+            wurden viele nicht für das Projekt verwendet oder es wurde nur wenig Wissen entnommen, wie
+            aus~\autocite{Book:Gravitation,Book:Science_of_Interstellar}.
+\end{itemize}
+Insgesamt ist die Recherche für ein Projekt dieser Komplexität äußerst wichtig und dementsprechend viele
+verschiedene Quellen wurden hierfür herangezogen.
+Neben den oben genannten wichtigsten Ressourcen wurden auch einige wissenschaftliche Artikel, Dissertationen,
+Videos und Webinhalte genutzt, um an das notwendige Wissen zu gelangen. \\
+
+\textbf{Planung des Projektablaufes} \\
+
+Die Planung des Projektes erfolgt agil, was nicht bedeutet, dass auf eine Planung im Vorfeld verzichtet
+wurde.
+Vielmehr wurde sich am Anfang die Zeit genommen, um die groben Ziele aufzustellen -
+siehe~\ref{subsubsec:project_origin} - und Rahmenbedingen zu schaffen sowie das
+Aufsetzen eines \textit{GitHub Repositories} und der \textit{Projektmanagementsoftware}
+YouTrack~\autocite{Project:Black_Hole_Sim_MoleHole,Website:YouTrack}.
+Darüber hinaus werden kleinere Aufgaben für jede Iteration eines sogenannten
+\textit{Sprints}~\autocite{Website:Scrum} eingeteilt.
+Die untergeordneten Projektziele werden im Laufe des Projektes angepasst und hinzugefügt oder gelöscht.
+Es wird eine Mischung der agilen Projektplanungsframeworks \textit{Scrum}~\autocite{Wikipedia:Scrum} und
+\textit{Kanban}~\autocite{Wikipedia:Kanban} - \textit{Scrumban}~\autocite{Wikipedia:Scrumban} - ausgeführt.
+Dies wird insofern eingehalten, als das Rollen für die Mitglieder des Projektteams festgelegt wurden,
+wöchentliche Meetings abgehalten werden, alle drei Wochen ein Product Increment erfolgt und alles über ein
+Kanban-Board verwaltet wird.
+Zudem werden mittels einer \textit{Knowledge Base} alle Meetings dokumentiert und andere wichtige Informationen
+festgehalten.
+Diese Art, ein Projekt zu planen und führen, ermöglicht eine flexible Arbeitsweise und macht besonders
+im Falle dieses Projektes Sinn.
+Dies kommt daher, dass die beiden Richtungen der Programmierung und der Physik miteinander kombiniert werden
+müssen und dies einen ständigen Paradigmenwechsel sowie eine Überarbeitung alter Konzepte erfordert.
+Da alle Beteiligten des Projektes großes Engagement zeigen, wird auch außerhalb des Unterrichts gearbeitet und
+versucht, die aktuellen Ziele zu erfüllen. \\
+
+%! Author = leo
+%! Date = 1/15/26
+
+\subsection{Projektumsetzung und Ausblick} \label{subsec:project_execution_outlook}
+
+Dieser Abschnitt beschreibt die wesentlichen Merkmale dieses Projektes und soll die Realisierung und die aktuellen
+Ergebnisse sowie das Entwicklungspotenzial erläutern. \\
+
+\subsubsection{Innovationsgehalt und Einzigartigkeit} \label{subsubsec:innovation_uniqueness} \\
+
+In dieser Sektion wird erklärt, warum dieses Projekt einzigartig ist und einen eigenen innovativen Charakter enthält. \\
+
+\textbf{Innovationscharakter} \\
+
+Dieses Projekt kann als innovativ oder außergewöhnlich angesehen werden, da schwarze Löcher für einen Großteil der
+Bevölkerung ein sehr unbekanntes Thema sind und eher einschüchternd wirken, wenn man die komplexe Mathematik dahinter
+betrachtet.
+Außerdem geht es um besonders abstrakte Konzepte, da bis heute erst zwei echte Bilder eines schwarzen Loches angefertigt
+werden konnten~\autocite{Article:EHT_Imaging_M87,Article:EHT_Imaging_SgrA}.
+Demnach ist das Projekt innovativ, weil es sich mit dieser komplizierten Thematik auseinandersetzt.
+Darüber hinaus wird auch versucht, anderen Menschen ein Verständnis für das Thema zu vermitteln, indem eine
+interaktive Applikation entwickelt wird, die es ermöglicht, spielerisch und experimentell die komplexen
+Vorgänge in der Nähe eines schwarzen Loches zu erleben. \\
+
+%\textbf{Rechtslage} \\
+
+
+
+\textbf{Einzigartigkeit} \\
+
+Es gibt ohnehin wenig frei zugängliche Projekte, die als Ziel die Visualisierung schwarzer Löcher verfolgen.
+Jedoch ist bei diesen Projekten nie eine Benutzerinteraktion vorgesehen, was der größte Unterschied zu
+diesem Projekt ist.
+Genau in dieser Lücke findet sich das MoleHole Projekt wieder, indem es die Echtzeitsimulation schwarzer Löcher mit einer
+interaktiven Benutzeroberfläche kombiniert. \\
+
+\subsubsection{Realisierung} \label{subsubsec:implementation} \\
+
+Diese Sektion befasst sich mit der Implementierung der aktuellen Version der Applikation und soll
+diese Schritt für Schritt beschreiben. \\
+
+\textbf{Technologiestack} \\
+
+Der Großteil der Applikation wurde in C++ entwickelt.
+Die einzige Programmiersprache, die zusätzlich verwendet wurde, ist GLSL für die Shader-Programmierung.
+Die Programmiersprachen sind also sehr einfach gehalten.
+Im Gegensatz dazu werden einige Bibliotheken verwendet, um nicht alles selbst entwickeln zu müssen.
+Alle verwendeten Bibliotheken sind:
+\begin{itemize}
+    \item   \textbf{OpenGL Libraries:} GLAD, GLFW und GLM für Parameter in GLSL und andere
+            Utilities~\autocite{GitHub:Glad,GitHub:Glfw,GitHub:Glm}
+    \item   \textbf{Dear ImGui:} Standardisierte Library für das \textit{User Interface}~\autocite{GitHub:ImGui}
+    \item   \textbf{Spdlog:} Library für das Logging~\autocite{GitHub:Spdlog}
+    \item   \textbf{PhysX:} Physiksimulationen verschiedenster Art~\autocite{GitHub:PhysX}
+    \item   \textbf{Stb\_image:} Verarbeiten von Bildern~\autocite{GitHub:Stb}
+    \item   \textbf{ImGuizmo:} Utility-Library für die Selektion von Objekten~\autocite{GitHub:ImGuizmo}
+    \item   \textbf{Tinygltf:} Für das \textit{File-Processing} von .gltf-Dateien~\autocite{GitHub:Tinygltf}
+    \item   \textbf{ImGui-Node-Editor:} Framework für einen \textit{Node Editor}~\autocite{GitHub:ImGuiNodeEditor}
+    \item   \textbf{Yaml-cpp:} Verarbeitung von .yaml-Dateien~\autocite{GitHub:Yaml-cpp}
+    \item   \textbf{Nativefiledialog-extended:} \textit{File-Dialogs} für den Export von Videos 
+            und Bildern~\autocite{GitHub:Nativefiledialog}
+\end{itemize}
+
+Zusätzlich zu diesen Technologien, gibt es auch einige Tools und Programme, die für die Entwicklung
+verwendet wurden.
+Dabei wurden CLion und YouTrack von JetBrains~\autocite{Website:CLion,Website:YouTrack} und
+Git~\autocite{Website:Git} als \textit{Versionskontrolle} eingesetzt. \\
+
+\textbf{Rendering Techniken} \\
+
+Die wichtigsten Rendering Techniken, die in der Applikation verwendet werden, sind Ray Tracing und
+Ray Marching.
+Beim Ray Tracing geht von der Kamera aus bis zu einem Schnittpunkt mit einem Objekt ein Lichtstrahl
+aus und wird dort reflektiert und zur Lichtquelle zurückverfolgt.
+Dies wird für eine große Anzahl an Schnittpunkten durchgeführt, bis schlussendlich das ganze Objekt sichtbar ist.
+Dies wird dann am Bildschirm dargestellt.
+Beim Ray Marching nutzt man auch Lichtstrahlen, die von der Kamera ausgehen, aber man geht hier Schritt für
+Schritt und rechnet nicht sofort den Schnittpunkt mit einem Objekt aus.
+Grundsätzlich ist diese Methode also rechenintensiver, aber sie ermöglicht es, gekrümmte Lichtstrahlen abzubilden.
+Diese gekrümmten Lichtstrahlen sind dafür verantwortlich, dass in der Nähe eines schwarzen Loches komplexe
+visuelle Effekte auftreten.
+Die Lichtstrahlen werden durch die Gravitation abgelenkt und dieser sogenannte Gravitationslinseneffekt
+wird durch das Ray Marching in der Applikation simuliert.
+Da die Rechenleistung eines normalen Computers für das Ray Marching nicht ausreicht, muss man einen Kompromiss eingehen.
+Man verzichtet auf die exakte Darstellung der Objekte und beschäftigt sich nur mit der Simulation von Lichtstrahlen,
+die sehr nahe an einer großen Masse vorbeigehen.
+Dadurch wird gewährleistet, dass die gewünschten optischen Effekte zu sehen sind, jedoch auch nicht zu viel Genauigkeit
+verloren geht, da die Lichtstrahlen in größerer Entfernung nicht mehr wirklich sichtbar abgelenkt werden.
+Für die Software werden also beide Rendering Techniken eingesetzt: Ray Tracing um Lichtstrahlen bis zu einer gewissen
+Entfernung zu schwarzen Löchern zu simulieren und Ray Marching um die Lichtstrahlen in der Nähe von schwarzen
+Löchern zu berechnen. \\
+
+%Antialiasing (FXAA);
+%Bloom Effekt;
+%Third-Person-Kamera;
+%irst-Person-Kamera; \\
+
+\textbf{Physikalische Effekte} \\
+
+Die physikalischen Effekte, die bis zum jetzigen Stand in der Software realisiert worden sind,
+bilden die Grundlage für die Simulation schwarzer Löcher.
+
+Der wichtigste Effekt betrifft den Gravitationslinseneffekt, der sich durch die starke
+Raumzeitkrümmung in der Nähe eines schwarzen Loches ergibt.
+Hierbei werden Lichtstrahlen in der Nähe einer großen Masse stärker abgelenkt als in größerer Entfernung.
+Dies entspricht dann einem ähnlichen Effekt wie bei einer herkömmlichen \textit{Konvexlinse}.
+Um diesen Effekt visuell darzustellen, ist es nötig die \textit{Nullgeodätische} auszurechnen, welche den
+Weg des Lichts um ein schwarzes Loch angibt~\autocite{Book:General_Relativity}.
+Man nehme an, dass $x(\lambda)$ den Weg eines Objektes durch Raum und Zeit und $\Gamma$ das
+\textit{Christoffel-Symbol} angibt.
+Damit ergibt sich nach Lösung von
+\begin{equation}
+    \frac{d^2 x^{\rho}}{d\lambda^2} + \Gamma^{\rho}_{\mu \nu} \frac{d x^{\mu}}{d\lambda} \frac{d x^{\nu}}{d\lambda} = 0
+    \label{eq:geodesic_equation}
+\end{equation}
+genau dieser Weg~\autocite{Book:Gravitation,Book:General_Relativity}.
+Für diese Lösung gibt es in der \textit{Schwarzschild-Metrik} eine vereinfachte Form, die in der Applikation
+tatsächlich verwendet wird.
+Die Kraft $\vec{F}(r)$ ergibt sich aus
+\begin{equation}
+    \vec{F}(r) = \frac{3h^2\hat{r}}{2r^5}
+    \label{eq:schwarzschild_acceleration}
+\end{equation}
+mit einer Konstante $h$, dem Radius $r$ und der Basis $\hat{r}$.
+
+Die Theorie, die vorerst zur Simulation der Gravitation verwendet wird, ist die Gravitationstheorie
+von Isaac Newton.
+Diese Theorie ist schon sehr alt, funktioniert aber immer gut für die Berechnung der Anziehungskräfte
+zwischen Objekten mit geringen Massen.
+$G$ sei die Gravitationskonstante, $M$ und $m$ die Massen zweier Objekte und $\vec{r}$ der Abstand
+zwischen den Zentren der beiden Objekte.
+Die Gravitationskraft $\vec{F}_G$ berechnet sich dann durch~\autocite{Book:Principia_Mathematica}
+\begin{equation}
+    \vec{F}_G = \frac{GMm}{\vec{r}^2}.
+    \label{eq:gravitational_force}
+\end{equation}
+
+Für die Visualisierung der Raumzeitkrümmung wird die Schwarzschild-Metrik verwendet.
+Diese wird zur Berechnung der Krümmung in der Nähe einer Punktmasse verwendet.
+Es seien die Distanz zwischen zwei Ereignissen $ds$, der Schwarzschildradius $R_S$, die Entfernung
+vom Zentrum der Masse $R$ sowie die Dimensionen der Raumzeit $dt$, $dr$ und $d\Omega$ gegeben.
+Dann beschreibt
+\begin{equation}
+    ds^2 = -\Bigg(1 - \frac{R_S}{R}\Bigg)dt^2 + \frac{1}{\Big(1 - \frac{R_S}{R}\Big)}dr^2 + r^2 d\Omega^2
+    \label{eq:schwarzschild_metric}
+\end{equation}
+die Raumzeitkrümmung in der Nähe einer
+Punktmasse~\autocite{Book:Gravitation,Book:General_Relativity,Book:Black_Holes_bc}. \\
+
+%Physikalische Effekte:
+
+%Dopplereffekt;
+%Gravitative Rotverschiebung;
+%Akkretionsscheibe;
+%ISCO;
+%Photonensphäre;
+%Schwarzkörperstrahlung;
+%Hertzsprung-Russell-Diagramm; \\
+
+\textbf{Forschungsmethoden} \\
+
+Als Forschungsmethode wurde sich auf die Empirie gestützt, um die Applikation zu verbessern.
+Es wurde ein Problem identifiziert und danach an einer vermeintlichen Lösung gearbeitet.
+Nachdem man eine Lösung auf dem Papier entwickelt hatte, wurde diese in der Applikation implementiert und ausprobiert.
+Durch die Überprüfung der neuen Implementierung konnte eine Entscheidung getroffen werden, ob die Lösung
+zielführend war oder nicht.
+
+Außerdem war die Recherche ein wichtiges Mittel, um an nötige Informationen zu gelangen.
+Hierfür wurden wissenschaftliche Artikel, Bücher und Videos wie zum
+Beispiel~\autocite{Book:General_Relativity,Book:Black_Holes_bc,Video:Coding_Adventure_Clouds}
+verwendet. \\
+
+\subsubsection{Ergebnisse} \label{subsubsec:results} \\
+
+Diese Sektion beschäftigt sich mit dem Fortschritt, der bis heute erreicht werden konnte.
+Dabei werden einige Bilder zu sehen sein und anhand einiger Zahlen der Umfang beschrieben. \\
+
+\textbf{Ergebnisse in visueller Darstellung} \\
+
+\begin{figure}[b]
+    \centering
+    \begin{subfigure}{0.4\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/02_Black_Hole_Rendering_White}
+        \caption{Rendering eines schwarzen Loches mit Akkretionsscheibe und Gravitationslinseneffekt.}
+        \label{fig:black_hole_rendering_white}
+    \end{subfigure}
+    \begin{subfigure}{0.4\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/Export-JI-07}
+        \caption{Rendering eines schwarzen Loches mit Akkretionsscheibe und Gravitationslinseneffekt.}
+        \label{fig:black_hole_rendering_black}
+    \end{subfigure}
+    \caption{Rendering eines schwarzen Loches mit Akkretionsscheibe und Gravitationslinseneffekt.}
+    \label{fig:black_hole_rendering}
+\end{figure}
+
+Die beiden Rendering-Ergebnisse in Abbildung~\ref{fig:black_hole_rendering} zeigen jeweils ein
+einziges schwarzes Loch.
+Bei dem linken Bild in Abbildung~\ref{fig:black_hole_rendering_white} ist die Akkretionsscheibe als weiß zu
+erkennen.
+Das kommt daher, da dieses Rendering in einem früheren Stadium des Projektes aufgenommen worden ist und
+die Temperaturskalierung nicht den realen Verhältnissen entsprochen hat.
+Im rechten Bild in Abbildung~\ref{fig:black_hole_rendering_black} kann man eine genauere Verteilung der
+Temperatur in der Akkretionsscheibe erkennen, welche sich in Abhängigkeit der Entfernung zum Zentrum
+des schwarzen Loches ändert.
+
+Man nehme an, dass $G$ die Gravitationskonstante, $\sigma$ die Stefan-Boltzmann-Konstante,
+$M$ die Masse des schwarzen Loches, $\dot{M}$ die Akkretionsrate, $R_i$ der innere Radius der Akkretionsscheibe
+und $R$ der aktuelle Radius in der Akkretionsscheibe ist.
+Die Temperaturverteilung $T(R)$ in der Akkretionsscheibe lässt sich dann durch
+
+\begin{equation}
+    T(R) = \Bigg[ \frac{3GM\dot{M}}{8\pi \sigma R^3} \Bigg( 1 - \sqrt{\frac{R_i}{R}}\Bigg) \Bigg]^{\frac{1}{4}}\label
+    {eq:temp_scaling_accretion_disk}
+\end{equation}
+
+beschreiben~\autocite{Article:Temp_Accretion_Disk}.
+
+\begin{figure}[b]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/Export-JI-03}
+        \caption{First-Person-Perspektive}
+        \label{fig:first_person_perspective}
+    \end{subfigure}
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/Export-JI-04}
+        \caption{Third-Person-Perspektive}
+        \label{fig:third_person_perspective}
+    \end{subfigure}
+    \caption{Vergleich der First-Person- und Third-Person-Perspektive.}
+    \label{fig:camera_perspectives}
+\end{figure}
+
+In der Software wurden zwei verschiedene Kameraperspektiven umgesetzt: die First-Person-Perspektive und
+die Third-Person-Perspektive.
+In Abbildung~\ref{fig:camera_perspectives} kann man die beiden im Vergleich betrachten.
+Für die Third-Person-Perspektive kann man ein Objekt auswählen, das man dann steuern kann.
+Dieses Objekt wird mit einem zusätzlichen Würfel, welcher eine Art Crosshair darstellen soll, in der
+Applikation gerendert. \\
+
+%Dreifachsternsystem:
+
+%Visualisierung Raumzeitkrümmung:
+
+%Performance: \\
+
+\textbf{Erreichung der Ziele} \\
+
+Das Projektteam setzt sich alle Ziele am Anfang eines sogenannten Sprints~\autocite{Website:Scrum} und schreibt
+diese in der Projektmanagement-Software YouTrack~\autocite{Website:YouTrack} nieder.
+Dort werden allgemein die Ziele formuliert, mit einer Priorität versehen, der Arbeitsaufwand anhand von Story Points
+geschätzt und ein Verantwortlicher festgelegt.
+Um zu überprüfen, ob das Projektteam die Ziele erfüllt, werden diese in der Applikation von den Mitgliedern des
+Projektteams ausprobiert.
+Da dies keine besonders zuverlässige Methode zur Bestimmung der erfüllten Ziele ist, gibt es am Ende eines jeden
+Sprints ein Sprint-Review Meeting, bei dem das Team ihre Ergebnisse dem Projektbetreuer sowie einem ausgewählten Kunden
+(ein Mitschüler) vorstellt und den Sprint somit abschließt~\autocite{Website:Scrum}.
+Danach werden erneut Ziele für die nächste Iteration überlegt. \\
+
+\subsubsection{Entwicklungspotenzial} \label{subsubsec:potential} \\
+
+Es steckt noch einiges an Potenzial in diesem Projekt und das Team plant nicht, dieses einfach wegzuwerfen und
+nicht zu nutzen.
+Demnach werden in dieser Sektion alle potenziellen Erweiterungen des Projektes aufgezählt. \\
+
+\textbf{Gesellschaftliche Auswirkungen} \\
+
+Wie bereits in~\ref{subsec:project_origin_and_planning} erwähnt ist das Gesamtziel des Projektes eine verbesserte
+Wissenschaftskommunikation durch eine Applikation mit der man experimentell und spielerisch komplexe Vorgänge
+unseres Universums erleben und erlernen kann.
+Das Produkt ist so konzipiert, dass es die Möglichkeit gibt, eigene Simulationen zu erstellen und in diesen zu experimentieren,
+aber auch über Tooltips und Dokumentation Genaueres über die simulierten physikalischen Effekte zu erfahren.
+Weiters ist die Applikation als OpenSource-Software frei auf GitHub verfügbar und wird dies in Zukunft auch bleiben, was
+den gesellschaftlichen Nutzen erheblich verbessert, weil es jeder, der einen PC besitzt, ausprobieren kann.
+Insgesamt lässt sich feststellen, dass es dem Projektteam ein Anliegen ist, mit dieser Applikation die
+Wissenschaftskommunikation zu verbessern und damit mehr Menschen den Zugang zur Wissenschaft zu erleichtern. \\
+
+\textbf{Kooperationen} \\
+
+Aktuell gibt es bei diesem Projekt keine bestehenden Kooperationen, jedoch würde das Projektteam in Zukunft welche anstreben.
+Allerdings ist das Projekt noch sehr jung und das Team möchte zuerst wissen, wie sich die Ziele und das Produkt entwickeln. \\
+
+\textbf{Releases} \\
+
+Wenn die Entwicklung des Projektes weiterhin große Fortschritte erzielt, ist eine Veröffentlichung des Projektes
+zum Beispiel auf Steam anzuvisieren.
+Aktuell kann man das Projekt zwar schon benutzen, da es ein öffentliches GitHub Repository mit dem Code gibt, aber
+es ist ein wenig technisches Wissen notwendig, um dieses zu verwenden.
+Wenn die Applikation auf einer Vertriebsplattform wie Steam veröffentlicht werden kann, würde das den Zugang
+zu der Software erleichtern.
+Vorausschauend ist zu sagen, dass der Plan eines offiziellen Releases besteht, aber noch einige Zeit in der Zukunft liegt.
+Das bedeutet, dass sich das Projektteam derzeit darum kümmert, die notwendigen Features hinzuzufügen, die dem Team noch wichtig sind
+und danach die nötigen Schritte in Richtung eines Releases gehen wird. \\
+
+\textbf{Technische Potenziale} \\
+
+Das mit Abstand wichtigste physikalische Phänomen, das in der Applikation noch umgesetzt werden muss, ist die
+\textit{Kerr-Metrik}, welche im Jahre 1963 vom neuseeländischen Physiker Roy Kerr als Lösung der Feldgleichungen aus der
+\textit{allgemeinen Relativitätstheorie (ART)} aufgestellt worden ist~\autocite{Book:General_Relativity}.
+Hierfür wird allerdings Wissen aus der ART benötigt, das sich das Projektteam noch nicht angeeignet hat.
+Deshalb wird es noch einige Zeit dauern, bis dieses Feature verwirklicht werden kann.
+Nichtsdestotrotz beschäftigt sich das Team mit diesem Effekt, da dieser extrem relevant für eine akkurate Darstellung
+eines schwarzen Loches ist.
+Mit der Kerr-Metrik folgen einige andere wichtige Phänomene aus der ART, die als mögliche Ziele des Projektes
+im Hinterkopf behalten werden sollen, jedoch erst nach Umsetzung der Kerr-Metrik implementiert werden können.
+Diese Effekte sind das Frame-Dragging, die Zeitdilatation, die Längenkontraktion sowie die Gravitation im Allgemeinen.
+Vor allem Zeitdilatation und Längenkontraktion sind wichtig für eine genaue Simulation schwarzer Löcher, da für Beobachter
+außerhalb der unmittelbaren Umgebung eines schwarzen Loches Objekte nahe dem Ereignishorizont sich immer langsamer
+bewegen und letztendlich verblassen~\autocite{Book:Gravitation}.
+Hierbei muss natürlich auch die Gravitation implementiert werden, die der wichtigste Bestandteil der zukünftigen Ziele
+sein wird.
+Es soll dabei die aktuell verwendete Simulation der Gravitation nach der Gravitationstheorie von Isaac
+Newton~\autocite{Book:Principia_Mathematica} durch die Gravitationstheorie von Albert Einstein, die ART, ersetzt werden.
+Mit dieser Theorie wäre es möglich, Objekte, die sich sehr nahe an großen Massen befinden, genauestens zu simulieren.
+Generell lässt sich sagen, dass die Theorie der Gravitation von Isaac Newton in der Nähe von schwarzen Löchern nicht
+funktionieren wird, da die Raumzeit hier besonders stark gekrümmt ist~\autocite{Book:Gravitation,Book:General_Relativity}.
+Aus der Gravitationstheorie lässt sich ein weiterer Effekt ableiten, der für eine genaue Simulation von Objekten in der
+Nähe großer Massen von Relevanz ist: die Gezeitenkraft~\autocite{Paper:Tidal_forces}.
+Mit der Implementierung dieser Kraft wäre es möglich, Himmelskörper wie zum Beispiel Millers Planet aus dem Film
+Interstellar~\autocite{Film:Interstellar,Book:Science_of_Interstellar} physikalisch möglichst genau zu simulieren.
+Aus technischer Perspektive soll die visuelle Darstellung der Objekte auch noch verbessert werden.
+Hierfür wird das \textit{Volumetric Cloud Rendering} verwendet werden, um die Akkretionsscheibe eines schwarzen Loches
+detailreicher darzustellen.
+Diese Rendering-Technik kümmert sich um die Belichtung wolkenartiger Gebilde, da Licht in Wolken gestreut und abgelenkt wird,
+sodass nicht genau das Licht den Beobachter erreicht, das ursprünglich in seine Richtung ausgesandt worden
+ist~\autocite{Video:Coding_Adventure_Clouds,Paper:Volumetric_Cloud_Rendering}.
+Außerdem wird eine Partikel Simulation angestrebt, sodass man sehen kann, wie sich über die Zeit eine Akkretionsscheibe um
+ein schwarzes Loch bildet.
+Abgesehen von der technischen Simulation, ist es auch das Ziel, Wissenschaft zu kommunizieren.
+Daher ist auch geplant, Erklärungen und Beschreibungen mittels Tooltips und detaillierte Berichte in einem Menü unterzubringen.
+Diese Erklärungen sollen auch nicht auf Mathematik verzichten, sollen diese aber verständlich erklären und wenn nötig auf externe
+Ressourcen verweisen.
+Somit wäre garantiert, dass interessierte Menschen relativ einfach an die nötigen Ressourcen gelangen können, die notwendig sind, um
+komplexe physikalische Konzepte zu verstehen. \\
+
+\textbf{Wirtschaftliches Potenzial} \\
+
+Das Projektteam plant nicht, aus dem Projekt Gewinne auszuschöpfen.
+Dies kommt daher, da Wissenschaft für alle zugänglich sein sollte und man den Zugang zu der Applikation mit einem Kaufpreis
+einschränken würde.
+Jedoch handelt es sich immer noch um eine einzigartige Software, welche theoretisch auch ein Premium-Abonnement erhalten könnte, um
+für wissenschaftliche Zwecke an Hochschulen verwendet werden zu können.
+Dieses würde Features wie zum Beispiel detaillierte Erklärungen zu physikalischen Phänomenen oder extrem rechenintensive Simulationen über einen
+externen Server beinhalten. \\
