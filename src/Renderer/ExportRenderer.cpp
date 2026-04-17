@@ -177,12 +177,6 @@ void ExportRenderer::StartVideoExport(const VideoConfig& config, const std::stri
     m_currentFrame = 0;
     m_totalFrames = static_cast<int>(m_videoConfig.length * m_videoConfig.framerate);
 
-    // Enable export mode on renderer if custom ray settings are used
-    auto& renderer = Application::GetRenderer();
-    if (m_videoConfig.useCustomRaySettings) {
-        renderer.blackHoleRenderer->SetExportMode(true);
-    }
-
     spdlog::info("Starting video export: {}x{} {} frames to {}", m_videoConfig.width, m_videoConfig.height, m_totalFrames, outputPath);
 }
 
@@ -486,10 +480,6 @@ void ExportRenderer::ProcessVideoExport() {
 }
 
 void ExportRenderer::FinishExport() {
-    // Disable export mode on renderer
-    auto& renderer = Application::GetRenderer();
-    renderer.blackHoleRenderer->SetExportMode(false);
-    
     m_camera.reset();
     CleanupOffscreenBuffers();
     m_pixelBuffer.clear();

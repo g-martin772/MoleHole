@@ -585,11 +585,9 @@ void BlackHoleRenderer::UpdateUniforms(const Scene& scene, const std::unordered_
     m_computeShader->SetFloat("u_accDiskTemp", 2000.0f);
     m_computeShader->SetInt("u_gravitationalRedshiftEnabled", Application::Params().Get(Params::GRGravitationalRedshiftEnabled, true) ? 1 : 0);
 
-    // Ray marching quality settings - only set during export mode
-    if (m_isExportMode) {
-        m_computeShader->SetFloat("u_rayStepSize", Application::Params().Get(Params::RenderingRayStepSize, 0.1f));
-        m_computeShader->SetInt("u_maxRaySteps", Application::Params().Get(Params::RenderingMaxRaySteps, 128));
-        m_computeShader->SetFloat("u_adaptiveStepRate", Application::Params().Get(Params::RenderingAdaptiveStepRate, 0.1f));
+    if (m_isPhysicallyAccurate)
+    {
+        m_computeShader->SetInt("u_isPhysicallyAccurate", 1);
     }
 
     int numBlackHoles = 0;

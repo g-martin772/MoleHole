@@ -1,4 +1,13 @@
 name: Test
+objects:
+  - classes:
+      - Entity
+      - BlackHole
+      - Physics
+    parameters:
+      Entity.Name: BlackHole
+      Entity.Position: [0, 0, -5]
+      Physics.Mass: 3.978e+30
 animation_graph:
   variables:
     []

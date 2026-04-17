@@ -726,6 +726,7 @@ void Renderer::RenderToFramebuffer(unsigned int fbo, int width, int height, Scen
     glViewport(0, 0, width, height);
     
     if (blackHoleRenderer) {
+        blackHoleRenderer->SetIsPhysicallyAccurate(true);
         blackHoleRenderer->Resize(width, height);
     }
 
@@ -744,6 +745,7 @@ void Renderer::RenderToFramebuffer(unsigned int fbo, int width, int height, Scen
     glFlush();
 
     if (blackHoleRenderer) {
+        blackHoleRenderer->SetIsPhysicallyAccurate(false);
         blackHoleRenderer->Resize(oldViewport[2], oldViewport[3]);
     }
 

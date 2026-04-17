@@ -29,9 +29,8 @@ public:
     unsigned int GetHRDiagramLUT() const { return m_hrDiagramLUT; }
     unsigned int GetAccelerationLUT() const { return m_accelerationLUT; }
     
-    // Export mode control
-    void SetExportMode(bool isExporting) { m_isExportMode = isExporting; }
-    bool IsExportMode() const { return m_isExportMode; }
+    void SetIsPhysicallyAccurate(const bool value) { m_isPhysicallyAccurate = value; }
+    bool IsPhysicallyAccurate() const { return m_isPhysicallyAccurate; }
 
     void LoadSkybox();
     
@@ -80,8 +79,7 @@ private:
 
     int m_width, m_height;
 
-    // Export mode flag - when true, uses custom ray marching settings from AppState
-    bool m_isExportMode = false;
+    bool m_isPhysicallyAccurate = false;
 
     static constexpr float G = 6.67430e-11f;
     static constexpr float c = 299792458.0f;

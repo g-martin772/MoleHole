@@ -11,7 +11,7 @@ float calculateEventHorizonRadius(float mass) {
 // Section Influence Radius
 // ------------------------------------------------------------------------------------------------------------
 float calculateInfluenceRadius(float r_s) {
-    return 50.0f * r_s;
+    return 8.0f * r_s;
 }
 
 // ------------------------------------------------------------------------------------------------------------
