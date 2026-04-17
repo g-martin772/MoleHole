@@ -1,0 +1,2 @@
+1 (Fig. 1) - This is figure Alt-Text for Figure 1.
+2 (Fig. 2) - This is figure Alt-Text for Figure 2.

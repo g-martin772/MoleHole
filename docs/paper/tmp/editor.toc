@@ -1,0 +1,32 @@
+\contentsline {part}{Part\ I\hspace {\betweenumberspace }Part Title}{1}{}%
+\contentsline {title}{Contribution Title}{3}{}%
+\authcount {1}
+\contentsline {author}{Name of First Author and\unskip \ \ignorespaces Name of Second Author}{3}{}%
+\contentsline {section}{\numberline {1}Section Heading}{3}{}%
+\contentsline {section}{\numberline {2}Section Heading}{4}{}%
+\contentsline {subsection}{\numberline {2.1}Subsection Heading}{4}{}%
+\contentsline {subsubsection}{\numberline {2.1.1}Subsubsection Heading}{4}{}%
+\contentsline {paragraph}{Paragraph Heading}{5}{}%
+\contentsline {paragraph}{Subparagraph Heading}{6}{}%
+\contentsline {paragraph}{Run-in Heading Boldface Version}{6}{}%
+\contentsline {paragraph}{Run-in Heading Boldface and Italic Version}{6}{}%
+\contentsline {paragraph}{Run-in Heading Displayed Version}{6}{}%
+\contentsline {section}{\numberline {3}Section Heading}{7}{}%
+\contentsline {subsection}{\numberline {3.1}Subsection Heading}{7}{}%
+\contentsline {subsubsection}{\numberline {3.1.1}Subsubsection Heading}{8}{}%
+\contentsline {paragraph}{Paragraph Heading}{8}{}%
+\contentsline {section}{Appendix}{11}{}%
+\contentsline {section}{Appendix}{11}{}%
+\contentsline {section}{\numberline {4}Styling of References}{11}{}%
+\contentsline {section}{References}{12}{}%
+\contentsline {section}{References}{12}{}%
+\contentsline {chapter}{\numberline {A}Chapter Heading}{15}{}%
+\contentsline {section}{\numberline {A.1}Section Heading}{15}{}%
+\contentsline {subsection}{\numberline {A.1.1}Subsection Heading}{15}{}%
+\contentsline {subsubsection}{\numberline {A.1.1.1}Subsubsection Heading}{15}{}%
+\contentsline {chapter}{Glossary}{17}{}%
+\contentsline {paragraph}{glossary term}{17}{}%
+\contentsline {paragraph}{glossary term}{17}{}%
+\contentsline {paragraph}{glossary term}{17}{}%
+\contentsline {paragraph}{glossary term}{17}{}%
+\contentsline {paragraph}{glossary term}{17}{}%
