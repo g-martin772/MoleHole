@@ -9,3 +9,4 @@ out/
 .shader_cache/
 scripts/cmake_paths.cmake
 dependencies/vulkan-sdk/
+__pycache__/
