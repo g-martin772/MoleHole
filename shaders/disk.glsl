@@ -12,8 +12,8 @@ uniform float u_time;
 // ------------------------------------------------------------------------------------------------------------
 // Returns the optical depth (density) at this position for volumetric rendering
 float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin, float blackHoleMass) {
-    float iscoRadius = 2.2f * eventHorizonRadius;
-    float outerRadius = 5.0f * eventHorizonRadius;
+    float iscoRadius = 2.4f * eventHorizonRadius;
+    float outerRadius = 6.7f * eventHorizonRadius;
     float r_sph = posSph.y;
     float theta_sph = posSph.z;
     float phi_sph = posSph.w;
@@ -73,7 +73,7 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
             r_cyl * sin(animatedTheta)
             ) * pow(max(1, i), 2) * u_accDiskNoiseScale;
 
-            noise *= 0.2 * worley(noiseCoord, 3.0f) + 0.5;
+            noise *= 0.5 * worley(noiseCoord, 1.0f) + 0.3;
         }
     } else {
         // For volumetric, add subtle detail noise
@@ -108,7 +108,10 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
     bbColor = vec3(1.0, 0.5, 0.2);
     bbColor = pow(bbColor, vec3(1.0 / 2.2));
 
-    vec3 emission = bbColor * noise * beamingFactor;
-    color += emission * alpha * 0.5;
+    // Increase contrast to make darker parts darker and brighter parts brighter
+    float contrastNoise = pow(noise, 3.0) * 3.5;
+
+    vec3 emission = bbColor * contrastNoise * beamingFactor;
+    color += emission * alpha * 0.9;
     return density * 2.0;
 }

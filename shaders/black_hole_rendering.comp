@@ -10,7 +10,7 @@ uniform int u_isPhysicallyAccurate = 0;
 uniform int u_debugMode = 0;
 
 // constants
-const float EPSILON = 0.0001f;
+const float EPSILON = 0.00005f;
 
 // camera
 uniform vec3 u_cameraPos;
