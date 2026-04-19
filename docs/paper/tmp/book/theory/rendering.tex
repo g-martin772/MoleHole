@@ -1,0 +1,280 @@
+%%%%%%%%%%%%%%%%%%%%% chapter.tex %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% sample chapter
+%
+% Use this file as a template for your own input.
+%
+%%%%%%%%%%%%%%%%%%%%%%%% Springer Nature %%%%%%%%%%%%%%%%%%%%%%%%%%
+\motto{All problems in computer graphics can be solved with a matrix 
+inversion. ---Jim Blinn}
+\chapter{Computer Graphics}
+\label{computer-graphics}
+
+\abstract*{
+  The following chapter will conclude most important theoretical work 
+  on computer graphics and the technology of rendering a picture on 
+  a computer screen. For this purpose the rendering equation will play 
+  a big role and be followed by the terms of ray tracing and ray marching.
+  Moreover, the view projection matrix is vital for understanding the 
+  basic visual guidance and interactivity for human and computer.
+}
+
+\abstract{
+  The following chapter will conclude most important theoretical work 
+  on computer graphics and the technology of rendering a picture on 
+  a computer screen. For this purpose the rendering equation will play 
+  a big role and be followed by the terms of ray tracing and ray marching.
+  Moreover, the view projection matrix is vital for understanding the 
+  basic visual guidance and interactivity for human and computer.
+}
+
+\section{Rendering - Theory}\label{sec:rendering---theory}
+
+\subsection{Raytracing}\label{subsec:raytracing}
+
+\subsubsection{Overview}\label{subsubsec:rt-overview}
+
+\subsubsection{Acceleration Structures}\label{subsubsec:acceleration-structures}
+
+Acceleration structures are essential for reducing the computational complexity of ray-tracing
+from $\mathcal{O}(N \cdot M)$ to a logarithmic scale.
+They utilize spatial or object subdivision to quickly cull geometry that a ray cannot intersect.
+This section is based on lecture 1 of a course from the TU Wien Faculty of Informatics,
+Institute of Visual Computing \& Human-Centered Technology,
+Research Unit of Computer Graphics~\cite{tuwien_rendering_2020}.
+
+\paragraph{Bounding Volumes}\label{par:bounding-volumes}
+
+Bounding volumes simplify complex geometry into basic shapes
+that are computationally cheap to test against rays.
+Common types include:
+
+\begin{itemize}
+    \item \textbf{\gls{aabb}}: {
+        Defined by minimum and maximum extents along the coordinate axes ($x, y, z$).
+        They are fast to build and test (using the slab method) but may fit underlying geometry poorly
+        if the object is rotated, leading to more false positives during traversal.
+    }
+    \item \textbf{\gls{obb}}: {
+        Similar to \glspl{aabb} but aligned with the object's principal axes rather than the world axes.
+        They provide a much tighter fit, reducing the number of false positive intersections,
+        but are more expensive to build and test.
+    }
+    \item \textbf{Bounding Sphere}: {
+        Defined by a center point and a radius.
+        They are rotationally invariant and offer the fastest intersection test
+        (procedural spheres work well with way math as described in section~\ref{subsubsec:rt-overview}),
+        but often provide a bad fit for complex objects because the spheres will inevitably overlap.
+    }
+\end{itemize}
+
+\paragraph{Spatial vs. Object Subdivision}\label{par:subdivision-types}
+
+\begin{itemize}
+    \item \textbf{Spatial Subdivision}:
+        The space itself is divided into cells like Grids, Octrees, or \glspl{kdtree}.
+        Objects that span boundaries must be referenced in multiple nodes, potentially increasing memory usage.
+    \item \textbf{Object Subdivision}:
+        The set of objects is partitioned into a hierarchy, most notably the \gls{bvh}.
+        A \gls{bvh} is a tree structure where each node represents a bounding volume
+        that encompasses all geometry in its children.
+        Unlike spatial subdivision, each geometric primitive belongs to exactly one leaf node.
+        Bounding volumes of sibling nodes can overlap,
+        but memory consumption is generally lower and predictable ($2N-1$ nodes for $N$ primitives).
+\end{itemize}
+
+\paragraph{Building Strategies}\label{par:building-strategies}
+
+Top-down construction is a common approach, particularly for \glspl{bvh}.
+The set of primitives is recursively split into child nodes
+until a leaf criterion (e.g., max triangles per node) is met.
+The quality of the tree depends heavily on the split strategy:
+
+\begin{itemize}
+    \item \textbf{Spatial Median}:
+        Splits the node at the spatial center of its bounding box.
+        Simple but can result in unbalanced trees if geometry is clustered.
+    \item \textbf{Object Median}:
+        Splits the list of objects into two equal halves based on their centroids.
+        Ensures balanced trees but may result in large overlapping bounding boxes.
+    \item \textbf{\gls{sah}}:
+        A greedy algorithm that attempts to minimize the expected traversal cost.
+        It evaluates potential splits based on the probability of a ray hitting a child node
+        (proportional to its surface area) and the cost of traversing it.
+        \[
+        Cost(b) = SA_L(b) \cdot N_L(b) + SA_R(b) \cdot N_R(b)
+        \]
+        where $SA$ is the surface area and $N$ is the number of primitives.
+\end{itemize}
+
+\paragraph{Comparison}\label{par:comparison}
+
+The choice of acceleration structure involves trade-offs between build time, memory usage, and traversal speed,
+as shown in Table~\ref{tab:comparison-of-as}.
+
+\begin{table*}[h]
+    \centering
+    \caption{Comparison of Spatial Acceleration Structures\cite{tuwien_rendering_2020}}
+    \label{tab:comparison-of-as}
+    \begin{tabular}{lccc}
+        \toprule
+        \textbf{Structure} & \textbf{Memory} & \textbf{Build Time} & \textbf{Traversal Quality} \\
+        \midrule
+        Regular Grid & Low -- High & Low & Poor (non-uniform) \\
+        Quad/Octree & Low -- High & Low & Good \\
+        \gls{kdtree} & Low -- High & Low -- High & Good -- Excellent \\
+        \gls{bvh} & Low & Low -- High & Good -- Excellent \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+\subsection{The Rendering Equation}\label{subsec:rendering-equation}
+
+The fundamental mathematical model for simulating light in physically-based rendering is the Rendering Equation,
+introduced by Kajiya in 1986~\cite{10.1145/15886.15902}.
+It describes the equilibrium distribution of radiance in a scene.
+This section is based on lecture 2 of the TU Wien Rendering course~\cite{tuwien_rendering_2020}.
+
+\subsubsection{Radiometry and Photometry}\label{subsubsec:radiometry-photometry}
+
+It is important to understand the difference between radiometry (physical measurement of \gls{em} radiation)
+and photometry (light as it is perceived by the human eye).
+Both systems define their own set of units.
+The conversion between the two is defined by the spectral luminous efficiency function $V(\lambda)$,
+which peaks at approximately $555nm$ (green).
+This is why colors like green and yellow appear brighter to the human eye compared to colors like blue.
+
+Table~\ref{tab:radiometric-quantities} shows the key radiometric quantities,
+and Table~\ref{tab:photometric-quantities} lists their photometric equivalents.
+Note that while rendering calculations are performed using radiometric units (specifically Radiance),
+output devices (displays) and human perception operate in the photometric domain (Luminance).
+
+\begin{table*}
+    \centering
+    \caption{Radiometric Quantities (Physical)~\cite{tuwien_rendering_2020}}
+    \label{tab:radiometric-quantities}
+    \begin{tabular}{lccl}
+        \toprule
+        \textbf{Quantity} & \textbf{Symbol} & \textbf{Unit} & \textbf{Description} \\
+        \midrule
+        Radiant Energy & $Q_e$ & Joule [$\mathrm{J}$] & Total energy of radiation \\
+        Radiant Flux (Power) & $\Phi_e$ & Watt [$\mathrm{W}$] & Energy per unit time ($\mathrm{J/s}$) \\
+        Radiant Intensity & $I_e$ & Watt/sr [$\mathrm{W/sr}$] & Flux per unit solid angle \\
+        Irradiance & $E_e$ & Watt/$\mathrm{m}^2$ [$\mathrm{W/m^2}$] & Incident flux per unit area \\
+        Radiance & $L_e$ & Watt/($\mathrm{sr} \cdot \mathrm{m}^2$) & Flux per unit projected area per unit solid angle \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+\begin{table*}
+    \centering
+    \caption{Photometric Quantities (Perceptual)~\cite{tuwien_rendering_2020}}
+    \label{tab:photometric-quantities}
+    \begin{tabular}{lccl}
+        \toprule
+        \textbf{Quantity} & \textbf{Symbol} & \textbf{Unit} & \textbf{Description} \\
+        \midrule
+        Luminous Energy & $Q_v$ & Talbot [$\mathrm{T}$] & Perceived energy of light \\
+        Luminous Flux & $\Phi_v$ & Lumen [$\mathrm{lm}$] & Perceived power \\
+        Luminous Intensity & $I_v$ & Candela [$\mathrm{cd}$] & Flux per unit solid angle ($\mathrm{lm/sr}$) \\
+        Illuminance & $E_v$ & Lux [$\mathrm{lx}$] & Incident flux per unit area ($\mathrm{lm/m^2}$) \\
+        Luminance & $L_v$ & Nit [$\mathrm{cd/m^2}$] & Perceived brightness of a surface \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+\subsubsection{The Equation}\label{subsubsec:the-equation}
+
+The Rendering Equation expresses the total spectral radiance $L_o$
+leaving a point $x$ in direction $\omega_o$ as the sum
+of emitted radiance $L_e$ and reflected radiance:
+
+\begin{align}
+    L_o(x, \omega_o) &= L_e(x, \omega_o) + \notag \\
+    & \int_{\Omega} f_r(x, \omega_i, \omega_o) L_i(x, \omega_i) (\omega_i \cdot n) d\omega_i
+    \label{eq:rendering-equation}
+\end{align}
+
+where:
+\begin{itemize}
+    \item $L_o(x, \omega_o)$ is the total outgoing radiance.
+    \item $L_e(x, \omega_o)$ is the emitted radiance (for light sources).
+    \item $\Omega$ is the unit hemisphere centered at normal $n$ containing all incoming directions $\omega_i$.
+    \item $f_r(x, \omega_i, \omega_o)$ is the \gls{brdf}, defining how light is scattered.
+    \item $L_i(x, \omega_i)$ is the incoming radiance from direction $\omega_i$.
+    \item $(\omega_i \cdot n)$ is the geometry term (Lambert's cosine law),
+        accounting for the spreading of light over the surface area (often written as $\cos\theta_i$).
+\end{itemize}
+
+\paragraph{Usage of Radiance ($L$)}
+
+Radiance ($L$) is the central quantity in rendering for several reasons:
+\begin{enumerate}
+    \item \textbf{Invariance}: Radiance is constant along a ray in a vacuum.
+    This implies $L_i(x, \omega) = L_o(y, -\omega)$ where $y$ is the visible surface point.
+    This property enables ray tracing: to find the radiance reaching the camera,
+    we simply trace a ray into the scene and calculate the radiance leaving the intersected surface.
+    \item \textbf{Sensor Response}: Camera sensors and the human eye respond to radiance
+    (integrated over the pixel area and solid angle).
+    \item \textbf{Light Transport}: It describes the flow of light energy through space.
+\end{enumerate}
+
+The recursive nature of $L_i$ (which is the $L_o$ from another point)
+makes this integral equation difficult to solve analytically.
+Therefore, most implementations use numerical methods like Monte Carlo integration (see ~\ref{subsubsec:monte-carlo}).
+
+\subsubsection{Spherical Integration}
+
+To solve the integral numerically, we often parameterize the hemisphere $\Omega$
+using spherical coordinates $(\theta, \phi)$.
+The differential solid angle $d\omega_i$ changes variables as follows:
+\begin{equation}
+    d\omega = \sin\theta d\theta d\phi\label{eq:omega-cov}
+\end{equation}
+
+Substituting this into the rendering equation gives the explicit double integral form:
+
+\begin{align}
+    \int_{\Omega} (\dots) d\omega_i &= \int_{0}^{2\pi} \int_{0}^{\frac{\pi}{2}} L_i(x, \theta, \phi) \cdot \notag \\
+    & f_r(x, \theta, \phi, \omega_o) \cos\theta \sin\theta d\theta d\phi
+\end{align}
+
+Here, $\theta$ is the polar angle (from the normal $n$, range $[0, \pi/2]$)
+and $\phi$ is the azimuth angle (range $[0, 2\pi]$).
+The term $\cos\theta$ comes from the geometry term $(\omega_i \cdot n)$,
+and $\sin\theta$ comes from the differential solid angle measure.
+
+\subsubsection{Color Spectrum}
+
+Radiance $L$ varies with wavelength ($L(\lambda)$).
+In computer graphics, strictly accurate rendering would require integrating over the entire visible spectrum.
+However, for efficiency, we typically sample this spectrum at three discrete wavelengths corresponding to Red, Green,
+and Blue (RGB).
+This mimics the tristimulus response of the human eye.
+While sufficient for most purposes, this approximation can fail for phenomena like
+dispersion, fluorescence or metamerism result in inaccurate results.
+
+\subsubsection{Energy Conservation (White Furnace Test)}
+
+A physically-based material must conserve energy: it cannot reflect more light than it receives.
+The ``White Furnace Test'' is a thought experiment (or unit-test) used to verify this.
+If a non-absorbing object is placed in an environment with uniform radiance $L_i = 1$ everywhere,
+the outgoing radiance $L_o$ must also be exactly $1$ (as long as no other form of light is emitted).
+For a perfectly diffuse (Lambertian) surface with albedo $\rho$, the \gls{brdf} is constant $f_r = c$.
+Integrating the cosine term over the hemisphere yields $\pi$:
+\[
+    \int_{\Omega} \cos\theta d\omega = \pi
+\]
+Therefore, to ensure $L_o = \rho L_i$, we must normalize the \gls{brdf}:
+\[
+f_{r, \text{diffuse}} = \frac{\rho}{\pi}
+\]
+The factor of $1/\pi$ is essential for energy conservation.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% References
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\bibliographystyle{spmpsci}
+\bibliography{theory/ref-rendering}

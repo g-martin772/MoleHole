@@ -1,0 +1,49 @@
+This is BibTeX, Version 0.99d (TeX Live 2023/Debian)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: theory/math.aux
+The style file: spmpsci.bst
+Database file #1: theory/ref-math.bib
+Warning--I didn't find a database entry for ""
+Warning--empty journal in Article:summation_convention_02_lei
+You've used 5 entries,
+            2945 wiz_defined-function locations,
+            630 strings with 5343 characters,
+and the built_in function-call counts, 1632 in all, are:
+= -- 113
+> -- 35
+< -- 1
++ -- 16
+- -- 10
+* -- 74
+:= -- 233
+add.period$ -- 4
+call.type$ -- 5
+change.case$ -- 18
+chr.to.int$ -- 0
+cite$ -- 6
+duplicate$ -- 166
+empty$ -- 181
+format.name$ -- 10
+if$ -- 350
+int.to.chr$ -- 0
+int.to.str$ -- 5
+missing$ -- 40
+newline$ -- 27
+num.names$ -- 10
+pop$ -- 78
+preamble$ -- 1
+purify$ -- 15
+quote$ -- 0
+skip$ -- 47
+stack$ -- 0
+substring$ -- 32
+swap$ -- 69
+text.length$ -- 1
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 14
+warning$ -- 1
+while$ -- 11
+width$ -- 6
+write$ -- 53
+(There were 2 warnings)

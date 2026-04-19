@@ -1,0 +1,23 @@
+\begin{thebibliography}{1}
+\providecommand{\url}[1]{{#1}}
+\providecommand{\urlprefix}{URL }
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{DOI~\discretionary{}{}{}#1}\else
+  \providecommand{\doi}{DOI~\discretionary{}{}{}\begingroup
+  \urlstyle{rm}\Url}\fi
+
+\bibitem{10.1145/15886.15902}
+Kajiya, J.T.: The rendering equation.
+\newblock SIGGRAPH Comput. Graph. \textbf{20}(4), 143–150 (1986).
+\newblock \doi{10.1145/15886.15902}.
+\newblock \urlprefix\url{https://doi.org/10.1145/15886.15902}
+
+\bibitem{tuwien_rendering_2020}
+Kerbl, B., Celarek, A.: Rendering (vu) - summer semester 2020.
+\newblock TU Wien, Institute of Visual Computing \& Human-Centered Technology
+  (2020).
+\newblock
+  \urlprefix\url{https://www.cg.tuwien.ac.at/courses/Rendering/VU.SS2020.html}.
+\newblock Accessed: 2024-05-22
+
+\end{thebibliography}

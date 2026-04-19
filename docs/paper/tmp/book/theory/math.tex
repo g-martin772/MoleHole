@@ -1,0 +1,293 @@
+%%%%%%%%%%%%%%%%%%%%% chapter.tex %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% sample chapter
+%
+% Use this file as a template for your own input.
+%
+%%%%%%%%%%%%%%%%%%%%%%%% Springer Nature %%%%%%%%%%%%%%%%%%%%%%%%%%
+\motto{Mathematics is, in its own way, the poetry of logical ideas. ---Albert Einstein}
+\chapter{Mathematical Foundation}
+\label{mathematics}
+
+\abstract*{
+  The following chapter will explain the mathematical notation that will 
+  be used in the rest of the book. Additionally, it will dive deep into 
+  the mathematical formulation of various properties intrinsic to spacetime
+  and elaborate the inner workings of integration methods. The reader is 
+  required to know basic linear algebra and analysis or otherwise this book 
+  would get too complex. For the proof of the reader's understanding exercises
+  shall be provided at the end of the chapter, which will be mostly of 
+  albegraic nature.
+}
+
+\abstract{
+  The following chapter will explain the mathematical notation that will 
+  be used in the rest of the book. Additionally, it will dive deep into 
+  the mathematical formulation of various properties intrinsic to spacetime
+  and elaborate the inner workings of integration methods. The reader is 
+  required to know basic linear algebra and analysis or otherwise this book 
+  would get too complex. For the proof of the reader's understanding exercises
+  shall be provided at the end of the chapter, which will be mostly of 
+  albegraic nature.  
+}
+
+\section{Basic mathematical notation}
+\label{sec:notation}
+
+This section is there to cover essential notation and define variables
+for the use throughout the whole book. There will be some special 
+abbreviations that need some time to get used to but will eventually 
+make sense and lower the amount of writing in equations. In addition, 
+there will be a list of all important functions and variables that will be 
+defined properly.
+
+\subsection{Einstein Summation Convention}
+\label{subsec:summation-convention}
+
+The summation convention proposed by Albert Einstein is helping researchers 
+on the general theory of relativity to minimize their writing effort.
+It is meant to remove all unnecessary summation terms and replace them solely 
+with indices.
+
+Let $\vec{a}$, $\vec{b}$ and $\vec{c}$ be vectors with four \emph{components}
+and $\tens{M}$ a matrix with four rows and columns\footnote{
+Notice the bold face notation for vectors and the sans serif notation 
+for matrices.}. Then 
+\begin{equation}
+  \vec{a} = \vec{b} + \tens{M}\vec{c}
+  \label{eq:matrix-equation}
+\end{equation}
+expresses this relationship in a \emph{matrix equation}.
+
+In detail, take the matrix equation 
+\begin{equation}
+  \begin{pmatrix}
+    a_1 \\ a_2 \\ a_3 \\ a_4
+  \end{pmatrix}
+  =
+  \begin{pmatrix}
+    b_1 \\ b_2 \\ b_3 \\ b_4
+  \end{pmatrix}
+  +
+  \begin{pmatrix}
+    M_{11} & M_{12} & M_{13} & M_{14} \\
+    M_{21} & M_{22} & M_{23} & M_{24} \\
+    M_{31} & M_{32} & M_{33} & M_{34} \\
+    M_{41} & M_{42} & M_{43} & M_{44} \\
+  \end{pmatrix}
+  \begin{pmatrix}
+    c_1 \\ c_2 \\ c_3 \\ c_4 
+  \end{pmatrix}
+  \label{eq:example-matrix-equation}
+\end{equation}
+as an example, which can be rewritten as 
+\begin{equation}
+  \begin{aligned}
+    a_1 = b_1 + M_{11}c_1 + M_{12}c_2 + M_{13}c_3 + M_{14}c_4 \\
+    a_2 = b_2 + M_{21}c_1 + M_{22}c_2 + M_{23}c_3 + M_{24}c_4 \\
+    a_3 = b_3 + M_{31}c_1 + M_{32}c_2 + M_{33}c_3 + M_{34}c_4 \\
+    a_4 = b_4 + M_{41}c_1 + M_{42}c_2 + M_{43}c_3 + M_{44}c_4 
+  \end{aligned}
+  \label{eq:rewritten-matrix-equation}
+\end{equation}
+and reduced to 
+\begin{equation}
+  a_i = b_i + \sum_{j=1}^{4} M_{ij}c_j.
+  \label{eq:reduction-matrix-equation}
+\end{equation}
+By applying the \emph{Einstein Summation Convention} defined above and
+leaving out the indices the equation~\ref{eq:matrix-equation} 
+will be left~\cite{Article:summation_convention_01_barr}.
+
+In proper writing, used throughout the rest of this book, it will 
+reduce to 
+\begin{equation}
+  a_i = b_i + M_{ij}c_j 
+  \label{eq:proper-summation-convention}
+\end{equation}
+with the use of the Einstein Summation 
+Convention~\cite{Article:summation_convention_02_lei}.
+
+\subsection{Derivatives}
+\label{subsec:derivatives}
+
+The fundamental concept of derivatives should be familiar but for 
+the detailed notation used in this book a definition of some 
+symbols is necessary.
+
+\paragraph{Partial Derivative}
+
+Usually, the partial derivative is expressed as 
+\begin{equation}
+  \frac{\partial}{\partial x}f(x,y)
+  \label{eq:partial-derivative}
+\end{equation}
+for a function $f: \mathbb{R}^2 \rightarrow \mathbb{R}$. 
+For the general theory of relativity this is expanded with the use 
+of the coordinate basis\footnote{More on this in~\ref{sec:manifolds}} 
+for an operation on any tensorial object, such as $T_{\mu\nu}$ 
+for example. Therefore, the partial derivative shall herein and 
+after be written as 
+\begin{equation}
+  \frac{\partial T_{\mu \nu}}{\partial x^{\mu}}.
+  \label{eq:partial-derivative-gr}
+\end{equation}
+
+So as to eliminate the unnecessary effort for writing the whole expression 
+over and over again, the partial derivative with respect to the 
+coordinate basis may and will also be written as 
+\begin{equation}
+  \frac{\partial T_{\mu \nu}}{\partial x^{\mu}} = \partial_{\mu}T_{\mu \nu}
+  \label{eq:partial-short}
+\end{equation}
+or, if preferred in the shortest version, as 
+\begin{equation}
+  \partial_{\mu}T_{\mu \nu} = T_{\mu \nu ,\mu}
+  \label{eq:partial-very-short}
+\end{equation}
+with the use of a comma separating the indices from the index, which the term is 
+derived with respect to~\cite{Book:general_relativity_01_wald,Book:general_relativity_02_dirac,Book:general_relativity_03_carroll}.
+
+\paragraph{Covariant Derivative}
+
+This new form of a derivative is needed for the correct differentiation 
+in the general theory of relativity. Is is composed of the generic 
+partial derivative and a correcting term. This correcting term will 
+be explained in detail in later sections but for now the reader shall 
+just keep in mind that it is meant to correct for deviations of the 
+partial derivative in curved spacetimes.
+
+Generally, this new term is expressed as 
+\begin{equation}
+  \nabla_{\mu}V^{\nu} = \partial_{\mu}V^{\nu} + \Gamma^{\nu}_{\;\;\mu \sigma}V^{\sigma}
+  \label{eq:covariant-derivative}
+\end{equation}
+where $V^{\nu}$ are the components of a vector and 
+$\Gamma^{\nu}_{\mu \sigma}$ denotes the correcting term.
+
+In some books\footnote{Specifically, in~\cite{}}, this covariant derivative 
+is also expressed in a shortened form, which in this case is 
+\begin{equation}
+  \nabla_{\mu}V^{\nu} = V^{\nu}_{\;\;;\mu}.
+  \label{eq:covariant-very-short}
+\end{equation}
+
+\subsection{Operators}
+\label{subsec:operators}
+
+Some other preliminaries are necessary in order to provide a basic foundation 
+of the notation used in this book. There are quite some definitions to be 
+covered but with partial and covariant derivative out of the way and defined
+in Subsection~\ref{subsec:derivatives} there are not as many left.
+
+\paragraph{Laplacian Operator}
+
+
+
+\subsection{Definitions}
+\label{subsec:definitions}
+
+\section{Transformations}
+\label{sec:transformations}
+
+Transformations are, out of necessity, covered in this section and there 
+will be graphics provided for the better understanding of the topic.
+Transformations are vital in the general concept of relativity because 
+nothing is absolute anymore, so transformations will eventually take over 
+as the standard method of changing the point of view. In later chapters,
+the reader may go back to this part and check his understanding, 
+when e.g. the cone of causality is introduced.
+
+\subsection{Translations}
+\label{subsec:translations}
+
+\subsection{Rotations}
+\label{subsec:rotations}
+
+\subsection{Galilean Transformation}
+\label{subsec:galilean}
+
+\subsection{Lorentz Transformation}
+\label{subsec:lorentz}
+
+\section{Linear Algebra}
+\label{sec:linear-algebra}
+
+Although the basic understanding of Linear Algebra is a requirement, some
+concepts will be explained in this section as well. These concepts include 
+the vector space, basis vectors, matrix inversions and, subsequently, the
+Gaussian Elimination algorithm. Furthermore, the concept of coordinate 
+systems in both $\mathbb{R}^2$ and $\mathbb{R}^3$ will be covered.
+
+\subsection{The vector space}
+\label{subsec:vector-space}
+
+\subsection{Matrices}
+\label{subsec:matrices}
+
+\subsection{Gaussian Elimination}
+\label{subsec:gaussian-elimination}
+
+\subsection{Cartesian Coordinates}
+\label{subsec:cartesian}
+
+\subsection{Spherical Coordinates}
+\label{subsec:spherical-coordinates}
+
+\section{Tensor Algebra}
+\label{sec:tensor-algebra}
+
+The foundation of the General Theory of Relativity is tensor algebra.
+For the purpose of this book, basic concepts, such as vectors, dual vectors, tensors and the tensor product will be introduced and explained for further 
+use in later chapters.
+
+\subsection{Vectors}
+\label{subsec:vectors}
+
+\subsection{Dual Vectors}
+\label{subsec:dual-vectors}
+
+\subsection{Tensors}
+\label{subsec:tensors}
+
+\subsection{Tensors operations}
+\label{subsec:tensor-operations}
+
+\section{Analysis}
+\label{sec:analysis}
+
+Analysis is a prerequisite for reading this book. However, there are still
+some topics to be covered in this book, which are Lie derivatives and 
+Jacobian matrices. 
+
+\subsection{Lie derivatives}
+\label{subsec:lie}
+
+\subsection{Jacobian}
+\label{subsec:jacobian}
+
+\section{Integration Methods}
+\label{sec:integration}
+
+Integration methods are basic methods for using analytic concepts in a 
+computer graphics context. For the purpose of this book, four of these 
+methods will be elaborated.
+
+\subsection{Euler Integration}
+\label{subsec:euler}
+
+\subsection{Runge Kutta fourth order}
+\label{subsec:runge-kutta}
+
+\subsection{Runge Kutta Fehlberg fourth order}
+\label{subsec:runge-kutta-fehlberg}
+
+\subsection{SODA}
+\label{subsec:soda}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% References
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\bibliographystyle{spmpsci}
+\bibliography{theory/ref-math}

@@ -1,0 +1,30 @@
+\begin{thebibliography}{1}
+\providecommand{\url}[1]{{#1}}
+\providecommand{\urlprefix}{URL }
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{DOI~\discretionary{}{}{}#1}\else
+  \providecommand{\doi}{DOI~\discretionary{}{}{}\begingroup
+  \urlstyle{rm}\Url}\fi
+
+\bibitem{Article:summation_convention_01_barr}
+Barr, A.H.: The einstein summation notation.
+\newblock An Introduction to Physically Based Modeling (Course Notes 19), pages
+  E \textbf{1}, 57 (1991)
+
+\bibitem{Book:general_relativity_03_carroll}
+Carroll, S.M.: Spacetime and Geometry: An Introduction to General Relativity,
+  1st edn.
+\newblock Addison-Wesley (2004)
+
+\bibitem{Book:general_relativity_02_dirac}
+Dirac, P.A.M.: General theory of relativity, vol.~14.
+\newblock Princeton University Press (1996)
+
+\bibitem{Article:summation_convention_02_lei}
+Lei, H.K.: Differential geometry i: Einstein summation notation  (2010)
+
+\bibitem{Book:general_relativity_01_wald}
+Wald, R.M.: General relativity.
+\newblock University of Chicago press (2010)
+
+\end{thebibliography}
