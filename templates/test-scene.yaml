@@ -5,10 +5,10 @@ objects:
       - BlackHole
       - Physics
     parameters:
-      BlackHole.Spin: 0.999
-      Physics.Mass: 3.978e+30
-      Entity.Position: [-0.4, 1.0, -5]
       Entity.Name: BlackHole
+      Entity.Position: [0, 0, 0]
+      Physics.Mass: 1.989e+30
+      BlackHole.Spin: 0.999
 animation_graph:
   variables:
     []

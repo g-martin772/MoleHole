@@ -628,7 +628,7 @@ scene_parameters:
     tooltip: "Physical mass"
     type: float
     group: Simulation
-    defaultValue: 1000.0
+    defaultValue: 1.989e30
     minValue: 0.0
     maxValue: 1.0e38
     dragSpeed: 1000.0

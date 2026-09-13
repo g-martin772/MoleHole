@@ -8,6 +8,8 @@ objects:
       - Entity
       - Sphere
       - Physics
+    parameters:
+      Entity.Position: [0, 42, 0]
   - classes:
       - Entity
       - Mesh

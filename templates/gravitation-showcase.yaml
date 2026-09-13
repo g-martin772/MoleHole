@@ -1,0 +1,17 @@
+name: Gravitation Showcase
+objects:
+  - classes:
+      - Entity
+      - Sphere
+      - Physics
+    parameters:
+      Entity.Rotation: Entity.Position
+      [0, 0, -5]: Entity.Name
+      Sphere
+animation_graph:
+  variables:
+    []
+  nodes:
+    []
+  links:
+    []

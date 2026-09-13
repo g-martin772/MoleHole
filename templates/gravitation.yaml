@@ -1,0 +1,50 @@
+name: ""
+objects:
+  - classes:
+      - Entity
+      - Sphere
+      - Physics
+    parameters:
+      Physics.Mass: 1.989e+14
+      Sphere.Radius: 5
+      Entity.Position: [0, 0, 20]
+      Physics.Velocity: [8, 0, 0]
+      Entity.Name: Sphere
+  - classes:
+      - Entity
+      - Sphere
+      - Physics
+    parameters:
+      Physics.Mass: 1.989e+14
+      Sphere.Radius: 4
+      Entity.Position: [0, 0, -20]
+      Physics.Velocity: [-7, 0, 0]
+      Entity.Name: Sphere
+  - classes:
+      - Entity
+      - Sphere
+      - Physics
+    parameters:
+      Physics.Mass: 100000000
+      Sphere.Radius: 2
+      Entity.Position: [200, 0, -5]
+      Physics.Velocity: [4, 0.1, 0]
+      Entity.Name: Sphere
+  - classes:
+      - Entity
+      - Mesh
+      - Physics
+    parameters:
+      Physics.Mass: 10000
+      Mesh.ComOffset: [0, 0, -8]
+      Mesh.FilePath: ../assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
+      Entity.Position: [0, 65, -5]
+      Physics.Velocity: [0, 0, -8]
+      Entity.Name: Mesh
+animation_graph:
+  variables:
+    []
+  nodes:
+    []
+  links:
+    []
