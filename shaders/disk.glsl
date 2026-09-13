@@ -7,6 +7,40 @@ uniform int u_gravitationalRedshiftEnabled = 1;
 uniform float u_dopplerBeamingEnabled = 1.0;
 uniform float u_time;
 
+float adiskColorVariant(vec4 posSph, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin, float blackHoleMass, vec3 blackHoleSpinAxis) {
+    float iscoRadius = 2.4f * eventHorizonRadius;
+    float outerRadius = 6.7f * eventHorizonRadius;
+    float r_sph = posSph.y;
+    float theta_sph = posSph.z;
+    float phi_sph = posSph.w;
+    float density = 1.0f;
+    vec3 bbColor;
+    float noise = 1.0f;
+    if (r_sph < iscoRadius || r_sph > outerRadius) return 0.0;
+
+    bbColor = vec3(1.0f, 0.5f, 0.2f);
+    /*bbColor = pow(bbColor, vec3(1.0 / 2.2));
+    float r_cyl = r_sph * sin(theta_sph);
+    vec3 noiseCoord = vec3(
+    r_cyl * cos(phi_sph),
+    r_sph * cos(theta_sph),
+    r_cyl * sin(phi_sph)
+    ) * pow(max(1, i), 2) * u_accDiskNoiseScale;
+
+    noise *= 0.5 * worley(noiseCoord, 1.0f) + 0.3;*/
+
+    vec3 diskPos = toCartesian(posSph.yzw) / outerRadius;
+
+    float spinPlaneDistance = dot(diskPos, normalize(blackHoleSpinAxis));
+    float d = abs(spinPlaneDistance) - 0.4f;
+    float falloff = exp(-100.0f * abs(spinPlaneDistance));;
+    density = worley(diskPos, u_accDiskNoiseScale) * max(0.0f, -sdFbm(diskPos, d)) * falloff;
+
+    color += 0.001f * bbColor;
+    return density;
+}
+
+
 // ------------------------------------------------------------------------------------------------------------
 // Section Disk Colour
 // ------------------------------------------------------------------------------------------------------------

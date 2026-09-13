@@ -4,12 +4,8 @@ objects:
       - Entity
       - BlackHole
       - Physics
-  - classes:
-      - Entity
-      - Sphere
-      - Physics
     parameters:
-      Entity.Position: [0, 42, 0]
+      Entity.Position: [0, 15, 60]
   - classes:
       - Entity
       - Mesh

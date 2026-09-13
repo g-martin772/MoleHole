@@ -100,7 +100,7 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
 // Section Ray Marching
 // ------------------------------------------------------------------------------------------------------------
 uniform float u_rayStepSize = 0.01f;
-uniform int u_maxRaySteps = 50000;
+uniform int u_maxRaySteps = 100000;
 uniform float u_adaptiveStepRate = 0.8f;
 
 vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection) {
@@ -324,7 +324,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
         float dist = relativePosSph.y;
 
         if (u_accretionDiskEnabled == 1) {
-            float dAlpha = adiskColor(relativePosSph, colorValue, alpha, r_s, rayOrigin, u_blackHoleMasses[0]);
+            float dAlpha = adiskColorVariant(relativePosSph, colorValue, alpha, r_s, rayOrigin, u_blackHoleMasses[0], u_blackHoleSpinAxes[0]);
             alpha *= (1.0f - clamp(dAlpha, 0.0f, 1.0f));
             if (alpha < 0.01f) {
                 return colorValue;
