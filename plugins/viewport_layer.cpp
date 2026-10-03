@@ -75,7 +75,13 @@ namespace
         void OnAttach() override
         {
             MoleHole::RegisterComponents();
-            LoadScene();
+            const auto sceneName = LoadScene();
+
+            auto physicsModule = std::make_shared<PhysicsSimulationModule>(m_Dispatcher, m_Logger);
+            auto gravityModule = std::make_shared<GravitySimulationModule>(physicsModule, m_Dispatcher, m_Logger);
+            m_Runner = m_Scenes->CreateSimulation(
+                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravityModule, physicsModule});
+            m_Runner->Start();
 
             const auto device = m_Renderer->GetDevice();
             m_UploadPool = std::make_unique<VulkanCommandPool>(device, m_Logger, device->GetQueueIndices().Graphics);
@@ -109,6 +115,7 @@ namespace
 
         void OnDetach() override
         {
+            if (m_Runner) m_Runner->Stop();
             m_Logger->Info("ViewportLayer detached");
         }
 
@@ -120,13 +127,16 @@ namespace
         void OnRenderGraph(RenderGraph& graph) override
         {
             const auto colorTarget = graph.GetPrimaryColorTarget();
-            if (colorTarget == kInvalidRenderGraphHandle || !m_RaytracePipeline) return;
+            if (colorTarget == kInvalidRenderGraphHandle || !m_RaytracePipeline || !m_Runner) return;
             const auto extent = graph.GetImageExtent(colorTarget);
             if (extent.width == 0 || extent.height == 0) return;
 
+            auto sceneLock = m_Runner->LockRenderScene();
+            Scene& scene = *sceneLock;
+
             EnsureImages(extent);
             EnsureCompositePipeline(graph.GetImageFormat(colorTarget));
-            UploadParams(extent);
+            UploadParams(extent, scene);
 
             const auto device = m_Renderer->GetDevice();
             const std::uint32_t groupsX = (extent.width + 15u) / 16u;
@@ -265,7 +275,7 @@ namespace
                 EnsureGravityGridPipeline(graph.GetImageFormat(colorTarget));
                 if (m_GravityGridPipeline)
                 {
-                    UploadGravityGridParams();
+                    UploadGravityGridParams(scene);
                     graph.AddGraphicsPass(
                         "ViewportLayer.GravityGrid", {}, {},
                         {RenderGraphAttachment{.Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
@@ -290,7 +300,7 @@ namespace
             if (const auto depthTarget = graph.GetPrimaryDepthTarget(); depthTarget != kInvalidRenderGraphHandle)
             {
                 EnsureMeshPipeline(graph.GetImageFormat(colorTarget), graph.GetImageFormat(depthTarget));
-                auto drawables = CollectMeshDrawables();
+                auto drawables = CollectMeshDrawables(scene);
                 if (m_MeshPipeline && !drawables.empty())
                 {
                     UploadMeshCamera();
@@ -535,18 +545,17 @@ namespace
             return result;
         }
 
-        std::vector<MeshDrawable> CollectMeshDrawables()
+        std::vector<MeshDrawable> CollectMeshDrawables(GPP::Scene& scene)
         {
             std::vector<MeshDrawable> drawables;
-            if (!m_Scene) return drawables;
             for (auto [entity, meshComponent, transform] :
-                 m_Scene->Registry().view<const MeshComponent, const TransformComponent>().each())
+                 scene.Registry().view<const MeshComponent, const TransformComponent>().each())
             {
                 if (meshComponent.AssetPath.empty()) continue;
-                const auto scene = GetOrLoadMesh(meshComponent.AssetPath);
-                if (!scene) continue;
+                const auto gltfScene = GetOrLoadMesh(meshComponent.AssetPath);
+                if (!gltfScene) continue;
                 const glm::mat4 model = transform.GetMatrix();
-                for (const auto& mesh : scene->Meshes)
+                for (const auto& mesh : gltfScene->Meshes)
                 {
                     for (const auto& primitive : mesh.Primitives)
                     {
@@ -554,9 +563,9 @@ namespace
                         drawable.Primitive = &primitive;
                         drawable.Model = model;
                         if (primitive.MaterialIndex >= 0 && static_cast<std::size_t>(primitive.MaterialIndex)
-                                                                 < scene->Materials.size())
+                                                                 < gltfScene->Materials.size())
                         {
-                            const auto& material = scene->Materials[static_cast<std::size_t>(primitive.MaterialIndex)];
+                            const auto& material = gltfScene->Materials[static_cast<std::size_t>(primitive.MaterialIndex)];
                             drawable.BaseColorFactor = material.BaseColorFactor;
                             drawable.MetallicFactor = material.MetallicFactor;
                             drawable.RoughnessFactor = material.RoughnessFactor;
@@ -579,7 +588,7 @@ namespace
             m_MeshCameraBuffer->Upload(&params, sizeof(params));
         }
 
-        void UploadGravityGridParams()
+        void UploadGravityGridParams(GPP::Scene& scene)
         {
             GravityGridParamsGpu params{};
             params.ViewProjection = m_Camera.GetViewProjectionMatrix();
@@ -588,7 +597,7 @@ namespace
             params.LineThickness = kGravityGridLineThickness;
             params.Opacity = kGravityGridOpacity;
             params.Color = kGravityGridColor;
-            if (m_Scene) FillGravityGridData(params, *m_Scene);
+            FillGravityGridData(params, scene);
             m_GravityGridParamsBuffer->Upload(&params, sizeof(params));
         }
 
@@ -627,22 +636,24 @@ namespace
             });
         }
 
-        void LoadScene()
+        std::string LoadScene()
         {
             static constexpr auto kDefaultScenePath = "templates/test-scene.yaml";
             try
             {
-                m_Scene = &m_Scenes->LoadSceneFromFile(kDefaultScenePath);
-                m_Logger->Info("ViewportLayer: loaded scene '{}'", m_Scene->Metadata().Name);
+                auto& scene = m_Scenes->LoadSceneFromFile(kDefaultScenePath);
+                m_Logger->Info("ViewportLayer: loaded scene '{}'", scene.Metadata().Name);
+                return scene.Metadata().Name;
             }
             catch (const std::exception& error)
             {
                 m_Logger->Warn("ViewportLayer: failed to load '{}' ({}), creating a default scene",
                                kDefaultScenePath, error.what());
-                m_Scene = &m_Scenes->CreateScene("ViewportDefault");
-                const auto entity = m_Scene->CreateEntity("BlackHole", "BlackHole");
-                m_Scene->Registry().emplace<TransformComponent>(entity, TransformComponent{});
-                m_Scene->Registry().emplace<BlackHoleComponent>(entity, BlackHoleComponent{.Mass = 1.0f, .Spin = 0.5f});
+                auto& scene = m_Scenes->CreateScene("ViewportDefault");
+                const auto entity = scene.CreateEntity("BlackHole", "BlackHole");
+                scene.Registry().emplace<TransformComponent>(entity, TransformComponent{});
+                scene.Registry().emplace<BlackHoleComponent>(entity, BlackHoleComponent{.Mass = 1.0f, .Spin = 0.5f});
+                return scene.Metadata().Name;
             }
         }
 
@@ -680,7 +691,7 @@ namespace
             m_LastMouseY = mouseY;
         }
 
-        void UploadParams(vk::Extent3D extent)
+        void UploadParams(vk::Extent3D extent, GPP::Scene& scene)
         {
             RaytraceParamsGpu params{};
             params.CameraPos = m_Camera.GetPosition();
@@ -690,7 +701,7 @@ namespace
             params.Fov = m_Camera.GetFov();
             params.Aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
             params.Time = std::chrono::duration<float>(std::chrono::steady_clock::now() - m_StartTime).count();
-            if (m_Scene) FillSceneData(params, *m_Scene);
+            FillSceneData(params, scene);
             m_ParamsBuffer->Upload(&params, sizeof(params));
         }
 
@@ -700,7 +711,7 @@ namespace
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<InputState> m_Input;
 
-        GPP::Scene* m_Scene{nullptr};
+        std::shared_ptr<SimulationRunner> m_Runner;
         Camera m_Camera;
         bool m_HasLastMouse{false};
         float m_LastMouseX{0.0f};
