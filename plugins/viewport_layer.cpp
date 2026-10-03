@@ -348,12 +348,18 @@ namespace
         void OnUiRender() override
         {
             ImGui::Begin("Viewport");
+
+            const ImVec2 avail = ImGui::GetContentRegionAvail();
+            if (avail.x >= 1.0f && avail.y >= 1.0f)
+            {
+                m_Renderer->ResizeBufferTarget(
+                    m_LayerTarget.Id,
+                    glm::uvec2{static_cast<std::uint32_t>(avail.x), static_cast<std::uint32_t>(avail.y)});
+            }
+
             if (const auto target = m_Renderer->GetRenderTargetInfo(m_LayerTarget.Id))
             {
-                ImGui::Image(
-                    reinterpret_cast<ImTextureID>(target->ImGuiTexture),
-                    ImVec2(static_cast<float>(target->Extent.width),
-                           static_cast<float>(target->Extent.height)));
+                ImGui::Image(reinterpret_cast<ImTextureID>(target->ImGuiTexture), avail);
                 const ImVec2 min = ImGui::GetItemRectMin();
                 const ImVec2 max = ImGui::GetItemRectMax();
                 m_UiState->ViewportScreenMin = {min.x, min.y};

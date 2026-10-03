@@ -81,6 +81,7 @@ void main() {
     vec2 uv = (vec2(texCoords) + 0.5f) / vec2(imageSize);
     uv = uv * 2.0f - 1.0f;
     uv.x *= u_aspect;
+    uv.y = -uv.y;
 
     vec3 rayOrigin;
     vec3 cameraFront;

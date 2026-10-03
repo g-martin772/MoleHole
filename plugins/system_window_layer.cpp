@@ -58,6 +58,8 @@ namespace
             }
 
             ImGui::End();
+
+            ImGui::ShowMetricsWindow();
         }
 
     private:

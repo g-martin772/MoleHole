@@ -20,7 +20,6 @@ namespace
             std::sin(glm::radians(state.CameraYaw)) * std::cos(glm::radians(state.CameraPitch))));
         const glm::vec3 up{0.0f, 1.0f, 0.0f};
         glm::mat4 projection = glm::perspective(glm::radians(state.CameraFov), aspect, 0.1f, 10000.0f);
-        projection[1][1] *= -1.0f;
         return projection * glm::lookAt(state.CameraPosition, state.CameraPosition + front, up);
     }
 

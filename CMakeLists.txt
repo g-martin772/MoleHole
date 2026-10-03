@@ -36,7 +36,8 @@ set(MOLEHOLE_UI_PLUGINS
         camera_window_layer
         debug_window_layer
         system_window_layer
-        viewport_hud_layer)
+        viewport_hud_layer
+        simulation_controls_layer)
 
 foreach (plugin ${MOLEHOLE_UI_PLUGINS})
     gpp_add_hot_reload_layer(molehole_${plugin}

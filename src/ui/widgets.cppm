@@ -2,6 +2,7 @@ export module MoleHole:UI.Widgets;
 
 import std;
 import imgui;
+import :UI.State;
 
 export namespace MoleHole
 {
@@ -13,5 +14,18 @@ export namespace MoleHole
         ImGui::PopStyleColor();
         ImGui::Separator();
         ImGui::Spacing();
+    }
+
+    inline ImFont* EnsureIconFont(UiState& state)
+    {
+        if (!state.IconFont)
+        {
+            static const ImWchar iconRanges[] = {0xe000, 0xf8ff, 0};
+            ImFontConfig config;
+            config.FontDataOwnedByAtlas = true;
+            state.IconFont = ImGui::GetIO().Fonts->AddFontFromFileTTF(
+                "font/fa-solid-900.ttf", 24.0f, &config, iconRanges);
+        }
+        return state.IconFont;
     }
 }

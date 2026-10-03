@@ -3,6 +3,7 @@ export module MoleHole:UI.State;
 import std;
 import glm;
 import GPP;
+import imgui;
 
 export namespace MoleHole
 {
@@ -52,6 +53,8 @@ export namespace MoleHole
 
         glm::vec2 ViewportScreenMin{0.0f};
         glm::vec2 ViewportScreenMax{0.0f};
+
+        ImFont* IconFont = nullptr;
 
         RenderToggles Render;
     };

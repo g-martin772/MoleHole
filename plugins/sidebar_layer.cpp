@@ -9,9 +9,22 @@ using namespace MoleHole;
 
 namespace
 {
+    constexpr const char* kIconCamera = "\xef\x80\xb0"; // U+F030
+    constexpr const char* kIconSystem = "\xef\x8b\x9b"; // U+F2DB (microchip)
+    constexpr const char* kIconScene = "\xef\x80\xbe"; // U+F03E (image)
+    constexpr const char* kIconDebug = "\xef\x86\x88"; // U+F188 (bug)
+    constexpr const char* kIconHud = "\xef\x98\xa4"; // U+F624 (gauge)
+    constexpr const char* kIconSettings = "\xef\x80\x93"; // U+F013 (gear)
+
+    constexpr ImVec4 kAccent(180.0f / 255.0f, 100.0f / 255.0f, 40.0f / 255.0f, 1.0f);
+    constexpr ImVec4 kAccentHover(200.0f / 255.0f, 120.0f / 255.0f, 50.0f / 255.0f, 1.0f);
+    constexpr ImVec4 kNeutral(0.16f, 0.16f, 0.16f, 1.0f);
+    constexpr ImVec4 kNeutralHover(0.24f, 0.24f, 0.24f, 1.0f);
+
     struct SidebarButton
     {
-        const char* label;
+        const char* icon;
+        const char* fallbackLabel;
         const char* tooltip;
         bool* active;
     };
@@ -25,10 +38,15 @@ namespace
         {
         }
 
+        void OnAttach() override
+        {
+            EnsureIconFont(*m_UiState);
+        }
+
         void OnUiRender() override
         {
-            constexpr float sidebarWidth = 56.0f;
-            constexpr float buttonHeight = 40.0f;
+            constexpr float sidebarWidth = 72.0f;
+            constexpr float buttonHeight = 44.0f;
 
             const ImGuiViewport* viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + ImGui::GetFrameHeight()));
@@ -46,39 +64,22 @@ namespace
             if (ImGui::Begin("##Sidebar", nullptr, flags))
             {
                 const SidebarButton buttons[] = {
-                    {"CAM", "Camera", &m_UiState->ShowCameraWindow},
-                    {"SYS", "System", &m_UiState->ShowSystemWindow},
-                    {"SCN", "Scene", &m_UiState->ShowSceneWindow},
-                    {"DBG", "Debug", &m_UiState->ShowDebugWindow},
-                    {"HUD", "Viewport HUD", &m_UiState->ShowViewportHud},
+                    {kIconCamera, "CAM", "Camera", &m_UiState->ShowCameraWindow},
+                    {kIconSystem, "SYS", "System", &m_UiState->ShowSystemWindow},
+                    {kIconScene, "SCN", "Scene", &m_UiState->ShowSceneWindow},
+                    {kIconDebug, "DBG", "Debug", &m_UiState->ShowDebugWindow},
+                    {kIconHud, "HUD", "Viewport HUD", &m_UiState->ShowViewportHud},
                 };
 
                 for (const auto& button : buttons)
                 {
-                    const bool active = *button.active;
-                    if (active)
-                    {
-                        ImGui::PushStyleColor(ImGuiCol_Button,
-                                              ImVec4(180.0f / 255.0f, 100.0f / 255.0f, 40.0f / 255.0f, 1.0f));
-                        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                                              ImVec4(200.0f / 255.0f, 120.0f / 255.0f, 50.0f / 255.0f, 1.0f));
-                    }
-                    if (ImGui::Button(button.label, ImVec2(-1, buttonHeight)))
-                    {
-                        *button.active = !*button.active;
-                    }
-                    if (active) ImGui::PopStyleColor(2);
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", button.tooltip);
+                    RenderButton(button);
                     ImGui::Spacing();
                 }
 
                 const float settingsY = ImGui::GetWindowHeight() - buttonHeight - 12.0f;
                 if (ImGui::GetCursorPosY() < settingsY) ImGui::SetCursorPosY(settingsY);
-                if (ImGui::Button("SET", ImVec2(-1, buttonHeight)))
-                {
-                    m_UiState->ShowSettingsWindow = !m_UiState->ShowSettingsWindow;
-                }
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Settings");
+                RenderButton({kIconSettings, "SET", "Settings", &m_UiState->ShowSettingsWindow});
             }
             ImGui::End();
 
@@ -87,6 +88,26 @@ namespace
         }
 
     private:
+        void RenderButton(const SidebarButton& button) const
+        {
+            constexpr float buttonHeight = 44.0f;
+            const bool active = *button.active;
+
+            ImGui::PushStyleColor(ImGuiCol_Button, active ? kAccent : kNeutral);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? kAccentHover : kNeutralHover);
+
+            const bool hasIconFont = m_UiState->IconFont != nullptr;
+            if (hasIconFont) ImGui::PushFont(m_UiState->IconFont);
+            if (ImGui::Button(hasIconFont ? button.icon : button.fallbackLabel, ImVec2(-1, buttonHeight)))
+            {
+                *button.active = !*button.active;
+            }
+            if (hasIconFont) ImGui::PopFont();
+
+            ImGui::PopStyleColor(2);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", button.tooltip);
+        }
+
         std::shared_ptr<UiState> m_UiState;
     };
 }

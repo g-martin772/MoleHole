@@ -60,8 +60,8 @@ namespace
             ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s",
                                m_UiState->CurrentScenePath.empty() ? "(unsaved)"
                                                                    : m_UiState->CurrentScenePath.c_str());
-
-            RenderTransportControls(*runner);
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                               runner->IsPaused() ? "Paused (see viewport controls)" : "Running");
 
             SectionHeader("ENTITIES");
             if (ImGui::Button("Add Black Hole"))
@@ -103,16 +103,6 @@ namespace
         }
 
     private:
-        void RenderTransportControls(SimulationRunner& runner)
-        {
-            const bool paused = runner.IsPaused();
-            if (ImGui::Button(paused ? "Resume" : "Pause", ImVec2(100, 0)))
-            {
-                runner.SetPaused(!paused);
-            }
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), paused ? "Paused" : "Running");
-        }
 
         void RenderEntityList(SimulationRunner& runner, Scene& scene)
         {
