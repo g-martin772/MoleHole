@@ -1,17 +1,3 @@
-name: ""
-objects:
-  - classes:
-      - Entity
-      - BlackHole
-      - Physics
-    parameters:
-      Physics.Mass: 3.978e+30
-      Entity.Position: [0, 0, -5]
-      Entity.Name: BlackHole
-animation_graph:
-  variables:
-    []
-  nodes:
-    []
-  links:
-    []
+Scene: Double Star System 02
+Entities:
+  []

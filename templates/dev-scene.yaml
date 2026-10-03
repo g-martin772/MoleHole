@@ -1,8 +1,3 @@
-name: dev-scene
-animation_graph:
-  variables:
-    []
-  nodes:
-    []
-  links:
-    []
+Scene: dev-scene
+Entities:
+  []

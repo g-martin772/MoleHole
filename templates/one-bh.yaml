@@ -1,19 +1,17 @@
-name: one-bh
-objects:
-  - classes:
-      - Entity
-      - BlackHole
-      - Physics
-    parameters:
-      Entity.Position: [0, 15, 60]
-  - classes:
-      - Entity
-      - Mesh
-      - Physics
-animation_graph:
-  variables:
-    []
-  nodes:
-    []
-  links:
-    []
+Scene: One Black Hole
+Entities:
+  - Guid: 3911260305441744459
+    Components:
+      Metadata:
+        Guid: 3911260305441744459
+        Name: BlackHole
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 15, 60]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      BlackHole:
+        Mass: 1
+        Spin: 0
+        Charge: 0
+        SpinAxis: [0, 1, 0]

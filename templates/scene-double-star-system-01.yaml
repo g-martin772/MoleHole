@@ -1,40 +1,104 @@
-name: ""
-black_holes:
-  []
-meshes:
-  []
-spheres:
-  - name: New Sphere
-    mass: 1e+15
-    texture_path: ""
-    velocity: [0, 0, -20]
-    position: [29.812284, 0, 7.298925]
-    rotation: [1, 0, 0, 0]
-    color: [0, 0.5, 1, 1]
-    spin: 0
-    radius: 5
-  - name: New Sphere
-    mass: 1e+15
-    texture_path: ""
-    velocity: [0, 0, 20]
-    position: [20.187822, 0, -17.298935]
-    rotation: [1, 0, 0, 0]
-    color: [0, 0.5, 1, 1]
-    spin: 0
-    radius: 5
-  - name: New Sphere
-    mass: 1000
-    texture_path: ""
-    velocity: [0, 0, 10]
-    position: [604.2604, 0, 641.5634]
-    rotation: [1, 0, 0, 0]
-    color: [0, 0.5, 1, 1]
-    spin: 0
-    radius: 0.1
-animation_graph:
-  variables:
-    []
-  nodes:
-    []
-  links:
-    []
+Scene: Double Star System 01
+Entities:
+  - Guid: 14762311208500631375
+    Components:
+      Metadata:
+        Guid: 14762311208500631375
+        Name: New Sphere
+        TypeTag: Sphere
+      Transform:
+        Position: [29.812284, 0, 7.298925]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Velocity:
+        Linear: [0, 0, -20]
+        Angular: [0, 0, 0]
+      RigidBody:
+        Type: Dynamic
+        Mass: 1e+15
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: true
+      Collider:
+        Shape: Sphere
+        HalfExtents: [0.5, 0.5, 0.5]
+        Radius: 5
+        HalfHeight: 0.5
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: false
+      Sphere:
+        Radius: 5
+        Spin: 0
+        Color: [0, 0.5, 1]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+  - Guid: 3393116101896835924
+    Components:
+      Metadata:
+        Guid: 3393116101896835924
+        Name: New Sphere
+        TypeTag: Sphere
+      Transform:
+        Position: [20.187822, 0, -17.298935]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Velocity:
+        Linear: [0, 0, 20]
+        Angular: [0, 0, 0]
+      RigidBody:
+        Type: Dynamic
+        Mass: 1e+15
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: true
+      Collider:
+        Shape: Sphere
+        HalfExtents: [0.5, 0.5, 0.5]
+        Radius: 5
+        HalfHeight: 0.5
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: false
+      Sphere:
+        Radius: 5
+        Spin: 0
+        Color: [0, 0.5, 1]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+  - Guid: 9894214195116092577
+    Components:
+      Metadata:
+        Guid: 9894214195116092577
+        Name: New Sphere
+        TypeTag: Sphere
+      Transform:
+        Position: [604.2604, 0, 641.5634]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Velocity:
+        Linear: [0, 0, 10]
+        Angular: [0, 0, 0]
+      RigidBody:
+        Type: Dynamic
+        Mass: 1000
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: true
+      Collider:
+        Shape: Sphere
+        HalfExtents: [0.5, 0.5, 0.5]
+        Radius: 0.1
+        HalfHeight: 0.5
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: false
+      Sphere:
+        Radius: 0.1
+        Spin: 0
+        Color: [0, 0.5, 1]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
