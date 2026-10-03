@@ -28,9 +28,6 @@ export namespace MoleHole
 
 namespace YAML
 {
-    // GPP::TransformComponent's own converter already specializes YAML::convert<glm::vec3>
-    // (components.cppm), and that specialization is reachable here via `import GPP;` -- redefining
-    // it ourselves is an ODR conflict, not an independent per-module copy.
     template <>
     struct convert<MoleHole::BlackHoleComponent>
     {

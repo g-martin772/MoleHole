@@ -1,0 +1,48 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0, rgba32f) uniform readonly image2D u_inputImage;
+layout(set = 0, binding = 1, rgba32f) uniform writeonly image2D u_outputImage;
+
+layout(push_constant) uniform PushConstants
+{
+    float u_flareIntensity;
+    float u_flareThreshold;
+    int u_flareEnabled;
+};
+
+const int NUM_GHOSTS = 5;
+const float GHOST_DISPERSAL = 0.3;
+
+void main() {
+    ivec2 texCoords = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imageSize = imageSize(u_inputImage);
+    if (texCoords.x >= imageSize.x || texCoords.y >= imageSize.y) {
+        return;
+    }
+
+    if (u_flareEnabled == 0) {
+        imageStore(u_outputImage, texCoords, vec4(0.0));
+        return;
+    }
+
+    vec2 uv = (vec2(texCoords) + 0.5) / vec2(imageSize);
+    vec2 center = vec2(0.5);
+    vec2 toCenter = center - uv;
+
+    vec3 result = vec3(0.0);
+    for (int i = 0; i < NUM_GHOSTS; i++) {
+        vec2 ghostUv = uv + toCenter * GHOST_DISPERSAL * float(i);
+        ivec2 ghostCoord = ivec2(ghostUv * vec2(imageSize));
+        if (ghostCoord.x >= 0 && ghostCoord.x < imageSize.x && ghostCoord.y >= 0 && ghostCoord.y < imageSize.y) {
+            vec3 sampleColor = imageLoad(u_inputImage, ghostCoord).rgb;
+            float brightness = dot(sampleColor, vec3(0.2126, 0.7152, 0.0722));
+            if (brightness > u_flareThreshold) {
+                result += sampleColor * (1.0 / float(i + 1));
+            }
+        }
+    }
+
+    imageStore(u_outputImage, texCoords, vec4(result * u_flareIntensity, 1.0));
+}

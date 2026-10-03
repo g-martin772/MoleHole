@@ -9,12 +9,16 @@ set(CMAKE_CXX_SCAN_FOR_MODULES 1)
 
 add_subdirectory(dependencies/gpp)
 
-file(GLOB_RECURSE MOLEHOLE_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
+file(GLOB_RECURSE MOLEHOLE_CORE_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 file(GLOB_RECURSE MOLEHOLE_MODULES CONFIGURE_DEPENDS "src/*.cppm")
+list(REMOVE_ITEM MOLEHOLE_CORE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
 
-add_executable(MoleHole ${MOLEHOLE_SOURCES})
-target_sources(MoleHole PRIVATE FILE_SET modules TYPE CXX_MODULES FILES ${MOLEHOLE_MODULES})
-target_link_libraries(MoleHole PRIVATE gpp)
+add_library(molehole_core SHARED ${MOLEHOLE_CORE_SOURCES})
+target_sources(molehole_core PUBLIC FILE_SET modules TYPE CXX_MODULES FILES ${MOLEHOLE_MODULES})
+target_link_libraries(molehole_core PUBLIC gpp)
+
+add_executable(MoleHole src/main.cpp)
+target_link_libraries(MoleHole PRIVATE molehole_core)
 
 gpp_add_hot_reload_theme(molehole_theme
         SOURCES plugins/theme.cpp
@@ -22,20 +26,16 @@ gpp_add_hot_reload_theme(molehole_theme
 
 gpp_add_hot_reload_layer(molehole_viewport_layer
         SOURCES plugins/viewport_layer.cpp
+        LINK_LIBRARIES molehole_core
         OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:MoleHole>")
 
 add_dependencies(MoleHole molehole_theme molehole_viewport_layer)
-
-set(MOLEHOLE_LIB_SOURCES ${MOLEHOLE_SOURCES})
-list(REMOVE_ITEM MOLEHOLE_LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
 
 find_package(Catch2 CONFIG REQUIRED)
 include(CTest)
 include(Catch)
 
 file(GLOB_RECURSE MOLEHOLE_TEST_SOURCES CONFIGURE_DEPENDS "tests/unit/*.cpp")
-add_executable(molehole_tests)
-target_sources(molehole_tests PRIVATE ${MOLEHOLE_TEST_SOURCES} ${MOLEHOLE_LIB_SOURCES})
-target_sources(molehole_tests PRIVATE FILE_SET test_modules TYPE CXX_MODULES FILES ${MOLEHOLE_MODULES})
-target_link_libraries(molehole_tests PRIVATE gpp Catch2::Catch2WithMain)
+add_executable(molehole_tests ${MOLEHOLE_TEST_SOURCES})
+target_link_libraries(molehole_tests PRIVATE molehole_core Catch2::Catch2WithMain)
 catch_discover_tests(molehole_tests)
