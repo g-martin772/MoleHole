@@ -7,3 +7,4 @@ cmake-build-debug-mingw/
 *.mhdr
 out/
 .shader_cache/
+.gpp/

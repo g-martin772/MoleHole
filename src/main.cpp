@@ -1,4 +1,5 @@
 import GPP;
+import MoleHole;
 import std;
 
 using namespace GPP;
@@ -10,6 +11,8 @@ namespace
 
 int main(int argc, char* argv[])
 {
+    MoleHole::RegisterComponents();
+
     auto builder = GuiApplicationBuilder();
 
     builder.Configuration

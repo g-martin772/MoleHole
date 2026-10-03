@@ -25,3 +25,17 @@ gpp_add_hot_reload_layer(molehole_viewport_layer
         OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:MoleHole>")
 
 add_dependencies(MoleHole molehole_theme molehole_viewport_layer)
+
+set(MOLEHOLE_LIB_SOURCES ${MOLEHOLE_SOURCES})
+list(REMOVE_ITEM MOLEHOLE_LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+
+find_package(Catch2 CONFIG REQUIRED)
+include(CTest)
+include(Catch)
+
+file(GLOB_RECURSE MOLEHOLE_TEST_SOURCES CONFIGURE_DEPENDS "tests/unit/*.cpp")
+add_executable(molehole_tests)
+target_sources(molehole_tests PRIVATE ${MOLEHOLE_TEST_SOURCES} ${MOLEHOLE_LIB_SOURCES})
+target_sources(molehole_tests PRIVATE FILE_SET test_modules TYPE CXX_MODULES FILES ${MOLEHOLE_MODULES})
+target_link_libraries(molehole_tests PRIVATE gpp Catch2::Catch2WithMain)
+catch_discover_tests(molehole_tests)
