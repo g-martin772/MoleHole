@@ -1,0 +1,30 @@
+{
+  "GPP": {
+    "Graphics": {
+      "Window": {
+        "Width": 1600,
+        "Height": 900,
+        "Fullscreen": false,
+        "Headless": false,
+        "Title": "MoleHole"
+      },
+      "Render": {
+        "ShaderAssetDirectories": ["shaders"],
+        "EnableShaderHotReload": true,
+        "ShaderHotReloadIntervalMilliseconds": 250
+      },
+      "LayerHotReload": {
+        "Enabled": true,
+        "PollingIntervalMilliseconds": 300
+      },
+      "Fonts": {
+        "FontDirectories": ["font"]
+      },
+      "Theme": {
+        "LibraryPath": "molehole_theme.so",
+        "EnableHotReload": true,
+        "PollingIntervalMilliseconds": 300
+      }
+    }
+  }
+}

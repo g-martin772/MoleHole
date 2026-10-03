@@ -1,23 +1,29 @@
-#include <spdlog/spdlog.h>
-#include "Application/Application.h"
+import GPP;
+import std;
 
-int main(int argc, char* argv[]) {
-    spdlog::set_level(spdlog::level::debug);
-    spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
+using namespace GPP;
 
-    auto& app = Application::Instance();
+namespace
+{
+    constexpr std::uint32_t kViewportBufferId = 1;
+}
 
-    if (!app.Initialize(argc, argv)) {
-        spdlog::error("Failed to initialize application");
-        return -1;
-    }
+int main(int argc, char* argv[])
+{
+    auto builder = GuiApplicationBuilder();
 
-    if (Application::Args().IsHeadless()) {
-        app.RunHeadless();
-    } else {
-        app.Run();
-    }
+    builder.Configuration
+           .AddJsonFile("config.json")
+           .AddCommandLine(argc, argv)
+           .AddEnvironmentVariables();
 
-    app.Shutdown();
-    return 0;
+    builder.ConfigureImGui({"DockingEnable", "ViewportsEnable"}, true);
+    builder.SetTheme("molehole_theme.so", true);
+
+    builder.AddHotReloadableLayer("viewport", "molehole_viewport_layer.so")
+           .SetBufferTarget(kViewportBufferId)
+           .SetWindowTarget("main");
+
+    auto app = builder.Build();
+    return app->Run();
 }
