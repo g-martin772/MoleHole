@@ -1,6 +1,7 @@
 import GPP;
 import MoleHole;
 import vulkan;
+import glm;
 import std;
 
 #include <gpp/hot_reload_export.h>
@@ -16,10 +17,28 @@ namespace
     constexpr float kLensFlareIntensity = 0.3f;
     constexpr float kLensFlareThreshold = 2.0f;
 
+    constexpr float kGravityGridPlaneY = -5.0f;
+    constexpr float kGravityGridPlaneSize = 200.0f;
+    constexpr int kGravityGridResolution = 256;
+    constexpr float kGravityGridCellSize = 2.0f;
+    constexpr float kGravityGridLineThickness = 0.03f;
+    constexpr float kGravityGridOpacity = 0.7f;
+    const glm::vec3 kGravityGridColor{0.1f, 0.1f, 0.8f};
+
     vk::ImageUsageFlags StorageSampledUsage()
     {
         return vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled;
     }
+
+    struct MeshDrawable
+    {
+        const GltfPrimitive* Primitive = nullptr;
+        glm::mat4 Model{1.0f};
+        glm::vec4 BaseColorFactor{0.8f, 0.8f, 0.8f, 1.0f};
+        float MetallicFactor{0.5f};
+        float RoughnessFactor{0.5f};
+        std::shared_ptr<VulkanImage> BaseColorTexture;
+    };
 
     VulkanImageSpecification MakeComputeTargetSpec(vk::Extent3D extent, std::string debugName)
     {
@@ -35,9 +54,9 @@ namespace
         };
     }
 
-    // Phase 3 renderer: raytrace -> bloom extract -> bloom blur (ping-pong) -> lens flare -> composite,
-    // ported from legacy/Renderer/BlackHoleRenderer.cpp onto GPP's render graph. Mesh/grid/object-path/
-    // physics-debug overlays and the Kerr geodesic LUTs are not yet ported (see docs/ for the follow-up).
+    // raytrace -> bloom extract -> bloom blur (ping-pong) -> lens flare -> composite
+    // -> gravity-grid overlay -> mesh overlay
+    // not ported yet: Object-path trails and PhysX debug lines until later
     struct ViewportLayer final : public HotReloadableLayer
     {
         using Dependencies = std::tuple<Logger, Renderer, IFileSystem, EventDispatcher, SceneManager, InputState>;
@@ -75,6 +94,14 @@ namespace
             m_HrDiagramLut = GenerateHrDiagramLut(device, *m_UploadPool, queue, m_Logger);
             m_Skybox = LoadSkyboxTexture(device, *m_UploadPool, queue, m_FileSystem,
                                          "assets/backgrounds/space.hdr", m_Logger);
+            m_DummyWhiteTexture = GenerateSolidColorTexture(device, *m_UploadPool, queue,
+                                                            glm::vec4(1.0f), m_Logger);
+
+            m_MeshCameraBuffer = std::make_unique<VulkanBuffer>(
+                device, MakeUniformBufferSpecification(sizeof(MeshCameraParamsGpu)), m_Logger);
+            m_GravityGridParamsBuffer = std::make_unique<VulkanBuffer>(
+                device, MakeUniformBufferSpecification(sizeof(GravityGridParamsGpu)), m_Logger);
+            CreateGravityGridMesh();
 
             m_StartTime = std::chrono::steady_clock::now();
             m_Logger->Info("ViewportLayer attached");
@@ -232,11 +259,88 @@ namespace
                         cmd.draw(3, 1, 0, 0);
                     });
             }
+
+            if (m_ShowGravityGrid)
+            {
+                EnsureGravityGridPipeline(graph.GetImageFormat(colorTarget));
+                if (m_GravityGridPipeline)
+                {
+                    UploadGravityGridParams();
+                    graph.AddGraphicsPass(
+                        "ViewportLayer.GravityGrid", {}, {},
+                        {RenderGraphAttachment{.Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
+                        std::nullopt,
+                        [this, device](const vk::CommandBuffer cmd, RenderGraph& g)
+                        {
+                            const auto pipeline = m_GravityGridPipeline->GetPipeline();
+                            if (!pipeline || m_GravityGridIndexCount == 0) return;
+                            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->GetPipeline());
+                            const auto set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
+                            DescriptorSetWriter(device->GetDevice())
+                                .WriteUniformBuffer(set, 0, m_GravityGridParamsBuffer->GetBuffer())
+                                .Update();
+                            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->GetLayout(), 0, set, {});
+                            BindVertexBuffer(cmd, m_GravityGridVertexBuffer->GetBuffer());
+                            BindIndexBuffer(cmd, m_GravityGridIndexBuffer->GetBuffer());
+                            cmd.drawIndexed(m_GravityGridIndexCount, 1, 0, 0, 0);
+                        });
+                }
+            }
+
+            if (const auto depthTarget = graph.GetPrimaryDepthTarget(); depthTarget != kInvalidRenderGraphHandle)
+            {
+                EnsureMeshPipeline(graph.GetImageFormat(colorTarget), graph.GetImageFormat(depthTarget));
+                auto drawables = CollectMeshDrawables();
+                if (m_MeshPipeline && !drawables.empty())
+                {
+                    UploadMeshCamera();
+                    graph.AddGraphicsPass(
+                        "ViewportLayer.Mesh", {}, {},
+                        {RenderGraphAttachment{.Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
+                        RenderGraphAttachment{
+                            .Handle = depthTarget, .LoadOp = vk::AttachmentLoadOp::eClear,
+                            .Clear = vk::ClearValue(vk::ClearDepthStencilValue(1.0f, 0))
+                        },
+                        [this, device, drawables = std::move(drawables)](const vk::CommandBuffer cmd, RenderGraph& g)
+                        {
+                            const auto pipeline = m_MeshPipeline->GetPipeline();
+                            if (!pipeline) return;
+                            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->GetPipeline());
+                            for (const auto& drawable : drawables)
+                            {
+                                const auto set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
+                                const auto* texture = drawable.BaseColorTexture
+                                                           ? drawable.BaseColorTexture.get()
+                                                           : m_DummyWhiteTexture.get();
+                                DescriptorSetWriter(device->GetDevice())
+                                    .WriteUniformBuffer(set, 0, m_MeshCameraBuffer->GetBuffer())
+                                    .WriteCombinedImageSampler(set, 1, texture->GetImageView(), texture->GetSampler())
+                                    .Update();
+                                cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->GetLayout(), 0, set, {});
+
+                                MeshPushConstantsGpu push{};
+                                push.Model = drawable.Model;
+                                push.BaseColorFactor = drawable.BaseColorFactor;
+                                push.MetallicFactor = drawable.MetallicFactor;
+                                push.RoughnessFactor = drawable.RoughnessFactor;
+                                push.HasBaseColorTexture = drawable.BaseColorTexture ? 1 : 0;
+                                cmd.pushConstants(pipeline->GetLayout(),
+                                                  vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                                  0, sizeof(push), &push);
+
+                                BindVertexBuffer(cmd, drawable.Primitive->VertexBuffer.GetBuffer());
+                                BindIndexBuffer(cmd, drawable.Primitive->IndexBuffer.GetBuffer());
+                                cmd.drawIndexed(drawable.Primitive->IndexCount, 1, 0, 0, 0);
+                            }
+                        });
+                }
+            }
         }
 
         void OnUiRender() override
         {
             ImGui::Begin("Viewport");
+            ImGui::Checkbox("Gravity Grid", &m_ShowGravityGrid);
             if (const auto target = m_Renderer->GetRenderTargetInfo(m_LayerTarget.Id))
             {
                 ImGui::Image(
@@ -302,6 +406,190 @@ namespace
                 m_Logger->Error("ViewportLayer: failed to compile composite display shader");
             }
             m_CompositeColorFormat = colorFormat;
+        }
+
+        void EnsureMeshPipeline(vk::Format colorFormat, vk::Format depthFormat)
+        {
+            if (m_MeshPipeline && m_MeshColorFormat == colorFormat && m_MeshDepthFormat == depthFormat) return;
+            const auto device = m_Renderer->GetDevice();
+            m_MeshPipeline = std::make_shared<ShaderPipeline>(
+                device,
+                VulkanPipelineSpecification{
+                    .colorFormat = colorFormat,
+                    .depthFormat = depthFormat,
+                    .enableBlending = false,
+                    .cullMode = vk::CullModeFlagBits::eNone
+                },
+                ShaderPipelineDescription{
+                    .vertex = ShaderSource{
+                        .path = m_FileSystem->ResolveAssetPath("shaders", "mesh.vert"),
+                        .stage = ShaderStage::Vertex
+                    },
+                    .fragment = ShaderSource{
+                        .path = m_FileSystem->ResolveAssetPath("shaders", "mesh.frag"),
+                        .stage = ShaderStage::Fragment
+                    },
+                    .enableHotReload = true
+                },
+                m_FileSystem, m_Dispatcher, m_Logger);
+            if (!m_MeshPipeline->StartOnRenderThread())
+            {
+                m_Logger->Error("ViewportLayer: failed to compile mesh overlay shader");
+            }
+            m_MeshColorFormat = colorFormat;
+            m_MeshDepthFormat = depthFormat;
+        }
+
+        void EnsureGravityGridPipeline(vk::Format colorFormat)
+        {
+            if (m_GravityGridPipeline && m_GravityGridColorFormat == colorFormat) return;
+            const auto device = m_Renderer->GetDevice();
+            m_GravityGridPipeline = std::make_shared<ShaderPipeline>(
+                device,
+                VulkanPipelineSpecification{
+                    .colorFormat = colorFormat,
+                    .depthFormat = vk::Format::eUndefined,
+                    .enableBlending = true,
+                    .cullMode = vk::CullModeFlagBits::eNone
+                },
+                ShaderPipelineDescription{
+                    .vertex = ShaderSource{
+                        .path = m_FileSystem->ResolveAssetPath("shaders", "plane_grid.vert"),
+                        .stage = ShaderStage::Vertex
+                    },
+                    .fragment = ShaderSource{
+                        .path = m_FileSystem->ResolveAssetPath("shaders", "plane_grid.frag"),
+                        .stage = ShaderStage::Fragment
+                    },
+                    .enableHotReload = true
+                },
+                m_FileSystem, m_Dispatcher, m_Logger);
+            if (!m_GravityGridPipeline->StartOnRenderThread())
+            {
+                m_Logger->Error("ViewportLayer: failed to compile gravity grid shader");
+            }
+            m_GravityGridColorFormat = colorFormat;
+        }
+
+        void CreateGravityGridMesh()
+        {
+            constexpr int N = kGravityGridResolution;
+            constexpr int vertsPerSide = N + 1;
+            std::vector<glm::vec3> vertices;
+            vertices.reserve(static_cast<std::size_t>(vertsPerSide) * vertsPerSide);
+            const float half = kGravityGridPlaneSize * 0.5f;
+            for (int z = 0; z <= N; ++z)
+            {
+                const float wz = -half + (static_cast<float>(z) / N) * kGravityGridPlaneSize;
+                for (int x = 0; x <= N; ++x)
+                {
+                    const float wx = -half + (static_cast<float>(x) / N) * kGravityGridPlaneSize;
+                    vertices.emplace_back(wx, kGravityGridPlaneY, wz);
+                }
+            }
+
+            std::vector<std::uint32_t> indices;
+            indices.reserve(static_cast<std::size_t>(N) * N * 6);
+            for (int z = 0; z < N; ++z)
+            {
+                for (int x = 0; x < N; ++x)
+                {
+                    const auto i0 = static_cast<std::uint32_t>(z * vertsPerSide + x);
+                    const std::uint32_t i1 = i0 + 1;
+                    const std::uint32_t i2 = i0 + vertsPerSide;
+                    const std::uint32_t i3 = i2 + 1;
+                    indices.insert(indices.end(), {i0, i2, i1, i1, i2, i3});
+                }
+            }
+
+            const auto device = m_Renderer->GetDevice();
+            const auto vertexBytes = static_cast<vk::DeviceSize>(vertices.size() * sizeof(glm::vec3));
+            m_GravityGridVertexBuffer = std::make_unique<VulkanBuffer>(
+                device, MakeVertexBufferSpecification(vertexBytes, true), m_Logger);
+            m_GravityGridVertexBuffer->Upload(vertices.data(), vertexBytes);
+
+            const auto indexBytes = static_cast<vk::DeviceSize>(indices.size() * sizeof(std::uint32_t));
+            m_GravityGridIndexBuffer = std::make_unique<VulkanBuffer>(
+                device, MakeIndexBufferSpecification(indexBytes, true), m_Logger);
+            m_GravityGridIndexBuffer->Upload(indices.data(), indexBytes);
+            m_GravityGridIndexCount = static_cast<std::uint32_t>(indices.size());
+        }
+
+        std::shared_ptr<GltfSceneData> GetOrLoadMesh(const std::string& assetPath)
+        {
+            if (const auto it = m_MeshCache.find(assetPath); it != m_MeshCache.end())
+            {
+                return it->second;
+            }
+            std::shared_ptr<GltfSceneData> result;
+            try
+            {
+                result = std::make_shared<GltfSceneData>(
+                    LoadGltfScene(m_Renderer->GetDevice(), m_FileSystem, assetPath, m_Logger));
+            }
+            catch (const std::exception& error)
+            {
+                m_Logger->Warn("ViewportLayer: failed to load mesh '{}': {}", assetPath, error.what());
+            }
+            m_MeshCache.emplace(assetPath, result);
+            return result;
+        }
+
+        std::vector<MeshDrawable> CollectMeshDrawables()
+        {
+            std::vector<MeshDrawable> drawables;
+            if (!m_Scene) return drawables;
+            for (auto [entity, meshComponent, transform] :
+                 m_Scene->Registry().view<const MeshComponent, const TransformComponent>().each())
+            {
+                if (meshComponent.AssetPath.empty()) continue;
+                const auto scene = GetOrLoadMesh(meshComponent.AssetPath);
+                if (!scene) continue;
+                const glm::mat4 model = transform.GetMatrix();
+                for (const auto& mesh : scene->Meshes)
+                {
+                    for (const auto& primitive : mesh.Primitives)
+                    {
+                        MeshDrawable drawable;
+                        drawable.Primitive = &primitive;
+                        drawable.Model = model;
+                        if (primitive.MaterialIndex >= 0 && static_cast<std::size_t>(primitive.MaterialIndex)
+                                                                 < scene->Materials.size())
+                        {
+                            const auto& material = scene->Materials[static_cast<std::size_t>(primitive.MaterialIndex)];
+                            drawable.BaseColorFactor = material.BaseColorFactor;
+                            drawable.MetallicFactor = material.MetallicFactor;
+                            drawable.RoughnessFactor = material.RoughnessFactor;
+                            drawable.BaseColorTexture = material.BaseColorTexture;
+                        }
+                        drawables.push_back(std::move(drawable));
+                    }
+                }
+            }
+            return drawables;
+        }
+
+        void UploadMeshCamera()
+        {
+            MeshCameraParamsGpu params{};
+            params.View = m_Camera.GetViewMatrix();
+            params.Projection = m_Camera.GetProjectionMatrix();
+            params.CameraPos = m_Camera.GetPosition();
+            params.LightDir = glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f));
+            m_MeshCameraBuffer->Upload(&params, sizeof(params));
+        }
+
+        void UploadGravityGridParams()
+        {
+            GravityGridParamsGpu params{};
+            params.ViewProjection = m_Camera.GetViewProjectionMatrix();
+            params.PlaneY = kGravityGridPlaneY;
+            params.CellSize = kGravityGridCellSize;
+            params.LineThickness = kGravityGridLineThickness;
+            params.Opacity = kGravityGridOpacity;
+            params.Color = kGravityGridColor;
+            if (m_Scene) FillGravityGridData(params, *m_Scene);
+            m_GravityGridParamsBuffer->Upload(&params, sizeof(params));
         }
 
         void EnsureImages(vk::Extent3D extent)
@@ -439,6 +727,21 @@ namespace
         std::shared_ptr<VulkanImage> m_AccelerationLut;
         std::shared_ptr<VulkanImage> m_HrDiagramLut;
         std::shared_ptr<VulkanImage> m_Skybox;
+        std::shared_ptr<VulkanImage> m_DummyWhiteTexture;
+
+        std::shared_ptr<ShaderPipeline> m_MeshPipeline;
+        vk::Format m_MeshColorFormat{vk::Format::eUndefined};
+        vk::Format m_MeshDepthFormat{vk::Format::eUndefined};
+        std::unique_ptr<VulkanBuffer> m_MeshCameraBuffer;
+        std::unordered_map<std::string, std::shared_ptr<GltfSceneData>> m_MeshCache;
+
+        bool m_ShowGravityGrid{false};
+        std::shared_ptr<ShaderPipeline> m_GravityGridPipeline;
+        vk::Format m_GravityGridColorFormat{vk::Format::eUndefined};
+        std::unique_ptr<VulkanBuffer> m_GravityGridVertexBuffer;
+        std::unique_ptr<VulkanBuffer> m_GravityGridIndexBuffer;
+        std::uint32_t m_GravityGridIndexCount{0};
+        std::unique_ptr<VulkanBuffer> m_GravityGridParamsBuffer;
     };
 }
 

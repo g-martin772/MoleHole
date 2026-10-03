@@ -49,7 +49,10 @@ export namespace MoleHole
 
         [[nodiscard]] glm::mat4 GetProjectionMatrix() const
         {
-            return glm::perspective(glm::radians(m_Fov), m_Aspect, m_NearPlane, m_FarPlane);
+            // glm's Y convention is OpenGL's (NDC +Y up); Vulkan's is the opposite
+            glm::mat4 projection = glm::perspective(glm::radians(m_Fov), m_Aspect, m_NearPlane, m_FarPlane);
+            projection[1][1] *= -1.0f;
+            return projection;
         }
 
         [[nodiscard]] glm::mat4 GetViewProjectionMatrix() const

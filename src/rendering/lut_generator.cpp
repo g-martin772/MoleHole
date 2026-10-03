@@ -304,4 +304,13 @@ namespace MoleHole
         return UploadRgba32f(device, uploadPool, queue, static_cast<std::uint32_t>(width),
                              static_cast<std::uint32_t>(height), data, "Skybox", logger);
     }
+
+    std::shared_ptr<VulkanImage> GenerateSolidColorTexture(const std::shared_ptr<VulkanDevice>& device,
+                                                            VulkanCommandPool& uploadPool, vk::Queue queue,
+                                                            const glm::vec4& color,
+                                                            const std::shared_ptr<Logger>& logger)
+    {
+        const std::vector data{color.r, color.g, color.b, color.a};
+        return UploadRgba32f(device, uploadPool, queue, 1, 1, data, "SolidColorTexture", logger);
+    }
 }
