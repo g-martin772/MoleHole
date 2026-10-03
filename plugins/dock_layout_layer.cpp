@@ -45,11 +45,16 @@ namespace
             ImGuiID dockRightTop, dockRightBottom;
             ImGui::DockBuilderSplitNode(dockRight, ImGuiDir_Up, 0.5f, &dockRightTop, &dockRightBottom);
 
+            ImGuiID dockBottom;
+            ImGui::DockBuilderSplitNode(dockCenter, ImGuiDir_Down, 0.30f, &dockBottom, &dockCenter);
+
             ImGui::DockBuilderDockWindow("System", dockRightTop);
             ImGui::DockBuilderDockWindow("Camera", dockRightTop);
             ImGui::DockBuilderDockWindow("Scene", dockRightBottom);
             ImGui::DockBuilderDockWindow("Debug", dockRightBottom);
             ImGui::DockBuilderDockWindow("Viewport", dockCenter);
+            ImGui::DockBuilderDockWindow("General Relativity", dockBottom);
+            ImGui::DockBuilderDockWindow("Science", dockBottom);
 
             ImGui::DockBuilderFinish(dockspaceId);
             m_Logger->Info("DockLayoutLayer: applied first-run docking layout");

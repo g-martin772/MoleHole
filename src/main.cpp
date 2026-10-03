@@ -20,6 +20,7 @@ int main(int argc, char* argv[])
     builder.SetTheme("molehole_theme.so", true);
 
     builder.Services.AddSingleton<UiState>();
+    builder.Services.AddSingleton<LatexRenderer>();
 
     builder.AddHotReloadableLayer("dock-layout", "molehole_dock_layout_layer.so").SetWindowTarget("main");
     builder.AddHotReloadableLayer("sidebar", "molehole_sidebar_layer.so").SetWindowTarget("main");
@@ -31,6 +32,9 @@ int main(int argc, char* argv[])
     builder.AddHotReloadableLayer("viewport-hud", "molehole_viewport_hud_layer.so").SetWindowTarget("main");
     builder.AddHotReloadableLayer("simulation-controls", "molehole_simulation_controls_layer.so")
            .SetWindowTarget("main");
+    builder.AddHotReloadableLayer("general-relativity-window", "molehole_general_relativity_window_layer.so")
+           .SetWindowTarget("main");
+    builder.AddHotReloadableLayer("science-window", "molehole_science_window_layer.so").SetWindowTarget("main");
 
     builder.AddHotReloadableLayer("viewport", "molehole_viewport_layer.so")
            .SetBufferTarget(kViewportBufferId);

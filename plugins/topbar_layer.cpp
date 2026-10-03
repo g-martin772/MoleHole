@@ -90,6 +90,8 @@ namespace
                 ImGui::MenuItem("Scene", nullptr, &m_UiState->ShowSceneWindow);
                 ImGui::MenuItem("Debug", nullptr, &m_UiState->ShowDebugWindow);
                 ImGui::MenuItem("Viewport HUD", nullptr, &m_UiState->ShowViewportHud);
+                ImGui::MenuItem("General Relativity", nullptr, &m_UiState->ShowGeneralRelativityWindow);
+                ImGui::MenuItem("Science", nullptr, &m_UiState->ShowScienceWindow);
                 ImGui::EndMenu();
             }
 

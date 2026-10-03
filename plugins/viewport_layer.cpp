@@ -771,6 +771,7 @@ namespace
 
             const auto& render = m_UiState->Render;
             params.DebugMode = render.DebugMode;
+            params.MetricType = render.MetricType;
             params.IsPhysicallyAccurate = render.PhysicallyAccurate ? 1 : 0;
             params.GravitationalLensingEnabled = render.GravitationalLensing ? 1 : 0;
             params.GravitationalRedshiftEnabled = render.GravitationalRedshift ? 1 : 0;

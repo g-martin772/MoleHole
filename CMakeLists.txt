@@ -38,7 +38,9 @@ set(MOLEHOLE_UI_PLUGINS
         debug_window_layer
         system_window_layer
         viewport_hud_layer
-        simulation_controls_layer)
+        simulation_controls_layer
+        general_relativity_window_layer
+        science_window_layer)
 
 foreach (plugin ${MOLEHOLE_UI_PLUGINS})
     gpp_add_hot_reload_layer(molehole_${plugin}

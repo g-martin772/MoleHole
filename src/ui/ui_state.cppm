@@ -21,6 +21,8 @@ export namespace MoleHole
         bool PhysicallyAccurate = false;
         bool ShowGravityGrid = false;
         int DebugMode = 0;
+        // 0=Schwarzschild, 1=Kerr, 2=Reissner-Nordstrom, 3=Kerr-Newman
+        int MetricType = 1;
         float AccDiskHeight = 0.2f;
         float AccDiskSpeed = 0.5f;
         float AccDiskNoiseScale = 1.0f;
@@ -36,6 +38,8 @@ export namespace MoleHole
         bool ShowDebugWindow = false;
         bool ShowViewportHud = false;
         bool ShowSettingsWindow = false;
+        bool ShowGeneralRelativityWindow = false;
+        bool ShowScienceWindow = false;
 
         std::uint64_t SelectedEntityGuid = 0;
 

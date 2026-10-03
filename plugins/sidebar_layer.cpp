@@ -14,6 +14,8 @@ namespace
     constexpr const char* kIconScene = "\xef\x80\xbe"; // U+F03E (image)
     constexpr const char* kIconDebug = "\xef\x86\x88"; // U+F188 (bug)
     constexpr const char* kIconHud = "\xef\x98\xa4"; // U+F624 (gauge)
+    constexpr const char* kIconAtom = "\xef\x97\x92"; // U+F5D2 (general relativity)
+    constexpr const char* kIconBrain = "\xef\x97\x9c"; // U+F5DC (science)
     constexpr const char* kIconSettings = "\xef\x80\x93"; // U+F013 (gear)
 
     constexpr ImVec4 kAccent(180.0f / 255.0f, 100.0f / 255.0f, 40.0f / 255.0f, 1.0f);
@@ -72,6 +74,8 @@ namespace
                     {kIconScene, "SCN", "Scene", &m_UiState->ShowSceneWindow},
                     {kIconDebug, "DBG", "Debug", &m_UiState->ShowDebugWindow},
                     {kIconHud, "HUD", "Viewport HUD", &m_UiState->ShowViewportHud},
+                    {kIconAtom, "GR", "General Relativity", &m_UiState->ShowGeneralRelativityWindow},
+                    {kIconBrain, "SCI", "Science", &m_UiState->ShowScienceWindow},
                 };
 
                 for (const auto& button : buttons)
