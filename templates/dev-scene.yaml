@@ -1,4 +1,13 @@
 name: dev-scene
+objects:
+  - classes:
+      - Entity
+      - BlackHole
+      - Physics
+    parameters:
+      Physics.Mass: 2e+30
+      Entity.Position: [0, -1.0, -20.0]
+      Entity.Name: BlackHole
 animation_graph:
   variables:
     []
