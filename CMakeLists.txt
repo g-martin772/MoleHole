@@ -29,7 +29,24 @@ gpp_add_hot_reload_layer(molehole_viewport_layer
         LINK_LIBRARIES molehole_core
         OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:MoleHole>")
 
-add_dependencies(MoleHole molehole_theme molehole_viewport_layer)
+set(MOLEHOLE_UI_PLUGINS
+        sidebar_layer
+        topbar_layer
+        scene_window_layer
+        camera_window_layer
+        debug_window_layer
+        system_window_layer
+        viewport_hud_layer)
+
+foreach (plugin ${MOLEHOLE_UI_PLUGINS})
+    gpp_add_hot_reload_layer(molehole_${plugin}
+            SOURCES plugins/${plugin}.cpp
+            LINK_LIBRARIES molehole_core
+            OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:MoleHole>")
+endforeach ()
+list(TRANSFORM MOLEHOLE_UI_PLUGINS PREPEND "molehole_" OUTPUT_VARIABLE MOLEHOLE_UI_PLUGIN_TARGETS)
+
+add_dependencies(MoleHole molehole_theme molehole_viewport_layer ${MOLEHOLE_UI_PLUGIN_TARGETS})
 
 find_package(Catch2 CONFIG REQUIRED)
 include(CTest)

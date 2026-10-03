@@ -131,7 +131,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
 
         if (u_accretionDiskEnabled == 1) {
             // Get optical depth from the accretion disk at this position
-            float opticalDepth = adiskColorVariant(vec4(0.0, toSpherical(relativePos)), color, alpha, r_s, newOrigin, u_blackHoles[closestBH].mass, u_blackHoles[closestBH].spinAxis);
+            float opticalDepth = adiskColor(vec4(0.0, toSpherical(relativePos)), color, alpha, r_s, newOrigin, u_blackHoles[closestBH].mass);
 
             // Apply volumetric absorption using Beer-Lambert law
             if (opticalDepth > 0.0) {

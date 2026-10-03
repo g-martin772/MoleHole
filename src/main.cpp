@@ -3,25 +3,7 @@ import MoleHole;
 import std;
 
 using namespace GPP;
-
-namespace
-{
-    constexpr std::uint32_t kViewportBufferId = 1;
-
-    struct MainLayer final : public GuiLayer
-    {
-        using Dependencies = std::tuple<Logger>;
-
-        explicit MainLayer(const std::shared_ptr<Logger>& logger) : GuiLayer(logger)
-        {
-        }
-
-        void OnAttach() override
-        {
-            m_Logger->Info("MainLayer attached");
-        }
-    };
-}
+using namespace MoleHole;
 
 int main(int argc, char* argv[])
 {
@@ -37,7 +19,18 @@ int main(int argc, char* argv[])
     builder.ConfigureImGui({"DockingEnable", "ViewportsEnable"}, true);
     builder.SetTheme("molehole_theme.so", true);
 
-    builder.AddGuiLayer<MainLayer>().SetWindowTarget("main");
+    builder.Services.AddSingleton<UiState>();
+
+    // All of MoleHole's editor UI is built as individually hot-reloadable plugins (like the
+    // viewport renderer and theme already were), so panels can be iterated on without
+    // restarting the app -- each one polls its own .so and swaps in the new version live.
+    builder.AddHotReloadableLayer("sidebar", "molehole_sidebar_layer.so").SetWindowTarget("main");
+    builder.AddHotReloadableLayer("topbar", "molehole_topbar_layer.so").SetWindowTarget("main");
+    builder.AddHotReloadableLayer("scene-window", "molehole_scene_window_layer.so").SetWindowTarget("main");
+    builder.AddHotReloadableLayer("camera-window", "molehole_camera_window_layer.so").SetWindowTarget("main");
+    builder.AddHotReloadableLayer("debug-window", "molehole_debug_window_layer.so").SetWindowTarget("main");
+    builder.AddHotReloadableLayer("system-window", "molehole_system_window_layer.so").SetWindowTarget("main");
+    builder.AddHotReloadableLayer("viewport-hud", "molehole_viewport_hud_layer.so").SetWindowTarget("main");
 
     builder.AddHotReloadableLayer("viewport", "molehole_viewport_layer.so")
            .SetBufferTarget(kViewportBufferId);

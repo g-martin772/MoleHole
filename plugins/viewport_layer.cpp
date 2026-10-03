@@ -59,16 +59,18 @@ namespace
     // not ported yet: Object-path trails and PhysX debug lines until later
     struct ViewportLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, Renderer, IFileSystem, EventDispatcher, SceneManager, InputState>;
+        using Dependencies =
+            std::tuple<Logger, Renderer, IFileSystem, EventDispatcher, SceneManager, InputState, UiState>;
 
         ViewportLayer(const std::shared_ptr<Logger>& logger,
                       const std::shared_ptr<Renderer>& renderer,
                       const std::shared_ptr<IFileSystem>& fileSystem,
                       const std::shared_ptr<EventDispatcher>& dispatcher,
                       const std::shared_ptr<SceneManager>& scenes,
-                      const std::shared_ptr<InputState>& input)
+                      const std::shared_ptr<InputState>& input,
+                      const std::shared_ptr<UiState>& uiState)
             : HotReloadableLayer(logger), m_Renderer(renderer), m_FileSystem(fileSystem),
-              m_Dispatcher(dispatcher), m_Scenes(scenes), m_Input(input)
+              m_Dispatcher(dispatcher), m_Scenes(scenes), m_Input(input), m_UiState(uiState)
         {
         }
 
@@ -76,12 +78,7 @@ namespace
         {
             MoleHole::RegisterComponents();
             const auto sceneName = LoadScene();
-
-            auto physicsModule = std::make_shared<PhysicsSimulationModule>(m_Dispatcher, m_Logger);
-            auto gravityModule = std::make_shared<GravitySimulationModule>(physicsModule, m_Dispatcher, m_Logger);
-            m_Runner = m_Scenes->CreateSimulation(
-                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravityModule, physicsModule});
-            m_Runner->Start();
+            StartSimulationFor(sceneName);
 
             const auto device = m_Renderer->GetDevice();
             m_UploadPool = std::make_unique<VulkanCommandPool>(device, m_Logger, device->GetQueueIndices().Graphics);
@@ -121,6 +118,7 @@ namespace
 
         void OnUpdate(float deltaTime) override
         {
+            CheckPendingSceneSwitch();
             UpdateCamera(deltaTime);
         }
 
@@ -270,7 +268,7 @@ namespace
                     });
             }
 
-            if (m_ShowGravityGrid)
+            if (m_UiState->Render.ShowGravityGrid)
             {
                 EnsureGravityGridPipeline(graph.GetImageFormat(colorTarget));
                 if (m_GravityGridPipeline)
@@ -350,13 +348,16 @@ namespace
         void OnUiRender() override
         {
             ImGui::Begin("Viewport");
-            ImGui::Checkbox("Gravity Grid", &m_ShowGravityGrid);
             if (const auto target = m_Renderer->GetRenderTargetInfo(m_LayerTarget.Id))
             {
                 ImGui::Image(
                     reinterpret_cast<ImTextureID>(target->ImGuiTexture),
                     ImVec2(static_cast<float>(target->Extent.width),
                            static_cast<float>(target->Extent.height)));
+                const ImVec2 min = ImGui::GetItemRectMin();
+                const ImVec2 max = ImGui::GetItemRectMax();
+                m_UiState->ViewportScreenMin = {min.x, min.y};
+                m_UiState->ViewportScreenMax = {max.x, max.y};
             }
             else
             {
@@ -643,6 +644,7 @@ namespace
             {
                 auto& scene = m_Scenes->LoadSceneFromFile(kDefaultScenePath);
                 m_Logger->Info("ViewportLayer: loaded scene '{}'", scene.Metadata().Name);
+                m_UiState->CurrentScenePath = kDefaultScenePath;
                 return scene.Metadata().Name;
             }
             catch (const std::exception& error)
@@ -653,12 +655,61 @@ namespace
                 const auto entity = scene.CreateEntity("BlackHole", "BlackHole");
                 scene.Registry().emplace<TransformComponent>(entity, TransformComponent{});
                 scene.Registry().emplace<BlackHoleComponent>(entity, BlackHoleComponent{.Mass = 1.0f, .Spin = 0.5f});
+                m_UiState->CurrentScenePath.clear();
                 return scene.Metadata().Name;
+            }
+        }
+
+        void StartSimulationFor(const std::string& sceneName)
+        {
+            if (m_Runner && !m_UiState->CurrentSceneName.empty())
+            {
+                m_Scenes->DestroySimulation(m_UiState->CurrentSceneName);
+            }
+            auto physicsModule = std::make_shared<PhysicsSimulationModule>(m_Dispatcher, m_Logger);
+            auto gravityModule = std::make_shared<GravitySimulationModule>(physicsModule, m_Dispatcher, m_Logger);
+            m_Runner = m_Scenes->CreateSimulation(
+                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravityModule, physicsModule});
+            m_Runner->Start();
+            m_UiState->CurrentSceneName = sceneName;
+            m_UiState->SelectedEntityGuid = 0;
+        }
+
+        void CheckPendingSceneSwitch()
+        {
+            if (m_UiState->PendingNewScene)
+            {
+                m_UiState->PendingNewScene = false;
+                auto& scene = m_Scenes->CreateScene("Untitled-" + std::to_string(++m_SceneCounter));
+                const auto entity = scene.CreateEntity("Black Hole", "BlackHole");
+                scene.Registry().emplace<TransformComponent>(entity, TransformComponent{});
+                scene.Registry().emplace<BlackHoleComponent>(entity, BlackHoleComponent{.Mass = 1.0f, .Spin = 0.5f});
+                m_UiState->CurrentScenePath.clear();
+                StartSimulationFor(scene.Metadata().Name);
+            }
+            else if (m_UiState->PendingLoadScenePath)
+            {
+                const auto path = *m_UiState->PendingLoadScenePath;
+                m_UiState->PendingLoadScenePath.reset();
+                try
+                {
+                    auto& scene = m_Scenes->LoadSceneFromFile(path);
+                    m_UiState->CurrentScenePath = path;
+                    StartSimulationFor(scene.Metadata().Name);
+                }
+                catch (const std::exception& error)
+                {
+                    m_Logger->Error("ViewportLayer: failed to load scene '{}': {}", path, error.what());
+                }
             }
         }
 
         void UpdateCamera(float deltaTime)
         {
+            m_Camera.SetPosition(m_UiState->CameraPosition);
+            m_Camera.SetYawPitch(m_UiState->CameraYaw, m_UiState->CameraPitch);
+            m_Camera.SetFov(m_UiState->CameraFov);
+
             float forward = 0.0f, right = 0.0f, up = 0.0f;
             if (m_Input->IsKeyDown(KeyCode::W)) forward += 1.0f;
             if (m_Input->IsKeyDown(KeyCode::S)) forward -= 1.0f;
@@ -668,7 +719,7 @@ namespace
             if (m_Input->IsKeyDown(KeyCode::Q)) up -= 1.0f;
             if (forward != 0.0f || right != 0.0f || up != 0.0f)
             {
-                m_Camera.ProcessKeyboard(forward, right, up, deltaTime);
+                m_Camera.ProcessKeyboard(forward, right, up, deltaTime, m_UiState->CameraSpeed);
             }
 
             const float mouseX = m_Input->MouseX();
@@ -679,7 +730,7 @@ namespace
                 {
                     const float dx = mouseX - m_LastMouseX;
                     const float dy = m_LastMouseY - mouseY;
-                    m_Camera.ProcessMouse(dx, dy);
+                    m_Camera.ProcessMouse(dx, dy, m_UiState->CameraMouseSensitivity);
                 }
                 m_HasLastMouse = true;
             }
@@ -689,6 +740,10 @@ namespace
             }
             m_LastMouseX = mouseX;
             m_LastMouseY = mouseY;
+
+            m_UiState->CameraPosition = m_Camera.GetPosition();
+            m_UiState->CameraYaw = m_Camera.GetYaw();
+            m_UiState->CameraPitch = m_Camera.GetPitch();
         }
 
         void UploadParams(vk::Extent3D extent, GPP::Scene& scene)
@@ -702,6 +757,22 @@ namespace
             params.Aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
             params.Time = std::chrono::duration<float>(std::chrono::steady_clock::now() - m_StartTime).count();
             FillSceneData(params, scene);
+
+            const auto& render = m_UiState->Render;
+            params.DebugMode = render.DebugMode;
+            params.IsPhysicallyAccurate = render.PhysicallyAccurate ? 1 : 0;
+            params.GravitationalLensingEnabled = render.GravitationalLensing ? 1 : 0;
+            params.GravitationalRedshiftEnabled = render.GravitationalRedshift ? 1 : 0;
+            params.AccretionDiskEnabled = render.AccretionDisk ? 1 : 0;
+            params.AccretionDiskVolumetric = render.AccretionDiskVolumetric ? 1 : 0;
+            params.RenderBlackHoles = render.RenderBlackHoles ? 1 : 0;
+            params.RenderSpheres = render.RenderSpheres ? 1 : 0;
+            params.DopplerBeamingEnabled = render.DopplerBeaming ? 1.0f : 0.0f;
+            params.AccDiskHeight = render.AccDiskHeight;
+            params.AccDiskSpeed = render.AccDiskSpeed;
+            params.AccDiskNoiseScale = render.AccDiskNoiseScale;
+            params.AccDiskNoiseLOD = render.AccDiskNoiseLOD;
+
             m_ParamsBuffer->Upload(&params, sizeof(params));
         }
 
@@ -710,8 +781,10 @@ namespace
         std::shared_ptr<EventDispatcher> m_Dispatcher;
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<InputState> m_Input;
+        std::shared_ptr<UiState> m_UiState;
 
         std::shared_ptr<SimulationRunner> m_Runner;
+        int m_SceneCounter{0};
         Camera m_Camera;
         bool m_HasLastMouse{false};
         float m_LastMouseX{0.0f};
@@ -746,7 +819,6 @@ namespace
         std::unique_ptr<VulkanBuffer> m_MeshCameraBuffer;
         std::unordered_map<std::string, std::shared_ptr<GltfSceneData>> m_MeshCache;
 
-        bool m_ShowGravityGrid{false};
         std::shared_ptr<ShaderPipeline> m_GravityGridPipeline;
         vk::Format m_GravityGridColorFormat{vk::Format::eUndefined};
         std::unique_ptr<VulkanBuffer> m_GravityGridVertexBuffer;
