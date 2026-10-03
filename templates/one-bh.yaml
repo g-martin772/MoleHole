@@ -5,11 +5,8 @@ objects:
       - BlackHole
       - Physics
     parameters:
+      BlackHole.SpinAxis: [-0.1, 1, 0.5]
       Entity.Position: [0, 15, 60]
-  - classes:
-      - Entity
-      - Mesh
-      - Physics
 animation_graph:
   variables:
     []

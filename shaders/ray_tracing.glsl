@@ -162,7 +162,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
 
         if (u_accretionDiskEnabled == 1) {
             // Get optical depth from the accretion disk at this position
-            float opticalDepth = adiskColor(vec4(0.0, toSpherical(relativePos)), color, alpha, r_s, newOrigin, u_blackHoleMasses[closestBH]);
+            float opticalDepth = adiskColor(vec4(0.0, toSpherical(relativePos)), color, alpha, r_s, newOrigin, u_blackHoleMasses[closestBH], u_blackHoleSpinAxes[closestBH]);
 
             // Apply volumetric absorption using Beer-Lambert law
             if (opticalDepth > 0.0) {
@@ -324,10 +324,15 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
         float dist = relativePosSph.y;
 
         if (u_accretionDiskEnabled == 1) {
-            float dAlpha = adiskColorVariant(relativePosSph, colorValue, alpha, r_s, rayOrigin, u_blackHoleMasses[0], u_blackHoleSpinAxes[0]);
-            alpha *= (1.0f - clamp(dAlpha, 0.0f, 1.0f));
-            if (alpha < 0.01f) {
-                return colorValue;
+            float opticalDepth = adiskColor(relativePosSph, colorValue, alpha, r_s, rayOrigin, u_blackHoleMasses[0], u_blackHoleSpinAxes[0]);
+
+            // Apply volumetric absorption using Beer-Lambert law
+            if (opticalDepth > 0.0) {
+                float transmittance = beerLambert(opticalDepth, stepSize);
+                alpha *= transmittance;
+                if (alpha < 0.01) {
+                    return colorValue;
+                }
             }
         }
 

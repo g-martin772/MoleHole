@@ -45,9 +45,9 @@ float adiskColorVariant(vec4 posSph, inout vec3 color, inout float alpha, float 
 // Section Disk Colour
 // ------------------------------------------------------------------------------------------------------------
 // Returns the optical depth (density) at this position for volumetric rendering
-float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin, float blackHoleMass) {
+float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin, float blackHoleMass, vec3 blackHoleSpinAxis) {
     float iscoRadius = 2.4f * eventHorizonRadius;
-    float outerRadius = 6.7f * eventHorizonRadius;
+    float outerRadius = 150.0f * eventHorizonRadius;
     float r_sph = posSph.y;
     float theta_sph = posSph.z;
     float phi_sph = posSph.w;
@@ -60,7 +60,7 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
     if (u_accretionDiskVolumetric == 1) {
         // Volumetric density using FBM
         // Normalize position to disk space
-        vec3 diskPos = toCartesian(posSph.yzw) / outerRadius;
+        vec3 diskPos = toCartesian(posSph.yzw);
 
         // Add rotation animation
         float animatedTheta = phi_sph + u_time * u_accDiskSpeed;
@@ -72,7 +72,8 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
         ) * u_accDiskNoiseScale * 2.0;
 
         // Initial SDF distance field
-        float d = abs(diskPos.y / u_accDiskHeight) - 0.5;
+        float spinPlaneDistance = dot(diskPos, normalize(blackHoleSpinAxis));
+        float d = abs(spinPlaneDistance) - 0.5f * u_accDiskHeight;
 
         // Apply FBM to get volumetric density
         float sdf = sdFbm(animatedPos, d);
@@ -139,13 +140,13 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
         beamingFactor = pow(max(0.1, doppler), 3.0);
     }
 
-    bbColor = vec3(1.0, 0.5, 0.2);
-    bbColor = pow(bbColor, vec3(1.0 / 2.2));
+    //bbColor = vec3(1.0, 0.5, 0.2);
+    //bbColor = pow(bbColor, vec3(1.0 / 2.2));
 
     // Increase contrast to make darker parts darker and brighter parts brighter
     float contrastNoise = pow(noise, 3.0) * 3.5;
 
-    vec3 emission = bbColor * contrastNoise * beamingFactor;
+    vec3 emission = 0.01f * bbColor * contrastNoise * beamingFactor;
     color += emission * alpha * 0.9;
-    return density * 2.0;
+    return density;
 }
