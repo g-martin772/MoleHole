@@ -679,6 +679,11 @@ namespace
             m_Runner->Start();
             m_UiState->CurrentSceneName = sceneName;
             m_UiState->SelectedEntityGuid = 0;
+            if (m_UiState->PendingStartPaused)
+            {
+                m_Runner->SetPaused(true);
+                m_UiState->PendingStartPaused = false;
+            }
         }
 
         void CheckPendingSceneSwitch()

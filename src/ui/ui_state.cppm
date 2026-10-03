@@ -43,6 +43,7 @@ export namespace MoleHole
         std::string CurrentScenePath;
         std::optional<std::string> PendingLoadScenePath;
         bool PendingNewScene = false;
+        bool PendingStartPaused = false;
 
         glm::vec3 CameraPosition{0.0f, 20.0f, 100.0f};
         float CameraYaw = -90.0f;

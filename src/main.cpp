@@ -21,6 +21,7 @@ int main(int argc, char* argv[])
 
     builder.Services.AddSingleton<UiState>();
 
+    builder.AddHotReloadableLayer("dock-layout", "molehole_dock_layout_layer.so").SetWindowTarget("main");
     builder.AddHotReloadableLayer("sidebar", "molehole_sidebar_layer.so").SetWindowTarget("main");
     builder.AddHotReloadableLayer("topbar", "molehole_topbar_layer.so").SetWindowTarget("main");
     builder.AddHotReloadableLayer("scene-window", "molehole_scene_window_layer.so").SetWindowTarget("main");

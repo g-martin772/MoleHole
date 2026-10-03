@@ -48,9 +48,12 @@ namespace
             constexpr float sidebarWidth = 72.0f;
             constexpr float buttonHeight = 44.0f;
 
-            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGuiViewport* viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + ImGui::GetFrameHeight()));
             ImGui::SetNextWindowSize(ImVec2(sidebarWidth, viewport->Size.y - ImGui::GetFrameHeight()));
+
+            viewport->WorkPos.x += sidebarWidth;
+            viewport->WorkSize.x -= sidebarWidth;
 
             constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                                                ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |

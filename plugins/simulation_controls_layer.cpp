@@ -12,6 +12,7 @@ namespace
 {
     constexpr const char* kIconPlay = "\xef\x81\x8b"; // U+F04B
     constexpr const char* kIconPause = "\xef\x81\x8c"; // U+F04C
+    constexpr const char* kIconStop = "\xef\x81\x8d"; // U+F04D
 
     struct SimulationControlsLayer final : public HotReloadableLayer
     {
@@ -70,6 +71,28 @@ namespace
                 if (hasIconFont) ImGui::PopFont();
                 ImGui::PopStyleColor(3);
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip(paused ? "Resume" : "Pause");
+
+                ImGui::SameLine();
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.6f, 0.15f, 0.15f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+                if (hasIconFont) ImGui::PushFont(m_UiState->IconFont);
+                if (ImGui::Button(hasIconFont ? kIconStop : "[]", ImVec2(buttonSize, buttonSize)))
+                {
+                    m_UiState->PendingStartPaused = true;
+                    if (!m_UiState->CurrentScenePath.empty())
+                        m_UiState->PendingLoadScenePath = m_UiState->CurrentScenePath;
+                    else
+                        m_UiState->PendingNewScene = true;
+                }
+                if (hasIconFont) ImGui::PopFont();
+                ImGui::PopStyleColor(3);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip(m_UiState->CurrentScenePath.empty()
+                                          ? "Stop (unsaved scene -- resets to a fresh default)"
+                                          : "Stop (reload from disk, paused)");
+                }
             }
             ImGui::End();
 

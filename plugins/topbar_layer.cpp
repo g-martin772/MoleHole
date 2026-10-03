@@ -11,13 +11,15 @@ namespace
 {
     struct TopBarLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, FileDialog, SceneManager, UiPreferences, UiState>;
+        using Dependencies =
+            std::tuple<Logger, FileDialog, SceneManager, UiPreferences, FontAssetCatalog, UiState>;
 
         TopBarLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<FileDialog> fileDialog,
                    std::shared_ptr<SceneManager> scenes, std::shared_ptr<UiPreferences> uiPreferences,
-                   std::shared_ptr<UiState> uiState)
+                   std::shared_ptr<FontAssetCatalog> fontAssets, std::shared_ptr<UiState> uiState)
             : HotReloadableLayer(logger), m_FileDialog(std::move(fileDialog)), m_Scenes(std::move(scenes)),
-              m_UiPreferences(std::move(uiPreferences)), m_UiState(std::move(uiState))
+              m_UiPreferences(std::move(uiPreferences)), m_FontAssets(std::move(fontAssets)),
+              m_UiState(std::move(uiState))
         {
         }
 
@@ -128,6 +130,28 @@ namespace
                     m_UiPreferences->SetUiScale(scale);
                 }
 
+                const auto currentFont = m_UiPreferences->GetFontName();
+                const auto currentSize = m_UiPreferences->GetFontSize();
+                const auto availableFonts = m_FontAssets->GetAvailableFonts();
+                if (ImGui::BeginCombo("Font", currentFont.c_str()))
+                {
+                    for (const auto& font : availableFonts)
+                    {
+                        const bool isSelected = font.Name == currentFont;
+                        if (ImGui::Selectable(font.Name.c_str(), isSelected))
+                        {
+                            m_UiPreferences->SetFont(font.Name, currentSize);
+                        }
+                        if (isSelected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                float fontSize = currentSize;
+                if (ImGui::SliderFloat("Font Size", &fontSize, 10.0f, 32.0f, "%.0f"))
+                {
+                    m_UiPreferences->SetFont(currentFont, fontSize);
+                }
+
                 ImGui::Spacing();
                 ImGui::Separator();
                 ImGui::Spacing();
@@ -143,6 +167,7 @@ namespace
         std::shared_ptr<FileDialog> m_FileDialog;
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<UiPreferences> m_UiPreferences;
+        std::shared_ptr<FontAssetCatalog> m_FontAssets;
         std::shared_ptr<UiState> m_UiState;
     };
 }
