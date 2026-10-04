@@ -72,9 +72,11 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
     return record;
 }
 
-vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection) {
+vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection, out vec3 hitPoint, out bool hitSolid) {
     hitEventHorizon = false;
     exitedZone = false;
+    hitSolid = false;
+    hitPoint = vec3(0.0);
     vec3 color = vec3(0.0);
     float alpha = 1.0;
 
@@ -146,6 +148,10 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         // Check object intersections within marching step
         HitRecord hit = rayTraceNormalSpace(newOrigin, newDirection, currentStepSize);
         if (hit.hit) {
+            if (hit.type == 1) {
+                hitSolid = true;
+                hitPoint = newOrigin + newDirection * hit.t;
+            }
             return color + hit.color;
         }
 
@@ -159,10 +165,12 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
     return color;
 }
 
-vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
+vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bool hitSolid) {
     vec3 color = vec3(0.0);
     vec3 currentOrigin = rayOrigin;
     vec3 currentDir = rayDirection;
+    hitSolid = false;
+    hitPoint = vec3(0.0);
 
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
     int maxOuterIterations = max(50, u_maxRaySteps / 200);
@@ -176,8 +184,13 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
         if (inZone) {
             bool hitHorizon, exited;
             vec3 newOrigin, newDir;
-            vec3 marchColor = rayMarchInfluenceZone(closestBH, currentOrigin, currentDir, hitHorizon, exited, newOrigin, newDir);
+            vec3 zoneHitPoint; bool zoneHitSolid;
+            vec3 marchColor = rayMarchInfluenceZone(closestBH, currentOrigin, currentDir, hitHorizon, exited, newOrigin, newDir, zoneHitPoint, zoneHitSolid);
             color += marchColor;
+            if (zoneHitSolid) {
+                hitSolid = true;
+                hitPoint = zoneHitPoint;
+            }
 
             if (hitHorizon) {
                 return color;
@@ -210,6 +223,10 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
             if (hit.hit) {
                 if (hit.t < minDistToInfluence) {
                     color += hit.color;
+                    if (hit.type == 1) {
+                        hitSolid = true;
+                        hitPoint = currentOrigin + currentDir * hit.t;
+                    }
                     return color;
                 } else {
                     currentOrigin += currentDir * (minDistToInfluence + EPSILON);

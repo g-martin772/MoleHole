@@ -63,6 +63,8 @@ vec3 FxaaPixelShader(vec2 uv, sampler2D tex, vec2 rcpFrame) {
 }
 
 void main() {
+    gl_FragDepth = texture(u_raytracedImage, TexCoord).a;
+
     vec3 color;
     if (u_fxaaEnabled == 1) {
         color = FxaaPixelShader(TexCoord, u_raytracedImage, vec2(1.0 / rt_w, 1.0 / rt_h));

@@ -52,6 +52,8 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
 
     BlackHoleData u_blackHoles[8];
     SphereData u_spheres[16];
+
+    mat4 u_viewProjection;
 };
 
 layout(set = 0, binding = 2) uniform sampler2D u_skyboxTexture;
@@ -112,13 +114,21 @@ void main() {
     vec3 rayDir = normalize(cameraFront + cameraRight * uv.x * tanHalfFov + cameraUp * uv.y * tanHalfFov);
 
     vec3 color;
+    vec3 hitPoint = vec3(0.0f);
+    bool hitSolid = false;
 
     if (u_isPhysicallyAccurate == 1) {
         color = rk4RayMarching(rayOrigin, rayDir);
     }
     else {
-        color = hybridRayTrace(rayOrigin, rayDir);
+        color = hybridRayTrace(rayOrigin, rayDir, hitPoint, hitSolid);
     }
 
-    imageStore(l_outputImage, texCoords, vec4(color, 1.0f));
+    float depth = 0.999999f;
+    if (hitSolid) {
+        vec4 clipPos = u_viewProjection * vec4(hitPoint, 1.0f);
+        depth = clipPos.z / clipPos.w;
+    }
+
+    imageStore(l_outputImage, texCoords, vec4(color, depth));
 }
