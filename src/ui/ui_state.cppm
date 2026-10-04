@@ -20,6 +20,7 @@ export namespace MoleHole
         bool RenderSpheres = true;
         bool PhysicallyAccurate = false;
         bool ShowGravityGrid = false;
+        bool ShowPhysicsDebug = false;
         int DebugMode = 0;
         // 0=Schwarzschild, 1=Kerr, 2=Reissner-Nordstrom, 3=Kerr-Newman
         int MetricType = 1;

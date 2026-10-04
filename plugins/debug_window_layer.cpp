@@ -74,6 +74,13 @@ namespace
                                    "independent from the 'Debug Mode' setting above.");
             }
 
+            ImGui::Checkbox("Physics Collider Wireframe", &render.ShowPhysicsDebug);
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Draws PhysX's own debug wireframe for every active collider\n"
+                                   "(PxVisualizationParameter::eCOLLISION_SHAPES).");
+            }
+
             ImGui::End();
         }
 

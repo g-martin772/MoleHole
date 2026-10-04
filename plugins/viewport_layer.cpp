@@ -312,6 +312,30 @@ namespace
                 }
             }
 
+            UpdatePhysicsDebugLines();
+            if (m_PhysicsDebugLineVertexCount > 0)
+            {
+                EnsurePhysicsDebugPipeline(graph.GetImageFormat(colorTarget));
+                if (m_PhysicsDebugPipeline)
+                {
+                    const glm::mat4 viewProjection = m_Camera.GetViewProjectionMatrix();
+                    graph.AddGraphicsPass(
+                        "ViewportLayer.PhysicsDebug", {}, {},
+                        {RenderGraphAttachment{.Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
+                        std::nullopt,
+                        [this, viewProjection](const vk::CommandBuffer cmd, RenderGraph& g)
+                        {
+                            const auto pipeline = m_PhysicsDebugPipeline->GetPipeline();
+                            if (!pipeline) return;
+                            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->GetPipeline());
+                            cmd.pushConstants(pipeline->GetLayout(), vk::ShaderStageFlagBits::eVertex, 0,
+                                              sizeof(glm::mat4), &viewProjection);
+                            BindVertexBuffer(cmd, m_PhysicsDebugVertexBuffer->GetBuffer());
+                            cmd.draw(m_PhysicsDebugLineVertexCount, 1, 0, 0);
+                        });
+                }
+            }
+
             if (const auto depthTarget = graph.GetPrimaryDepthTarget(); depthTarget != kInvalidRenderGraphHandle)
             {
                 EnsureMeshPipeline(graph.GetImageFormat(colorTarget), graph.GetImageFormat(depthTarget));
@@ -730,6 +754,83 @@ namespace
                 m_Logger->Error("ViewportLayer: failed to compile gravity grid shader");
             }
             m_GravityGridColorFormat = colorFormat;
+        }
+
+        void EnsurePhysicsDebugPipeline(vk::Format colorFormat)
+        {
+            if (m_PhysicsDebugPipeline && m_PhysicsDebugColorFormat == colorFormat) return;
+            const auto device = m_Renderer->GetDevice();
+            m_PhysicsDebugPipeline = std::make_shared<ShaderPipeline>(
+                device,
+                VulkanPipelineSpecification{
+                    .colorFormat = colorFormat,
+                    .depthFormat = vk::Format::eUndefined,
+                    .enableBlending = false,
+                    .cullMode = vk::CullModeFlagBits::eNone,
+                    .topology = vk::PrimitiveTopology::eLineList
+                },
+                ShaderPipelineDescription{
+                    .vertex = ShaderSource{
+                        .path = m_FileSystem->ResolveAssetPath("shaders", "physics_debug_line.vert"),
+                        .stage = ShaderStage::Vertex
+                    },
+                    .fragment = ShaderSource{
+                        .path = m_FileSystem->ResolveAssetPath("shaders", "physics_debug_line.frag"),
+                        .stage = ShaderStage::Fragment
+                    },
+                    .enableHotReload = true
+                },
+                m_FileSystem, m_Dispatcher, m_Logger);
+            if (!m_PhysicsDebugPipeline->StartOnRenderThread())
+            {
+                m_Logger->Error("ViewportLayer: failed to compile physics debug line shader");
+            }
+            m_PhysicsDebugColorFormat = colorFormat;
+        }
+
+        void AppendPhysicsDebugVertex(std::vector<float>& out, const physx::PxVec3& position, physx::PxU32 color)
+        {
+            out.push_back(position.x);
+            out.push_back(position.y);
+            out.push_back(position.z);
+            out.push_back(static_cast<float>((color >> 16) & 0xFF) / 255.0f);
+            out.push_back(static_cast<float>((color >> 8) & 0xFF) / 255.0f);
+            out.push_back(static_cast<float>(color & 0xFF) / 255.0f);
+        }
+
+        void UpdatePhysicsDebugLines()
+        {
+            m_PhysicsDebugLineVertexCount = 0;
+            if (!m_PhysicsModule) return;
+
+            const bool enabled = m_UiState->Render.ShowPhysicsDebug;
+            m_PhysicsModule->SetDebugVisualizationEnabled(enabled);
+            if (!enabled) return;
+
+            auto* pxScene = m_PhysicsModule->GetPxScene();
+            if (!pxScene) return;
+            const auto& renderBuffer = pxScene->getRenderBuffer();
+            const auto lineCount = renderBuffer.getNbLines();
+            if (lineCount == 0) return;
+
+            std::vector<float> vertices;
+            vertices.reserve(static_cast<std::size_t>(lineCount) * 2 * 6);
+            const auto* lines = renderBuffer.getLines();
+            for (physx::PxU32 i = 0; i < lineCount; ++i)
+            {
+                AppendPhysicsDebugVertex(vertices, lines[i].pos0, lines[i].color0);
+                AppendPhysicsDebugVertex(vertices, lines[i].pos1, lines[i].color1);
+            }
+
+            const auto device = m_Renderer->GetDevice();
+            const auto byteSize = static_cast<vk::DeviceSize>(vertices.size() * sizeof(float));
+            if (!m_PhysicsDebugVertexBuffer || m_PhysicsDebugVertexBuffer->GetSize() < byteSize)
+            {
+                m_PhysicsDebugVertexBuffer = std::make_unique<VulkanBuffer>(
+                    device, MakeVertexBufferSpecification(byteSize, true), m_Logger);
+            }
+            m_PhysicsDebugVertexBuffer->Upload(vertices.data(), byteSize);
+            m_PhysicsDebugLineVertexCount = static_cast<std::uint32_t>(lineCount) * 2;
         }
 
         void CreateGravityGridMesh()
@@ -1323,6 +1424,11 @@ namespace
 
         std::shared_ptr<ShaderPipeline> m_GravityGridPipeline;
         vk::Format m_GravityGridColorFormat{vk::Format::eUndefined};
+
+        std::shared_ptr<ShaderPipeline> m_PhysicsDebugPipeline;
+        vk::Format m_PhysicsDebugColorFormat{vk::Format::eUndefined};
+        std::unique_ptr<VulkanBuffer> m_PhysicsDebugVertexBuffer;
+        std::uint32_t m_PhysicsDebugLineVertexCount{0};
         std::unique_ptr<VulkanBuffer> m_GravityGridVertexBuffer;
         std::unique_ptr<VulkanBuffer> m_GravityGridIndexBuffer;
         std::uint32_t m_GravityGridIndexCount{0};
