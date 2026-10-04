@@ -120,6 +120,7 @@ namespace
         {
             CheckPendingSceneSwitch();
             UpdateCamera(deltaTime);
+            ProcessExport();
         }
 
         void OnRenderGraph(RenderGraph& graph) override
@@ -350,7 +351,7 @@ namespace
             ImGui::Begin("Viewport");
 
             const ImVec2 avail = ImGui::GetContentRegionAvail();
-            if (avail.x >= 1.0f && avail.y >= 1.0f)
+            if (!m_UiState->ExportActive && avail.x >= 1.0f && avail.y >= 1.0f)
             {
                 m_Renderer->ResizeBufferTarget(
                     m_LayerTarget.Id,
@@ -369,6 +370,18 @@ namespace
             {
                 ImGui::TextUnformatted("Viewport buffer not ready yet.");
             }
+
+            if (m_UiState->ExportActive)
+            {
+                ImGui::SetCursorPos(ImVec2(8, ImGui::GetFrameHeight() + 8));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.6f));
+                ImGui::BeginChild("##ExportProgress", ImVec2(260, 48), true, ImGuiWindowFlags_NoScrollbar);
+                ImGui::TextUnformatted(m_UiState->ExportStatus.c_str());
+                ImGui::ProgressBar(m_UiState->ExportProgress, ImVec2(-1, 0));
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+            }
+
             ImGui::End();
         }
 
@@ -715,6 +728,160 @@ namespace
             }
         }
 
+        void ProcessExport()
+        {
+            if (m_PendingCapture)
+            {
+                m_PendingCapture = false;
+                CaptureExportFrame();
+            }
+
+            if (m_UiState->PendingExport && !m_UiState->ExportActive)
+            {
+                StartExport(*m_UiState->PendingExport);
+                m_UiState->PendingExport.reset();
+            }
+
+            if (m_UiState->ExportActive)
+            {
+                m_Renderer->ResizeBufferTarget(m_LayerTarget.Id, m_UiState->ExportResolution);
+                // Shader compilation (StartOnRenderThread) is asynchronous -- GetPipeline() stays
+                // null until a background compile finishes and swaps it in. Windowed use always
+                // has plenty of real time for that before anyone looks at the viewport; headless
+                // export can reach its first capture within a tick or two of OnAttach, racing
+                // ahead of it. Without this check we'd silently capture however many frames
+                // render before compilation finishes -- compute/graphics passes that find a null
+                // pipeline just skip their dispatch (see OnRenderGraph), leaving that pass's
+                // image untouched (black for the raytrace image, since EnsureImages never clears
+                // it to anything else).
+                if (AllExportPipelinesReady())
+                {
+                    m_PendingCapture = true;
+                }
+                else
+                {
+                    m_UiState->ExportStatus = "Compiling shaders...";
+                }
+            }
+        }
+
+        [[nodiscard]] bool AllExportPipelinesReady() const
+        {
+            return m_RaytracePipeline && m_RaytracePipeline->GetPipeline() &&
+                   m_BloomExtractPipeline && m_BloomExtractPipeline->GetPipeline() &&
+                   m_BloomBlurPipeline && m_BloomBlurPipeline->GetPipeline() &&
+                   m_LensFlarePipeline && m_LensFlarePipeline->GetPipeline() &&
+                   m_CompositePipeline && m_CompositePipeline->GetPipeline();
+        }
+
+        void StartExport(const ExportRequest& request)
+        {
+            m_ExportRequest = request;
+            m_UiState->ExportResolution = {request.Width, request.Height};
+            m_UiState->ExportActive = true;
+            m_UiState->ExportProgress = 0.0f;
+            m_UiState->ExportStatus = "Starting export...";
+            m_ExportFrameIndex = 0;
+            m_ExportTotalFrames = request.RequestKind == ExportRequest::Kind::Video
+                                      ? std::max(1, static_cast<int>(request.DurationSeconds * request.Framerate))
+                                      : 1;
+
+            m_SavedRenderToggles = m_UiState->Render;
+            if (request.RayStepSize) m_UiState->Render.RayStepSize = *request.RayStepSize;
+            if (request.MaxRaySteps) m_UiState->Render.MaxRaySteps = *request.MaxRaySteps;
+
+            if (request.RequestKind == ExportRequest::Kind::Video)
+            {
+                m_ExportTempDir = std::filesystem::temp_directory_path() /
+                                  std::format("molehole_export_{}",
+                                             std::chrono::steady_clock::now().time_since_epoch().count());
+                std::filesystem::create_directories(m_ExportTempDir);
+            }
+
+            m_Logger->Info("Export started: {}x{} -> {}", request.Width, request.Height, request.OutputPath);
+        }
+
+        void CaptureExportFrame()
+        {
+            const auto readback = m_Renderer->ReadBackBufferTarget(m_LayerTarget.Id);
+            if (readback.Pixels.empty() ||
+                readback.Extent.width != m_UiState->ExportResolution.x ||
+                readback.Extent.height != m_UiState->ExportResolution.y)
+            {
+                m_PendingCapture = true;
+                return;
+            }
+
+            const bool bgr = readback.Format == vk::Format::eB8G8R8A8Unorm ||
+                            readback.Format == vk::Format::eB8G8R8A8Srgb;
+            const auto pixelCount = static_cast<std::size_t>(readback.Extent.width) * readback.Extent.height;
+            std::vector<unsigned char> rgb(pixelCount * 3);
+            for (std::size_t i = 0; i < pixelCount; ++i)
+            {
+                const auto* p = &readback.Pixels[i * 4];
+                rgb[i * 3 + 0] = bgr ? p[2] : p[0];
+                rgb[i * 3 + 1] = p[1];
+                rgb[i * 3 + 2] = bgr ? p[0] : p[2];
+            }
+
+            const auto path = m_ExportRequest.RequestKind == ExportRequest::Kind::Image
+                                  ? std::filesystem::path(m_ExportRequest.OutputPath)
+                                  : m_ExportTempDir / std::format("frame_{:06d}.png", m_ExportFrameIndex);
+            stbi_write_png(path.string().c_str(), static_cast<int>(readback.Extent.width),
+                          static_cast<int>(readback.Extent.height), 3, rgb.data(),
+                          static_cast<int>(readback.Extent.width) * 3);
+
+            ++m_ExportFrameIndex;
+            m_UiState->ExportProgress = static_cast<float>(m_ExportFrameIndex) / static_cast<float>(m_ExportTotalFrames);
+            m_UiState->ExportStatus =
+                m_ExportRequest.RequestKind == ExportRequest::Kind::Video
+                    ? std::format("Rendering frame {}/{}", m_ExportFrameIndex, m_ExportTotalFrames)
+                    : "Rendering...";
+
+            if (m_ExportFrameIndex >= m_ExportTotalFrames)
+            {
+                FinishExport();
+            }
+            else
+            {
+                m_PendingCapture = true;
+            }
+        }
+
+        void FinishExport()
+        {
+            m_UiState->Render = m_SavedRenderToggles;
+
+            if (m_ExportRequest.RequestKind == ExportRequest::Kind::Video)
+            {
+                m_UiState->ExportStatus = "Encoding video...";
+                const auto cmd = std::format(
+                    "ffmpeg -y -framerate {} -i {} -c:v libx264 -pix_fmt yuv420p {} > /dev/null 2>&1",
+                    m_ExportRequest.Framerate, (m_ExportTempDir / "frame_%06d.png").string(),
+                    m_ExportRequest.OutputPath);
+                if (std::system(cmd.c_str()) != 0)
+                {
+                    m_Logger->Error("ViewportLayer: ffmpeg encoding failed (is ffmpeg installed?)");
+                    m_UiState->ExportStatus = "Failed: ffmpeg encoding error";
+                }
+                std::error_code ec;
+                std::filesystem::remove_all(m_ExportTempDir, ec);
+            }
+
+            m_UiState->ExportActive = false;
+            m_UiState->ExportProgress = 1.0f;
+            if (m_UiState->ExportStatus.find("Failed") == std::string::npos)
+            {
+                m_UiState->ExportStatus = "Complete";
+                m_Logger->Info("Export complete: {}", m_ExportRequest.OutputPath);
+            }
+
+            if (m_UiState->ExitWhenExportDone)
+            {
+                Application::Instance().Stop();
+            }
+        }
+
         void UpdateCamera(float deltaTime)
         {
             m_Camera.SetPosition(m_UiState->CameraPosition);
@@ -784,6 +951,9 @@ namespace
             params.AccDiskSpeed = render.AccDiskSpeed;
             params.AccDiskNoiseScale = render.AccDiskNoiseScale;
             params.AccDiskNoiseLOD = render.AccDiskNoiseLOD;
+            params.RayStepSize = render.RayStepSize;
+            params.MaxRaySteps = render.MaxRaySteps;
+            params.AdaptiveStepRate = render.AdaptiveStepRate;
 
             m_ParamsBuffer->Upload(&params, sizeof(params));
         }
@@ -794,6 +964,13 @@ namespace
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<InputState> m_Input;
         std::shared_ptr<UiState> m_UiState;
+
+        bool m_PendingCapture{false};
+        ExportRequest m_ExportRequest;
+        int m_ExportFrameIndex{0};
+        int m_ExportTotalFrames{0};
+        std::filesystem::path m_ExportTempDir;
+        RenderToggles m_SavedRenderToggles;
 
         std::shared_ptr<SimulationRunner> m_Runner;
         int m_SceneCounter{0};

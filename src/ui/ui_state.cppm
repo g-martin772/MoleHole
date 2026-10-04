@@ -27,6 +27,21 @@ export namespace MoleHole
         float AccDiskSpeed = 0.5f;
         float AccDiskNoiseScale = 1.0f;
         float AccDiskNoiseLOD = 5.0f;
+        float RayStepSize = 0.01f;
+        int MaxRaySteps = 100000;
+        float AdaptiveStepRate = 0.8f;
+    };
+
+    struct ExportRequest
+    {
+        enum class Kind { Image, Video } RequestKind = Kind::Image;
+        std::string OutputPath;
+        std::uint32_t Width = 1920;
+        std::uint32_t Height = 1080;
+        float DurationSeconds = 10.0f;
+        int Framerate = 60;
+        std::optional<float> RayStepSize;
+        std::optional<int> MaxRaySteps;
     };
 
     class UiState final : public GPP::IService
@@ -48,6 +63,8 @@ export namespace MoleHole
         std::optional<std::string> PendingLoadScenePath;
         bool PendingNewScene = false;
         bool PendingStartPaused = false;
+        // CLI --scene override
+        std::optional<std::string> StartupScenePath;
 
         glm::vec3 CameraPosition{0.0f, 20.0f, 100.0f};
         float CameraYaw = -90.0f;
@@ -60,6 +77,13 @@ export namespace MoleHole
         glm::vec2 ViewportScreenMax{0.0f};
 
         ImFont* IconFont = nullptr;
+
+        std::optional<ExportRequest> PendingExport;
+        bool ExportActive = false;
+        glm::uvec2 ExportResolution{1920, 1080};
+        float ExportProgress = 0.0f;
+        std::string ExportStatus;
+        bool ExitWhenExportDone = false;
 
         RenderToggles Render;
     };

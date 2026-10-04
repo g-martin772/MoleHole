@@ -27,6 +27,7 @@ namespace
         {
             RenderMenuBar();
             RenderSettingsPopup();
+            RenderExportDialog();
         }
 
     private:
@@ -92,6 +93,20 @@ namespace
                 ImGui::MenuItem("Viewport HUD", nullptr, &m_UiState->ShowViewportHud);
                 ImGui::MenuItem("General Relativity", nullptr, &m_UiState->ShowGeneralRelativityWindow);
                 ImGui::MenuItem("Science", nullptr, &m_UiState->ShowScienceWindow);
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Export"))
+            {
+                if (ImGui::MenuItem("Export Render..."))
+                {
+                    if (m_ExportPathBuffer[0] == '\0')
+                    {
+                        const auto defaultName = m_ExportKind == 0 ? "render.png" : "render.mp4";
+                        std::ranges::copy(std::string_view(defaultName), m_ExportPathBuffer.begin());
+                    }
+                    m_ShowExportDialog = true;
+                }
                 ImGui::EndMenu();
             }
 
@@ -166,11 +181,139 @@ namespace
             }
         }
 
+        void RenderExportDialog()
+        {
+            if (m_ShowExportDialog && !ImGui::IsPopupOpen("Export Render"))
+            {
+                ImGui::OpenPopup("Export Render");
+            }
+
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSize(ImVec2(420, 0), ImGuiCond_Appearing);
+
+            if (!ImGui::BeginPopupModal("Export Render", &m_ShowExportDialog, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                return;
+            }
+
+            const bool exporting = m_UiState->ExportActive;
+
+            ImGui::BeginDisabled(exporting);
+
+            SectionHeader("FORMAT");
+            ImGui::RadioButton("Image (PNG)", &m_ExportKind, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("Video (MP4)", &m_ExportKind, 1);
+
+            SectionHeader("RESOLUTION");
+            ImGui::InputInt("Width", &m_ExportWidth);
+            ImGui::InputInt("Height", &m_ExportHeight);
+            if (ImGui::Button("1280x720")) { m_ExportWidth = 1280; m_ExportHeight = 720; }
+            ImGui::SameLine();
+            if (ImGui::Button("1920x1080")) { m_ExportWidth = 1920; m_ExportHeight = 1080; }
+            ImGui::SameLine();
+            if (ImGui::Button("3840x2160")) { m_ExportWidth = 3840; m_ExportHeight = 2160; }
+            m_ExportWidth = std::max(1, m_ExportWidth);
+            m_ExportHeight = std::max(1, m_ExportHeight);
+
+            if (m_ExportKind == 1)
+            {
+                SectionHeader("VIDEO");
+                ImGui::InputFloat("Duration (s)", &m_ExportDuration);
+                ImGui::InputInt("Framerate", &m_ExportFps);
+                m_ExportDuration = std::max(0.1f, m_ExportDuration);
+                m_ExportFps = std::clamp(m_ExportFps, 1, 240);
+            }
+
+            SectionHeader("QUALITY");
+            ImGui::Checkbox("Override ray-march quality", &m_ExportOverrideQuality);
+            if (m_ExportOverrideQuality)
+            {
+                ImGui::SliderFloat("Ray Step Size", &m_ExportRayStepSize, 0.001f, 0.05f, "%.4f");
+                ImGui::InputInt("Max Ray Steps", &m_ExportMaxRaySteps);
+                m_ExportMaxRaySteps = std::max(1000, m_ExportMaxRaySteps);
+            }
+
+            SectionHeader("OUTPUT");
+            ImGui::InputText("##ExportPath", m_ExportPathBuffer.data(), m_ExportPathBuffer.size());
+            ImGui::SameLine();
+            if (ImGui::Button("Browse..."))
+            {
+                const auto defaultName = m_ExportKind == 0 ? "render.png" : "render.mp4";
+                const auto filter = m_ExportKind == 0 ? FileDialogFilter{"PNG Image", "png"}
+                                                       : FileDialogFilter{"MP4 Video", "mp4"};
+                if (const auto path = m_FileDialog->SaveFile({filter}, defaultName))
+                {
+                    const auto str = path->string();
+                    std::ranges::fill(m_ExportPathBuffer, '\0');
+                    const auto count = std::min(str.size(), m_ExportPathBuffer.size() - 1);
+                    std::ranges::copy(str.substr(0, count), m_ExportPathBuffer.begin());
+                }
+            }
+
+            ImGui::EndDisabled();
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            if (exporting)
+            {
+                ImGui::TextUnformatted(m_UiState->ExportStatus.c_str());
+                ImGui::ProgressBar(m_UiState->ExportProgress);
+            }
+            else
+            {
+                const bool canStart = m_ExportPathBuffer[0] != '\0';
+                ImGui::BeginDisabled(!canStart);
+                if (ImGui::Button("Start Export", ImVec2(120, 0)))
+                {
+                    ExportRequest request;
+                    request.RequestKind =
+                        m_ExportKind == 0 ? ExportRequest::Kind::Image : ExportRequest::Kind::Video;
+                    request.OutputPath = m_ExportPathBuffer.data();
+                    request.Width = static_cast<std::uint32_t>(m_ExportWidth);
+                    request.Height = static_cast<std::uint32_t>(m_ExportHeight);
+                    request.DurationSeconds = m_ExportDuration;
+                    request.Framerate = m_ExportFps;
+                    if (m_ExportOverrideQuality)
+                    {
+                        request.RayStepSize = m_ExportRayStepSize;
+                        request.MaxRaySteps = m_ExportMaxRaySteps;
+                    }
+                    m_UiState->PendingExport = request;
+                    m_ShowExportDialog = false;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                if (ImGui::Button("Close", ImVec2(120, 0)))
+                {
+                    m_ShowExportDialog = false;
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            ImGui::EndPopup();
+        }
+
         std::shared_ptr<FileDialog> m_FileDialog;
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<UiPreferences> m_UiPreferences;
         std::shared_ptr<FontAssetCatalog> m_FontAssets;
         std::shared_ptr<UiState> m_UiState;
+
+        bool m_ShowExportDialog = false;
+        int m_ExportKind = 0; // 0 = Image, 1 = Video
+        int m_ExportWidth = 1920;
+        int m_ExportHeight = 1080;
+        float m_ExportDuration = 5.0f;
+        int m_ExportFps = 30;
+        bool m_ExportOverrideQuality = false;
+        float m_ExportRayStepSize = 0.01f;
+        int m_ExportMaxRaySteps = 100000;
+        std::array<char, 512> m_ExportPathBuffer{};
     };
 }
 
