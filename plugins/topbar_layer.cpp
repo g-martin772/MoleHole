@@ -11,43 +11,151 @@ namespace
 {
     struct TopBarLayer final : public HotReloadableLayer
     {
-        using Dependencies =
-            std::tuple<Logger, FileDialog, SceneManager, UiPreferences, FontAssetCatalog, UiState, AppStateService>;
+        using Dependencies = std::tuple<Logger, FileDialog, SceneManager, UiPreferences, FontAssetCatalog, UiState,
+                                        AppStateService, IFileSystem>;
 
         TopBarLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<FileDialog> fileDialog,
                    std::shared_ptr<SceneManager> scenes, std::shared_ptr<UiPreferences> uiPreferences,
                    std::shared_ptr<FontAssetCatalog> fontAssets, std::shared_ptr<UiState> uiState,
-                   std::shared_ptr<AppStateService> appState)
+                   std::shared_ptr<AppStateService> appState, std::shared_ptr<IFileSystem> fileSystem)
             : HotReloadableLayer(logger), m_FileDialog(std::move(fileDialog)), m_Scenes(std::move(scenes)),
               m_UiPreferences(std::move(uiPreferences)), m_FontAssets(std::move(fontAssets)),
-              m_UiState(std::move(uiState)), m_AppState(std::move(appState))
+              m_UiState(std::move(uiState)), m_AppState(std::move(appState)), m_FileSystem(std::move(fileSystem))
         {
         }
 
         void OnUiRender() override
         {
+            HandleShortcuts();
             RenderMenuBar();
             RenderSettingsPopup();
             RenderExportDialog();
         }
 
     private:
+        struct TemplateEntry { std::string Label; std::string Path; };
+
+        void HandleShortcuts()
+        {
+            if (ImGui::GetIO().WantTextInput) return;
+            if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S)) DoSaveAs();
+            else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_S)) DoSave();
+            else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_O)) DoOpen();
+            else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_N)) DoNewScene();
+        }
+
+        void DoNewScene()
+        {
+            m_UiState->PendingNewScene = true;
+        }
+
+        void DoOpen()
+        {
+            if (const auto path = m_FileDialog->OpenFile({FileDialogFilter{"Scene", "yaml"}}))
+            {
+                m_UiState->PendingLoadScenePath = path->string();
+            }
+        }
+
+        void DoSave()
+        {
+            if (m_UiState->CurrentScenePath.empty())
+            {
+                DoSaveAs();
+                return;
+            }
+            SaveLiveSceneTo(m_UiState->CurrentScenePath);
+        }
+
+        void DoSaveAs()
+        {
+            const auto defaultName = m_UiState->CurrentSceneName.empty()
+                                         ? std::string("scene.yaml")
+                                         : m_UiState->CurrentSceneName + ".yaml";
+            if (const auto path = m_FileDialog->SaveFile({FileDialogFilter{"Scene", "yaml"}}, defaultName))
+            {
+                SaveLiveSceneTo(*path);
+            }
+        }
+
+        void SaveLiveSceneTo(const std::filesystem::path& path)
+        {
+            try
+            {
+                const auto runner = m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
+                if (!runner)
+                {
+                    m_Logger->Error("Failed to save scene: no active simulation for '{}'",
+                                   m_UiState->CurrentSceneName);
+                    return;
+                }
+                std::string yaml;
+                {
+                    auto sceneLock = runner->LockRenderScene();
+                    yaml = sceneLock->SerializeToYaml();
+                }
+                std::ofstream file(path, std::ios::binary | std::ios::trunc);
+                if (!file)
+                {
+                    m_Logger->Error("Failed to save scene: could not open '{}' for writing", path.string());
+                    return;
+                }
+                file << yaml;
+                m_UiState->CurrentScenePath = path.string();
+                m_Logger->Info("Scene saved to '{}'", m_UiState->CurrentScenePath);
+                m_AppState->NotifySceneOpened(m_UiState->CurrentScenePath);
+            }
+            catch (const std::exception& error)
+            {
+                m_Logger->Error("Failed to save scene: {}", error.what());
+            }
+        }
+
+        [[nodiscard]] std::vector<TemplateEntry> CollectTemplatePaths() const
+        {
+            std::vector<TemplateEntry> result;
+            std::error_code ec;
+            const auto dir = m_FileSystem->ResolvePath("templates");
+            if (!std::filesystem::exists(dir, ec)) return result;
+            for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
+            {
+                if (ec) break;
+                if (entry.path().extension() != ".yaml") continue;
+                result.push_back({entry.path().stem().string(), entry.path().string()});
+            }
+            std::ranges::sort(result, {}, &TemplateEntry::Label);
+            return result;
+        }
+
         void RenderMenuBar()
         {
             if (!ImGui::BeginMainMenuBar()) return;
 
             if (ImGui::BeginMenu("File"))
             {
-                if (ImGui::MenuItem("New Scene"))
+                if (ImGui::MenuItem("New Scene", "Ctrl+N"))
                 {
-                    m_UiState->PendingNewScene = true;
+                    DoNewScene();
                 }
-                if (ImGui::MenuItem("Open Scene..."))
+                if (ImGui::BeginMenu("New from Template"))
                 {
-                    if (const auto path = m_FileDialog->OpenFile({FileDialogFilter{"Scene", "yaml"}}))
+                    const auto templates = CollectTemplatePaths();
+                    if (templates.empty())
                     {
-                        m_UiState->PendingLoadScenePath = path->string();
+                        ImGui::TextDisabled("(no templates found)");
                     }
+                    for (const auto& entry : templates)
+                    {
+                        if (ImGui::MenuItem(entry.Label.c_str()))
+                        {
+                            m_UiState->PendingLoadTemplatePath = entry.Path;
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+                if (ImGui::MenuItem("Open Scene...", "Ctrl+O"))
+                {
+                    DoOpen();
                 }
                 const auto recentScenes = m_AppState->GetRecentScenes();
                 if (ImGui::BeginMenu("Open Recent", !recentScenes.empty()))
@@ -61,40 +169,13 @@ namespace
                     }
                     ImGui::EndMenu();
                 }
-                const bool canSave = !m_UiState->CurrentScenePath.empty();
-                if (ImGui::MenuItem("Save Scene", nullptr, false, canSave))
+                if (ImGui::MenuItem("Save Scene", "Ctrl+S"))
                 {
-                    try
-                    {
-                        m_Scenes->SaveSceneToFile(m_UiState->CurrentSceneName, m_UiState->CurrentScenePath);
-                        m_Logger->Info("Scene saved to '{}'", m_UiState->CurrentScenePath);
-                        m_AppState->NotifySceneOpened(m_UiState->CurrentScenePath);
-                    }
-                    catch (const std::exception& error)
-                    {
-                        m_Logger->Error("Failed to save scene: {}", error.what());
-                    }
+                    DoSave();
                 }
-                if (ImGui::MenuItem("Save Scene As..."))
+                if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S"))
                 {
-                    const auto defaultName = m_UiState->CurrentSceneName.empty()
-                                                 ? std::string("scene.yaml")
-                                                 : m_UiState->CurrentSceneName + ".yaml";
-                    if (const auto path =
-                            m_FileDialog->SaveFile({FileDialogFilter{"Scene", "yaml"}}, defaultName))
-                    {
-                        try
-                        {
-                            m_Scenes->SaveSceneToFile(m_UiState->CurrentSceneName, *path);
-                            m_UiState->CurrentScenePath = path->string();
-                            m_Logger->Info("Scene saved to '{}'", m_UiState->CurrentScenePath);
-                            m_AppState->NotifySceneOpened(m_UiState->CurrentScenePath);
-                        }
-                        catch (const std::exception& error)
-                        {
-                            m_Logger->Error("Failed to save scene: {}", error.what());
-                        }
-                    }
+                    DoSaveAs();
                 }
                 ImGui::EndMenu();
             }
@@ -314,6 +395,7 @@ namespace
         }
 
         std::shared_ptr<FileDialog> m_FileDialog;
+        std::shared_ptr<IFileSystem> m_FileSystem;
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<UiPreferences> m_UiPreferences;
         std::shared_ptr<FontAssetCatalog> m_FontAssets;

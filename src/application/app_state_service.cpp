@@ -84,6 +84,13 @@ namespace MoleHole
             {
                 m_LastExportDirectory = v.as<std::string>();
             }
+            if (const auto scanDirs = node["MeshScanDirectories"]; scanDirs && scanDirs.IsSequence())
+            {
+                for (const auto& entry : scanDirs)
+                {
+                    m_MeshScanDirectories.push_back(entry.as<std::string>());
+                }
+            }
 
             m_Logger->Info("AppStateService: loaded state from '{}'", m_StatePath.string());
         }
@@ -131,6 +138,16 @@ namespace MoleHole
             root["Render"]["PhysicallyAccurate"] = m_UiState->Render.PhysicallyAccurate;
 
             root["LastExportDirectory"] = GetLastExportDirectory();
+
+            YAML::Node scanDirsNode;
+            {
+                std::scoped_lock lock(m_Mutex);
+                for (const auto& dir : m_MeshScanDirectories)
+                {
+                    scanDirsNode.push_back(dir);
+                }
+            }
+            root["MeshScanDirectories"] = scanDirsNode;
 
             auto backupPath = m_StatePath;
             backupPath += ".backup";
@@ -195,5 +212,21 @@ namespace MoleHole
     {
         std::scoped_lock lock(m_Mutex);
         m_LastExportDirectory = std::filesystem::path(outputPath).parent_path().string();
+    }
+
+    void AppStateService::AddMeshScanDirectory(const std::string& directory)
+    {
+        if (directory.empty()) return;
+        std::scoped_lock lock(m_Mutex);
+        if (std::ranges::find(m_MeshScanDirectories, directory) == m_MeshScanDirectories.end())
+        {
+            m_MeshScanDirectories.push_back(directory);
+        }
+    }
+
+    std::vector<std::string> AppStateService::GetMeshScanDirectories() const
+    {
+        std::scoped_lock lock(m_Mutex);
+        return m_MeshScanDirectories;
     }
 }

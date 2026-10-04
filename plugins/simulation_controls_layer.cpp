@@ -66,7 +66,14 @@ namespace
                 if (ImGui::Button(hasIconFont ? (paused ? kIconPlay : kIconPause) : (paused ? ">" : "||"),
                                   ImVec2(buttonSize, buttonSize)))
                 {
-                    runner->SetPaused(!paused);
+                    if (paused)
+                    {
+                        m_UiState->PendingSnapshotForPlay = true;
+                    }
+                    else
+                    {
+                        runner->SetPaused(true);
+                    }
                 }
                 if (hasIconFont) ImGui::PopFont();
                 ImGui::PopStyleColor(3);
@@ -79,19 +86,13 @@ namespace
                 if (hasIconFont) ImGui::PushFont(m_UiState->IconFont);
                 if (ImGui::Button(hasIconFont ? kIconStop : "[]", ImVec2(buttonSize, buttonSize)))
                 {
-                    m_UiState->PendingStartPaused = true;
-                    if (!m_UiState->CurrentScenePath.empty())
-                        m_UiState->PendingLoadScenePath = m_UiState->CurrentScenePath;
-                    else
-                        m_UiState->PendingNewScene = true;
+                    m_UiState->PendingStopSimulation = true;
                 }
                 if (hasIconFont) ImGui::PopFont();
                 ImGui::PopStyleColor(3);
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip(m_UiState->CurrentScenePath.empty()
-                                          ? "Stop (unsaved scene -- resets to a fresh default)"
-                                          : "Stop (reload from disk, paused)");
+                    ImGui::SetTooltip("Stop (restores the scene to how it was when Play was pressed)");
                 }
             }
             ImGui::End();

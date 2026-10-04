@@ -25,11 +25,14 @@ namespace
 
     struct SceneWindowLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, SceneManager, UiState>;
+        using Dependencies = std::tuple<Logger, SceneManager, UiState, AppStateService, IFileSystem, FileDialog>;
 
         SceneWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<SceneManager> scenes,
-                         std::shared_ptr<UiState> uiState)
-            : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState))
+                         std::shared_ptr<UiState> uiState, std::shared_ptr<AppStateService> appState,
+                         std::shared_ptr<IFileSystem> fileSystem, std::shared_ptr<FileDialog> fileDialog)
+            : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState)),
+              m_AppState(std::move(appState)), m_FileSystem(std::move(fileSystem)),
+              m_FileDialog(std::move(fileDialog))
         {
         }
 
@@ -63,6 +66,9 @@ namespace
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
                                runner->IsPaused() ? "Paused (see viewport controls)" : "Running");
 
+            SectionHeader("SIMULATION");
+            ImGui::SliderFloat("Gravity Strength", &m_UiState->GravityMultiplier, 0.0f, 10.0f, "%.2fx");
+
             SectionHeader("ENTITIES");
             if (ImGui::Button("Add Black Hole"))
             {
@@ -92,6 +98,8 @@ namespace
                         entity, ColliderComponent{.Shape = ColliderShape::Sphere, .Radius = 0.5f});
                 });
             }
+            ImGui::SameLine();
+            RenderAddMeshPopup(*runner);
 
             {
                 auto sceneLock = runner->LockRenderScene();
@@ -133,6 +141,124 @@ namespace
                 ImGui::PopID();
             }
             ImGui::EndChild();
+        }
+
+        void RenderAddMeshPopup(SimulationRunner& runner)
+        {
+            if (ImGui::Button("Add Mesh"))
+            {
+                std::ranges::fill(m_MeshPathBuffer, '\0');
+                ImGui::OpenPopup("Add Mesh");
+            }
+
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSize(ImVec2(460, 0), ImGuiCond_Appearing);
+            if (!ImGui::BeginPopupModal("Add Mesh", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+
+            ImGui::InputText("Path", m_MeshPathBuffer.data(), m_MeshPathBuffer.size());
+            ImGui::SameLine();
+            if (ImGui::Button("Browse..."))
+            {
+                if (const auto path = m_FileDialog->OpenFile({FileDialogFilter{"glTF Model", "gltf,glb"}}))
+                {
+                    SetMeshPathBuffer(path->string());
+                }
+            }
+
+            if (ImGui::BeginCombo("Scanned Models", "Select a scanned model..."))
+            {
+                const auto scanned = CollectScannedMeshes();
+                if (scanned.empty())
+                {
+                    ImGui::TextDisabled("(no models found under the scanned directories)");
+                }
+                for (const auto& path : scanned)
+                {
+                    if (ImGui::Selectable(path.c_str()))
+                    {
+                        SetMeshPathBuffer(path);
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            if (ImGui::Button("Add Scan Directory..."))
+            {
+                if (const auto dir = m_FileDialog->PickFolder())
+                {
+                    m_AppState->AddMeshScanDirectory(dir->string());
+                }
+            }
+
+            ImGui::Checkbox("Add physics collider (convex hull)", &m_MeshAddCollider);
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            const bool canCreate = m_MeshPathBuffer[0] != '\0';
+            ImGui::BeginDisabled(!canCreate);
+            if (ImGui::Button("Create", ImVec2(120, 0)))
+            {
+                const std::string assetPath = m_MeshPathBuffer.data();
+                const bool addCollider = m_MeshAddCollider;
+                runner.EnqueueEdit([assetPath, addCollider](Scene& scene)
+                {
+                    const auto entity = scene.CreateEntity("Mesh", "Mesh");
+                    scene.Registry().emplace<TransformComponent>(entity);
+                    scene.Registry().emplace<MeshComponent>(entity, MeshComponent{.AssetPath = assetPath});
+                    if (addCollider)
+                    {
+                        scene.Registry().emplace<RigidBodyComponent>(
+                            entity, RigidBodyComponent{.Type = RigidBodyType::Static});
+                        scene.Registry().emplace<ColliderComponent>(
+                            entity, ColliderComponent{.Shape = ColliderShape::ConvexMesh});
+                    }
+                });
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        void SetMeshPathBuffer(const std::string& path)
+        {
+            std::ranges::fill(m_MeshPathBuffer, '\0');
+            const auto count = std::min(path.size(), m_MeshPathBuffer.size() - 1);
+            std::ranges::copy(path.substr(0, count), m_MeshPathBuffer.begin());
+        }
+
+        [[nodiscard]] std::vector<std::string> CollectScannedMeshes() const
+        {
+            std::vector<std::string> roots{m_FileSystem->ResolvePath("assets/models").string()};
+            const auto extra = m_AppState->GetMeshScanDirectories();
+            roots.insert(roots.end(), extra.begin(), extra.end());
+
+            std::vector<std::string> result;
+            std::error_code ec;
+            for (const auto& root : roots)
+            {
+                if (!std::filesystem::exists(root, ec)) continue;
+                for (const auto& entry : std::filesystem::recursive_directory_iterator(
+                         root, std::filesystem::directory_options::skip_permission_denied, ec))
+                {
+                    if (ec) break;
+                    if (!entry.is_regular_file()) continue;
+                    const auto ext = entry.path().extension();
+                    if (ext == ".gltf" || ext == ".glb")
+                    {
+                        result.push_back(entry.path().string());
+                    }
+                }
+            }
+            std::ranges::sort(result);
+            return result;
         }
 
         void RenderSelectedEntity(SimulationRunner& runner, Scene& scene)
@@ -186,12 +312,92 @@ namespace
 
             if (const auto* body = scene.Registry().try_get<const RigidBodyComponent>(entity))
             {
+                SectionHeader("RIGID BODY");
+                static constexpr std::array kBodyTypeNames{"Static", "Kinematic", "Dynamic"};
+                int typeIndex = static_cast<int>(body->Type);
+                if (ImGui::Combo("Type", &typeIndex, kBodyTypeNames.data(),
+                                 static_cast<int>(kBodyTypeNames.size())))
+                    EditField(runner, guid, &RigidBodyComponent::Type, static_cast<RigidBodyType>(typeIndex));
                 float mass = body->Mass;
                 if (ImGui::DragFloat("Mass (kg)", &mass, 1.0e22f, 0.0f, 0.0f, "%.3e"))
                     EditField(runner, guid, &RigidBodyComponent::Mass, mass);
+                float linearDamping = body->LinearDamping;
+                if (ImGui::DragFloat("Linear Damping", &linearDamping, 0.01f, 0.0f, 10.0f))
+                    EditField(runner, guid, &RigidBodyComponent::LinearDamping, linearDamping);
+                float angularDamping = body->AngularDamping;
+                if (ImGui::DragFloat("Angular Damping", &angularDamping, 0.01f, 0.0f, 10.0f))
+                    EditField(runner, guid, &RigidBodyComponent::AngularDamping, angularDamping);
                 bool enableGravity = body->EnableGravity;
                 if (ImGui::Checkbox("Enable Gravity", &enableGravity))
                     EditField(runner, guid, &RigidBodyComponent::EnableGravity, enableGravity);
+            }
+
+            if (const auto* collider = scene.Registry().try_get<const ColliderComponent>(entity))
+            {
+                SectionHeader("COLLIDER");
+                ImGui::TextDisabled("Shape/size changes apply on next scene reload");
+                static constexpr std::array kShapeNames{"Box", "Sphere", "Capsule", "Plane", "Convex Mesh"};
+                int shapeIndex = static_cast<int>(collider->Shape);
+                if (ImGui::Combo("Shape", &shapeIndex, kShapeNames.data(),
+                                 static_cast<int>(kShapeNames.size())))
+                    EditField(runner, guid, &ColliderComponent::Shape, static_cast<ColliderShape>(shapeIndex));
+
+                switch (collider->Shape)
+                {
+                case ColliderShape::Box:
+                {
+                    glm::vec3 halfExtents = collider->HalfExtents;
+                    if (ImGui::DragFloat3("Half Extents", &halfExtents.x, 0.01f, 0.01f, 1000.0f))
+                        EditField(runner, guid, &ColliderComponent::HalfExtents, halfExtents);
+                    break;
+                }
+                case ColliderShape::Sphere:
+                {
+                    float radius = collider->Radius;
+                    if (ImGui::DragFloat("Radius", &radius, 0.01f, 0.01f, 1000.0f))
+                        EditField(runner, guid, &ColliderComponent::Radius, radius);
+                    break;
+                }
+                case ColliderShape::Capsule:
+                {
+                    float radius = collider->Radius;
+                    if (ImGui::DragFloat("Radius", &radius, 0.01f, 0.01f, 1000.0f))
+                        EditField(runner, guid, &ColliderComponent::Radius, radius);
+                    float halfHeight = collider->HalfHeight;
+                    if (ImGui::DragFloat("Half Height", &halfHeight, 0.01f, 0.01f, 1000.0f))
+                        EditField(runner, guid, &ColliderComponent::HalfHeight, halfHeight);
+                    break;
+                }
+                case ColliderShape::Plane:
+                    break;
+                case ColliderShape::ConvexMesh:
+                    ImGui::Text("%zu hull points", collider->ConvexHullPoints.size());
+                    break;
+                }
+
+                float staticFriction = collider->StaticFriction;
+                if (ImGui::DragFloat("Static Friction", &staticFriction, 0.01f, 0.0f, 10.0f))
+                    EditField(runner, guid, &ColliderComponent::StaticFriction, staticFriction);
+                float dynamicFriction = collider->DynamicFriction;
+                if (ImGui::DragFloat("Dynamic Friction", &dynamicFriction, 0.01f, 0.0f, 10.0f))
+                    EditField(runner, guid, &ColliderComponent::DynamicFriction, dynamicFriction);
+                float restitution = collider->Restitution;
+                if (ImGui::DragFloat("Restitution", &restitution, 0.01f, 0.0f, 1.0f))
+                    EditField(runner, guid, &ColliderComponent::Restitution, restitution);
+                bool isTrigger = collider->IsTrigger;
+                if (ImGui::Checkbox("Is Trigger", &isTrigger))
+                    EditField(runner, guid, &ColliderComponent::IsTrigger, isTrigger);
+            }
+
+            if (const auto* velocity = scene.Registry().try_get<const VelocityComponent>(entity))
+            {
+                SectionHeader("VELOCITY (read-only)");
+                glm::vec3 linear = velocity->Linear;
+                ImGui::BeginDisabled();
+                ImGui::DragFloat3("Linear", &linear.x);
+                glm::vec3 angular = velocity->Angular;
+                ImGui::DragFloat3("Angular", &angular.x);
+                ImGui::EndDisabled();
             }
 
             ImGui::Spacing();
@@ -208,6 +414,12 @@ namespace
 
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<UiState> m_UiState;
+        std::shared_ptr<AppStateService> m_AppState;
+        std::shared_ptr<IFileSystem> m_FileSystem;
+        std::shared_ptr<FileDialog> m_FileDialog;
+
+        std::array<char, 512> m_MeshPathBuffer{};
+        bool m_MeshAddCollider = true;
     };
 }
 

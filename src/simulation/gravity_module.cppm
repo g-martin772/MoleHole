@@ -7,8 +7,8 @@ import :Simulation.Components;
 
 export namespace MoleHole
 {
-    constexpr float kGravitationalConstant = 6.67430e-11f;
     constexpr float kGravitySolarMassKg = 1.989e30f;
+    constexpr float kBaseGravityStrength = 5.0e-29f;
 
     class GravitySimulationModule final : public GPP::ISimulationModule
     {
@@ -20,6 +20,10 @@ export namespace MoleHole
         void OnInit(GPP::Scene& scene) override;
         void OnTick(GPP::Scene& scene, float deltaTime) override;
 
+        // Thread-safe: called from the main thread (ViewportLayer mirrors UiState::GravityMultiplier
+        // here every frame), read from the simulation thread inside OnTick.
+        void SetGravityMultiplier(float multiplier) noexcept { m_GravityMultiplier.store(multiplier, std::memory_order_relaxed); }
+
     private:
         void HandleTrigger(const GPP::PhysicsTriggerEvent& event);
 
@@ -27,5 +31,6 @@ export namespace MoleHole
         std::shared_ptr<GPP::Logger> m_Logger;
         GPP::EventSubscription m_TriggerSubscription;
         GPP::Scene* m_CurrentScene{nullptr};
+        std::atomic<float> m_GravityMultiplier{1.0f};
     };
 }

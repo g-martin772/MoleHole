@@ -72,16 +72,27 @@ namespace MoleHole
             auto* dynamic = actor ? actor->is<physx::PxRigidDynamic>() : nullptr;
             if (!dynamic) continue;
 
+            const float strength = kBaseGravityStrength * m_GravityMultiplier.load(std::memory_order_relaxed);
             glm::vec3 acceleration{0.0f};
             for (const auto& source : sources)
             {
                 const glm::vec3 delta = source.Position - transform.Position;
                 const float distSq = glm::dot(delta, delta);
                 if (distSq < 1e-6f) continue;
-                acceleration += kGravitationalConstant * source.MassKg / distSq * glm::normalize(delta);
+                acceleration += strength * source.MassKg / distSq * glm::normalize(delta);
             }
 
             const glm::vec3 force = acceleration * body.Mass;
+            const bool finite = std::isfinite(force.x) && std::isfinite(force.y) && std::isfinite(force.z);
+            if (!finite)
+            {
+                if (m_Logger)
+                {
+                    m_Logger->Warn("GravitySimulationModule: skipping a non-finite gravity force "
+                                   "(check mass/distance values are reasonable)");
+                }
+                continue;
+            }
             dynamic->addForce(physx::PxVec3(force.x, force.y, force.z), physx::PxForceMode::eFORCE);
         }
     }
@@ -101,6 +112,9 @@ namespace MoleHole
         if (!m_CurrentScene->IsValid(otherEntity)) return;
 
         if (m_Logger) m_Logger->Info("GravitySimulationModule: entity absorbed by black hole.");
-        m_CurrentScene->Registry().destroy(otherEntity);
+        // Scene::DestroyEntity, not Registry().destroy() -- the latter leaves the entity's guid
+        // dangling in Scene's GuidIndex pointing at a now-invalid entity handle, which later crashes
+        // Scene::SyncInto (e.g. a Play->Stop snapshot restore) when it resolves that stale guid.
+        m_CurrentScene->DestroyEntity(otherEntity);
     }
 }

@@ -70,8 +70,10 @@ export namespace MoleHole
         std::string CurrentSceneName;
         std::string CurrentScenePath;
         std::optional<std::string> PendingLoadScenePath;
+        std::optional<std::string> PendingLoadTemplatePath;
         bool PendingNewScene = false;
-        bool PendingStartPaused = false;
+        bool PendingSnapshotForPlay = false;
+        bool PendingStopSimulation = false;
         // CLI --scene override
         std::optional<std::string> StartupScenePath;
 
@@ -95,5 +97,6 @@ export namespace MoleHole
         bool ExitWhenExportDone = false;
 
         RenderToggles Render;
+        float GravityMultiplier = 1.0f;
     };
 }

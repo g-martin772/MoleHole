@@ -134,6 +134,8 @@ namespace
             CheckPendingSceneSwitch();
             UpdateCamera(deltaTime);
             ProcessExport();
+            if (m_GravityModule) m_GravityModule->SetGravityMultiplier(m_UiState->GravityMultiplier);
+            FixupPendingConvexHulls();
         }
 
         void OnRenderGraph(RenderGraph& graph) override
@@ -794,6 +796,40 @@ namespace
             return result;
         }
 
+        void FixupPendingConvexHulls()
+        {
+            if (!m_Runner) return;
+            std::vector<std::pair<std::uint64_t, std::string>> pending;
+            {
+                auto sceneLock = m_Runner->LockRenderScene();
+                for (auto [entity, mesh, collider, metadata] :
+                     sceneLock->Registry()
+                         .view<const MeshComponent, const ColliderComponent, const MetadataComponent>()
+                         .each())
+                {
+                    if (collider.Shape == ColliderShape::ConvexMesh && collider.ConvexHullPoints.empty()
+                        && !mesh.AssetPath.empty())
+                    {
+                        pending.emplace_back(metadata.Guid, mesh.AssetPath);
+                    }
+                }
+            }
+            for (const auto& [guid, assetPath] : pending)
+            {
+                const auto gltfScene = GetOrLoadMesh(assetPath);
+                if (!gltfScene || gltfScene->Geometry.Vertices.empty()) continue;
+                auto points = gltfScene->Geometry.Vertices;
+                m_Runner->EnqueueEdit([guid, points = std::move(points)](Scene& scene)
+                {
+                    const auto entity = scene.FindByGuid(guid);
+                    if (scene.IsValid(entity) && scene.Registry().all_of<ColliderComponent>(entity))
+                    {
+                        scene.Registry().get<ColliderComponent>(entity).ConvexHullPoints = points;
+                    }
+                });
+            }
+        }
+
         std::vector<MeshDrawable> CollectMeshDrawables(GPP::Scene& scene)
         {
             std::vector<MeshDrawable> drawables;
@@ -924,17 +960,15 @@ namespace
                 m_Scenes->DestroySimulation(m_UiState->CurrentSceneName);
             }
             m_PhysicsModule = std::make_shared<PhysicsSimulationModule>(m_Dispatcher, m_Logger);
-            auto gravityModule = std::make_shared<GravitySimulationModule>(m_PhysicsModule, m_Dispatcher, m_Logger);
+            m_GravityModule = std::make_shared<GravitySimulationModule>(m_PhysicsModule, m_Dispatcher, m_Logger);
+            m_GravityModule->SetGravityMultiplier(m_UiState->GravityMultiplier);
             m_Runner = m_Scenes->CreateSimulation(
-                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravityModule, m_PhysicsModule});
+                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{m_GravityModule, m_PhysicsModule});
             m_Runner->Start();
+            m_Runner->SetPaused(true);
+            m_PlaySnapshot.reset();
             m_UiState->CurrentSceneName = sceneName;
             m_UiState->SelectedEntityGuid = 0;
-            if (m_UiState->PendingStartPaused)
-            {
-                m_Runner->SetPaused(true);
-                m_UiState->PendingStartPaused = false;
-            }
         }
 
         void CheckPendingSceneSwitch()
@@ -965,6 +999,49 @@ namespace
                     m_Logger->Error("ViewportLayer: failed to load scene '{}': {}", path, error.what());
                 }
             }
+            else if (m_UiState->PendingLoadTemplatePath)
+            {
+                const auto path = *m_UiState->PendingLoadTemplatePath;
+                m_UiState->PendingLoadTemplatePath.reset();
+                try
+                {
+                    auto& scene = m_Scenes->LoadSceneFromFile(path);
+                    m_UiState->CurrentScenePath.clear();
+                    StartSimulationFor(scene.Metadata().Name);
+                }
+                catch (const std::exception& error)
+                {
+                    m_Logger->Error("ViewportLayer: failed to load template '{}': {}", path, error.what());
+                }
+            }
+
+            if (m_UiState->PendingSnapshotForPlay)
+            {
+                m_UiState->PendingSnapshotForPlay = false;
+                if (m_Runner && !m_PlaySnapshot)
+                {
+                    m_PlaySnapshot = m_Runner->LockRenderScene()->Clone();
+                    m_Runner->SetPaused(false);
+                }
+            }
+
+            if (m_UiState->PendingStopSimulation)
+            {
+                m_UiState->PendingStopSimulation = false;
+                if (m_Runner)
+                {
+                    if (m_PlaySnapshot)
+                    {
+                        auto snapshot = *m_PlaySnapshot;
+                        m_Runner->EnqueueEdit([snapshot = std::move(snapshot)](Scene& scene)
+                        {
+                            Scene::SyncInto(snapshot, scene);
+                        });
+                        m_PlaySnapshot.reset();
+                    }
+                    m_Runner->SetPaused(true);
+                }
+            }
         }
 
         void ProcessExport()
@@ -984,15 +1061,7 @@ namespace
             if (m_UiState->ExportActive)
             {
                 m_Renderer->ResizeBufferTarget(m_LayerTarget.Id, m_UiState->ExportResolution);
-                // Shader compilation (StartOnRenderThread) is asynchronous -- GetPipeline() stays
-                // null until a background compile finishes and swaps it in. Windowed use always
-                // has plenty of real time for that before anyone looks at the viewport; headless
-                // export can reach its first capture within a tick or two of OnAttach, racing
-                // ahead of it. Without this check we'd silently capture however many frames
-                // render before compilation finishes -- compute/graphics passes that find a null
-                // pipeline just skip their dispatch (see OnRenderGraph), leaving that pass's
-                // image untouched (black for the raytrace image, since EnsureImages never clears
-                // it to anything else).
+
                 if (AllExportPipelinesReady())
                 {
                     m_PendingCapture = true;
@@ -1215,6 +1284,8 @@ namespace
 
         std::shared_ptr<SimulationRunner> m_Runner;
         std::shared_ptr<PhysicsSimulationModule> m_PhysicsModule;
+        std::shared_ptr<GravitySimulationModule> m_GravityModule;
+        std::optional<Scene> m_PlaySnapshot;
         int m_SceneCounter{0};
         Camera m_Camera;
         bool m_HasLastMouse{false};

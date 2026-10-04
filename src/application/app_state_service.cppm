@@ -24,6 +24,9 @@ export namespace MoleHole
         void NotifyExported(const std::string& outputPath);
         [[nodiscard]] std::string GetLastExportDirectory() const;
 
+        void AddMeshScanDirectory(const std::string& directory);
+        [[nodiscard]] std::vector<std::string> GetMeshScanDirectories() const;
+
     private:
         void Load();
         void Save() const;
@@ -40,5 +43,6 @@ export namespace MoleHole
         std::string m_LastScenePath;
         std::vector<std::string> m_RecentScenes;
         std::string m_LastExportDirectory;
+        std::vector<std::string> m_MeshScanDirectories;
     };
 }
