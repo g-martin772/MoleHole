@@ -7,8 +7,17 @@ import glm;
 
 namespace MoleHole
 {
-    float BoundingRadiusOf(const GPP::Scene& scene, const entt::entity entity)
+    float BoundingRadiusOf(const GPP::Scene& scene, const entt::entity entity,
+                           const BoundingRadiusOverride& radiusOverride)
     {
+        if (radiusOverride)
+        {
+            if (const auto radius = radiusOverride(scene, entity))
+            {
+                return *radius;
+            }
+        }
+
         const auto& registry = scene.Registry();
         if (registry.all_of<SphereComponent>(entity))
         {
@@ -36,14 +45,15 @@ namespace MoleHole
     }
 
     std::optional<PickHit> PickClosestEntity(
-        const GPP::Scene& scene, const glm::vec3& rayOrigin, const glm::vec3& rayDirection)
+        const GPP::Scene& scene, const glm::vec3& rayOrigin, const glm::vec3& rayDirection,
+        const BoundingRadiusOverride& radiusOverride)
     {
         const auto direction = glm::normalize(rayDirection);
         std::optional<PickHit> closest;
 
         for (auto [entity, transform] : scene.Registry().view<GPP::TransformComponent>().each())
         {
-            const float radius = BoundingRadiusOf(scene, entity);
+            const float radius = BoundingRadiusOf(scene, entity, radiusOverride);
             const glm::vec3 toCenter = rayOrigin - transform.Position;
             const float b = glm::dot(toCenter, direction);
             const float c = glm::dot(toCenter, toCenter) - radius * radius;

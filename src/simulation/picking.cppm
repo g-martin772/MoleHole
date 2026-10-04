@@ -13,10 +13,14 @@ export namespace MoleHole
         float Distance{0.0f};
     };
 
-    [[nodiscard]] float BoundingRadiusOf(const GPP::Scene& scene, entt::entity entity);
+    using BoundingRadiusOverride = std::function<std::optional<float>(const GPP::Scene&, entt::entity)>;
+
+    [[nodiscard]] float BoundingRadiusOf(const GPP::Scene& scene, entt::entity entity,
+                                          const BoundingRadiusOverride& radiusOverride = {});
 
     [[nodiscard]] std::optional<PickHit> PickClosestEntity(
-        const GPP::Scene& scene, const glm::vec3& rayOrigin, const glm::vec3& rayDirection);
+        const GPP::Scene& scene, const glm::vec3& rayOrigin, const glm::vec3& rayDirection,
+        const BoundingRadiusOverride& radiusOverride = {});
 
     struct Ray
     {

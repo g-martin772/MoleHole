@@ -149,8 +149,13 @@ namespace
             auto sceneLock = m_Runner->LockRenderScene();
             Scene& scene = *sceneLock;
 
+            const auto depthTarget = graph.GetPrimaryDepthTarget();
+            const auto depthFormat = depthTarget != kInvalidRenderGraphHandle
+                                         ? graph.GetImageFormat(depthTarget)
+                                         : vk::Format::eUndefined;
+
             EnsureImages(extent);
-            EnsureCompositePipeline(graph.GetImageFormat(colorTarget));
+            EnsureCompositePipeline(graph.GetImageFormat(colorTarget), depthFormat);
             UploadParams(extent, scene);
 
             const auto device = m_Renderer->GetDevice();
@@ -245,13 +250,24 @@ namespace
 
             if (m_CompositePipeline)
             {
+                std::optional<RenderGraphAttachment> compositeDepthAttachment;
+                if (depthTarget != kInvalidRenderGraphHandle)
+                {
+                    // First (and only, until the mesh pass) writer of depth this frame -- clears to
+                    // 1.0 (far), then black_hole_rendering.comp's per-pixel depth (carried via alpha,
+                    // written to gl_FragDepth in the fragment shader below) overwrites every pixel.
+                    compositeDepthAttachment = RenderGraphAttachment{
+                        .Handle = depthTarget, .LoadOp = vk::AttachmentLoadOp::eClear,
+                        .Clear = vk::ClearValue(vk::ClearDepthStencilValue(1.0f, 0))
+                    };
+                }
                 graph.AddGraphicsPass(
                     "ViewportLayer.Composite", {}, {},
                     {RenderGraphAttachment{
                         .Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eClear,
                         .Clear = vk::ClearValue(vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f))
                     }},
-                    std::nullopt,
+                    compositeDepthAttachment,
                     [this, device, extent, finalBlurImage](const vk::CommandBuffer cmd, RenderGraph& g)
                     {
                         const auto pipeline = m_CompositePipeline->GetPipeline();
@@ -336,9 +352,9 @@ namespace
                 }
             }
 
-            if (const auto depthTarget = graph.GetPrimaryDepthTarget(); depthTarget != kInvalidRenderGraphHandle)
+            if (depthTarget != kInvalidRenderGraphHandle)
             {
-                EnsureMeshPipeline(graph.GetImageFormat(colorTarget), graph.GetImageFormat(depthTarget));
+                EnsureMeshPipeline(graph.GetImageFormat(colorTarget), depthFormat);
                 auto drawables = CollectMeshDrawables(scene);
                 if (m_MeshPipeline && !drawables.empty())
                 {
@@ -346,10 +362,10 @@ namespace
                     graph.AddGraphicsPass(
                         "ViewportLayer.Mesh", {}, {},
                         {RenderGraphAttachment{.Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
-                        RenderGraphAttachment{
-                            .Handle = depthTarget, .LoadOp = vk::AttachmentLoadOp::eClear,
-                            .Clear = vk::ClearValue(vk::ClearDepthStencilValue(1.0f, 0))
-                        },
+                        // eLoad, not eClear: the composite pass (run earlier this frame) already
+                        // wrote the raytraced spheres/disk's depth here -- clearing would discard it
+                        // and meshes would once again always draw on top regardless of 3D position.
+                        RenderGraphAttachment{.Handle = depthTarget, .LoadOp = vk::AttachmentLoadOp::eLoad},
                         [this, device, drawables = std::move(drawables)](const vk::CommandBuffer cmd, RenderGraph& g)
                         {
                             const auto pipeline = m_MeshPipeline->GetPipeline();
@@ -631,7 +647,18 @@ namespace
 
             auto sceneLock = m_Runner->LockRenderScene();
             Scene& scene = *sceneLock;
-            if (const auto hit = PickClosestEntity(scene, ray.Origin, ray.Direction))
+            const auto radiusOverride = [this](const Scene& s, entt::entity entity) -> std::optional<float>
+            {
+                const auto* mesh = s.Registry().try_get<const MeshComponent>(entity);
+                if (!mesh || mesh->AssetPath.empty()) return std::nullopt;
+                const float localRadius = GetMeshBoundingRadius(mesh->AssetPath);
+                if (const auto* transform = s.Registry().try_get<const TransformComponent>(entity))
+                {
+                    return localRadius * std::max({transform->Scale.x, transform->Scale.y, transform->Scale.z});
+                }
+                return localRadius;
+            };
+            if (const auto hit = PickClosestEntity(scene, ray.Origin, ray.Direction, radiusOverride))
             {
                 m_UiState->SelectedEntityGuid = scene.Registry().get<MetadataComponent>(hit->Entity).Guid;
             }
@@ -639,6 +666,26 @@ namespace
             {
                 m_UiState->SelectedEntityGuid = 0;
             }
+        }
+
+        float GetMeshBoundingRadius(const std::string& assetPath)
+        {
+            if (const auto it = m_MeshBoundingRadiusCache.find(assetPath); it != m_MeshBoundingRadiusCache.end())
+            {
+                return it->second;
+            }
+            float radius = 0.5f;
+            if (const auto gltfScene = GetOrLoadMesh(assetPath); gltfScene && !gltfScene->Geometry.Vertices.empty())
+            {
+                float maxDistSq = 0.0f;
+                for (const auto& vertex : gltfScene->Geometry.Vertices)
+                {
+                    maxDistSq = std::max(maxDistSq, glm::dot(vertex, vertex));
+                }
+                radius = std::sqrt(maxDistSq);
+            }
+            m_MeshBoundingRadiusCache.emplace(assetPath, radius);
+            return radius;
         }
 
         std::shared_ptr<ShaderPipeline> MakeComputePipeline(const std::shared_ptr<VulkanDevice>& device,
@@ -662,15 +709,16 @@ namespace
             return pipeline;
         }
 
-        void EnsureCompositePipeline(vk::Format colorFormat)
+        void EnsureCompositePipeline(vk::Format colorFormat, vk::Format depthFormat)
         {
-            if (m_CompositePipeline && m_CompositeColorFormat == colorFormat) return;
+            if (m_CompositePipeline && m_CompositeColorFormat == colorFormat
+                && m_CompositeDepthFormat == depthFormat) return;
             const auto device = m_Renderer->GetDevice();
             m_CompositePipeline = std::make_shared<ShaderPipeline>(
                 device,
                 VulkanPipelineSpecification{
                     .colorFormat = colorFormat,
-                    .depthFormat = vk::Format::eUndefined,
+                    .depthFormat = depthFormat,
                     .enableBlending = false,
                     .cullMode = vk::CullModeFlagBits::eNone
                 },
@@ -691,6 +739,7 @@ namespace
                 m_Logger->Error("ViewportLayer: failed to compile composite display shader");
             }
             m_CompositeColorFormat = colorFormat;
+            m_CompositeDepthFormat = depthFormat;
         }
 
         void EnsureMeshPipeline(vk::Format colorFormat, vk::Format depthFormat)
@@ -807,19 +856,15 @@ namespace
             m_PhysicsModule->SetDebugVisualizationEnabled(enabled);
             if (!enabled) return;
 
-            auto* pxScene = m_PhysicsModule->GetPxScene();
-            if (!pxScene) return;
-            const auto& renderBuffer = pxScene->getRenderBuffer();
-            const auto lineCount = renderBuffer.getNbLines();
-            if (lineCount == 0) return;
+            const auto lines = m_PhysicsModule->GetDebugLines();
+            if (lines.empty()) return;
 
             std::vector<float> vertices;
-            vertices.reserve(static_cast<std::size_t>(lineCount) * 2 * 6);
-            const auto* lines = renderBuffer.getLines();
-            for (physx::PxU32 i = 0; i < lineCount; ++i)
+            vertices.reserve(lines.size() * 2 * 6);
+            for (const auto& line : lines)
             {
-                AppendPhysicsDebugVertex(vertices, lines[i].pos0, lines[i].color0);
-                AppendPhysicsDebugVertex(vertices, lines[i].pos1, lines[i].color1);
+                AppendPhysicsDebugVertex(vertices, line.pos0, line.color0);
+                AppendPhysicsDebugVertex(vertices, line.pos1, line.color1);
             }
 
             const auto device = m_Renderer->GetDevice();
@@ -830,7 +875,7 @@ namespace
                     device, MakeVertexBufferSpecification(byteSize, true), m_Logger);
             }
             m_PhysicsDebugVertexBuffer->Upload(vertices.data(), byteSize);
-            m_PhysicsDebugLineVertexCount = static_cast<std::uint32_t>(lineCount) * 2;
+            m_PhysicsDebugLineVertexCount = static_cast<std::uint32_t>(lines.size()) * 2;
         }
 
         void CreateGravityGridMesh()
@@ -928,6 +973,20 @@ namespace
                         scene.Registry().get<ColliderComponent>(entity).ConvexHullPoints = points;
                     }
                 });
+            }
+        }
+
+        void PopulateConvexHulls(GPP::Scene& scene)
+        {
+            for (auto [entity, mesh, collider] :
+                 scene.Registry().view<const MeshComponent, ColliderComponent>().each())
+            {
+                if (collider.Shape != ColliderShape::ConvexMesh || !collider.ConvexHullPoints.empty()) continue;
+                if (mesh.AssetPath.empty()) continue;
+                if (const auto gltfScene = GetOrLoadMesh(mesh.AssetPath); gltfScene && !gltfScene->Geometry.Vertices.empty())
+                {
+                    collider.ConvexHullPoints = gltfScene->Geometry.Vertices;
+                }
             }
         }
 
@@ -1060,6 +1119,11 @@ namespace
             {
                 m_Scenes->DestroySimulation(m_UiState->CurrentSceneName);
             }
+
+            if (auto* scene = m_Scenes->FindScene(sceneName))
+            {
+                PopulateConvexHulls(*scene);
+            }
             m_PhysicsModule = std::make_shared<PhysicsSimulationModule>(m_Dispatcher, m_Logger);
             m_GravityModule = std::make_shared<GravitySimulationModule>(m_PhysicsModule, m_Dispatcher, m_Logger);
             m_GravityModule->SetGravityMultiplier(m_UiState->GravityMultiplier);
@@ -1134,9 +1198,34 @@ namespace
                     if (m_PlaySnapshot)
                     {
                         auto snapshot = *m_PlaySnapshot;
-                        m_Runner->EnqueueEdit([snapshot = std::move(snapshot)](Scene& scene)
+                        m_Runner->EnqueueEdit([snapshot = std::move(snapshot), physics = m_PhysicsModule](Scene& scene)
                         {
                             Scene::SyncInto(snapshot, scene);
+
+                            if (physics)
+                            {
+                                for (auto [entity, transform] : scene.Registry().view<const TransformComponent>().each())
+                                {
+                                    auto* actor = physics->FindActor(entity);
+                                    if (!actor) continue;
+                                    actor->setGlobalPose(physx::PxTransform(
+                                        physx::PxVec3(transform.Position.x, transform.Position.y, transform.Position.z),
+                                        physx::PxQuat(transform.Rotation.x, transform.Rotation.y,
+                                                      transform.Rotation.z, transform.Rotation.w)));
+
+                                    auto* dynamic = actor->is<physx::PxRigidDynamic>();
+                                    const bool kinematic = dynamic &&
+                                        (dynamic->getRigidBodyFlags() & physx::PxRigidBodyFlag::eKINEMATIC);
+                                    if (dynamic && !kinematic)
+                                    {
+                                        const auto* velocity = scene.Registry().try_get<const VelocityComponent>(entity);
+                                        const auto linear = velocity ? velocity->Linear : glm::vec3(0.0f);
+                                        const auto angular = velocity ? velocity->Angular : glm::vec3(0.0f);
+                                        dynamic->setLinearVelocity(physx::PxVec3(linear.x, linear.y, linear.z));
+                                        dynamic->setAngularVelocity(physx::PxVec3(angular.x, angular.y, angular.z));
+                                    }
+                                }
+                            }
                         });
                         m_PlaySnapshot.reset();
                     }
@@ -1344,6 +1433,7 @@ namespace
             params.Fov = m_Camera.GetFov();
             params.Aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
             params.Time = std::chrono::duration<float>(std::chrono::steady_clock::now() - m_StartTime).count();
+            params.ViewProjection = m_Camera.GetViewProjectionMatrix();
             FillSceneData(params, scene);
 
             const auto& render = m_UiState->Render;
@@ -1403,6 +1493,7 @@ namespace
         std::shared_ptr<ShaderPipeline> m_LensFlarePipeline;
         std::shared_ptr<ShaderPipeline> m_CompositePipeline;
         vk::Format m_CompositeColorFormat{vk::Format::eUndefined};
+        vk::Format m_CompositeDepthFormat{vk::Format::eUndefined};
 
         vk::Extent3D m_ImageExtent{0, 0, 0};
         std::unique_ptr<VulkanImage> m_RaytraceImage;
@@ -1421,6 +1512,7 @@ namespace
         vk::Format m_MeshDepthFormat{vk::Format::eUndefined};
         std::unique_ptr<VulkanBuffer> m_MeshCameraBuffer;
         std::unordered_map<std::string, std::shared_ptr<GltfSceneData>> m_MeshCache;
+        std::unordered_map<std::string, float> m_MeshBoundingRadiusCache;
 
         std::shared_ptr<ShaderPipeline> m_GravityGridPipeline;
         vk::Format m_GravityGridColorFormat{vk::Format::eUndefined};

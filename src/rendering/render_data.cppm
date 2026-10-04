@@ -73,10 +73,13 @@ export namespace MoleHole
 
         std::array<BlackHoleGpuData, kMaxBlackHoles> BlackHoles{};
         std::array<SphereGpuData, kMaxSpheres> Spheres{};
+
+        glm::mat4 ViewProjection{1.0f};
     };
-    static_assert(sizeof(RaytraceParamsGpu) == 1328);
+    static_assert(sizeof(RaytraceParamsGpu) == 1392);
     static_assert(offsetof(RaytraceParamsGpu, BlackHoles) == 176);
     static_assert(offsetof(RaytraceParamsGpu, Spheres) == 560);
+    static_assert(offsetof(RaytraceParamsGpu, ViewProjection) == 1328);
 
     inline void FillSceneData(RaytraceParamsGpu& params, const GPP::Scene& scene)
     {
