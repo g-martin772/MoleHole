@@ -53,3 +53,45 @@ TEST_CASE("PickClosestEntity ignores hits behind the ray origin", "[simulation][
     const auto hit = PickClosestEntity(scene, glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     CHECK_FALSE(hit.has_value());
 }
+
+TEST_CASE("ScreenPointToRay at the viewport center points straight down the camera's forward axis",
+          "[simulation][picking]")
+{
+    const glm::vec3 cameraPos{0.0f, 0.0f, 10.0f};
+    const glm::mat4 view = glm::lookAt(cameraPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 projection = glm::perspective(glm::radians(60.0f), 1.0f, 0.1f, 1000.0f);
+    projection[1][1] *= -1.0f;
+
+    const glm::vec2 viewportMin{100.0f, 50.0f};
+    const glm::vec2 viewportSize{800.0f, 600.0f};
+    const glm::vec2 center = viewportMin + viewportSize * 0.5f;
+
+    const auto ray = ScreenPointToRay(center, viewportMin, viewportSize, view, projection, cameraPos);
+    CHECK(ray.Origin == cameraPos);
+    CHECK(ray.Direction.x == Catch::Approx(0.0f).margin(1e-4));
+    CHECK(ray.Direction.y == Catch::Approx(0.0f).margin(1e-4));
+    CHECK(ray.Direction.z == Catch::Approx(-1.0f).margin(1e-4));
+}
+
+TEST_CASE("ScreenPointToRay finds an entity directly ahead of the camera", "[simulation][picking]")
+{
+    RegisterComponents();
+    Scene scene("ScreenPickTest");
+    const auto entity = scene.CreateEntity("Target");
+    scene.Registry().emplace<TransformComponent>(entity, TransformComponent{.Position = {0.0f, 0.0f, 0.0f}});
+    scene.Registry().emplace<SphereComponent>(entity, SphereComponent{.Radius = 1.0f});
+
+    const glm::vec3 cameraPos{0.0f, 0.0f, 10.0f};
+    const glm::mat4 view = glm::lookAt(cameraPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 projection = glm::perspective(glm::radians(60.0f), 1.0f, 0.1f, 1000.0f);
+    projection[1][1] *= -1.0f;
+
+    const glm::vec2 viewportMin{0.0f, 0.0f};
+    const glm::vec2 viewportSize{800.0f, 600.0f};
+    const glm::vec2 center = viewportSize * 0.5f;
+
+    const auto ray = ScreenPointToRay(center, viewportMin, viewportSize, view, projection, cameraPos);
+    const auto hit = PickClosestEntity(scene, ray.Origin, ray.Direction);
+    REQUIRE(hit.has_value());
+    CHECK(hit->Entity == entity);
+}

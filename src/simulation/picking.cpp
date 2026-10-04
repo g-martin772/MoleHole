@@ -70,4 +70,18 @@ namespace MoleHole
 
         return closest;
     }
+
+    Ray ScreenPointToRay(const glm::vec2& mousePos, const glm::vec2& viewportMin, const glm::vec2& viewportSize,
+                         const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPosition)
+    {
+        const glm::vec2 local = mousePos - viewportMin;
+        const float ndcX = (2.0f * local.x / viewportSize.x) - 1.0f;
+        const float ndcY = (2.0f * local.y / viewportSize.y) - 1.0f;
+
+        const glm::mat4 inverseViewProjection = glm::inverse(projection * view);
+        glm::vec4 farPoint = inverseViewProjection * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+        farPoint /= farPoint.w;
+
+        return Ray{cameraPosition, glm::normalize(glm::vec3(farPoint) - cameraPosition)};
+    }
 }

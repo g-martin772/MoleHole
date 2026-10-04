@@ -32,6 +32,9 @@ export namespace MoleHole
         float AdaptiveStepRate = 0.8f;
     };
 
+    enum class GizmoOperation { Translate, Rotate, Scale };
+    enum class GizmoMode { Local, World };
+
     struct ExportRequest
     {
         enum class Kind { Image, Video } RequestKind = Kind::Image;
@@ -57,6 +60,12 @@ export namespace MoleHole
         bool ShowScienceWindow = false;
 
         std::uint64_t SelectedEntityGuid = 0;
+        GizmoOperation ActiveGizmoOperation = GizmoOperation::Translate;
+        GizmoMode ActiveGizmoMode = GizmoMode::World;
+        bool GizmoSnapEnabled = false;
+        glm::vec3 GizmoTranslateSnap{1.0f, 1.0f, 1.0f};
+        float GizmoRotateSnapDegrees = 15.0f;
+        float GizmoScaleSnap = 0.1f;
 
         std::string CurrentSceneName;
         std::string CurrentScenePath;

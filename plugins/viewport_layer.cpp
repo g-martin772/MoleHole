@@ -30,6 +30,17 @@ namespace
         return vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled;
     }
 
+    ImGuizmo::OPERATION ToImGuizmoOperation(GizmoOperation operation)
+    {
+        switch (operation)
+        {
+        case GizmoOperation::Translate: return ImGuizmo::TRANSLATE;
+        case GizmoOperation::Rotate: return ImGuizmo::ROTATE;
+        case GizmoOperation::Scale: return ImGuizmo::SCALE;
+        }
+        return ImGuizmo::TRANSLATE;
+    }
+
     struct MeshDrawable
     {
         const GltfPrimitive* Primitive = nullptr;
@@ -131,6 +142,7 @@ namespace
             if (colorTarget == kInvalidRenderGraphHandle || !m_RaytracePipeline || !m_Runner) return;
             const auto extent = graph.GetImageExtent(colorTarget);
             if (extent.width == 0 || extent.height == 0) return;
+            m_Camera.SetAspect(static_cast<float>(extent.width) / static_cast<float>(extent.height));
 
             auto sceneLock = m_Runner->LockRenderScene();
             Scene& scene = *sceneLock;
@@ -350,6 +362,7 @@ namespace
 
         void OnUiRender() override
         {
+            ImGuizmo::BeginFrame();
             ImGui::Begin("Viewport");
 
             const ImVec2 avail = ImGui::GetContentRegionAvail();
@@ -363,10 +376,17 @@ namespace
             if (const auto target = m_Renderer->GetRenderTargetInfo(m_LayerTarget.Id))
             {
                 ImGui::Image(reinterpret_cast<ImTextureID>(target->ImGuiTexture), avail);
+                const bool imageHovered = ImGui::IsItemHovered();
                 const ImVec2 min = ImGui::GetItemRectMin();
                 const ImVec2 max = ImGui::GetItemRectMax();
                 m_UiState->ViewportScreenMin = {min.x, min.y};
                 m_UiState->ViewportScreenMax = {max.x, max.y};
+
+                if (!m_UiState->ExportActive)
+                {
+                    const bool toolbarHovered = RenderGizmoToolbar(min, max);
+                    UpdateGizmoAndPicking(min, max, imageHovered, toolbarHovered);
+                }
             }
             else
             {
@@ -388,6 +408,213 @@ namespace
         }
 
     private:
+        [[nodiscard]] bool RenderGizmoToolbar(ImVec2 viewportMin, ImVec2 viewportMax)
+        {
+            struct ButtonSpec { const char* Label; GizmoOperation Op; const char* Tooltip; };
+            const std::array<ButtonSpec, 3> operationButtons{{
+                {"Move", GizmoOperation::Translate, "Translate (T / 1)"},
+                {"Rotate", GizmoOperation::Rotate, "Rotate (R / 2)"},
+                {"Scale", GizmoOperation::Scale, "Scale (S / 3)"},
+            }};
+            const char* modeLabel = m_UiState->ActiveGizmoMode == GizmoMode::Local ? "Local" : "World";
+
+            const ImVec2 framePad = ImGui::GetStyle().FramePadding;
+            const float spacing = ImGui::GetStyle().ItemSpacing.x;
+            const float rowHeight = ImGui::GetFrameHeight();
+            const auto buttonSize = [&](const char* label)
+            {
+                return ImVec2(ImGui::CalcTextSize(label).x + framePad.x * 2.0f, rowHeight);
+            };
+
+            std::array<ImVec2, operationButtons.size()> opSizes{};
+            float contentWidth = 0.0f;
+            for (std::size_t i = 0; i < operationButtons.size(); ++i)
+            {
+                opSizes[i] = buttonSize(operationButtons[i].Label);
+                contentWidth += opSizes[i].x + spacing;
+            }
+            const ImVec2 modeSize = buttonSize(modeLabel);
+            contentWidth += modeSize.x + spacing;
+            contentWidth += rowHeight + spacing + ImGui::CalcTextSize("Snap").x;
+
+            constexpr float kOuterPadding = 8.0f;
+            constexpr float kInnerPadding = 8.0f;
+            const ImVec2 panelSize(contentWidth + kInnerPadding * 2.0f, rowHeight + kInnerPadding * 2.0f);
+            const ImVec2 panelMin(viewportMax.x - panelSize.x - kOuterPadding, viewportMin.y + kOuterPadding);
+
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                panelMin, ImVec2(panelMin.x + panelSize.x, panelMin.y + panelSize.y),
+                ImGui::GetColorU32(ImGuiCol_ChildBg), 4.0f);
+
+            ImGui::SetCursorScreenPos(ImVec2(panelMin.x + kInnerPadding, panelMin.y + kInnerPadding));
+            ImGui::BeginGroup();
+            for (std::size_t i = 0; i < operationButtons.size(); ++i)
+            {
+                const auto& button = operationButtons[i];
+                const bool active = m_UiState->ActiveGizmoOperation == button.Op;
+                if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+                if (ImGui::Button(button.Label, opSizes[i])) m_UiState->ActiveGizmoOperation = button.Op;
+                if (active) ImGui::PopStyleColor();
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", button.Tooltip);
+                ImGui::SameLine();
+            }
+
+            if (ImGui::Button(modeLabel, modeSize))
+            {
+                m_UiState->ActiveGizmoMode =
+                    m_UiState->ActiveGizmoMode == GizmoMode::Local ? GizmoMode::World : GizmoMode::Local;
+            }
+            ImGui::SameLine();
+            ImGui::Checkbox("Snap", &m_UiState->GizmoSnapEnabled);
+            ImGui::EndGroup();
+
+            return ImGui::IsMouseHoveringRect(panelMin, ImVec2(panelMin.x + panelSize.x, panelMin.y + panelSize.y));
+        }
+
+        void UpdateGizmoAndPicking(ImVec2 min, ImVec2 max, bool imageHovered, bool toolbarHovered)
+        {
+            if (imageHovered && !ImGui::GetIO().WantTextInput)
+            {
+                if (ImGui::IsKeyPressed(ImGuiKey_1) || ImGui::IsKeyPressed(ImGuiKey_T))
+                    m_UiState->ActiveGizmoOperation = GizmoOperation::Translate;
+                if (ImGui::IsKeyPressed(ImGuiKey_2) || ImGui::IsKeyPressed(ImGuiKey_R))
+                    m_UiState->ActiveGizmoOperation = GizmoOperation::Rotate;
+                if (ImGui::IsKeyPressed(ImGuiKey_3) || ImGui::IsKeyPressed(ImGuiKey_S))
+                    m_UiState->ActiveGizmoOperation = GizmoOperation::Scale;
+                if (ImGui::IsKeyPressed(ImGuiKey_Escape)) m_UiState->SelectedEntityGuid = 0;
+            }
+
+            ImGuizmo::SetOrthographic(false);
+            ImGuizmo::SetDrawlist();
+            ImGuizmo::SetRect(min.x, min.y, max.x - min.x, max.y - min.y);
+
+            bool gizmoActive = false;
+            if (m_UiState->SelectedEntityGuid != 0 && m_Runner)
+            {
+                gizmoActive = ManipulateSelectedEntity();
+            }
+
+            if (imageHovered && !toolbarHovered && !gizmoActive && !ImGuizmo::IsOver() && m_Runner &&
+                ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                PickEntityUnderMouse(min, max);
+            }
+        }
+
+        bool ManipulateSelectedEntity()
+        {
+            glm::mat4 model(1.0f);
+            bool hasTransform = false;
+            {
+                auto sceneLock = m_Runner->LockRenderScene();
+                Scene& scene = *sceneLock;
+                const auto entity = scene.FindByGuid(m_UiState->SelectedEntityGuid);
+                if (scene.IsValid(entity) && scene.Registry().all_of<TransformComponent>(entity))
+                {
+                    model = scene.Registry().get<TransformComponent>(entity).GetMatrix();
+                    hasTransform = true;
+                }
+            }
+            if (!hasTransform)
+            {
+                m_UiState->SelectedEntityGuid = 0;
+                return false;
+            }
+
+            const glm::mat4 view = m_Camera.GetViewMatrix();
+            // ImGuizmo computes its own screen-space handle geometry assuming a GL-style projection
+            // (NDC Y up); GetProjectionMatrix() flips Y for Vulkan's NDC convention, which inverts
+            // the gizmo vertically if handed to it directly, so undo that flip for this call only.
+            glm::mat4 projection = m_Camera.GetProjectionMatrix();
+            projection[1][1] *= -1.0f;
+            const auto operation = ToImGuizmoOperation(m_UiState->ActiveGizmoOperation);
+            const auto mode = m_UiState->ActiveGizmoMode == GizmoMode::Local ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+
+            float snapValues[3]{};
+            const float* snapPtr = nullptr;
+            if (m_UiState->GizmoSnapEnabled)
+            {
+                switch (m_UiState->ActiveGizmoOperation)
+                {
+                case GizmoOperation::Translate:
+                    snapValues[0] = m_UiState->GizmoTranslateSnap.x;
+                    snapValues[1] = m_UiState->GizmoTranslateSnap.y;
+                    snapValues[2] = m_UiState->GizmoTranslateSnap.z;
+                    break;
+                case GizmoOperation::Rotate:
+                    snapValues[0] = snapValues[1] = snapValues[2] = m_UiState->GizmoRotateSnapDegrees;
+                    break;
+                case GizmoOperation::Scale:
+                    snapValues[0] = snapValues[1] = snapValues[2] = m_UiState->GizmoScaleSnap;
+                    break;
+                }
+                snapPtr = snapValues;
+            }
+
+            const bool manipulated = ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(projection),
+                                                           operation, mode, glm::value_ptr(model), nullptr, snapPtr);
+            if (manipulated)
+            {
+                float t[3], r[3], s[3];
+                ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), t, r, s);
+                const glm::vec3 position(t[0], t[1], t[2]);
+                const glm::quat rotation(glm::radians(glm::vec3(r[0], r[1], r[2])));
+                const glm::vec3 scale(s[0], s[1], s[2]);
+                const auto guid = m_UiState->SelectedEntityGuid;
+                m_Runner->EnqueueEdit([guid, position, rotation, scale, physics = m_PhysicsModule](Scene& scene)
+                {
+                    const auto entity = scene.FindByGuid(guid);
+                    if (scene.IsValid(entity) && scene.Registry().all_of<TransformComponent>(entity))
+                    {
+                        auto& transform = scene.Registry().get<TransformComponent>(entity);
+                        transform.Position = position;
+                        transform.Rotation = rotation;
+                        transform.Scale = scale;
+
+                        // Dynamic rigid bodies are physics-authoritative: PhysicsSimulationModule
+                        // overwrites TransformComponent from the PxRigidActor's pose every tick, so a
+                        // plain component edit here would be clobbered again before the next frame
+                        // renders. Push the gizmo's new pose into the live actor too, so physics picks
+                        // up from here instead of fighting the edit.
+                        if (physics)
+                        {
+                            if (auto* actor = physics->FindActor(entity))
+                            {
+                                actor->setGlobalPose(physx::PxTransform(
+                                    physx::PxVec3(position.x, position.y, position.z),
+                                    physx::PxQuat(rotation.x, rotation.y, rotation.z, rotation.w)));
+                            }
+                        }
+                    }
+                });
+            }
+
+            return ImGuizmo::IsOver() || ImGuizmo::IsUsing();
+        }
+
+        void PickEntityUnderMouse(ImVec2 min, ImVec2 max)
+        {
+            const glm::vec2 viewportMin{min.x, min.y};
+            const glm::vec2 viewportSize{max.x - min.x, max.y - min.y};
+            if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f) return;
+
+            const auto mousePos = ImGui::GetMousePos();
+            const auto ray = ScreenPointToRay({mousePos.x, mousePos.y}, viewportMin, viewportSize,
+                                              m_Camera.GetViewMatrix(), m_Camera.GetProjectionMatrix(),
+                                              m_Camera.GetPosition());
+
+            auto sceneLock = m_Runner->LockRenderScene();
+            Scene& scene = *sceneLock;
+            if (const auto hit = PickClosestEntity(scene, ray.Origin, ray.Direction))
+            {
+                m_UiState->SelectedEntityGuid = scene.Registry().get<MetadataComponent>(hit->Entity).Guid;
+            }
+            else
+            {
+                m_UiState->SelectedEntityGuid = 0;
+            }
+        }
+
         std::shared_ptr<ShaderPipeline> MakeComputePipeline(const std::shared_ptr<VulkanDevice>& device,
                                                              std::string fileName)
         {
@@ -696,10 +923,10 @@ namespace
             {
                 m_Scenes->DestroySimulation(m_UiState->CurrentSceneName);
             }
-            auto physicsModule = std::make_shared<PhysicsSimulationModule>(m_Dispatcher, m_Logger);
-            auto gravityModule = std::make_shared<GravitySimulationModule>(physicsModule, m_Dispatcher, m_Logger);
+            m_PhysicsModule = std::make_shared<PhysicsSimulationModule>(m_Dispatcher, m_Logger);
+            auto gravityModule = std::make_shared<GravitySimulationModule>(m_PhysicsModule, m_Dispatcher, m_Logger);
             m_Runner = m_Scenes->CreateSimulation(
-                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravityModule, physicsModule});
+                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravityModule, m_PhysicsModule});
             m_Runner->Start();
             m_UiState->CurrentSceneName = sceneName;
             m_UiState->SelectedEntityGuid = 0;
@@ -987,6 +1214,7 @@ namespace
         RenderToggles m_SavedRenderToggles;
 
         std::shared_ptr<SimulationRunner> m_Runner;
+        std::shared_ptr<PhysicsSimulationModule> m_PhysicsModule;
         int m_SceneCounter{0};
         Camera m_Camera;
         bool m_HasLastMouse{false};
