@@ -1,4 +1,5 @@
 export module MoleHole;
+export import :Application.State;
 export import :Simulation.Components;
 export import :Simulation.Picking;
 export import :Simulation.Gravity;

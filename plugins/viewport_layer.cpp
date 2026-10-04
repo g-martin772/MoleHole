@@ -60,7 +60,8 @@ namespace
     struct ViewportLayer final : public HotReloadableLayer
     {
         using Dependencies =
-            std::tuple<Logger, Renderer, IFileSystem, EventDispatcher, SceneManager, InputState, UiState>;
+            std::tuple<Logger, Renderer, IFileSystem, EventDispatcher, SceneManager, InputState, UiState,
+                       AppStateService>;
 
         ViewportLayer(const std::shared_ptr<Logger>& logger,
                       const std::shared_ptr<Renderer>& renderer,
@@ -68,9 +69,10 @@ namespace
                       const std::shared_ptr<EventDispatcher>& dispatcher,
                       const std::shared_ptr<SceneManager>& scenes,
                       const std::shared_ptr<InputState>& input,
-                      const std::shared_ptr<UiState>& uiState)
+                      const std::shared_ptr<UiState>& uiState,
+                      const std::shared_ptr<AppStateService>& appState)
             : HotReloadableLayer(logger), m_Renderer(renderer), m_FileSystem(fileSystem),
-              m_Dispatcher(dispatcher), m_Scenes(scenes), m_Input(input), m_UiState(uiState)
+              m_Dispatcher(dispatcher), m_Scenes(scenes), m_Input(input), m_UiState(uiState), m_AppState(appState)
         {
         }
 
@@ -659,17 +661,26 @@ namespace
         std::string LoadScene()
         {
             static constexpr auto kDefaultScenePath = "templates/test-scene.yaml";
+            // Explicit --scene (or export request) wins; otherwise resume the last session's
+            // scene if one was persisted; otherwise fall back to the bundled default.
+            const auto scenePath = m_UiState->StartupScenePath.value_or(
+                [this]
+                {
+                    const auto lastScene = m_AppState->GetLastScenePath();
+                    return lastScene.empty() ? std::string(kDefaultScenePath) : lastScene;
+                }());
             try
             {
-                auto& scene = m_Scenes->LoadSceneFromFile(kDefaultScenePath);
+                auto& scene = m_Scenes->LoadSceneFromFile(scenePath);
                 m_Logger->Info("ViewportLayer: loaded scene '{}'", scene.Metadata().Name);
-                m_UiState->CurrentScenePath = kDefaultScenePath;
+                m_UiState->CurrentScenePath = scenePath;
+                m_AppState->NotifySceneOpened(scenePath);
                 return scene.Metadata().Name;
             }
             catch (const std::exception& error)
             {
                 m_Logger->Warn("ViewportLayer: failed to load '{}' ({}), creating a default scene",
-                               kDefaultScenePath, error.what());
+                               scenePath, error.what());
                 auto& scene = m_Scenes->CreateScene("ViewportDefault");
                 const auto entity = scene.CreateEntity("BlackHole", "BlackHole");
                 scene.Registry().emplace<TransformComponent>(entity, TransformComponent{});
@@ -719,6 +730,7 @@ namespace
                 {
                     auto& scene = m_Scenes->LoadSceneFromFile(path);
                     m_UiState->CurrentScenePath = path;
+                    m_AppState->NotifySceneOpened(path);
                     StartSimulationFor(scene.Metadata().Name);
                 }
                 catch (const std::exception& error)
@@ -874,6 +886,7 @@ namespace
             {
                 m_UiState->ExportStatus = "Complete";
                 m_Logger->Info("Export complete: {}", m_ExportRequest.OutputPath);
+                m_AppState->NotifyExported(m_ExportRequest.OutputPath);
             }
 
             if (m_UiState->ExitWhenExportDone)
@@ -964,6 +977,7 @@ namespace
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<InputState> m_Input;
         std::shared_ptr<UiState> m_UiState;
+        std::shared_ptr<AppStateService> m_AppState;
 
         bool m_PendingCapture{false};
         ExportRequest m_ExportRequest;

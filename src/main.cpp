@@ -86,6 +86,7 @@ int main(int argc, char* argv[])
     }
 
     builder.Services.AddSingleton<LatexRenderer>();
+    builder.Services.AddHostedService<AppStateService>();
 
     if (!exportArgs)
     {

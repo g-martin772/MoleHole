@@ -8,3 +8,5 @@ cmake-build-debug-mingw/
 out/
 .shader_cache/
 .gpp/
+molehole_state.yaml
+molehole_state.yaml.backup

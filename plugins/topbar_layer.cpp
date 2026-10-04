@@ -12,14 +12,15 @@ namespace
     struct TopBarLayer final : public HotReloadableLayer
     {
         using Dependencies =
-            std::tuple<Logger, FileDialog, SceneManager, UiPreferences, FontAssetCatalog, UiState>;
+            std::tuple<Logger, FileDialog, SceneManager, UiPreferences, FontAssetCatalog, UiState, AppStateService>;
 
         TopBarLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<FileDialog> fileDialog,
                    std::shared_ptr<SceneManager> scenes, std::shared_ptr<UiPreferences> uiPreferences,
-                   std::shared_ptr<FontAssetCatalog> fontAssets, std::shared_ptr<UiState> uiState)
+                   std::shared_ptr<FontAssetCatalog> fontAssets, std::shared_ptr<UiState> uiState,
+                   std::shared_ptr<AppStateService> appState)
             : HotReloadableLayer(logger), m_FileDialog(std::move(fileDialog)), m_Scenes(std::move(scenes)),
               m_UiPreferences(std::move(uiPreferences)), m_FontAssets(std::move(fontAssets)),
-              m_UiState(std::move(uiState))
+              m_UiState(std::move(uiState)), m_AppState(std::move(appState))
         {
         }
 
@@ -48,6 +49,18 @@ namespace
                         m_UiState->PendingLoadScenePath = path->string();
                     }
                 }
+                const auto recentScenes = m_AppState->GetRecentScenes();
+                if (ImGui::BeginMenu("Open Recent", !recentScenes.empty()))
+                {
+                    for (const auto& scene : recentScenes)
+                    {
+                        if (ImGui::MenuItem(scene.c_str()))
+                        {
+                            m_UiState->PendingLoadScenePath = scene;
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
                 const bool canSave = !m_UiState->CurrentScenePath.empty();
                 if (ImGui::MenuItem("Save Scene", nullptr, false, canSave))
                 {
@@ -55,6 +68,7 @@ namespace
                     {
                         m_Scenes->SaveSceneToFile(m_UiState->CurrentSceneName, m_UiState->CurrentScenePath);
                         m_Logger->Info("Scene saved to '{}'", m_UiState->CurrentScenePath);
+                        m_AppState->NotifySceneOpened(m_UiState->CurrentScenePath);
                     }
                     catch (const std::exception& error)
                     {
@@ -74,6 +88,7 @@ namespace
                             m_Scenes->SaveSceneToFile(m_UiState->CurrentSceneName, *path);
                             m_UiState->CurrentScenePath = path->string();
                             m_Logger->Info("Scene saved to '{}'", m_UiState->CurrentScenePath);
+                            m_AppState->NotifySceneOpened(m_UiState->CurrentScenePath);
                         }
                         catch (const std::exception& error)
                         {
@@ -243,7 +258,7 @@ namespace
                 const auto defaultName = m_ExportKind == 0 ? "render.png" : "render.mp4";
                 const auto filter = m_ExportKind == 0 ? FileDialogFilter{"PNG Image", "png"}
                                                        : FileDialogFilter{"MP4 Video", "mp4"};
-                if (const auto path = m_FileDialog->SaveFile({filter}, defaultName))
+                if (const auto path = m_FileDialog->SaveFile({filter}, defaultName, m_AppState->GetLastExportDirectory()))
                 {
                     const auto str = path->string();
                     std::ranges::fill(m_ExportPathBuffer, '\0');
@@ -303,6 +318,7 @@ namespace
         std::shared_ptr<UiPreferences> m_UiPreferences;
         std::shared_ptr<FontAssetCatalog> m_FontAssets;
         std::shared_ptr<UiState> m_UiState;
+        std::shared_ptr<AppStateService> m_AppState;
 
         bool m_ShowExportDialog = false;
         int m_ExportKind = 0; // 0 = Image, 1 = Video
