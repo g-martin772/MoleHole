@@ -30,6 +30,7 @@ gpp_add_hot_reload_layer(molehole_viewport_layer
         OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:MoleHole>")
 
 set(MOLEHOLE_UI_PLUGINS
+        intro_layer
         dock_layout_layer
         sidebar_layer
         topbar_layer
@@ -40,7 +41,9 @@ set(MOLEHOLE_UI_PLUGINS
         viewport_hud_layer
         simulation_controls_layer
         general_relativity_window_layer
-        science_window_layer)
+        science_window_layer
+        animation_graph_window_layer
+        tutorial_overlay_layer)
 
 foreach (plugin ${MOLEHOLE_UI_PLUGINS})
     gpp_add_hot_reload_layer(molehole_${plugin}

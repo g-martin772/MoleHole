@@ -117,6 +117,9 @@ namespace
             ImGui::BeginChild("EntityList", ImVec2(0, 160), true);
             for (auto [entity, metadata] : scene.Registry().view<const MetadataComponent>().each())
             {
+                // not a real scene object, not shown/selectable/deletable through entity list
+                if (metadata.TypeTag == kAnimationGraphDataTypeTag) continue;
+
                 const std::string label = metadata.Name.empty()
                                               ? (metadata.TypeTag + " #" + std::to_string(metadata.Guid))
                                               : metadata.Name;

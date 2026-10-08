@@ -24,6 +24,24 @@ export namespace MoleHole
         glm::vec3 SpinAxis{0.0f, 1.0f, 0.0f};
         std::string TexturePath;
     };
+
+    // Opaque storage for the animation-graph visual-scripting feature: the whole graph is kept as a
+    // single YAML string produced/consumed by animation_graph.cppm's own SerializeToYaml/
+    // DeserializeFromYaml (round-trip-tested in isolation there). Deliberately NOT decomposed into a
+    // richer YAML shape here -- doing so would mean teaching GPP's generic scene serializer about an
+    // app-specific graph structure, which this migration's framework/app layering explicitly avoids.
+    // A plain string field round-trips through this exact same YAML::convert mechanism every other
+    // string field (e.g. SphereComponent::TexturePath above) already uses.
+    struct AnimationGraphComponent
+    {
+        std::string GraphYaml;
+    };
+
+    // TypeTag for the single, lazily-created, hidden bookkeeping entity that carries
+    // AnimationGraphComponent. Not a real scene object -- UI panels that list ordinary entities
+    // (e.g. SceneWindowLayer's Entities list) filter it out by this tag so it never shows up as a
+    // mystery unnamed row or becomes selectable/deletable through normal entity UI.
+    constexpr const char* kAnimationGraphDataTypeTag = "__AnimationGraphData";
 }
 
 namespace YAML
@@ -75,6 +93,23 @@ namespace YAML
             return true;
         }
     };
+
+    template <>
+    struct convert<MoleHole::AnimationGraphComponent>
+    {
+        static Node encode(const MoleHole::AnimationGraphComponent& value)
+        {
+            Node node;
+            node["GraphYaml"] = value.GraphYaml;
+            return node;
+        }
+
+        static bool decode(const Node& node, MoleHole::AnimationGraphComponent& out)
+        {
+            if (node["GraphYaml"]) out.GraphYaml = node["GraphYaml"].as<std::string>();
+            return true;
+        }
+    };
 }
 
 namespace MoleHole
@@ -87,6 +122,7 @@ namespace MoleHole
             GPP::RegisterBaseComponents();
             GPP::RegisterComponent<BlackHoleComponent>("BlackHole");
             GPP::RegisterComponent<SphereComponent>("Sphere");
+            GPP::RegisterComponent<AnimationGraphComponent>("AnimationGraph");
         });
     }
 }
