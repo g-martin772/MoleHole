@@ -10,3 +10,4 @@ out/
 .gpp/
 molehole_state.yaml
 molehole_state.yaml.backup
+/NodeEditor.json

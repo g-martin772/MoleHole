@@ -1476,6 +1476,8 @@ namespace
 
         void UpdateCamera(float deltaTime)
         {
+            if (m_UiState->IntroActive) return;
+
             m_Camera.SetPosition(m_UiState->CameraPosition);
             m_Camera.SetYawPitch(m_UiState->CameraYaw, m_UiState->CameraPitch);
             m_Camera.SetFov(m_UiState->CameraFov);

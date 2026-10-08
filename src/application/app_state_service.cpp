@@ -3,6 +3,7 @@ module;
 module MoleHole;
 
 import :Application.State;
+import :UI.TutorialState;
 import std;
 import glm;
 import GPP;
@@ -25,6 +26,10 @@ namespace MoleHole
         if (m_Persist)
         {
             Load();
+            if (!m_TutorialCompleted)
+            {
+                StartTutorial(*m_UiState);
+            }
         }
         co_return;
     }
@@ -84,6 +89,10 @@ namespace MoleHole
             {
                 m_LastExportDirectory = v.as<std::string>();
             }
+            if (const auto v = node["TutorialCompleted"]; v && v.IsScalar())
+            {
+                m_TutorialCompleted = v.as<bool>();
+            }
             if (const auto scanDirs = node["MeshScanDirectories"]; scanDirs && scanDirs.IsSequence())
             {
                 for (const auto& entry : scanDirs)
@@ -138,6 +147,7 @@ namespace MoleHole
             root["Render"]["PhysicallyAccurate"] = m_UiState->Render.PhysicallyAccurate;
 
             root["LastExportDirectory"] = GetLastExportDirectory();
+            root["TutorialCompleted"] = GetTutorialCompleted();
 
             YAML::Node scanDirsNode;
             {
@@ -212,6 +222,18 @@ namespace MoleHole
     {
         std::scoped_lock lock(m_Mutex);
         m_LastExportDirectory = std::filesystem::path(outputPath).parent_path().string();
+    }
+
+    bool AppStateService::GetTutorialCompleted() const
+    {
+        std::scoped_lock lock(m_Mutex);
+        return m_TutorialCompleted;
+    }
+
+    void AppStateService::SetTutorialCompleted(bool completed)
+    {
+        std::scoped_lock lock(m_Mutex);
+        m_TutorialCompleted = completed;
     }
 
     void AppStateService::AddMeshScanDirectory(const std::string& directory)

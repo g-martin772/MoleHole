@@ -8,6 +8,7 @@ import imgui;
 export namespace MoleHole
 {
     constexpr std::uint32_t kViewportBufferId = 1;
+    constexpr std::uint32_t kIntroBufferId = 2;
 
     struct RenderToggles
     {
@@ -60,7 +61,11 @@ export namespace MoleHole
         bool ShowSettingsWindow = false;
         bool ShowGeneralRelativityWindow = false;
         bool ShowScienceWindow = false;
-        bool ShowAnimationGraphWindow = true; // TEMP: visual verification, revert before finishing
+        bool ShowAnimationGraphWindow = false;
+
+        bool IntroActive = false;
+        bool TutorialActive = false;
+        int TutorialStep = 0;
 
         std::uint64_t SelectedEntityGuid = 0;
         GizmoOperation ActiveGizmoOperation = GizmoOperation::Translate;

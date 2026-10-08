@@ -208,6 +208,11 @@ namespace
 
             if (ImGui::BeginMenu("Help"))
             {
+                if (ImGui::MenuItem("Start Tutorial"))
+                {
+                    StartTutorial(*m_UiState);
+                }
+                ImGui::Separator();
                 if (ImGui::MenuItem("About"))
                 {
                     m_UiState->ShowSettingsWindow = true;

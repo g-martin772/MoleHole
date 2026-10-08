@@ -99,9 +99,9 @@ Entities:
         Name: Mesh
         TypeTag: Mesh
       Transform:
-        Position: [0, 3.2983088, 10.840476]
-        Rotation: [0.65901524, 0.24520561, -0.019324929, 0.71077394]
-        Scale: [0.99999917, 0.9999988, 0.9999993]
+        Position: [-26.746088, 31.006155, 5.1414022]
+        Rotation: [0.032389656, 0.17262217, -0.1752161, 0.96873724]
+        Scale: [0.9999993, 0.9999988, 0.9999991]
       RigidBody:
         Type: Static
         Mass: 1e+20
@@ -120,3 +120,11 @@ Entities:
       Mesh:
         AssetPath: /home/gabriel/Repos/MoleHole/assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
         CenterOfMassOffset: [0, 0, 0]
+  - Guid: 3377604101991697808
+    Components:
+      Metadata:
+        Guid: 3377604101991697808
+        Name: ""
+        TypeTag: __AnimationGraphData
+      AnimationGraph:
+        GraphYaml: "NextId: 6\nVariables:\n  []\nNodes:\n  - Id: 1\n    Name: Start\n    Type: Event\n    SubType: Start\n    VariableName: \"\"\n    TargetGuid: 0\n    ConstantValue:\n      T: None\n    Position: [-140, 438]\n    Inputs:\n      []\n    Outputs:\n      - Id: 1500\n        Name: Out\n        Type: Flow\n        IsInput: false\n  - Id: 2\n    Name: Print\n    Type: Print\n    SubType: None\n    VariableName: \"\"\n    TargetGuid: 0\n    ConstantValue:\n      T: None\n    Position: [110, 438]\n    Inputs:\n      - Id: 2001\n        Name: In\n        Type: Flow\n        IsInput: true\n      - Id: 2002\n        Name: Value\n        Type: String\n        IsInput: true\n    Outputs:\n      - Id: 2500\n        Name: Out\n        Type: Flow\n        IsInput: false\n  - Id: 3\n    Name: Constant String\n    Type: Constant\n    SubType: None\n    VariableName: \"\"\n    TargetGuid: 0\n    ConstantValue:\n      T: String\n      V: Test\n    Position: [-213, 518]\n    Inputs:\n      []\n    Outputs:\n      - Id: 3500\n        Name: Value\n        Type: String\n        IsInput: false\nLinks:\n  - Id: 4\n    StartPinId: 3500\n    EndPinId: 2002\n  - Id: 5\n    StartPinId: 1500\n    EndPinId: 2001"
