@@ -3,6 +3,7 @@ export import :Application.State;
 export import :Simulation.Components;
 export import :Simulation.Picking;
 export import :Simulation.Gravity;
+export import :Simulation.ObjectPaths;
 export import :Rendering.Data;
 export import :Rendering.Camera;
 export import :Rendering.Lut;

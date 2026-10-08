@@ -21,6 +21,7 @@ export namespace MoleHole
         bool PhysicallyAccurate = false;
         bool ShowGravityGrid = false;
         bool ShowPhysicsDebug = false;
+        bool ShowObjectPaths = false;
         int DebugMode = 0;
         // 0=Schwarzschild, 1=Kerr, 2=Reissner-Nordstrom, 3=Kerr-Newman
         int MetricType = 1;
@@ -59,6 +60,7 @@ export namespace MoleHole
         bool ShowSettingsWindow = false;
         bool ShowGeneralRelativityWindow = false;
         bool ShowScienceWindow = false;
+        bool ShowAnimationGraphWindow = true; // TEMP: visual verification, revert before finishing
 
         std::uint64_t SelectedEntityGuid = 0;
         GizmoOperation ActiveGizmoOperation = GizmoOperation::Translate;

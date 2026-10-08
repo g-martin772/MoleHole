@@ -66,8 +66,7 @@ namespace
     }
 
     // raytrace -> bloom extract -> bloom blur (ping-pong) -> lens flare -> composite
-    // -> gravity-grid overlay -> mesh overlay
-    // not ported yet: Object-path trails and PhysX debug lines until later
+    // -> gravity-grid overlay -> physics debug lines -> object-path trails -> mesh overlay
     struct ViewportLayer final : public HotReloadableLayer
     {
         using Dependencies =
@@ -136,6 +135,7 @@ namespace
             ProcessExport();
             if (m_GravityModule) m_GravityModule->SetGravityMultiplier(m_UiState->GravityMultiplier);
             FixupPendingConvexHulls();
+            RecordObjectPaths();
         }
 
         void OnRenderGraph(RenderGraph& graph) override
@@ -348,6 +348,30 @@ namespace
                                               sizeof(glm::mat4), &viewProjection);
                             BindVertexBuffer(cmd, m_PhysicsDebugVertexBuffer->GetBuffer());
                             cmd.draw(m_PhysicsDebugLineVertexCount, 1, 0, 0);
+                        });
+                }
+            }
+
+            UpdateObjectPathLines();
+            if (m_ObjectPathLineVertexCount > 0)
+            {
+                EnsurePhysicsDebugPipeline(graph.GetImageFormat(colorTarget));
+                if (m_PhysicsDebugPipeline)
+                {
+                    const glm::mat4 viewProjection = m_Camera.GetViewProjectionMatrix();
+                    graph.AddGraphicsPass(
+                        "ViewportLayer.ObjectPaths", {}, {},
+                        {RenderGraphAttachment{.Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
+                        std::nullopt,
+                        [this, viewProjection](const vk::CommandBuffer cmd, RenderGraph& g)
+                        {
+                            const auto pipeline = m_PhysicsDebugPipeline->GetPipeline();
+                            if (!pipeline) return;
+                            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->GetPipeline());
+                            cmd.pushConstants(pipeline->GetLayout(), vk::ShaderStageFlagBits::eVertex, 0,
+                                              sizeof(glm::mat4), &viewProjection);
+                            BindVertexBuffer(cmd, m_ObjectPathVertexBuffer->GetBuffer());
+                            cmd.draw(m_ObjectPathLineVertexCount, 1, 0, 0);
                         });
                 }
             }
@@ -837,6 +861,19 @@ namespace
             m_PhysicsDebugColorFormat = colorFormat;
         }
 
+        static constexpr std::size_t kMaxRetiredDebugBuffers = 3;
+        std::deque<std::shared_ptr<VulkanBuffer>> m_RetiredDebugBuffers;
+
+        void RetireDebugBuffer(std::unique_ptr<VulkanBuffer> oldBuffer)
+        {
+            if (!oldBuffer) return;
+            m_RetiredDebugBuffers.push_back(std::shared_ptr<VulkanBuffer>(std::move(oldBuffer)));
+            while (m_RetiredDebugBuffers.size() > kMaxRetiredDebugBuffers)
+            {
+                m_RetiredDebugBuffers.pop_front();
+            }
+        }
+
         void AppendPhysicsDebugVertex(std::vector<float>& out, const physx::PxVec3& position, physx::PxU32 color)
         {
             out.push_back(position.x);
@@ -871,11 +908,65 @@ namespace
             const auto byteSize = static_cast<vk::DeviceSize>(vertices.size() * sizeof(float));
             if (!m_PhysicsDebugVertexBuffer || m_PhysicsDebugVertexBuffer->GetSize() < byteSize)
             {
+                RetireDebugBuffer(std::move(m_PhysicsDebugVertexBuffer));
                 m_PhysicsDebugVertexBuffer = std::make_unique<VulkanBuffer>(
                     device, MakeVertexBufferSpecification(byteSize, true), m_Logger);
             }
             m_PhysicsDebugVertexBuffer->Upload(vertices.data(), byteSize);
             m_PhysicsDebugLineVertexCount = static_cast<std::uint32_t>(lines.size()) * 2;
+        }
+
+        void RecordObjectPaths()
+        {
+            if (!m_Runner) return;
+            if (m_Runner->IsPaused()) return;
+            auto sceneLock = m_Runner->LockRenderScene();
+            m_ObjectPathTracker.RecordPositions(*sceneLock);
+        }
+
+        void AppendObjectPathSegment(std::vector<float>& out, const glm::vec3& a, const glm::vec3& b,
+                                     const glm::vec3& color)
+        {
+            out.insert(out.end(), {a.x, a.y, a.z, color.r, color.g, color.b});
+            out.insert(out.end(), {b.x, b.y, b.z, color.r, color.g, color.b});
+        }
+
+        void UpdateObjectPathLines()
+        {
+            m_ObjectPathLineVertexCount = 0;
+            if (!m_UiState->Render.ShowObjectPaths) return;
+
+            static const glm::vec3 kMeshColor{0.2f, 0.8f, 0.2f};
+            static const glm::vec3 kSphereColor{0.8f, 0.2f, 0.8f};
+
+            std::vector<float> vertices;
+            for (const auto& [guid, history] : m_ObjectPathTracker.MeshHistories())
+            {
+                for (std::size_t i = 1; i < history.size(); ++i)
+                {
+                    AppendObjectPathSegment(vertices, history[i - 1], history[i], kMeshColor);
+                }
+            }
+            for (const auto& [guid, history] : m_ObjectPathTracker.SphereHistories())
+            {
+                for (std::size_t i = 1; i < history.size(); ++i)
+                {
+                    AppendObjectPathSegment(vertices, history[i - 1], history[i], kSphereColor);
+                }
+            }
+            if (vertices.empty()) return;
+
+            const auto device = m_Renderer->GetDevice();
+            const auto byteSize = static_cast<vk::DeviceSize>(vertices.size() * sizeof(float));
+            if (!m_ObjectPathVertexBuffer || m_ObjectPathVertexBuffer->GetSize() < byteSize)
+            {
+                RetireDebugBuffer(std::move(m_ObjectPathVertexBuffer));
+                m_ObjectPathVertexBuffer = std::make_unique<VulkanBuffer>(
+                    device, MakeVertexBufferSpecification(byteSize, true), m_Logger);
+            }
+            m_ObjectPathVertexBuffer->Upload(vertices.data(), byteSize);
+            // 6 floats (pos+color) per vertex, 2 vertices per segment.
+            m_ObjectPathLineVertexCount = static_cast<std::uint32_t>(vertices.size() / 6);
         }
 
         void CreateGravityGridMesh()
@@ -1134,6 +1225,7 @@ namespace
             m_PlaySnapshot.reset();
             m_UiState->CurrentSceneName = sceneName;
             m_UiState->SelectedEntityGuid = 0;
+            m_ObjectPathTracker.Clear();
         }
 
         void CheckPendingSceneSwitch()
@@ -1186,6 +1278,7 @@ namespace
                 if (m_Runner && !m_PlaySnapshot)
                 {
                     m_PlaySnapshot = m_Runner->LockRenderScene()->Clone();
+                    m_ObjectPathTracker.Clear();
                     m_Runner->SetPaused(false);
                 }
             }
@@ -1521,6 +1614,9 @@ namespace
         vk::Format m_PhysicsDebugColorFormat{vk::Format::eUndefined};
         std::unique_ptr<VulkanBuffer> m_PhysicsDebugVertexBuffer;
         std::uint32_t m_PhysicsDebugLineVertexCount{0};
+        ObjectPathTracker m_ObjectPathTracker;
+        std::unique_ptr<VulkanBuffer> m_ObjectPathVertexBuffer;
+        std::uint32_t m_ObjectPathLineVertexCount{0};
         std::unique_ptr<VulkanBuffer> m_GravityGridVertexBuffer;
         std::unique_ptr<VulkanBuffer> m_GravityGridIndexBuffer;
         std::uint32_t m_GravityGridIndexCount{0};

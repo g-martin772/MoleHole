@@ -1,3 +1,17 @@
 Scene: Double Star System 02
 Entities:
-  []
+  - Guid: 2633712327297270731
+    Components:
+      Metadata:
+        Guid: 2633712327297270731
+        Name: BlackHole
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 0, -5]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      BlackHole:
+        Mass: 2
+        Spin: 0
+        Charge: 0
+        SpinAxis: [0, 1, 0]

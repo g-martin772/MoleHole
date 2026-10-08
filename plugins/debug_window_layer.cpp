@@ -81,6 +81,13 @@ namespace
                                    "(PxVisualizationParameter::eCOLLISION_SHAPES).");
             }
 
+            ImGui::Checkbox("Object Path Trails", &render.ShowObjectPaths);
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Draws each mesh's and sphere's recent world-space path while the\n"
+                                   "simulation is playing (green for meshes, magenta for spheres).");
+            }
+
             ImGui::End();
         }
 
