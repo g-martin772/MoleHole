@@ -53,7 +53,7 @@ namespace
         {
             if (const auto path = m_FileDialog->OpenFile({FileDialogFilter{"Scene", "yaml"}}))
             {
-                m_UiState->PendingLoadScenePath = path->string();
+                m_UiState->PendingLoadScenePath.Set(path->string());
             }
         }
 
@@ -148,7 +148,7 @@ namespace
                     {
                         if (ImGui::MenuItem(entry.Label.c_str()))
                         {
-                            m_UiState->PendingLoadTemplatePath = entry.Path;
+                            m_UiState->PendingLoadTemplatePath.Set(entry.Path);
                         }
                     }
                     ImGui::EndMenu();
@@ -164,7 +164,7 @@ namespace
                     {
                         if (ImGui::MenuItem(scene.c_str()))
                         {
-                            m_UiState->PendingLoadScenePath = scene;
+                            m_UiState->PendingLoadScenePath.Set(scene);
                         }
                     }
                     ImGui::EndMenu();
@@ -384,7 +384,7 @@ namespace
                         request.RayStepSize = m_ExportRayStepSize;
                         request.MaxRaySteps = m_ExportMaxRaySteps;
                     }
-                    m_UiState->PendingExport = request;
+                    m_UiState->PendingExport.Set(request);
                     m_ShowExportDialog = false;
                     ImGui::CloseCurrentPopup();
                 }

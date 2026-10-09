@@ -50,6 +50,39 @@ export namespace MoleHole
         std::optional<int> MaxRaySteps;
     };
 
+    template <typename T>
+    class OneShot
+    {
+    public:
+        void Set(T value)
+        {
+            std::scoped_lock lock(m_Mutex);
+            m_Value = std::move(value);
+        }
+
+        [[nodiscard]] std::optional<T> Take()
+        {
+            std::scoped_lock lock(m_Mutex);
+            return std::exchange(m_Value, std::nullopt);
+        }
+
+        void Restore(T value)
+        {
+            std::scoped_lock lock(m_Mutex);
+            if (!m_Value) m_Value = std::move(value);
+        }
+
+        [[nodiscard]] bool Pending() const
+        {
+            std::scoped_lock lock(m_Mutex);
+            return m_Value.has_value();
+        }
+
+    private:
+        mutable std::mutex m_Mutex;
+        std::optional<T> m_Value;
+    };
+
     class UiState final : public GPP::IService
     {
     public:
@@ -79,11 +112,11 @@ export namespace MoleHole
 
         std::string CurrentSceneName;
         std::string CurrentScenePath;
-        std::optional<std::string> PendingLoadScenePath;
-        std::optional<std::string> PendingLoadTemplatePath;
-        bool PendingNewScene = false;
-        bool PendingSnapshotForPlay = false;
-        bool PendingStopSimulation = false;
+        OneShot<std::string> PendingLoadScenePath;
+        OneShot<std::string> PendingLoadTemplatePath;
+        std::atomic<bool> PendingNewScene{false};
+        std::atomic<bool> PendingSnapshotForPlay{false};
+        std::atomic<bool> PendingStopSimulation{false};
         // CLI --scene override
         std::optional<std::string> StartupScenePath;
 
@@ -99,7 +132,7 @@ export namespace MoleHole
 
         ImFont* IconFont = nullptr;
 
-        std::optional<ExportRequest> PendingExport;
+        OneShot<ExportRequest> PendingExport;
         bool ExportActive = false;
         glm::uvec2 ExportResolution{1920, 1080};
         float ExportProgress = 0.0f;

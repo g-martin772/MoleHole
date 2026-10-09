@@ -77,11 +77,10 @@ TEST_CASE("Restoring a play snapshot resets the live PhysX actor, not just the E
     physics->OnShutdown(scene);
 }
 
-TEST_CASE("Without resetting the actor, restoring only the ECS transform does not stick",
+TEST_CASE("Restoring only the ECS transform and velocity sticks without manual actor resets",
           "[simulation][physics][playstop]")
 {
-    // Negative control proving the bug this fixes is real, not a strawman: SyncInto alone (no actor
-    // reset) must NOT survive a subsequent tick.
+    // PhysicsSimulationModule pushes externally changed ECS pose and velocity to the actor itself.
     RegisterComponents();
     auto dispatcher = std::make_shared<EventDispatcher>();
     auto logger = std::make_shared<Logger>();
@@ -108,14 +107,12 @@ TEST_CASE("Without resetting the actor, restoring only the ECS transform does no
     }
     const float playedY = scene.Registry().get<TransformComponent>(sphere).Position.y;
 
-    Scene::SyncInto(playSnapshot, scene); // deliberately WITHOUT the actor-reset step
+    Scene::SyncInto(playSnapshot, scene);
     physics->OnTick(scene, dt);
     const float afterTickY = scene.Registry().get<TransformComponent>(sphere).Position.y;
 
-    // The restore gets clobbered: it ends up back near where "played" state had drifted to, not
-    // near the snapshot.
-    CHECK(afterTickY != Catch::Approx(snapshotY).margin(0.1f));
-    CHECK(afterTickY == Catch::Approx(playedY).margin(0.2f));
+    CHECK(afterTickY == Catch::Approx(snapshotY).margin(0.1f));
+    CHECK(afterTickY > playedY + 0.5f);
 
     physics->OnShutdown(scene);
 }

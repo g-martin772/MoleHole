@@ -71,7 +71,7 @@ int main(int argc, char* argv[])
         builder.Services.AddSingleton<UiState>([exportArgs](ServiceProvider&) -> std::shared_ptr<IService>
         {
             auto state = std::make_shared<UiState>();
-            state->PendingExport = exportArgs->Request;
+            state->PendingExport.Set(exportArgs->Request);
             state->ExitWhenExportDone = true;
             if (!exportArgs->ScenePath.empty())
             {

@@ -17,6 +17,9 @@ export namespace MoleHole
                                 const std::shared_ptr<GPP::EventDispatcher>& dispatcher,
                                 std::shared_ptr<GPP::Logger> logger);
 
+        [[nodiscard]] GPP::SimulationPhase Phase() const noexcept override { return GPP::SimulationPhase::Forces; }
+        [[nodiscard]] bool ReportsChanges() const noexcept override { return true; }
+
         void OnInit(GPP::Scene& scene) override;
         void OnTick(GPP::Scene& scene, float deltaTime) override;
 

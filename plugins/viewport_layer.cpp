@@ -71,11 +71,17 @@ namespace
         RenderToggles Render;
     };
 
+    struct PlayState
+    {
+        std::mutex Mutex;
+        std::optional<Scene> Snapshot;
+        std::atomic<bool> Active{false};
+    };
+
     struct SimBinding
     {
         std::shared_ptr<SimulationRunner> Runner;
-        std::shared_ptr<PhysicsSimulationModule> Physics;
-        std::shared_ptr<GravitySimulationModule> Gravity;
+        std::shared_ptr<PlayState> Play = std::make_shared<PlayState>();
     };
 
     class MeshCache
@@ -275,7 +281,8 @@ namespace
             ProcessExport();
             if (const auto sim = m_Sim.Load(); sim->Runner)
             {
-                if (sim->Gravity) sim->Gravity->SetGravityMultiplier(m_UiState->GravityMultiplier);
+                if (const auto gravity = sim->Runner->GetModule<GravitySimulationModule>())
+                    gravity->SetGravityMultiplier(m_UiState->GravityMultiplier);
                 // Tick rate is a UI setting; the runner is told whenever it differs (also covers a
                 // freshly started simulation).
                 if (sim->Runner->GetTickRate() != m_UiState->SimulationTickRate)
@@ -303,7 +310,7 @@ namespace
             m_RenderCamera = frameParams->ViewCamera;
             m_RenderToggles = frameParams->Render;
             m_RenderCamera.SetAspect(static_cast<float>(extent.width) / static_cast<float>(extent.height));
-            m_RenderPhysics = sim->Physics;
+            m_RenderPhysics = sim->Runner->GetModule<PhysicsSimulationModule>();
 
             const auto sceneLock = sim->Runner->AcquireSnapshot();
             const Scene& scene = *sceneLock;
@@ -795,7 +802,7 @@ namespace
                 const glm::quat rotation(glm::radians(glm::vec3(r[0], r[1], r[2])));
                 const glm::vec3 scale(s[0], s[1], s[2]);
                 const auto guid = m_UiState->SelectedEntityGuid;
-                sim.Runner->EnqueueEdit([guid, position, rotation, scale, physics = sim.Physics](Scene& scene)
+                sim.Runner->EnqueueTrackedEdit([guid, position, rotation, scale](Scene& scene)
                 {
                     const auto entity = scene.FindByGuid(guid);
                     if (scene.IsValid(entity) && scene.Registry().all_of<TransformComponent>(entity))
@@ -804,16 +811,7 @@ namespace
                         transform.Position = position;
                         transform.Rotation = rotation;
                         transform.Scale = scale;
-
-                        if (physics)
-                        {
-                            if (auto* actor = physics->FindActor(entity))
-                            {
-                                actor->setGlobalPose(physx::PxTransform(
-                                    physx::PxVec3(position.x, position.y, position.z),
-                                    physx::PxQuat(rotation.x, rotation.y, rotation.z, rotation.w)));
-                            }
-                        }
+                        scene.MarkDirty(entity);
                     }
                 });
             }
@@ -1390,8 +1388,7 @@ namespace
                 sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravity, physics}, options);
             runner->Start();
             runner->SetPaused(true);
-            m_Sim.Publish(SimBinding{runner, physics, gravity});
-            m_PlaySnapshot.reset();
+            m_Sim.Publish(SimBinding{runner});
             m_UiState->CurrentSceneName = sceneName;
             m_UiState->SelectedEntityGuid = 0;
             {
@@ -1402,85 +1399,57 @@ namespace
 
         void CheckPendingSceneSwitch()
         {
-            if (m_UiState->PendingNewScene)
+            if (m_UiState->PendingNewScene.exchange(false))
             {
-                m_UiState->PendingNewScene = false;
                 const auto name = "Untitled-" + std::to_string(++m_SceneCounter);
                 CreateDefaultScene(name, "Black Hole");
                 m_UiState->CurrentScenePath.clear();
                 StartSimulationFor(name);
             }
-            else if (m_UiState->PendingLoadScenePath)
+            else if (auto path = m_UiState->PendingLoadScenePath.Take())
             {
-                if (BeginSceneLoad(*m_UiState->PendingLoadScenePath, SceneLoadResult::Kind::File))
-                {
-                    m_UiState->PendingLoadScenePath.reset();
-                }
+                if (!BeginSceneLoad(*path, SceneLoadResult::Kind::File))
+                    m_UiState->PendingLoadScenePath.Restore(std::move(*path));
             }
-            else if (m_UiState->PendingLoadTemplatePath)
+            else if (auto path = m_UiState->PendingLoadTemplatePath.Take())
             {
-                if (BeginSceneLoad(*m_UiState->PendingLoadTemplatePath, SceneLoadResult::Kind::Template))
-                {
-                    m_UiState->PendingLoadTemplatePath.reset();
-                }
+                if (!BeginSceneLoad(*path, SceneLoadResult::Kind::Template))
+                    m_UiState->PendingLoadTemplatePath.Restore(std::move(*path));
             }
 
             const auto sim = m_Sim.Load();
-            if (m_UiState->PendingSnapshotForPlay)
+            if (m_UiState->PendingSnapshotForPlay.exchange(false) && sim->Runner)
             {
-                m_UiState->PendingSnapshotForPlay = false;
-                if (sim->Runner && !m_PlaySnapshot)
+                const bool fresh = !sim->Play->Active.exchange(true);
+                if (fresh)
                 {
-                    m_PlaySnapshot = sim->Runner->AcquireSnapshot()->Clone();
-                    {
-                        std::scoped_lock lock(m_PathMutex);
-                        m_ObjectPathTracker.Clear();
-                    }
-                    sim->Runner->SetPaused(false);
+                    std::scoped_lock lock(m_PathMutex);
+                    m_ObjectPathTracker.Clear();
                 }
+                sim->Runner->EnqueueTrackedEdit([play = sim->Play, runner = sim->Runner.get(), fresh](Scene& scene)
+                {
+                    if (fresh)
+                    {
+                        std::scoped_lock lock(play->Mutex);
+                        play->Snapshot = scene.Clone();
+                    }
+                    runner->SetPaused(false);
+                });
             }
 
-            if (m_UiState->PendingStopSimulation)
+            if (m_UiState->PendingStopSimulation.exchange(false) && sim->Runner)
             {
-                m_UiState->PendingStopSimulation = false;
-                if (sim->Runner)
+                sim->Play->Active = false;
+                sim->Runner->EnqueueEdit([play = sim->Play, runner = sim->Runner.get()](Scene& scene)
                 {
-                    if (m_PlaySnapshot)
+                    std::optional<Scene> snapshot;
                     {
-                        auto snapshot = *m_PlaySnapshot;
-                        sim->Runner->EnqueueEdit([snapshot = std::move(snapshot), physics = sim->Physics](Scene& scene)
-                        {
-                            Scene::SyncInto(snapshot, scene);
-
-                            if (physics)
-                            {
-                                for (auto [entity, transform] : scene.Registry().view<const TransformComponent>().each())
-                                {
-                                    auto* actor = physics->FindActor(entity);
-                                    if (!actor) continue;
-                                    actor->setGlobalPose(physx::PxTransform(
-                                        physx::PxVec3(transform.Position.x, transform.Position.y, transform.Position.z),
-                                        physx::PxQuat(transform.Rotation.x, transform.Rotation.y,
-                                                      transform.Rotation.z, transform.Rotation.w)));
-
-                                    auto* dynamic = actor->is<physx::PxRigidDynamic>();
-                                    const bool kinematic = dynamic &&
-                                        (dynamic->getRigidBodyFlags() & physx::PxRigidBodyFlag::eKINEMATIC);
-                                    if (dynamic && !kinematic)
-                                    {
-                                        const auto* velocity = scene.Registry().try_get<const VelocityComponent>(entity);
-                                        const auto linear = velocity ? velocity->Linear : glm::vec3(0.0f);
-                                        const auto angular = velocity ? velocity->Angular : glm::vec3(0.0f);
-                                        dynamic->setLinearVelocity(physx::PxVec3(linear.x, linear.y, linear.z));
-                                        dynamic->setAngularVelocity(physx::PxVec3(angular.x, angular.y, angular.z));
-                                    }
-                                }
-                            }
-                        });
-                        m_PlaySnapshot.reset();
+                        std::scoped_lock lock(play->Mutex);
+                        snapshot = std::exchange(play->Snapshot, std::nullopt);
                     }
-                    sim->Runner->SetPaused(true);
-                }
+                    if (snapshot) Scene::SyncInto(*snapshot, scene);
+                    runner->SetPaused(true);
+                });
             }
         }
 
@@ -1501,10 +1470,9 @@ namespace
                 CaptureExportFrame();
             }
 
-            if (m_UiState->PendingExport && !m_UiState->ExportActive)
+            if (!m_UiState->ExportActive)
             {
-                StartExport(*m_UiState->PendingExport);
-                m_UiState->PendingExport.reset();
+                if (auto request = m_UiState->PendingExport.Take()) StartExport(*request);
             }
 
             if (m_UiState->ExportActive)
@@ -1826,7 +1794,6 @@ namespace
         std::filesystem::path m_ExportTempDir;
         RenderToggles m_SavedRenderToggles;
 
-        std::optional<Scene> m_PlaySnapshot;
         int m_SceneCounter{0};
         Camera m_Camera;
         bool m_HasLastMouse{false};
