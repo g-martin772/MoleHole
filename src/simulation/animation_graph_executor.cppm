@@ -7,6 +7,7 @@ import :Simulation.AnimationGraph;
 import :Simulation.AnimationGraphProperties;
 import :Simulation.SceneGraphs;
 import :Simulation.GraphFunctions;
+import :Simulation.GraphTrace;
 
 export namespace MoleHole
 {
@@ -21,6 +22,9 @@ export namespace MoleHole
 
         void SetGuidSource(std::function<std::uint64_t()> source) { m_GuidSource = std::move(source); }
         void SetFunctionLibrary(const FunctionLibrary* library) { m_Functions = library; }
+        void SetTraceSink(ITraceSink* sink) { m_Trace = sink; }
+        void SetName(std::string name) { m_Name = std::move(name); }
+        [[nodiscard]] bool Aborted() const { return m_Aborted; }
 
         [[nodiscard]] PendingWrites ExecuteStartEvent(const GPP::Scene& scene);
         [[nodiscard]] PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime);
@@ -46,6 +50,13 @@ export namespace MoleHole
         bool m_Returned{false};
         std::unordered_set<int> m_Evaluating;
         int m_FlowDepth{0};
+        ITraceSink* m_Trace{nullptr};
+        std::string m_Name;
+        bool m_Aborted{false};
+
+        void SetPin(int pinId, Value value);
+        void Report(const Node* node, TraceSeverity severity, std::string message);
+        [[nodiscard]] bool Enter(const Node* node);
 
         void ExecuteFlowFromPin(int pinId, ExecutionContext& ctx);
         void ExecuteNode(const Node* node, ExecutionContext& ctx);
@@ -75,11 +86,13 @@ export namespace MoleHole
         GraphSetExecutor(const SceneGraphs& graphs, std::function<void(std::string)> onPrint = nullptr);
 
         void SetGuidSource(const std::function<std::uint64_t()>& source);
+        void SetTraceSink(ITraceSink* sink);
 
         [[nodiscard]] PendingWrites ExecuteStartEvent(const GPP::Scene& scene);
         [[nodiscard]] PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime);
 
     private:
+        ITraceSink* m_Trace{nullptr};
         std::unique_ptr<FunctionLibrary> m_Functions;
         std::vector<std::unique_ptr<GraphExecutor>> m_Executors;
     };

@@ -13,6 +13,8 @@ export import :Simulation.GraphLayout;
 export import :Simulation.NodeRegistry;
 export import :Simulation.GraphFunctions;
 export import :Simulation.GraphCombos;
+export import :Simulation.GraphTrace;
+export import :Simulation.GraphValidation;
 export import :Simulation.CameraMath;
 export import :Simulation.EntityPresets;
 export import :Simulation.AnimationGraphProperties;

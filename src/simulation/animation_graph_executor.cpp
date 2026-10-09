@@ -5,6 +5,7 @@ import :Simulation.AnimationGraph;
 import :Simulation.AnimationGraphProperties;
 import :Simulation.SceneGraphs;
 import :Simulation.GraphFunctions;
+import :Simulation.GraphTrace;
 import :Simulation.CameraMath;
 import :Simulation.EntityPresets;
 import :Simulation.Components;
@@ -39,6 +40,7 @@ namespace MoleHole
             if (!item.Enabled || item.IsFunction) continue;
             m_Executors.push_back(std::make_unique<GraphExecutor>(item.Graph, onPrint, item.EntityGuid));
             m_Executors.back()->SetFunctionLibrary(m_Functions.get());
+            m_Executors.back()->SetName(item.Name);
         }
     }
 
@@ -47,36 +49,75 @@ namespace MoleHole
         for (auto& executor : m_Executors) executor->SetGuidSource(source);
     }
 
+    void GraphSetExecutor::SetTraceSink(ITraceSink* sink)
+    {
+        m_Trace = sink;
+        for (auto& executor : m_Executors) executor->SetTraceSink(sink);
+    }
+
     PendingWrites GraphSetExecutor::ExecuteStartEvent(const GPP::Scene& scene)
     {
         PendingWrites writes;
+        if (m_Trace) { m_Trace->OnTickBegin("Start"); }
         for (auto& executor : m_Executors)
         {
             auto result = executor->ExecuteStartEvent(scene);
             std::ranges::move(result, std::back_inserter(writes));
+            if (executor->Aborted()) { break; }
         }
+        if (m_Trace) { m_Trace->OnTickEnd(); }
         return writes;
     }
 
     PendingWrites GraphSetExecutor::ExecuteTickEvent(const GPP::Scene& scene, const float deltaTime)
     {
         PendingWrites writes;
+        if (m_Trace) { m_Trace->OnTickBegin("Tick"); }
         for (auto& executor : m_Executors)
         {
             auto result = executor->ExecuteTickEvent(scene, deltaTime);
             std::ranges::move(result, std::back_inserter(writes));
+            if (executor->Aborted()) { break; }
         }
+        if (m_Trace) { m_Trace->OnTickEnd(); }
         return writes;
+    }
+
+    void GraphExecutor::SetPin(const int pinId, Value value)
+    {
+        if (m_Trace) { m_Trace->OnPinEvaluated(m_Name, pinId, value); }
+        m_PinValues[pinId] = std::move(value);
+    }
+
+    void GraphExecutor::Report(const Node* node, const TraceSeverity severity, std::string message)
+    {
+        if (m_Trace) { m_Trace->OnDiagnostic(m_Name, node ? node->Id : 0, severity, message); }
+    }
+
+    bool GraphExecutor::Enter(const Node* node)
+    {
+        if (m_Aborted) { return false; }
+        if (m_Trace)
+        {
+            if (m_Trace->ShouldBreakBefore(m_Name, node->Id))
+            {
+                m_Aborted = true;
+                return false;
+            }
+            m_Trace->OnNodeExecuted(m_Name, node->Id);
+        }
+        return true;
     }
 
     PendingWrites GraphExecutor::ExecuteStartEvent(const GPP::Scene& scene)
     {
         m_PinValues.clear();
+        m_Aborted = false;
         ExecutionContext ctx{.Scene = scene, .DeltaTime = 0.0f, .Writes = {}};
 
         for (const auto& node : m_Graph.Nodes)
         {
-            if (node.Type == NodeType::Event && node.SubType == NodeSubType::Start && !node.Outputs.empty())
+            if (node.Type == NodeType::Event && node.SubType == NodeSubType::Start && !node.Outputs.empty() && Enter(&node))
             {
                 ExecuteFlowFromPin(node.Outputs[0].Id, ctx);
             }
@@ -88,13 +129,14 @@ namespace MoleHole
     PendingWrites GraphExecutor::ExecuteTickEvent(const GPP::Scene& scene, const float deltaTime)
     {
         m_PinValues.clear();
+        m_Aborted = false;
         ExecutionContext ctx{.Scene = scene, .DeltaTime = deltaTime, .Writes = {}};
 
         for (const auto& node : m_Graph.Nodes)
         {
-            if (node.Type == NodeType::Event && node.SubType == NodeSubType::Tick && node.Outputs.size() > 1)
+            if (node.Type == NodeType::Event && node.SubType == NodeSubType::Tick && node.Outputs.size() > 1 && Enter(&node))
             {
-                m_PinValues[node.Outputs[1].Id] = deltaTime;
+                SetPin(node.Outputs[1].Id, deltaTime);
                 ExecuteFlowFromPin(node.Outputs[0].Id, ctx);
             }
         }
@@ -104,15 +146,20 @@ namespace MoleHole
 
     void GraphExecutor::ExecuteFlowFromPin(const int pinId, ExecutionContext& ctx)
     {
-        if (m_FlowDepth >= kMaxFlowDepth) { return; }
+        if (m_FlowDepth >= kMaxFlowDepth)
+        {
+            Report(m_Graph.FindNodeByOutputPin(pinId), TraceSeverity::Error, "Flow loop: depth limit reached");
+            return;
+        }
         ++m_FlowDepth;
         for (const auto& link : m_Graph.Links)
         {
-            if (m_Returned) { break; }
+            if (m_Returned || m_Aborted) { break; }
             if (link.StartPinId == pinId)
             {
                 if (const Node* target = m_Graph.FindNodeByInputPin(link.EndPinId))
                 {
+                    if (m_Trace) { m_Trace->OnLinkTraversed(m_Name, link.Id); }
                     ExecuteNode(target, ctx);
                 }
             }
@@ -122,6 +169,7 @@ namespace MoleHole
 
     void GraphExecutor::ExecuteNode(const Node* node, ExecutionContext& ctx)
     {
+        if (!Enter(node)) { return; }
         switch (node->Type)
         {
         case NodeType::Print:
@@ -184,7 +232,11 @@ namespace MoleHole
         const Node* sourceNode = m_Graph.FindNodeByOutputPin(outputPinId);
         if (!sourceNode) { return std::monostate{}; }
 
-        if (!m_Evaluating.insert(outputPinId).second) { return std::monostate{}; }
+        if (!m_Evaluating.insert(outputPinId).second)
+        {
+            Report(sourceNode, TraceSeverity::Error, "Data cycle: this value depends on itself");
+            return std::monostate{};
+        }
         struct Release
         {
             std::unordered_set<int>& Set;
@@ -210,7 +262,11 @@ namespace MoleHole
         }
 
         Value result = EvaluateNode(sourceNode, ctx);
-        m_PinValues[outputPinId] = result;
+        if (sourceNode->Type == NodeType::Function && std::holds_alternative<std::monostate>(result))
+        {
+            Report(sourceNode, TraceSeverity::Warning, "Inputs are unconnected or have mismatched types");
+        }
+        SetPin(outputPinId, result);
         return result;
     }
 
@@ -433,18 +489,30 @@ namespace MoleHole
         if (node->Inputs.empty()) { return; }
 
         const Value inputVal = EvaluatePinValue(node->Inputs[0].Id, ctx);
-        if (!std::holds_alternative<std::uint64_t>(inputVal)) { return; }
+        if (!std::holds_alternative<std::uint64_t>(inputVal))
+        {
+            Report(node, TraceSeverity::Warning, "Entity input is empty");
+            return;
+        }
 
         const std::uint64_t guid = std::get<std::uint64_t>(inputVal);
         const entt::entity entity = ctx.Scene.FindByGuid(guid);
-        if (!ctx.Scene.IsValid(entity)) { return; }
+        if (!ctx.Scene.IsValid(entity))
+        {
+            Report(node, TraceSeverity::Warning, "Entity " + std::to_string(guid) + " not found in the scene");
+            return;
+        }
 
         const PropertyCategory* category = FindPropertyCategory(node->Component);
-        if (!category) { return; }
+        if (!category)
+        {
+            Report(node, TraceSeverity::Error, "Unknown component '" + node->Component + "'");
+            return;
+        }
 
         for (std::size_t i = 0; i < node->Outputs.size() && i < category->Properties.size(); ++i)
         {
-            m_PinValues[node->Outputs[i].Id] = category->Properties[i].Get(ctx.Scene, entity);
+            SetPin(node->Outputs[i].Id, category->Properties[i].Get(ctx.Scene, entity));
         }
     }
 
@@ -453,6 +521,8 @@ namespace MoleHole
         const std::uint64_t guid = node->TargetGuid != 0 ? node->TargetGuid : m_SelfGuid;
         const entt::entity entity = ctx.Scene.FindByGuid(guid);
         if (ctx.Scene.IsValid(entity)) { return guid; }
+        Report(node, TraceSeverity::Warning, guid == 0 ? "No target entity and the graph is not bound to one"
+                                                          : "Target entity not found in the scene");
         return std::monostate{};
     }
 
@@ -461,13 +531,25 @@ namespace MoleHole
         if (node->Inputs.size() < 2) { return; }
 
         const Value entityVal = EvaluatePinValue(node->Inputs[1].Id, ctx);
-        if (!std::holds_alternative<std::uint64_t>(entityVal)) { return; }
+        if (!std::holds_alternative<std::uint64_t>(entityVal))
+        {
+            Report(node, TraceSeverity::Warning, "Entity input is empty");
+            return;
+        }
         const std::uint64_t guid = std::get<std::uint64_t>(entityVal);
 
-        if (!EntityKnown(ctx, guid)) { return; }
+        if (!EntityKnown(ctx, guid))
+        {
+            Report(node, TraceSeverity::Warning, "Entity " + std::to_string(guid) + " not found in the scene");
+            return;
+        }
 
         const PropertyCategory* category = FindPropertyCategory(node->Component);
-        if (!category) { return; }
+        if (!category)
+        {
+            Report(node, TraceSeverity::Error, "Unknown component '" + node->Component + "'");
+            return;
+        }
 
         for (std::size_t i = 2; i < node->Inputs.size(); ++i)
         {
@@ -490,7 +572,7 @@ namespace MoleHole
 
         if (node->Outputs.size() > 1)
         {
-            m_PinValues[node->Outputs[1].Id] = guid;
+            SetPin(node->Outputs[1].Id, guid);
         }
     }
 
@@ -532,7 +614,11 @@ namespace MoleHole
                 {
                     if (metadata.Name == preset) { sourceGuid = metadata.Guid; break; }
                 }
-                if (sourceGuid == 0) { return; }
+                if (sourceGuid == 0)
+                {
+                    Report(node, TraceSeverity::Warning, "No preset or entity named '" + preset + "'");
+                    return;
+                }
                 ctx.Writes.push_back([guid, sourceGuid, position, name](GPP::Scene& live)
                 {
                     const auto source = live.FindByGuid(sourceGuid);
@@ -543,19 +629,27 @@ namespace MoleHole
                 });
             }
             ctx.Spawned.insert(guid);
-            if (const int pin = outputPin(1)) { m_PinValues[pin] = guid; }
+            if (const int pin = outputPin(1)) { SetPin(pin, guid); }
         }
         else if (node->SubType == NodeSubType::DestroyEntity && node->Inputs.size() >= 2)
         {
             const std::uint64_t guid = asGuid(EvaluatePinValue(node->Inputs[1].Id, ctx));
-            if (guid == 0) { return; }
+            if (guid == 0)
+            {
+                Report(node, TraceSeverity::Warning, "Entity input is empty");
+                return;
+            }
             ctx.Spawned.erase(guid);
             ctx.Writes.push_back([guid](GPP::Scene& live) { live.DestroyEntity(live.FindByGuid(guid)); });
         }
         else if (node->SubType == NodeSubType::CloneEntity && node->Inputs.size() >= 3)
         {
             const std::uint64_t sourceGuid = asGuid(EvaluatePinValue(node->Inputs[1].Id, ctx));
-            if (sourceGuid == 0 || !EntityKnown(ctx, sourceGuid)) { return; }
+            if (sourceGuid == 0 || !EntityKnown(ctx, sourceGuid))
+            {
+                Report(node, TraceSeverity::Warning, "Source entity is empty or not found");
+                return;
+            }
             const Value positionValue = EvaluatePinValue(node->Inputs[2].Id, ctx);
             const std::optional<glm::vec3> position = std::holds_alternative<glm::vec3>(positionValue)
                                                           ? std::optional(std::get<glm::vec3>(positionValue))
@@ -568,7 +662,7 @@ namespace MoleHole
                 if (auto* transform = live.Registry().try_get<GPP::TransformComponent>(copy)) { transform->Position = *position; }
             });
             ctx.Spawned.insert(guid);
-            if (const int pin = outputPin(1)) { m_PinValues[pin] = guid; }
+            if (const int pin = outputPin(1)) { SetPin(pin, guid); }
         }
     }
 
@@ -603,11 +697,12 @@ namespace MoleHole
             const int end = GetValueAs<int>(EvaluatePinValue(node->Inputs[2].Id, ctx), 0);
 
             int iterations = 0;
-            for (int i = start; i < end && !m_Returned; ++i)
+            for (int i = start; i < end && !m_Returned && !m_Aborted; ++i)
             {
                 if (++iterations > kMaxForIterations)
                 {
                     if (m_OnPrint) { m_OnPrint("[GraphExecutor] For loop aborted: exceeded max iteration cap"); }
+                    Report(node, TraceSeverity::Error, "Loop aborted: iteration cap exceeded");
                     break;
                 }
 
@@ -617,7 +712,7 @@ namespace MoleHole
                     return !owner || owner->Type != NodeType::Event;
                 });
 
-                if (node->Outputs.size() > 1) { m_PinValues[node->Outputs[1].Id] = static_cast<float>(i); }
+                if (node->Outputs.size() > 1) { SetPin(node->Outputs[1].Id, static_cast<float>(i)); }
                 if (!node->Outputs.empty()) { ExecuteFlowFromPin(node->Outputs[0].Id, ctx); }
             }
 
@@ -640,6 +735,8 @@ namespace MoleHole
         callee.m_Functions = m_Functions;
         callee.m_CallStack = m_CallStack;
         callee.m_CallStack.push_back(name);
+        callee.m_Trace = m_Trace;
+        callee.m_Name = name;
 
         const Node* entry = nullptr;
         const Node* ret = nullptr;
@@ -657,7 +754,7 @@ namespace MoleHole
         for (const auto& pin : entry->Outputs)
         {
             if (pin.Type == PinType::Flow) { continue; }
-            if (argIndex < args.size()) { callee.m_PinValues[pin.Id] = args[argIndex]; }
+            if (argIndex < args.size()) { callee.SetPin(pin.Id, args[argIndex]); }
             ++argIndex;
         }
 
@@ -678,6 +775,7 @@ namespace MoleHole
         {
             callee.ExecuteFlowFromPin(entry->Outputs[0].Id, ctx);
         }
+        if (callee.m_Aborted) { m_Aborted = true; }
         for (std::size_t i = 0; i < results.size() && i < callee.m_ReturnValues.size(); ++i)
         {
             if (!std::holds_alternative<std::monostate>(callee.m_ReturnValues[i])) { results[i] = callee.m_ReturnValues[i]; }
@@ -687,12 +785,20 @@ namespace MoleHole
 
     void GraphExecutor::ExecuteCall(const Node* node, ExecutionContext& ctx)
     {
-        if (!m_Functions) { return; }
-        const auto it = m_Functions->find(node->FunctionName);
-        if (it == m_Functions->end()) { return; }
-        if (static_cast<int>(m_CallStack.size()) >= kMaxCallDepth ||
-            std::ranges::contains(m_CallStack, node->FunctionName))
+        const auto it = m_Functions ? m_Functions->find(node->FunctionName) : FunctionLibrary::const_iterator{};
+        if (!m_Functions || it == m_Functions->end())
         {
+            Report(node, TraceSeverity::Error, "Function '" + node->FunctionName + "' does not exist");
+            return;
+        }
+        if (std::ranges::contains(m_CallStack, node->FunctionName))
+        {
+            Report(node, TraceSeverity::Warning, "Recursive call to '" + node->FunctionName + "' skipped");
+            return;
+        }
+        if (static_cast<int>(m_CallStack.size()) >= kMaxCallDepth)
+        {
+            Report(node, TraceSeverity::Warning, "Call depth limit reached");
             return;
         }
 
@@ -707,13 +813,14 @@ namespace MoleHole
         for (const auto& pin : node->Outputs)
         {
             if (pin.Type == PinType::Flow) { continue; }
-            if (index < results.size()) { m_PinValues[pin.Id] = results[index]; }
+            if (index < results.size()) { SetPin(pin.Id, results[index]); }
             ++index;
         }
     }
 
     Value GraphExecutor::ExecuteVariableGet(const Node* node)
     {
+        if (node->VariableName.empty()) { Report(node, TraceSeverity::Error, "No variable assigned"); }
         if (const auto it = m_Variables.find(node->VariableName); it != m_Variables.end())
         {
             return it->second;
@@ -724,6 +831,7 @@ namespace MoleHole
     void GraphExecutor::ExecuteVariableSet(const Node* node, ExecutionContext& ctx)
     {
         if (node->Inputs.size() < 2) { return; }
+        if (node->VariableName.empty()) { Report(node, TraceSeverity::Error, "No variable assigned"); }
         m_Variables[node->VariableName] = EvaluatePinValue(node->Inputs[1].Id, ctx);
     }
 }

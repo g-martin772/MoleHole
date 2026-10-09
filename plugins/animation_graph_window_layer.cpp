@@ -25,6 +25,7 @@ namespace
     constexpr float kCommentTitleHeight = 26.0f;
 
     constexpr int kNavigateToContentRetryFrames = 15;
+    constexpr std::uint64_t kHighlightTicks = 30;
 
     ImVec4 PinColor(const PinType type) { return ToVec4(GraphPinColor(type)); }
 
@@ -149,6 +150,9 @@ namespace
 
             if (m_WasPaused && !paused)
             {
+                m_Trace.ClearRuntime();
+                m_Trace.Continue();
+                m_LinkFlowTicks.clear();
                 RebuildExecutor();
                 auto sceneLock = runner->LockRenderScene();
                 ApplyWrites(*runner, m_Executor->ExecuteStartEvent(*sceneLock));
@@ -156,9 +160,10 @@ namespace
             else if (!m_WasPaused && paused)
             {
                 m_Executor.reset();
+                m_Trace.Continue();
             }
 
-            if (!paused && m_Executor)
+            if (!paused && m_Executor && m_Trace.ShouldRunTick())
             {
                 auto sceneLock = runner->LockRenderScene();
                 ApplyWrites(*runner, m_Executor->ExecuteTickEvent(*sceneLock, deltaTime));
@@ -202,15 +207,24 @@ namespace
             SyncSelectedNodeFromEditor();
 
             RenderGraphToolbar(entities);
+            RenderDebugToolbar();
             ImGui::Separator();
 
             constexpr float inspectorWidth = 280.0f;
             const ImVec2 avail = ImGui::GetContentRegionAvail();
 
-            ImGui::BeginChild("AnimationGraphEditorPanel", ImVec2(avail.x - inspectorWidth - 8.0f, 0), true);
+            RefreshProblems();
+            constexpr float debugPanelHeight = 170.0f;
+            ImGui::BeginGroup();
+            ImGui::BeginChild("AnimationGraphEditorPanel", ImVec2(avail.x - inspectorWidth - 8.0f, avail.y - debugPanelHeight - 6.0f),
+                              true);
             if (m_Current < m_Graphs.Items.size()) RenderGraphEditor(entities);
             else ImGui::TextDisabled("No graph in this scene. Click New to create one.");
             ImGui::EndChild();
+            ImGui::BeginChild("AnimationGraphDebugPanel", ImVec2(avail.x - inspectorWidth - 8.0f, 0), true);
+            RenderDebugPanel();
+            ImGui::EndChild();
+            ImGui::EndGroup();
 
             ImGui::SameLine();
 
@@ -240,6 +254,7 @@ namespace
     private:
         void LoadGraphFromScene()
         {
+            ++m_Revision;
             m_Graphs = SceneGraphs{};
             m_Histories.clear();
             m_Current = 0;
@@ -256,6 +271,7 @@ namespace
 
         void MarkDirty(const std::string& key = {})
         {
+            ++m_Revision;
             if (m_Dirty && key != m_DirtyKey) m_DirtyKey.clear();
             else m_DirtyKey = key;
             m_Dirty = true;
@@ -300,6 +316,7 @@ namespace
             {
                 logger->Info("[AnimationGraph] {}", message);
             });
+            m_Executor->SetTraceSink(&m_Trace);
         }
 
         AnimationGraphData& CurrentGraph()
@@ -463,6 +480,213 @@ namespace
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Entity this graph is bound to; unset Getter nodes target it");
         }
 
+        // ---- debugging -----------------------------------------------------------------------
+
+        struct NodeIssue
+        {
+            TraceSeverity Severity{TraceSeverity::Warning};
+            std::string Message;
+        };
+
+        static ImVec4 SeverityColor(const TraceSeverity severity)
+        {
+            switch (severity)
+            {
+            case TraceSeverity::Error: return ImVec4(0.95f, 0.25f, 0.25f, 1.0f);
+            case TraceSeverity::Warning: return ImVec4(0.95f, 0.75f, 0.2f, 1.0f);
+            case TraceSeverity::Info: break;
+            }
+            return ImVec4(0.55f, 0.7f, 0.9f, 1.0f);
+        }
+
+        static const char* SeverityLabel(const TraceSeverity severity)
+        {
+            return severity == TraceSeverity::Error ? "Error" : severity == TraceSeverity::Warning ? "Warning" : "Info";
+        }
+
+        const std::string& GraphName() const
+        {
+            static const std::string none;
+            return m_Current < m_Graphs.Items.size() ? m_Graphs.Items[m_Current].Name : none;
+        }
+
+        void RefreshProblems()
+        {
+            if (m_ProblemsRevision == m_Revision) return;
+            m_ProblemsRevision = m_Revision;
+            m_Problems = ValidateScene(m_Graphs);
+        }
+
+        std::vector<NodeIssue> IssuesFor(const std::string& graph, const int nodeId) const
+        {
+            std::vector<NodeIssue> issues;
+            if (const auto it = m_Problems.find(graph); it != m_Problems.end())
+            {
+                for (const auto& d : it->second) if (d.NodeId == nodeId) issues.push_back({d.Severity, d.Message});
+            }
+            for (const auto& d : m_Trace.ActiveDiagnostics(graph, nodeId)) issues.push_back({d.Severity, d.Message});
+            return issues;
+        }
+
+        std::string NodeLabel(const std::string& graph, const int nodeId)
+        {
+            for (const auto& item : m_Graphs.Items)
+            {
+                if (item.Name != graph) continue;
+                if (const Node* node = item.Graph.FindNode(nodeId)) return node->Name;
+            }
+            return nodeId == 0 ? "(graph)" : "#" + std::to_string(nodeId);
+        }
+
+        void FocusNode(const std::string& graph, const int nodeId)
+        {
+            for (std::size_t i = 0; i < m_Graphs.Items.size(); ++i)
+            {
+                if (m_Graphs.Items[i].Name != graph) continue;
+                if (i != m_Current) SelectGraph(i);
+                m_PendingSelectNode = nodeId;
+                return;
+            }
+        }
+
+        void RenderDebugToolbar()
+        {
+            const bool running = m_Executor != nullptr;
+            ImGui::TextDisabled("Debug");
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!running);
+            if (m_Trace.Paused())
+            {
+                if (ImGui::Button("Continue")) m_Trace.Continue();
+                ImGui::SameLine();
+                if (ImGui::Button("Step Tick")) m_Trace.Step();
+            }
+            else if (ImGui::Button("Pause Graph"))
+            {
+                m_Trace.Pause();
+            }
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::SetTooltip("Pausing stops graph execution only; the simulation keeps running.\n"
+                                  "A breakpoint aborts the rest of that tick and pauses the graph.\n"
+                                  "Step Tick runs one full tick (breakpoints ignored), then pauses again.");
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Clear Trace")) m_Trace.ClearRuntime();
+            ImGui::SameLine();
+            ImGui::Checkbox("Pin values", &m_ShowPinValues);
+            ImGui::SameLine();
+            if (m_Trace.Paused() && m_Trace.Hit())
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Paused at %s (%s)",
+                                   NodeLabel(m_Trace.Hit()->Graph, m_Trace.Hit()->NodeId).c_str(), m_Trace.Hit()->Graph.c_str());
+            }
+            else if (m_Trace.Paused())
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Graph paused");
+            }
+            else
+            {
+                ImGui::TextDisabled(running ? "Running (tick %llu)" : "Stopped", static_cast<unsigned long long>(m_Trace.Tick()));
+            }
+        }
+
+        void RenderDebugPanel()
+        {
+            std::size_t errors = 0, warnings = 0;
+            for (const auto& [name, list] : m_Problems)
+            {
+                errors += CountSeverity(list, TraceSeverity::Error);
+                warnings += CountSeverity(list, TraceSeverity::Warning);
+            }
+            errors += static_cast<std::size_t>(std::ranges::count(m_Trace.AllActiveDiagnostics(), TraceSeverity::Error,
+                                                                  [](const GraphNodeDiagnostic& d) { return d.Diagnostic.Severity; }));
+            if (!ImGui::BeginTabBar("DebugTabs")) return;
+            const std::string problemsLabel = "Problems (" + std::to_string(errors) + " errors, " + std::to_string(warnings) +
+                                              " warnings)###problems";
+            if (ImGui::BeginTabItem(problemsLabel.c_str()))
+            {
+                RenderProblemsList();
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Trace###trace"))
+            {
+                RenderTraceList();
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
+
+        void RenderProblemsList()
+        {
+            struct Row { TraceSeverity Severity; std::string Graph; int NodeId; std::string Message; bool Runtime; };
+            std::vector<Row> rows;
+            for (const auto& [graph, list] : m_Problems)
+            {
+                for (const auto& d : list) rows.push_back({d.Severity, graph, d.NodeId, d.Message, false});
+            }
+            for (const auto& d : m_Trace.AllActiveDiagnostics())
+            {
+                rows.push_back({d.Diagnostic.Severity, d.Graph, d.NodeId, d.Diagnostic.Message, true});
+            }
+            std::ranges::stable_sort(rows, [](const Row& a, const Row& b) { return a.Severity > b.Severity; });
+            if (rows.empty()) ImGui::TextDisabled("No problems found");
+            int index = 0;
+            for (const auto& row : rows)
+            {
+                ImGui::PushID(index++);
+                ImGui::TextColored(SeverityColor(row.Severity), "%s", SeverityLabel(row.Severity));
+                ImGui::SameLine(70.0f);
+                const std::string text = (row.Runtime ? "[run] " : "") + row.Graph + " / " + NodeLabel(row.Graph, row.NodeId) +
+                                         ": " + row.Message;
+                if (ImGui::Selectable(text.c_str(), false) && row.NodeId != 0) FocusNode(row.Graph, row.NodeId);
+                ImGui::PopID();
+            }
+        }
+
+        void RenderTraceList()
+        {
+            ImGui::Checkbox("Only problems", &m_TraceOnlyProblems);
+            ImGui::SameLine();
+            ImGui::TextDisabled("%zu events", m_Trace.Entries().size());
+            ImGui::BeginChild("##tracelist", ImVec2(0, 0));
+            const auto& entries = m_Trace.Entries();
+            int index = 0;
+            for (auto it = entries.rbegin(); it != entries.rend(); ++it)
+            {
+                const TraceEntry& entry = *it;
+                if (m_TraceOnlyProblems && entry.Kind == TraceKind::NodeExecuted) continue;
+                ImGui::PushID(index++);
+                const std::string node = NodeLabel(entry.Graph, entry.NodeId);
+                std::string text = "#" + std::to_string(entry.Tick) + "  " + entry.Graph + " / " + node + "  ";
+                ImVec4 color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+                if (entry.Kind == TraceKind::NodeExecuted) text += "executed (" + entry.Message + ")";
+                else
+                {
+                    text += entry.Message;
+                    color = entry.Kind == TraceKind::Breakpoint ? ImVec4(1.0f, 0.6f, 0.2f, 1.0f) : SeverityColor(entry.Severity);
+                }
+                ImGui::PushStyleColor(ImGuiCol_Text, color);
+                if (ImGui::Selectable(text.c_str(), false) && entry.NodeId != 0) FocusNode(entry.Graph, entry.NodeId);
+                ImGui::PopStyleColor();
+                ImGui::PopID();
+            }
+            ImGui::EndChild();
+        }
+
+        std::string PinValueText(const std::string& graph, const Pin& pin) const
+        {
+            int source = pin.Id;
+            if (pin.IsInput)
+            {
+                source = 0;
+                for (const auto& link : CurrentGraph().Links) if (link.EndPinId == pin.Id) { source = link.StartPinId; break; }
+            }
+            const Value* value = source != 0 ? m_Trace.PinValue(graph, source) : nullptr;
+            return value ? ValueToString(*value) : std::string{};
+        }
+
         // ---- live execution -------------------------------------------------------------------
 
         void ApplyWrites(SimulationRunner& runner, PendingWrites writes)
@@ -512,7 +736,9 @@ namespace
             style.Colors[ed::StyleColor_NodeBorder] = ImVec4(0.0f, 0.0f, 0.0f, 0.55f);
             style.Colors[ed::StyleColor_HovNodeBorder] = ToVec4(Palette::AccentHover);
             style.Colors[ed::StyleColor_SelNodeBorder] = ToVec4(Palette::Accent);
-            style.Colors[ed::StyleColor_Flow] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+            style.FlowDuration = 0.6f;
+            style.FlowMarkerDistance = 24.0f;
+            style.Colors[ed::StyleColor_Flow] = ImVec4(1.0f, 0.9f, 0.3f, 1.0f);
             style.Colors[ed::StyleColor_FlowMarker] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
             style.Colors[ed::StyleColor_GroupBg] = ImVec4(1.0f, 1.0f, 1.0f, 0.06f);
             style.Colors[ed::StyleColor_GroupBorder] = ImVec4(1.0f, 1.0f, 1.0f, 0.2f);
@@ -571,17 +797,54 @@ namespace
 
         void DrawLinks()
         {
+            const auto& problems = m_Problems.find(GraphName());
             for (const auto& link : CurrentGraph().Links)
             {
                 const Pin* start = FindPin(CurrentGraph(), link.StartPinId);
                 const PinType type = start ? start->Type : PinType::Flow;
-                ed::Link(ed::LinkId(link.Id), ed::PinId(link.StartPinId), ed::PinId(link.EndPinId), PinColor(type),
-                         GraphLinkThickness(type));
+                ImVec4 color = PinColor(type);
+                float thickness = GraphLinkThickness(type);
+                if (problems != m_Problems.end() &&
+                    std::ranges::any_of(problems->second, [&](const Diagnostic& d) { return d.LinkId == link.Id; }))
+                {
+                    color = ImVec4(1.0f, 0.2f, 0.2f, 1.0f);
+                }
+                if (type == PinType::Flow)
+                {
+                    const std::uint64_t tick = m_Trace.LinkTick(GraphName(), link.Id);
+                    const std::uint64_t age = m_Trace.Tick() - tick;
+                    if (tick != 0 && age < kHighlightTicks)
+                    {
+                        const float fade = 1.0f - static_cast<float>(age) / static_cast<float>(kHighlightTicks);
+                        color = ImVec4(color.x + (1.0f - color.x) * fade, color.y + (0.9f - color.y) * fade, color.z * (1.0f - fade), 1.0f);
+                        thickness += 2.0f * fade;
+                    }
+                    auto& shown = m_LinkFlowTicks[link.Id];
+                    if (tick != 0 && tick != shown && age < 2)
+                    {
+                        ed::Flow(ed::LinkId(link.Id));
+                        shown = tick;
+                    }
+                }
+                ed::Link(ed::LinkId(link.Id), ed::PinId(link.StartPinId), ed::PinId(link.EndPinId), color, thickness);
             }
         }
 
         void DrawHoverTooltips()
         {
+            if (m_BadgeHoverNode != 0)
+            {
+                ImGui::BeginTooltip();
+                for (const auto& issue : IssuesFor(GraphName(), m_BadgeHoverNode))
+                {
+                    ImGui::TextColored(SeverityColor(issue.Severity), "%s", SeverityLabel(issue.Severity));
+                    ImGui::SameLine();
+                    ImGui::TextUnformatted(issue.Message.c_str());
+                }
+                ImGui::EndTooltip();
+                m_BadgeHoverNode = 0;
+                return;
+            }
             if (m_HoveredPinId != 0)
             {
                 if (const Pin* pin = FindPin(CurrentGraph(), m_HoveredPinId))
@@ -592,6 +855,14 @@ namespace
                     ImGui::TextDisabled("%s%s", pin->IsInput ? "input" : "output",
                                         m_LinkedPins.contains(pin->Id) ? ", connected" : "");
                     if (!pin->Name.empty()) ImGui::TextUnformatted(pin->Name.c_str());
+                    if (pin->Type != PinType::Flow)
+                    {
+                        if (const std::string live = PinValueText(GraphName(), *pin); !live.empty())
+                        {
+                            ImGui::Separator();
+                            ImGui::Text("Value: %s", live.c_str());
+                        }
+                    }
                     ImGui::EndTooltip();
                 }
                 m_HoverNodeTime = 0.0f;
@@ -689,6 +960,7 @@ namespace
             ApplyEditorStyle();
             RebuildLinkedPins();
             m_EditorFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
+            m_BadgeHoverNode = 0;
             ed::Begin("AnimationGraphCanvas");
 
             if (m_NeedsPositionRestore || m_RestorePositions)
@@ -700,6 +972,17 @@ namespace
             for (auto& comment : CurrentGraph().Comments) DrawComment(comment);
             for (auto& node : CurrentGraph().Nodes) DrawNode(node, entities);
             DrawLinks();
+
+            if (m_PendingSelectNode != 0 && !m_NeedsPositionRestore)
+            {
+                if (CurrentGraph().FindNode(m_PendingSelectNode))
+                {
+                    SelectNodes({m_PendingSelectNode});
+                    ed::NavigateToSelection();
+                    m_PendingNavigateFrames = 0;
+                }
+                m_PendingSelectNode = 0;
+            }
 
             m_HoveredPinId = static_cast<int>(ed::GetHoveredPin().Get());
             m_HoveredNodeId = static_cast<int>(ed::GetHoveredNode().Get());
@@ -817,6 +1100,10 @@ namespace
         {
             const ImGuiIO& io = ImGui::GetIO();
             if (!m_EditorFocused || io.WantTextInput) return;
+            if (ImGui::IsKeyPressed(ImGuiKey_F9, false))
+            {
+                for (const int id : SelectedNodeIds()) if (CurrentGraph().FindNode(id)) m_Trace.ToggleBreakpoint(GraphName(), id);
+            }
             if (!io.KeyCtrl)
             {
                 if (ImGui::IsKeyPressed(ImGuiKey_C, false)) m_PendingAction = EditorAction::CommentSelection;
@@ -1243,7 +1530,38 @@ namespace
             ImGui::Dummy(ImVec2(iconSize, iconSize));
         }
 
-        static void DrawHeader(const Node& node, const float nodeWidth)
+        void DrawBadges(const Node& node, const ImVec2 headerStart, const float nodeWidth)
+        {
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            float x = headerStart.x + nodeWidth - 12.0f;
+            const float y = headerStart.y + kHeaderHeight * 0.5f;
+
+            if (m_Trace.HasBreakpoint(GraphName(), node.Id))
+            {
+                drawList->AddCircleFilled(ImVec2(x, y), 6.0f, IM_COL32(220, 40, 40, 255));
+                drawList->AddCircle(ImVec2(x, y), 6.0f, IM_COL32(255, 255, 255, 200), 16, 1.5f);
+                x -= 18.0f;
+            }
+
+            const auto issues = IssuesFor(GraphName(), node.Id);
+            TraceSeverity worst = TraceSeverity::Info;
+            int count = 0;
+            for (const auto& issue : issues)
+            {
+                if (issue.Severity == TraceSeverity::Info) continue;
+                ++count;
+                worst = std::max(worst, issue.Severity);
+            }
+            if (count == 0) return;
+            const ImVec4 color = SeverityColor(worst);
+            drawList->AddCircleFilled(ImVec2(x, y), 8.0f, ImGui::ColorConvertFloat4ToU32(color));
+            const std::string text = count > 9 ? "9+" : std::to_string(count);
+            const ImVec2 size = ImGui::CalcTextSize(text.c_str());
+            drawList->AddText(ImVec2(x - size.x * 0.5f, y - size.y * 0.5f), IM_COL32(20, 20, 20, 255), text.c_str());
+            if (ImGui::IsMouseHoveringRect(ImVec2(x - 8.0f, y - 8.0f), ImVec2(x + 8.0f, y + 8.0f))) m_BadgeHoverNode = node.Id;
+        }
+
+        void DrawHeader(const Node& node, const float nodeWidth)
         {
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             const ImVec2 headerStart = ImGui::GetCursorScreenPos();
@@ -1261,6 +1579,8 @@ namespace
             ImGui::SameLine(0, 4.0f);
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (16.0f - ImGui::GetTextLineHeight()) * 0.5f);
             ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", node.Name.c_str());
+
+            DrawBadges(node, headerStart, nodeWidth);
 
             ImGui::SetCursorScreenPos(ImVec2(headerStart.x, headerEnd.y));
             ImGui::Dummy(ImVec2(nodeWidth, 0));
@@ -1343,12 +1663,19 @@ namespace
                 if (i < node.Outputs.size())
                 {
                     const auto& pin = node.Outputs[i];
-                    const float textWidth = ImGui::CalcTextSize(pin.Name.c_str()).x;
+                    std::string label = pin.Name;
+                    if (m_ShowPinValues && pin.Type != PinType::Flow)
+                    {
+                        std::string live = PinValueText(GraphName(), pin);
+                        if (live.size() > 16) live = live.substr(0, 15) + "~";
+                        if (!live.empty()) label += " = " + live;
+                    }
+                    const float textWidth = ImGui::CalcTextSize(label.c_str()).x;
                     ImGui::SetCursorScreenPos(ImVec2(contentEnd.x - kNodePadding - textWidth - kPinSize - 4.0f, rowStart.y));
                     ed::BeginPin(ed::PinId(pin.Id), ed::PinKind::Output);
                     ed::PinPivotAlignment(ImVec2(1.0f, 0.5f));
                     ed::PinPivotSize(ImVec2(0.0f, 0.0f));
-                    ImGui::Text("%s", pin.Name.c_str());
+                    ImGui::Text("%s", label.c_str());
                     ImGui::SameLine(0, 4.0f);
                     DrawPinIcon(pin.Type, m_LinkedPins.contains(pin.Id));
                     ed::EndPin();
@@ -1408,7 +1735,19 @@ namespace
             }
 
             const bool dangling = node.SubType == NodeSubType::FunctionCall && !FunctionExists(node.FunctionName);
+            const std::uint64_t nodeTick = m_Trace.NodeTick(GraphName(), node.Id);
+            const std::uint64_t nodeAge = m_Trace.Tick() - nodeTick;
+            const bool pausedHere = m_Trace.Paused() && m_Trace.Hit() && m_Trace.Hit()->NodeId == node.Id &&
+                                    m_Trace.Hit()->Graph == GraphName();
+            const bool recentlyRan = nodeTick != 0 && nodeAge < kHighlightTicks;
+            const bool highlighted = dangling || pausedHere || recentlyRan;
             if (dangling) ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.95f, 0.2f, 0.2f, 1.0f));
+            else if (pausedHere) ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(1.0f, 0.6f, 0.2f, 1.0f));
+            else if (recentlyRan)
+            {
+                const float fade = 1.0f - static_cast<float>(nodeAge) / static_cast<float>(kHighlightTicks);
+                ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.9f, 0.85f, 0.3f, 0.25f + 0.75f * fade));
+            }
             ed::PushStyleVar(ed::StyleVar_NodePadding, ImVec4(0, 0, 0, 0));
             ed::PushStyleVar(ed::StyleVar_NodeRounding, kNodeRounding);
 
@@ -1419,7 +1758,7 @@ namespace
             ed::EndNode();
 
             ed::PopStyleVar(2);
-            if (dangling) ed::PopStyleColor();
+            if (highlighted) ed::PopStyleColor();
         }
 
         // ---- inspector panel -------------------------------------------------------------------
@@ -1571,6 +1910,18 @@ namespace
 
             ImGui::Spacing();
             ImGui::Separator();
+            ImGui::Spacing();
+            const bool hasBreakpoint = m_Trace.HasBreakpoint(GraphName(), node->Id);
+            if (ImGui::Button(hasBreakpoint ? "Remove Breakpoint (F9)" : "Add Breakpoint (F9)", ImVec2(-1, 0)))
+            {
+                m_Trace.ToggleBreakpoint(GraphName(), node->Id);
+            }
+            for (const auto& issue : IssuesFor(GraphName(), node->Id))
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, SeverityColor(issue.Severity));
+                ImGui::TextWrapped("%s: %s", SeverityLabel(issue.Severity), issue.Message.c_str());
+                ImGui::PopStyleColor();
+            }
             ImGui::Spacing();
             if (ImGui::Button("Delete Node", ImVec2(-1, 0)))
             {
@@ -1802,6 +2153,16 @@ namespace
             std::string Text;
         };
         ParamEdit m_ParamEdit;
+
+        TraceRecorder m_Trace;
+        std::map<std::string, std::vector<Diagnostic>> m_Problems;
+        std::uint64_t m_Revision = 1;
+        std::uint64_t m_ProblemsRevision = 0;
+        std::unordered_map<int, std::uint64_t> m_LinkFlowTicks;
+        int m_BadgeHoverNode = 0;
+        int m_PendingSelectNode = 0;
+        bool m_ShowPinValues = false;
+        bool m_TraceOnlyProblems = false;
 
         std::string m_LastSceneName;
         bool m_WasPaused = true;
