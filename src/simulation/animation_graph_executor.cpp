@@ -22,6 +22,10 @@ namespace MoleHole
                                  const std::uint64_t selfGuid)
         : m_Graph(graph), m_OnPrint(std::move(onPrint)), m_SelfGuid(selfGuid), m_GuidSource(&GPP::GenerateGuid)
     {
+        for (const auto& variable : graph.Variables)
+        {
+            if (!std::holds_alternative<std::monostate>(variable.Default)) { m_Variables[variable.Name] = variable.Default; }
+        }
     }
 
     GraphSetExecutor::GraphSetExecutor(const SceneGraphs& graphs, std::function<void(std::string)> onPrint)
@@ -118,6 +122,9 @@ namespace MoleHole
         case NodeType::Control:
             ExecuteControlFlow(node, ctx);
             break;
+        case NodeType::Reroute:
+            if (!node->Outputs.empty()) { ExecuteFlowFromPin(node->Outputs[0].Id, ctx); }
+            break;
         case NodeType::Entity:
             ExecuteEntityNode(node, ctx);
             if (!node->Outputs.empty()) { ExecuteFlowFromPin(node->Outputs[0].Id, ctx); }
@@ -192,6 +199,8 @@ namespace MoleHole
             return std::monostate{};
         case NodeType::Getter:
             return ExecuteSceneGetter(node, ctx);
+        case NodeType::Reroute:
+            return node->Inputs.empty() ? Value{std::monostate{}} : EvaluatePinValue(node->Inputs[0].Id, ctx);
         case NodeType::Variable:
             if (node->SubType == NodeSubType::VariableGet) { return ExecuteVariableGet(node); }
             break;

@@ -32,6 +32,7 @@ export namespace MoleHole
         Control,
         Print,
         Entity,
+        Reroute,
     };
 
     enum class NodeSubType
@@ -112,6 +113,16 @@ export namespace MoleHole
     {
         std::string Name;
         PinType Type{PinType::Float};
+        Value Default;
+    };
+
+    struct Comment
+    {
+        int Id{0};
+        std::string Title{"Comment"};
+        glm::vec2 Position{0.0f, 0.0f};
+        glm::vec2 Size{320.0f, 200.0f};
+        glm::vec4 Color{0.25f, 0.45f, 0.75f, 0.35f};
     };
 
     class AnimationGraphData
@@ -120,6 +131,7 @@ export namespace MoleHole
         std::vector<Node> Nodes;
         std::vector<Link> Links;
         std::vector<Variable> Variables;
+        std::vector<Comment> Comments;
         int NextId{1};
 
         int AllocateId() { return NextId++; }
@@ -131,11 +143,14 @@ export namespace MoleHole
         [[nodiscard]] Node* FindNodeByOutputPin(int pinId);
         [[nodiscard]] const Node* FindNodeByOutputPin(int pinId) const;
 
+        [[nodiscard]] Comment* FindComment(int commentId);
+
         void RemoveNode(int nodeId);
         void RemoveLink(int linkId);
     };
 
     [[nodiscard]] bool ArePinsCompatible(PinType a, PinType b);
+    [[nodiscard]] Value DefaultValueFor(PinType type);
 
     [[nodiscard]] Node CreateStartEventNode(int id);
     [[nodiscard]] Node CreateTickEventNode(int id);
@@ -155,6 +170,7 @@ export namespace MoleHole
     [[nodiscard]] Node CreateSetterNode(int id, const std::string& component);
     [[nodiscard]] Node CreateGetterNode(int id, const std::string& component);
 
+    [[nodiscard]] Node CreateRerouteNode(int id, PinType type);
     [[nodiscard]] Node CreateSpawnEntityNode(int id);
     [[nodiscard]] Node CreateDestroyEntityNode(int id);
     [[nodiscard]] Node CreateCloneEntityNode(int id);

@@ -268,6 +268,27 @@ export namespace MoleHole
         add("Destroy Entity", "Entities", "Removes an entity from the scene.", {"delete", "remove", "kill"},
             CreateDestroyEntityNode);
 
+        registry.Add(NodeEntry{"Comment", "Utility", "A titled box that groups nodes; dragging it moves the nodes inside.",
+                               {"group", "box", "note", "frame"},
+                               [](AnimationGraphData& graph)
+                               {
+                                   Comment comment;
+                                   comment.Id = graph.AllocateId();
+                                   graph.Comments.push_back(comment);
+                                   return std::vector<int>{comment.Id};
+                               }});
+
+        static constexpr std::pair<const char*, PinType> kRerouteTypes[] = {
+            {"Flow", PinType::Flow}, {"Bool", PinType::Bool}, {"Float", PinType::Float}, {"Int", PinType::Int},
+            {"Vec2", PinType::Vec2}, {"Vec3", PinType::Vec3}, {"Vec4", PinType::Vec4}, {"String", PinType::String},
+            {"Object", PinType::Object},
+        };
+        for (const auto& [label, type] : kRerouteTypes)
+        {
+            add(std::string("Reroute (") + label + ")", "Reroute", "Passes a wire through unchanged; use it to tidy long links.",
+                {"reroute", "knot", "wire", "passthrough"}, [type](const int id) { return CreateRerouteNode(id, type); });
+        }
+
         add("Print", "Utility", "Logs a value to the console.", {"log", "debug", "output"}, CreatePrintNode);
 
         static constexpr TypeOption kVariableTypes[] = {

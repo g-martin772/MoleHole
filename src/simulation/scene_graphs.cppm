@@ -9,7 +9,7 @@ import :Simulation.AnimationGraph;
 
 export namespace MoleHole
 {
-    constexpr int kSceneGraphsVersion = 1;
+    constexpr int kSceneGraphsVersion = 2;
     constexpr const char* kSceneGraphsKey = "Graphs";
     constexpr const char* kMainGraphName = "Main";
 

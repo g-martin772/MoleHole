@@ -55,6 +55,7 @@ namespace MoleHole
             case NodeType::Control: return "Control";
             case NodeType::Print: return "Print";
             case NodeType::Entity: return "Entity";
+            case NodeType::Reroute: return "Reroute";
             }
             return "Event";
         }
@@ -70,6 +71,7 @@ namespace MoleHole
             if (text == "Control") return NodeType::Control;
             if (text == "Print") return NodeType::Print;
             if (text == "Entity") return NodeType::Entity;
+            if (text == "Reroute") return NodeType::Reroute;
             return NodeType::Event;
         }
 
@@ -385,6 +387,25 @@ namespace MoleHole
     }
 
     // ---- ArePinsCompatible --------------------------------------------------------------------
+
+    Value DefaultValueFor(const PinType type) { return DefaultValueForType(type); }
+
+    Comment* AnimationGraphData::FindComment(const int commentId)
+    {
+        for (auto& comment : Comments) { if (comment.Id == commentId) { return &comment; } }
+        return nullptr;
+    }
+
+    Node CreateRerouteNode(const int id, const PinType type)
+    {
+        Node node;
+        node.Id = id;
+        node.Name = "Reroute";
+        node.Type = NodeType::Reroute;
+        node.Inputs = { Pin{InputPinId(id, 0), "", type, true} };
+        node.Outputs = { Pin{OutputPinId(id, 0), "", type, false} };
+        return node;
+    }
 
     bool ArePinsCompatible(const PinType a, const PinType b)
     {
@@ -729,9 +750,26 @@ namespace MoleHole
             YAML::Node v;
             v["Name"] = variable.Name;
             v["Type"] = PinTypeToString(variable.Type);
+            if (!std::holds_alternative<std::monostate>(variable.Default)) { v["Default"] = EncodeValue(variable.Default); }
             variablesNode.push_back(v);
         }
         root["Variables"] = variablesNode;
+
+        if (!graph.Comments.empty())
+        {
+            YAML::Node commentsNode(YAML::NodeType::Sequence);
+            for (const auto& comment : graph.Comments)
+            {
+                YAML::Node c;
+                c["Id"] = comment.Id;
+                c["Title"] = comment.Title;
+                c["Position"] = std::vector<float>{comment.Position.x, comment.Position.y};
+                c["Size"] = std::vector<float>{comment.Size.x, comment.Size.y};
+                c["Color"] = std::vector<float>{comment.Color.r, comment.Color.g, comment.Color.b, comment.Color.a};
+                commentsNode.push_back(c);
+            }
+            root["Comments"] = commentsNode;
+        }
 
         YAML::Node nodesNode(YAML::NodeType::Sequence);
         for (const auto& node : graph.Nodes)
@@ -802,7 +840,32 @@ namespace MoleHole
                 Variable variable;
                 variable.Name = v["Name"] ? v["Name"].as<std::string>() : std::string{};
                 variable.Type = v["Type"] ? PinTypeFromString(v["Type"].as<std::string>()) : PinType::Float;
+                if (v["Default"]) { variable.Default = DecodeValue(v["Default"]); }
+                else { variable.Default = DefaultValueForType(variable.Type); }
                 graph.Variables.push_back(std::move(variable));
+            }
+        }
+
+        if (const auto comments = root["Comments"]; comments && comments.IsSequence())
+        {
+            for (const auto& c : comments)
+            {
+                Comment comment;
+                comment.Id = c["Id"] ? c["Id"].as<int>() : 0;
+                comment.Title = c["Title"] ? c["Title"].as<std::string>() : std::string{};
+                if (const auto p = c["Position"]; p && p.IsSequence() && p.size() >= 2)
+                {
+                    comment.Position = glm::vec2(p[0].as<float>(), p[1].as<float>());
+                }
+                if (const auto z = c["Size"]; z && z.IsSequence() && z.size() >= 2)
+                {
+                    comment.Size = glm::vec2(z[0].as<float>(), z[1].as<float>());
+                }
+                if (const auto k = c["Color"]; k && k.IsSequence() && k.size() >= 4)
+                {
+                    comment.Color = glm::vec4(k[0].as<float>(), k[1].as<float>(), k[2].as<float>(), k[3].as<float>());
+                }
+                graph.Comments.push_back(std::move(comment));
             }
         }
 

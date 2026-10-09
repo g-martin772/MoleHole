@@ -13,15 +13,16 @@ export namespace MoleHole
     struct GraphPasteResult
     {
         std::vector<int> NodeIds;
+        std::vector<int> CommentIds;
     };
 
-    [[nodiscard]] inline std::string CopyGraphSelection(const AnimationGraphData& graph, const std::vector<int>& nodeIds)
+    [[nodiscard]] inline std::string CopyGraphSelection(const AnimationGraphData& graph, const std::vector<int>& selectedIds)
     {
         AnimationGraphData subset;
         std::unordered_set<int> pins;
         for (const auto& node : graph.Nodes)
         {
-            if (!std::ranges::contains(nodeIds, node.Id)) continue;
+            if (!std::ranges::contains(selectedIds, node.Id)) continue;
             subset.Nodes.push_back(node);
             for (const auto& pin : node.Inputs) pins.insert(pin.Id);
             for (const auto& pin : node.Outputs) pins.insert(pin.Id);
@@ -37,6 +38,10 @@ export namespace MoleHole
         for (const auto& link : graph.Links)
         {
             if (pins.contains(link.StartPinId) && pins.contains(link.EndPinId)) subset.Links.push_back(link);
+        }
+        for (const auto& comment : graph.Comments)
+        {
+            if (std::ranges::contains(selectedIds, comment.Id)) subset.Comments.push_back(comment);
         }
         subset.NextId = graph.NextId;
 
@@ -75,10 +80,11 @@ export namespace MoleHole
         {
             return result;
         }
-        if (source.Nodes.empty()) return result;
+        if (source.Nodes.empty() && source.Comments.empty()) return result;
 
-        glm::vec2 minPos = source.Nodes.front().Position;
+        glm::vec2 minPos(std::numeric_limits<float>::max());
         for (const auto& node : source.Nodes) minPos = glm::min(minPos, node.Position);
+        for (const auto& comment : source.Comments) minPos = glm::min(minPos, comment.Position);
 
         std::unordered_map<int, int> pinMap;
         for (auto node : source.Nodes)
@@ -105,6 +111,14 @@ export namespace MoleHole
             const auto to = pinMap.find(link.EndPinId);
             if (from == pinMap.end() || to == pinMap.end()) continue;
             graph.Links.push_back(Link{graph.AllocateId(), from->second, to->second});
+        }
+
+        for (auto comment : source.Comments)
+        {
+            comment.Id = graph.AllocateId();
+            comment.Position = comment.Position - minPos + anchor;
+            graph.Comments.push_back(comment);
+            result.CommentIds.push_back(comment.Id);
         }
 
         for (const auto& variable : source.Variables)

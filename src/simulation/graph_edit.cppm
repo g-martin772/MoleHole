@@ -63,4 +63,65 @@ export namespace MoleHole
     {
         for (const int id : nodeIds) graph.RemoveNode(id);
     }
+
+    inline void RemoveComment(AnimationGraphData& graph, const int commentId)
+    {
+        std::erase_if(graph.Comments, [commentId](const Comment& c) { return c.Id == commentId; });
+    }
+
+    // Removes nodes and comments alike; the editor addresses both through one id space.
+    inline void RemoveItems(AnimationGraphData& graph, const std::vector<int>& ids)
+    {
+        for (const int id : ids)
+        {
+            if (graph.FindComment(id)) RemoveComment(graph, id);
+            else graph.RemoveNode(id);
+        }
+    }
+
+    [[nodiscard]] inline std::string UniqueVariableName(const AnimationGraphData& graph, const std::string& base)
+    {
+        const auto taken = [&](const std::string& name) { return std::ranges::contains(graph.Variables, name, &Variable::Name); };
+        if (!taken(base)) return base;
+        for (int i = 2;; ++i)
+        {
+            auto candidate = base + " " + std::to_string(i);
+            if (!taken(candidate)) return candidate;
+        }
+    }
+
+    inline Variable& AddVariable(AnimationGraphData& graph, const std::string& name, const PinType type)
+    {
+        graph.Variables.push_back(Variable{UniqueVariableName(graph, name), type, DefaultValueFor(type)});
+        return graph.Variables.back();
+    }
+
+    inline bool RenameVariable(AnimationGraphData& graph, const std::string& from, const std::string& to)
+    {
+        if (to.empty() || from == to || std::ranges::contains(graph.Variables, to, &Variable::Name)) return false;
+        const auto it = std::ranges::find(graph.Variables, from, &Variable::Name);
+        if (it == graph.Variables.end()) return false;
+        it->Name = to;
+
+        for (auto& node : graph.Nodes)
+        {
+            if (node.Type != NodeType::Variable || node.VariableName != from) continue;
+            node.VariableName = to;
+            const std::string prefix = node.SubType == NodeSubType::VariableSet ? "Set " : "Get ";
+            if (node.Name == prefix + from) node.Name = prefix + to;
+            for (auto& pin : node.Inputs) if (pin.Name == from) pin.Name = to;
+            for (auto& pin : node.Outputs) if (pin.Name == from) pin.Name = to;
+        }
+        return true;
+    }
+
+    // Nodes that used the variable are kept but become unassigned.
+    inline void RemoveVariable(AnimationGraphData& graph, const std::string& name)
+    {
+        std::erase_if(graph.Variables, [&](const Variable& v) { return v.Name == name; });
+        for (auto& node : graph.Nodes)
+        {
+            if (node.Type == NodeType::Variable && node.VariableName == name) node.VariableName.clear();
+        }
+    }
 }
