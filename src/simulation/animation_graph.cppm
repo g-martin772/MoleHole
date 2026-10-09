@@ -73,6 +73,8 @@ export namespace MoleHole
         Component,
     };
 
+    constexpr int kPinIdStride = 1000;
+
     using Value = std::variant<std::monostate, bool, int, float, glm::vec2, glm::vec3, glm::vec4,
                                 std::string, std::uint64_t>;
 

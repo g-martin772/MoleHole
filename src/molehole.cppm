@@ -6,6 +6,8 @@ export import :Simulation.Gravity;
 export import :Simulation.ObjectPaths;
 export import :Simulation.AnimationGraph;
 export import :Simulation.SceneGraphs;
+export import :Simulation.GraphHistory;
+export import :Simulation.GraphClipboard;
 export import :Simulation.CameraMath;
 export import :Simulation.EntityPresets;
 export import :Simulation.AnimationGraphProperties;

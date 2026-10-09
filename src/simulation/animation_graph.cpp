@@ -149,7 +149,6 @@ namespace MoleHole
             return NodeSubType::None;
         }
 
-        constexpr int kPinIdStride = 1000;
         constexpr int kPinIdOutputOffset = 500;
 
         int InputPinId(const int nodeId, const int index) { return nodeId * kPinIdStride + 1 + index; }

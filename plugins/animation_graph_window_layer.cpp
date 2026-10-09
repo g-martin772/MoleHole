@@ -292,8 +292,15 @@ namespace
 
             if (m_Dirty)
             {
+                if (m_Current < m_Graphs.Items.size()) History().Record(CurrentGraph(), m_DirtyKey);
                 SaveGraphToScene(*runner);
                 m_Dirty = false;
+                m_DirtyKey.clear();
+            }
+            if (m_Current < m_Graphs.Items.size() && !ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
+                !ImGui::IsAnyItemActive())
+            {
+                History().Seal();
             }
         }
 
@@ -301,6 +308,7 @@ namespace
         void LoadGraphFromScene()
         {
             m_Graphs = SceneGraphs{};
+            m_Histories.clear();
             m_Current = 0;
             if (!m_UiState->CurrentSceneName.empty())
             {
@@ -313,9 +321,35 @@ namespace
             ResetEditorView();
         }
 
+        void MarkDirty(const std::string& key = {})
+        {
+            if (m_Dirty && key != m_DirtyKey) m_DirtyKey.clear();
+            else m_DirtyKey = key;
+            m_Dirty = true;
+        }
+
+        GraphHistory& History()
+        {
+            m_Histories.resize(std::max(m_Histories.size(), m_Graphs.Items.size()));
+            auto& history = m_Histories[m_Current];
+            if (history.Size() == 0) history.Reset(CurrentGraph());
+            return history;
+        }
+
+        void ApplyHistory(const bool undo)
+        {
+            if (m_Current >= m_Graphs.Items.size()) return;
+            auto& history = History();
+            if (!(undo ? history.Undo(CurrentGraph()) : history.Redo(CurrentGraph()))) return;
+            m_SelectedNodeId = 0;
+            m_RestorePositions = true;
+            StructureChanged();
+        }
+
         void ResetEditorView()
         {
             m_Dirty = false;
+            m_DirtyKey.clear();
             m_SelectedNodeId = 0;
             m_NeedsPositionRestore = true;
             m_PendingNavigateFrames = 0;
@@ -353,7 +387,7 @@ namespace
         void StructureChanged()
         {
             if (m_Executor) RebuildExecutor();
-            m_Dirty = true;
+            MarkDirty();
         }
 
         void RenderGraphToolbar(const std::vector<EntityOption>& entities)
@@ -388,6 +422,7 @@ namespace
             if (ImGui::Button("Delete") && hasGraph)
             {
                 m_Graphs.Items.erase(m_Graphs.Items.begin() + static_cast<std::ptrdiff_t>(m_Current));
+                if (m_Current < m_Histories.size()) m_Histories.erase(m_Histories.begin() + static_cast<std::ptrdiff_t>(m_Current));
                 SelectGraph(m_Current > 0 ? m_Current - 1 : 0);
                 StructureChanged();
             }
@@ -404,7 +439,7 @@ namespace
                     {
                         m_Graphs.Items[m_Current].Name.clear();
                         m_Graphs.Items[m_Current].Name = m_Graphs.UniqueName(name);
-                        m_Dirty = true;
+                        MarkDirty();
                     }
                     ImGui::CloseCurrentPopup();
                 }
@@ -415,6 +450,14 @@ namespace
 
             if (!hasGraph) return;
             auto& named = m_Graphs.Items[m_Current];
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!History().CanUndo());
+            if (ImGui::Button("Undo")) ApplyHistory(true);
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!History().CanRedo());
+            if (ImGui::Button("Redo")) ApplyHistory(false);
+            ImGui::EndDisabled();
             ImGui::SameLine();
             if (ImGui::Checkbox("Enabled", &named.Enabled)) StructureChanged();
             ImGui::SameLine();
@@ -469,10 +512,12 @@ namespace
         {
             if (!m_EditorContext) m_EditorContext = ed::CreateEditor();
             ed::SetCurrentEditor(m_EditorContext);
+            m_EditorFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
             ed::Begin("AnimationGraphCanvas");
 
-            if (m_NeedsPositionRestore)
+            if (m_NeedsPositionRestore || m_RestorePositions)
             {
+                m_RestorePositions = false;
                 for (const auto& node : CurrentGraph().Nodes)
                 {
                     ed::SetNodePosition(ed::NodeId(node.Id), ImVec2(node.Position.x, node.Position.y));
@@ -491,6 +536,7 @@ namespace
 
             HandleLinkCreation();
             HandleDeletion();
+            HandleShortcuts();
 
             ed::Suspend();
             HandleContextMenu();
@@ -516,7 +562,7 @@ namespace
                     if (std::abs(pos.x - node.Position.x) > 0.01f || std::abs(pos.y - node.Position.y) > 0.01f)
                     {
                         node.Position = glm::vec2(pos.x, pos.y);
-                        m_Dirty = true;
+                        MarkDirty("move");
                     }
                 }
             }
@@ -567,7 +613,7 @@ namespace
                             if (ed::AcceptNewItem())
                             {
                                 CurrentGraph().Links.push_back(Link{CurrentGraph().AllocateId(), startId, endId});
-                                m_Dirty = true;
+                                MarkDirty();
                             }
                         }
                         else
@@ -580,6 +626,76 @@ namespace
             ed::EndCreate();
         }
 
+        std::vector<int> SelectedNodeIds() const
+        {
+            std::vector<ed::NodeId> selected(CurrentGraph().Nodes.size() + 1);
+            const int count = ed::GetSelectedNodes(selected.data(), static_cast<int>(selected.size()));
+            std::vector<int> ids;
+            for (int i = 0; i < count; ++i) ids.push_back(static_cast<int>(selected[i].Get()));
+            return ids;
+        }
+
+        void SelectNodes(const std::vector<int>& ids)
+        {
+            ed::ClearSelection();
+            for (const int id : ids) ed::SelectNode(ed::NodeId(id), true);
+            m_SelectedNodeId = ids.empty() ? 0 : ids.front();
+        }
+
+        void PasteText(const std::string& text, const glm::vec2 anchor)
+        {
+            const auto result = PasteGraphSelection(CurrentGraph(), text, anchor);
+            if (result.NodeIds.empty()) return;
+            for (const int id : result.NodeIds)
+            {
+                const auto& pos = CurrentGraph().FindNode(id)->Position;
+                ed::SetNodePosition(ed::NodeId(id), ImVec2(pos.x, pos.y));
+            }
+            SelectNodes(result.NodeIds);
+            StructureChanged();
+        }
+
+        void HandleShortcuts()
+        {
+            const ImGuiIO& io = ImGui::GetIO();
+            if (!m_EditorFocused || io.WantTextInput || !io.KeyCtrl) return;
+
+            const auto selected = SelectedNodeIds();
+            const auto copyText = [&] { return CopyGraphSelection(CurrentGraph(), selected); };
+
+            if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) ApplyHistory(!io.KeyShift);
+            else if (ImGui::IsKeyPressed(ImGuiKey_Y, false)) ApplyHistory(false);
+            else if (ImGui::IsKeyPressed(ImGuiKey_A, false))
+            {
+                std::vector<int> all;
+                for (const auto& node : CurrentGraph().Nodes) all.push_back(node.Id);
+                SelectNodes(all);
+            }
+            else if (ImGui::IsKeyPressed(ImGuiKey_C, false) && !selected.empty())
+            {
+                ImGui::SetClipboardText(copyText().c_str());
+            }
+            else if (ImGui::IsKeyPressed(ImGuiKey_X, false) && !selected.empty())
+            {
+                ImGui::SetClipboardText(copyText().c_str());
+                for (const int id : selected) ed::DeleteNode(ed::NodeId(id));
+            }
+            else if (ImGui::IsKeyPressed(ImGuiKey_V, false))
+            {
+                if (const char* clip = ImGui::GetClipboardText(); clip && IsGraphClipboardText(clip))
+                {
+                    const auto canvas = ed::ScreenToCanvas(io.MousePos);
+                    PasteText(clip, glm::vec2(canvas.x, canvas.y));
+                }
+            }
+            else if (ImGui::IsKeyPressed(ImGuiKey_D, false) && !selected.empty())
+            {
+                glm::vec2 minPos{std::numeric_limits<float>::max()};
+                for (const int id : selected) minPos = glm::min(minPos, CurrentGraph().FindNode(id)->Position);
+                PasteText(copyText(), minPos + glm::vec2(40.0f, 40.0f));
+            }
+        }
+
         void HandleDeletion()
         {
             if (ed::BeginDelete())
@@ -590,7 +706,7 @@ namespace
                     if (ed::AcceptDeletedItem())
                     {
                         CurrentGraph().RemoveLink(static_cast<int>(deletedLinkId.Get()));
-                        m_Dirty = true;
+                        MarkDirty();
                     }
                 }
 
@@ -602,7 +718,7 @@ namespace
                         const int id = static_cast<int>(deletedNodeId.Get());
                         CurrentGraph().RemoveNode(id);
                         if (m_SelectedNodeId == id) m_SelectedNodeId = 0;
-                        m_Dirty = true;
+                        MarkDirty();
                     }
                 }
             }
@@ -629,7 +745,7 @@ namespace
                 ed::SetNodePosition(ed::NodeId(id), canvasPos);
                 ed::SelectNode(ed::NodeId(id));
                 m_SelectedNodeId = id;
-                m_Dirty = true;
+                MarkDirty();
             };
 
             if (ImGui::BeginMenu("Events"))
@@ -839,10 +955,11 @@ namespace
             ImGui::Dummy(ImVec2(nodeWidth, 0));
         }
 
-        static void DrawConstantValueInput(Node& node, const float nodeWidth)
+        void DrawConstantValueInput(Node& node, const float nodeWidth)
         {
             ImGui::SetNextItemWidth(nodeWidth - kNodePadding * 2);
             const std::string id = "##const_" + std::to_string(node.Id);
+            const Value before = node.ConstantValue;
 
             if (std::holds_alternative<bool>(node.ConstantValue))
             {
@@ -885,6 +1002,7 @@ namespace
                     node.ConstantValue = std::string(buffer.data());
                 }
             }
+            if (node.ConstantValue != before) MarkDirty("const:" + std::to_string(node.Id));
         }
 
         void DrawInlineContent(Node& node, const float nodeWidth, const std::vector<EntityOption>& entities)
@@ -1022,7 +1140,7 @@ namespace
             {
                 CurrentGraph().RemoveNode(node->Id);
                 m_SelectedNodeId = 0;
-                m_Dirty = true;
+                MarkDirty();
             }
         }
 
@@ -1057,7 +1175,7 @@ namespace
                     if (ImGui::Selectable(variable.Name.c_str(), selected))
                     {
                         node.VariableName = variable.Name;
-                        m_Dirty = true;
+                        MarkDirty();
                     }
                     if (selected) ImGui::SetItemDefaultFocus();
                 }
@@ -1087,7 +1205,7 @@ namespace
                     });
                     if (!exists) CurrentGraph().Variables.push_back(Variable{name, varType});
                     node.VariableName = name;
-                    m_Dirty = true;
+                    MarkDirty();
                     m_NewVariableBuffer[0] = '\0';
                     ImGui::CloseCurrentPopup();
                 }
@@ -1121,7 +1239,7 @@ namespace
                     if (ImGui::Selectable(entity.Label.c_str(), selected))
                     {
                         node.TargetGuid = entity.Guid;
-                        m_Dirty = true;
+                        MarkDirty();
                     }
                     if (selected) ImGui::SetItemDefaultFocus();
                 }
@@ -1139,6 +1257,10 @@ namespace
         AnimationGraphData m_EmptyGraph;
         std::array<char, 128> m_RenameBuffer{};
         bool m_Dirty = false;
+        std::string m_DirtyKey;
+        std::vector<GraphHistory> m_Histories;
+        bool m_RestorePositions = false;
+        bool m_EditorFocused = false;
         bool m_NeedsPositionRestore = true;
         int m_PendingNavigateFrames = 0;
         int m_SelectedNodeId = 0;
