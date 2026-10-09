@@ -14,6 +14,16 @@ export namespace MoleHole
     using PendingWrite = std::function<void(GPP::Scene&)>;
     using PendingWrites = std::vector<PendingWrite>;
 
+    class IGraphRuntime
+    {
+    public:
+        virtual ~IGraphRuntime() = default;
+        virtual void SetGuidSource(const std::function<std::uint64_t()>& source) = 0;
+        virtual void SetTraceSink(ITraceSink* sink) = 0;
+        [[nodiscard]] virtual PendingWrites ExecuteStartEvent(const GPP::Scene& scene) = 0;
+        [[nodiscard]] virtual PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime) = 0;
+    };
+
     class GraphExecutor
     {
     public:
@@ -80,16 +90,16 @@ export namespace MoleHole
         void ExecuteVariableSet(const Node* node, ExecutionContext& ctx);
     };
 
-    class GraphSetExecutor
+    class GraphSetExecutor final : public IGraphRuntime
     {
     public:
         GraphSetExecutor(const SceneGraphs& graphs, std::function<void(std::string)> onPrint = nullptr);
 
-        void SetGuidSource(const std::function<std::uint64_t()>& source);
-        void SetTraceSink(ITraceSink* sink);
+        void SetGuidSource(const std::function<std::uint64_t()>& source) override;
+        void SetTraceSink(ITraceSink* sink) override;
 
-        [[nodiscard]] PendingWrites ExecuteStartEvent(const GPP::Scene& scene);
-        [[nodiscard]] PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime);
+        [[nodiscard]] PendingWrites ExecuteStartEvent(const GPP::Scene& scene) override;
+        [[nodiscard]] PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime) override;
 
     private:
         ITraceSink* m_Trace{nullptr};

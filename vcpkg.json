@@ -19,6 +19,7 @@
     "tinygltf",
     "physx",
     "entt",
-    "nativefiledialog-extended"
+    "nativefiledialog-extended",
+    "luau"
   ]
 }
