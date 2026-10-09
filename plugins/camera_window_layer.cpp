@@ -28,15 +28,34 @@ namespace
                 return;
             }
 
-            SectionHeader("MOVEMENT");
-            ImGui::SliderFloat("Speed", &m_UiState->CameraSpeed, 0.5f, 100.0f, "%.1f");
-            ImGui::SliderFloat("Mouse Sensitivity", &m_UiState->CameraMouseSensitivity, 0.01f, 1.0f, "%.2f");
+            ImFont* icons = m_UiState->IconFont;
+            const auto slider = [&](const char* label, float& value, float fallback, float min, float max,
+                                    const char* format)
+            {
+                if (PropertyRow(icons, label, value != fallback, [&]
+                {
+                    DragFloatValue("##v", &value, (max - min) / 400.0f, min, max, format);
+                }))
+                {
+                    value = fallback;
+                }
+            };
 
-            SectionHeader("POSITION");
-            ImGui::Text("Pos: (%.1f, %.1f, %.1f)", m_UiState->CameraPosition.x,
-                        m_UiState->CameraPosition.y, m_UiState->CameraPosition.z);
-            ImGui::Text("Yaw: %.1f  Pitch: %.1f", m_UiState->CameraYaw, m_UiState->CameraPitch);
-            ImGui::SliderFloat("FOV", &m_UiState->CameraFov, 20.0f, 120.0f, "%.0f");
+            if (BeginSection(icons, "Movement"))
+            {
+                slider("Speed", m_UiState->CameraSpeed, 5.0f, 0.5f, 100.0f, "%.1f");
+                slider("Mouse Sensitivity", m_UiState->CameraMouseSensitivity, 0.1f, 0.01f, 1.0f, "%.2f");
+                EndSection();
+            }
+
+            if (BeginSection(icons, "Position"))
+            {
+                ImGui::Text("Pos: (%.1f, %.1f, %.1f)", m_UiState->CameraPosition.x,
+                            m_UiState->CameraPosition.y, m_UiState->CameraPosition.z);
+                ImGui::Text("Yaw: %.1f  Pitch: %.1f", m_UiState->CameraYaw, m_UiState->CameraPitch);
+                slider("FOV", m_UiState->CameraFov, 60.0f, 20.0f, 120.0f, "%.0f");
+                EndSection();
+            }
 
             ImGui::Spacing();
             if (ImGui::Button("Reset Camera", ImVec2(-1, 0)))

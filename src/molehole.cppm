@@ -12,6 +12,7 @@ export import :Rendering.Camera;
 export import :Rendering.Lut;
 export import :Rendering.Latex;
 export import :UI.State;
+export import :UI.WidgetLogic;
 export import :UI.Widgets;
 export import :UI.IntroTimeline;
 export import :UI.TutorialState;
