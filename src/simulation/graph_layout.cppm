@@ -64,6 +64,20 @@ export namespace MoleHole
         return rects;
     }
 
+    // Approximates the on-screen size of a node before it has been drawn.
+    [[nodiscard]] inline glm::vec2 EstimateNodeSize(const Node& node)
+    {
+        if (node.Type == NodeType::Reroute) return glm::vec2(44.0f, 28.0f);
+        constexpr float kCharWidth = 7.0f;
+        float width = std::max(150.0f, kCharWidth * static_cast<float>(node.Name.size()) + 40.0f);
+        for (const auto& pin : node.Inputs) width = std::max(width, 1.5f * (kCharWidth * static_cast<float>(pin.Name.size()) + 28.0f));
+        for (const auto& pin : node.Outputs) width = std::max(width, 1.5f * (kCharWidth * static_cast<float>(pin.Name.size()) + 28.0f));
+        const auto rows = static_cast<float>(std::max(node.Inputs.size(), node.Outputs.size()));
+        float height = 28.0f + rows * 16.0f + 8.0f;
+        if (node.Type == NodeType::Constant || node.Type == NodeType::Variable || node.Type == NodeType::Getter) height += 24.0f;
+        return glm::vec2(width, height);
+    }
+
     [[nodiscard]] inline std::pair<glm::vec2, glm::vec2> BoundsOf(const std::vector<NodeRect>& rects, const float padding,
                                                                   const float titleHeight = 0.0f)
     {

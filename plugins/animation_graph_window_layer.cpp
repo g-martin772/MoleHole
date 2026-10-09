@@ -106,11 +106,13 @@ namespace
 
     struct AnimationGraphWindowLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, SceneManager, UiState>;
+        using Dependencies = std::tuple<Logger, SceneManager, UiState, AssetDirectories, AssetOptions>;
 
         AnimationGraphWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<SceneManager> scenes,
-                                  std::shared_ptr<UiState> uiState)
-            : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState))
+                                  std::shared_ptr<UiState> uiState, std::shared_ptr<AssetDirectories> assets,
+                                  std::shared_ptr<AssetOptions> assetOptions)
+            : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState)),
+              m_Assets(std::move(assets)), m_AssetOptions(std::move(assetOptions))
         {
         }
 
@@ -130,6 +132,7 @@ namespace
 
         void OnUpdate(float deltaTime) override
         {
+            RefreshCombos(deltaTime);
             if (m_UiState->CurrentSceneName != m_LastSceneName)
             {
                 m_LastSceneName = m_UiState->CurrentSceneName;
@@ -429,6 +432,12 @@ namespace
             ImGui::EndDisabled();
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Wrap the selection in a comment box (C)");
             ImGui::SameLine();
+            ImGui::BeginDisabled(m_SelectionCount == 0);
+            if (ImGui::Button("Save Combo")) m_OpenComboSave = true;
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Save the selected nodes as a reusable combo template");
+            RenderComboSaveModal();
+            ImGui::SameLine();
             if (ImGui::Checkbox("Enabled", &named.Enabled)) StructureChanged();
             ImGui::SameLine();
             ImGui::SetNextItemWidth(180.0f);
@@ -703,7 +712,8 @@ namespace
             ed::Suspend();
             if (ed::ShowBackgroundContextMenu()) OpenPalette(std::nullopt, 0);
             RenderPalette();
-            if (!ImGui::IsPopupOpen("AnimationGraphPalette")) DrawHoverTooltips();
+            RenderComboForm(entities);
+            if (!ImGui::IsPopupOpen("AnimationGraphPalette") && !ImGui::IsPopupOpen("AnimationGraphComboForm")) DrawHoverTooltips();
             ed::Resume();
 
             ed::End();
@@ -885,8 +895,78 @@ namespace
 
         const NodeRegistry& Registry()
         {
-            if (!m_Registry) m_Registry = std::make_unique<NodeRegistry>(BuildNodeRegistry());
+            if (!m_Registry)
+            {
+                m_Registry = std::make_unique<NodeRegistry>(BuildNodeRegistry());
+                m_ComboVersion = std::numeric_limits<std::uint64_t>::max();
+            }
             return *m_Registry;
+        }
+
+        // Combo templates are polled from the Combos asset directories and swapped into the palette when they change.
+        void RefreshCombos(const float deltaTime)
+        {
+            if (!m_Assets) return;
+            m_ComboPollTimer += deltaTime;
+            if (m_ComboPollTimer >= 0.5f)
+            {
+                m_ComboPollTimer = 0.0f;
+                m_Assets->Poll();
+            }
+            Registry();
+            if (m_ComboVersion == m_Assets->Version()) return;
+            m_ComboVersion = m_Assets->Version();
+            m_Combos.Load(ReadComboSources(*m_Assets));
+            m_Registry->ReplaceCombos(m_Combos.Entries());
+            for (const auto& error : m_Combos.Errors()) m_Logger->Warn("[Combos] {}", error);
+        }
+
+        std::filesystem::path ComboDirectory() const
+        {
+            if (m_AssetOptions)
+            {
+                if (const auto it = m_AssetOptions->Kinds.find(kComboAssetKind);
+                    it != m_AssetOptions->Kinds.end() && !it->second.Directories.empty())
+                {
+                    return it->second.Directories.front();
+                }
+            }
+            return "combos";
+        }
+
+        void SaveSelectionAsCombo()
+        {
+            std::vector<int> nodeIds;
+            for (const int id : SelectedNodeIds()) if (CurrentGraph().FindNode(id)) nodeIds.push_back(id);
+            const std::string name = m_ComboNameBuffer.data();
+            const auto path = SaveComboFile(ComboDirectory(), name,
+                                            SelectionToComboYaml(CurrentGraph(), nodeIds, name, m_ComboDescBuffer.data()));
+            m_ComboStatus = path ? "Saved combo to " + path->string() : "Could not write the combo file";
+        }
+
+        void RenderComboSaveModal()
+        {
+            if (m_OpenComboSave)
+            {
+                ImGui::OpenPopup("SaveGraphCombo");
+                m_ComboNameBuffer.fill('\0');
+                m_ComboDescBuffer.fill('\0');
+                m_ComboStatus.clear();
+                m_OpenComboSave = false;
+            }
+            if (!ImGui::BeginPopupModal("SaveGraphCombo", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+            ImGui::TextUnformatted("Save selection as combo");
+            ImGui::TextDisabled("Loose constants and entity getters become form fields.");
+            ImGui::InputTextWithHint("##combo_name", "Name", m_ComboNameBuffer.data(), m_ComboNameBuffer.size());
+            ImGui::InputTextWithHint("##combo_desc", "Description", m_ComboDescBuffer.data(), m_ComboDescBuffer.size());
+            if (!m_ComboStatus.empty()) ImGui::TextWrapped("%s", m_ComboStatus.c_str());
+            const bool saved = !m_ComboStatus.empty() && m_ComboStatus.starts_with("Saved");
+            ImGui::BeginDisabled(m_ComboNameBuffer[0] == '\0' || saved);
+            if (ImGui::Button("Save")) SaveSelectionAsCombo();
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (ImGui::Button(saved ? "Close" : "Cancel")) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
         }
 
         void OpenPalette(const std::optional<PinFilter> filter, const int draggedPin)
@@ -898,10 +978,10 @@ namespace
             m_OpenPalette = true;
         }
 
-        void SpawnEntry(const NodeEntry& entry)
+        void SpawnEntry(const NodeEntry& entry, const std::vector<Value>* values = nullptr)
         {
             auto& graph = CurrentGraph();
-            const auto ids = entry.Spawn(graph);
+            const auto ids = values && entry.SpawnWith ? entry.SpawnWith(graph, *values) : entry.Spawn(graph);
             if (ids.empty()) return;
             for (const int id : ids)
             {
@@ -1011,9 +1091,84 @@ namespace
 
             if (chosen)
             {
-                SpawnEntry(*chosen);
+                if (chosen->Fields.empty() || !chosen->SpawnWith) SpawnEntry(*chosen);
+                else
+                {
+                    m_FormEntry = *chosen;
+                    m_FormValues.clear();
+                    for (const auto& field : chosen->Fields) m_FormValues.push_back(field.Default);
+                    m_OpenForm = true;
+                }
                 ImGui::CloseCurrentPopup();
             }
+            ImGui::EndPopup();
+        }
+
+        void RenderComboForm(const std::vector<EntityOption>& entities)
+        {
+            if (m_OpenForm)
+            {
+                ImGui::OpenPopup("AnimationGraphComboForm");
+                m_OpenForm = false;
+            }
+            if (!ImGui::BeginPopup("AnimationGraphComboForm")) return;
+
+            ImGui::TextUnformatted(m_FormEntry.Name.c_str());
+            if (!m_FormEntry.Description.empty())
+            {
+                ImGui::PushTextWrapPos(320.0f);
+                ImGui::TextDisabled("%s", m_FormEntry.Description.c_str());
+                ImGui::PopTextWrapPos();
+            }
+            ImGui::Separator();
+            for (std::size_t i = 0; i < m_FormEntry.Fields.size() && i < m_FormValues.size(); ++i)
+            {
+                const auto& field = m_FormEntry.Fields[i];
+                auto& value = m_FormValues[i];
+                ImGui::PushID(static_cast<int>(i));
+                ImGui::TextUnformatted(field.Label.c_str());
+                ImGui::SetNextItemWidth(260.0f);
+                if (field.Choice)
+                {
+                    int index = std::clamp(GetValueAs<int>(value, 0), 0, static_cast<int>(field.Options.size()) - 1);
+                    if (ImGui::BeginCombo("##field", field.Options[static_cast<std::size_t>(index)].c_str()))
+                    {
+                        for (int o = 0; o < static_cast<int>(field.Options.size()); ++o)
+                        {
+                            if (ImGui::Selectable(field.Options[static_cast<std::size_t>(o)].c_str(), o == index)) index = o;
+                        }
+                        ImGui::EndCombo();
+                    }
+                    value = index;
+                }
+                else if (field.Type == PinType::Object)
+                {
+                    const auto guid = GetValueAs<std::uint64_t>(value, 0);
+                    const EntityOption* current = guid != 0 ? FindEntityOption(entities, guid) : nullptr;
+                    if (ImGui::BeginCombo("##field", current ? current->Label.c_str() : "(Graph's entity)"))
+                    {
+                        if (ImGui::Selectable("(Graph's entity)", guid == 0)) value = std::uint64_t{0};
+                        for (const auto& entity : entities)
+                        {
+                            if (ImGui::Selectable(entity.Label.c_str(), entity.Guid == guid)) value = entity.Guid;
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                else
+                {
+                    EditValue("##field", value, 260.0f);
+                }
+                ImGui::PopID();
+            }
+            ImGui::Separator();
+            if (ImGui::Button("Insert", ImVec2(120, 0)))
+            {
+                SpawnEntry(m_FormEntry, &m_FormValues);
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0))) ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
 
@@ -1614,6 +1769,18 @@ namespace
             CommentSelection,
         };
         EditorAction m_PendingAction = EditorAction::None;
+        std::shared_ptr<AssetDirectories> m_Assets;
+        std::shared_ptr<AssetOptions> m_AssetOptions;
+        ComboLibrary m_Combos;
+        std::uint64_t m_ComboVersion = std::numeric_limits<std::uint64_t>::max();
+        float m_ComboPollTimer = 0.0f;
+        NodeEntry m_FormEntry;
+        std::vector<Value> m_FormValues;
+        bool m_OpenForm = false;
+        bool m_OpenComboSave = false;
+        std::array<char, 128> m_ComboNameBuffer{};
+        std::array<char, 256> m_ComboDescBuffer{};
+        std::string m_ComboStatus;
         std::unique_ptr<NodeRegistry> m_Registry;
         std::vector<std::string> m_Recents;
         std::array<char, 128> m_PaletteQuery{};

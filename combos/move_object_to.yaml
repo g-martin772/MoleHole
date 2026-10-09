@@ -1,0 +1,90 @@
+Name: Move Object To
+Description: Slides an object to a position over a duration with an easing curve. Starts when play begins.
+Keywords: [move, tween, animate, lerp, translate, slide]
+Variables:
+  - {Name: Elapsed, Type: Float, Default: 0}
+  - {Name: From, Type: Vec3, Default: [0, 0, 0]}
+Fields:
+  - Label: Target
+    Type: Object
+    Targets: [{Node: target, Set: Target}]
+  - Label: Position
+    Type: Vec3
+    Default: [0, 5, 0]
+    Targets: [{Node: dest, Set: Constant}]
+  - Label: Duration
+    Type: Float
+    Default: 2
+    Targets: [{Node: duration, Set: Constant}]
+  - Label: Easing
+    Type: Choice
+    Options: [Linear, Ease In, Ease Out, Smooth Step]
+    Default: 0
+    Targets:
+      - {Node: kLinear, Values: [1, 0, 2, 0]}
+      - {Node: kSquare, Values: [0, 1, -1, 3]}
+      - {Node: kCubic, Values: [0, 0, 0, -2]}
+Nodes:
+  - {Key: start, Kind: Start, Pos: [0, 0]}
+  - {Key: target, Kind: Get Transform, Pos: [0, 130]}
+  - {Key: current, Kind: Decompose Transform, Pos: [240, 130]}
+  - {Key: setFrom, Kind: "Set Variable (Vec3)", Variable: From, Pos: [480, 0]}
+  - {Key: tick, Kind: Tick, Pos: [0, 330]}
+  - {Key: getElapsed, Kind: "Get Variable (Float)", Variable: Elapsed, Pos: [0, 470]}
+  - {Key: advance, Kind: Add, Pos: [240, 400]}
+  - {Key: zero, Kind: Float Constant, Constant: 0, Pos: [240, 540]}
+  - {Key: duration, Kind: Float Constant, Constant: 2, Pos: [240, 620]}
+  - {Key: epsilon, Kind: Float Constant, Constant: 0.0001, Pos: [240, 700]}
+  - {Key: safeDuration, Kind: Max, Pos: [480, 640]}
+  - {Key: clamped, Kind: Clamp, Pos: [720, 440]}
+  - {Key: setElapsed, Kind: "Set Variable (Float)", Variable: Elapsed, Pos: [960, 330]}
+  - {Key: progress, Kind: Divide, Pos: [960, 470]}
+  - {Key: square, Kind: Multiply, Pos: [1200, 540]}
+  - {Key: cube, Kind: Multiply, Pos: [1440, 540]}
+  - {Key: kLinear, Kind: Float Constant, Constant: 1, Pos: [1200, 400]}
+  - {Key: kSquare, Kind: Float Constant, Constant: 0, Pos: [1680, 400]}
+  - {Key: kCubic, Kind: Float Constant, Constant: 0, Pos: [1680, 560]}
+  - {Key: termA, Kind: Multiply, Pos: [1440, 400]}
+  - {Key: termB, Kind: Multiply, Pos: [1920, 400]}
+  - {Key: termC, Kind: Multiply, Pos: [1920, 560]}
+  - {Key: sumAB, Kind: Add, Pos: [2160, 400]}
+  - {Key: eased, Kind: Add, Pos: [2400, 460]}
+  - {Key: getFrom, Kind: "Get Variable (Vec3)", Variable: From, Pos: [2160, 620]}
+  - {Key: dest, Kind: Vec3 Constant, Constant: [0, 5, 0], Pos: [2160, 700]}
+  - {Key: blend, Kind: Lerp, Pos: [2640, 540]}
+  - {Key: move, Kind: Set Transform, Pos: [2880, 330]}
+Links:
+  - [start.Out, setFrom.In]
+  - [target.Entity, current.Entity]
+  - [current.Position, setFrom.#1]
+  - [tick.Out, setElapsed.In]
+  - [getElapsed.#0, advance.A]
+  - [tick.DeltaTime, advance.B]
+  - [duration.Value, safeDuration.A]
+  - [epsilon.Value, safeDuration.B]
+  - [advance.Result, clamped.Value]
+  - [zero.Value, clamped.Min]
+  - [safeDuration.Result, clamped.Max]
+  - [clamped.Result, setElapsed.#1]
+  - [clamped.Result, progress.A]
+  - [safeDuration.Result, progress.B]
+  - [progress.Result, square.A]
+  - [progress.Result, square.B]
+  - [square.Result, cube.A]
+  - [progress.Result, cube.B]
+  - [progress.Result, termA.A]
+  - [kLinear.Value, termA.B]
+  - [square.Result, termB.A]
+  - [kSquare.Value, termB.B]
+  - [cube.Result, termC.A]
+  - [kCubic.Value, termC.B]
+  - [termA.Result, sumAB.A]
+  - [termB.Result, sumAB.B]
+  - [sumAB.Result, eased.A]
+  - [termC.Result, eased.B]
+  - [getFrom.#0, blend.A]
+  - [dest.Value, blend.B]
+  - [eased.Result, blend.T]
+  - [setElapsed.Out, move.In]
+  - [target.Entity, move.Entity]
+  - [blend.Result, move.Position]

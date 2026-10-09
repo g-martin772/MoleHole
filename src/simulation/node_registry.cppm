@@ -12,6 +12,16 @@ export namespace MoleHole
     constexpr const char* kCombosCategory = "Combos";
     constexpr std::size_t kMaxRecentNodes = 8;
 
+    // One user-editable value shown in the form that precedes spawning an entry (used by combos).
+    struct EntryField
+    {
+        std::string Label;
+        PinType Type{PinType::Float};
+        Value Default;
+        std::vector<std::string> Options;
+        bool Choice{false};
+    };
+
     struct NodeEntry
     {
         std::string Name;
@@ -20,6 +30,8 @@ export namespace MoleHole
         std::vector<std::string> Keywords;
         // Adds the node(s) to the graph at the origin and returns their ids; the first is the one wired to a dragged pin.
         std::function<std::vector<int>(AnimationGraphData&)> Spawn;
+        std::vector<EntryField> Fields;
+        std::function<std::vector<int>(AnimationGraphData&, const std::vector<Value>&)> SpawnWith;
     };
 
     struct PinFilter
@@ -101,6 +113,19 @@ export namespace MoleHole
         {
             entry.Category = kCombosCategory;
             Add(std::move(entry));
+        }
+
+        // Swaps the whole set of combo entries (used when combo templates are hot-reloaded).
+        void ReplaceCombos(std::vector<NodeEntry> entries)
+        {
+            std::erase_if(m_Entries, [](const NodeEntry& e) { return e.Category == kCombosCategory; });
+            for (auto& entry : entries) AddCombo(std::move(entry));
+        }
+
+        [[nodiscard]] const NodeEntry* Find(const std::string_view name) const
+        {
+            const auto it = std::ranges::find(m_Entries, name, &NodeEntry::Name);
+            return it != m_Entries.end() ? &*it : nullptr;
         }
 
         [[nodiscard]] const std::vector<NodeEntry>& Entries() const { return m_Entries; }

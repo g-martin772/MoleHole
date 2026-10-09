@@ -1,0 +1,28 @@
+Name: On Start Set Property
+Description: Sets a numeric property of an entity once when play begins.
+Keywords: [start, set, property, initial, begin, value]
+Fields:
+  - Label: Entity
+    Type: Object
+    Targets: [{Node: entity, Set: Target}]
+  - Label: Property
+    Type: Choice
+    Options:
+      - {Label: Black Hole Mass, Vars: {Comp: BlackHole, Prop: Mass}}
+      - {Label: Black Hole Spin, Vars: {Comp: BlackHole, Prop: Spin}}
+      - {Label: Black Hole Charge, Vars: {Comp: BlackHole, Prop: Charge}}
+      - {Label: Sphere Radius, Vars: {Comp: Sphere, Prop: Radius}}
+      - {Label: Sphere Spin, Vars: {Comp: Sphere, Prop: Spin}}
+  - Label: Value
+    Type: Float
+    Default: 1
+    Targets: [{Node: value, Set: Constant}]
+Nodes:
+  - {Key: start, Kind: Start, Pos: [0, 0]}
+  - {Key: entity, Kind: "Get ${Comp}", Pos: [0, 120]}
+  - {Key: value, Kind: Float Constant, Constant: 1, Pos: [0, 240]}
+  - {Key: write, Kind: "Set ${Comp}", Pos: [260, 0]}
+Links:
+  - [start.Out, write.In]
+  - [entity.Entity, write.Entity]
+  - ["value.Value", "write.${Prop}"]

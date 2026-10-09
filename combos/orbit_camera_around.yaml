@@ -1,0 +1,74 @@
+Name: Orbit Camera Around
+Description: Circles a camera around a target entity at a fixed radius and angular speed, always looking at it.
+Keywords: [orbit, camera, circle, rotate, spin, around]
+Variables:
+  - {Name: Angle, Type: Float, Default: 0}
+Fields:
+  - Label: Camera
+    Type: Object
+    Targets: [{Node: camera, Set: Target}]
+  - Label: Target
+    Type: Object
+    Targets: [{Node: target, Set: Target}]
+  - Label: Radius
+    Type: Float
+    Default: 10
+    Targets: [{Node: radius, Set: Constant}]
+  - Label: Speed
+    Type: Float
+    Default: 0.5
+    Targets: [{Node: speed, Set: Constant}]
+Nodes:
+  - {Key: tick, Kind: Tick, Pos: [0, 0]}
+  - {Key: speed, Kind: Float Constant, Constant: 0.5, Pos: [0, 140]}
+  - {Key: step, Kind: Multiply, Pos: [240, 100]}
+  - {Key: getAngle, Kind: "Get Variable (Float)", Variable: Angle, Pos: [240, 240]}
+  - {Key: advance, Kind: Add, Pos: [480, 160]}
+  - {Key: setAngle, Kind: "Set Variable (Float)", Variable: Angle, Pos: [720, 0]}
+  - {Key: cosine, Kind: Cos, Pos: [720, 200]}
+  - {Key: sine, Kind: Sin, Pos: [720, 320]}
+  - {Key: radius, Kind: Float Constant, Constant: 10, Pos: [720, 440]}
+  - {Key: xDist, Kind: Multiply, Pos: [960, 200]}
+  - {Key: zDist, Kind: Multiply, Pos: [960, 340]}
+  - {Key: zero, Kind: Vec3 Constant, Constant: [0, 0, 0], Pos: [960, 480]}
+  - {Key: unitX, Kind: Vec3 Constant, Constant: [1, 0, 0], Pos: [960, 560]}
+  - {Key: unitZ, Kind: Vec3 Constant, Constant: [0, 0, 1], Pos: [960, 640]}
+  - {Key: xOffset, Kind: Lerp, Pos: [1200, 240]}
+  - {Key: zOffset, Kind: Lerp, Pos: [1200, 420]}
+  - {Key: offset, Kind: Add, Pos: [1440, 320]}
+  - {Key: target, Kind: Get Transform, Pos: [1200, 600]}
+  - {Key: targetPose, Kind: Decompose Transform, Pos: [1440, 600]}
+  - {Key: position, Kind: Add, Pos: [1680, 420]}
+  - {Key: aim, Kind: Look At, Pos: [1920, 520]}
+  - {Key: camera, Kind: Get Transform, Pos: [1920, 260]}
+  - {Key: place, Kind: Set Transform, Pos: [2160, 80]}
+Links:
+  - [tick.Out, setAngle.In]
+  - [speed.Value, step.A]
+  - [tick.DeltaTime, step.B]
+  - [getAngle.#0, advance.A]
+  - [step.Result, advance.B]
+  - [advance.Result, setAngle.#1]
+  - [advance.Result, cosine.A]
+  - [advance.Result, sine.A]
+  - [cosine.Result, xDist.A]
+  - [radius.Value, xDist.B]
+  - [sine.Result, zDist.A]
+  - [radius.Value, zDist.B]
+  - [zero.Value, xOffset.A]
+  - [unitX.Value, xOffset.B]
+  - [xDist.Result, xOffset.T]
+  - [zero.Value, zOffset.A]
+  - [unitZ.Value, zOffset.B]
+  - [zDist.Result, zOffset.T]
+  - [xOffset.Result, offset.A]
+  - [zOffset.Result, offset.B]
+  - [target.Entity, targetPose.Entity]
+  - [targetPose.Position, position.A]
+  - [offset.Result, position.B]
+  - [position.Result, aim.From]
+  - [targetPose.Position, aim.Target]
+  - [setAngle.Out, place.In]
+  - [camera.Entity, place.Entity]
+  - [position.Result, place.Position]
+  - [aim.Rotation, place.Rotation]
