@@ -242,6 +242,7 @@ namespace
                     "and spacetime curvature rendered in real time.");
 
                 SectionHeader("INTERFACE");
+                ImGui::Checkbox("Play intro animation on startup", &m_UiState->IntroEnabled);
                 float scale = m_UiPreferences->GetUiScale();
                 if (ImGui::SliderFloat("UI Scale", &scale, 0.5f, 2.0f, "%.2f"))
                 {

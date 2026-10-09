@@ -429,7 +429,15 @@ namespace
         void OnUiRender() override
         {
             ImGuizmo::BeginFrame();
-            ImGui::Begin("Viewport");
+            const bool viewportOpen = ImGui::Begin("Viewport");
+            m_UiState->ViewportVisible = viewportOpen;
+            if (!viewportOpen)
+            {
+                m_UiState->ViewportScreenMin = {0.0f, 0.0f};
+                m_UiState->ViewportScreenMax = {0.0f, 0.0f};
+                ImGui::End();
+                return;
+            }
 
             const ImVec2 avail = ImGui::GetContentRegionAvail();
             if (!m_UiState->ExportActive && avail.x >= 1.0f && avail.y >= 1.0f)

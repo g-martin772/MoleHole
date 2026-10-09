@@ -26,6 +26,7 @@ namespace MoleHole
         if (m_Persist)
         {
             Load();
+            if (!m_UiState->IntroEnabled) m_UiState->IntroActive = false;
             if (!m_TutorialCompleted)
             {
                 StartTutorial(*m_UiState);
@@ -79,6 +80,16 @@ namespace MoleHole
                 m_Preferences->SetFont(font, fontSize);
                 if (const auto v = ui["UiScale"]) m_Preferences->SetUiScale(v.as<float>());
                 if (const auto v = ui["ShowViewportHud"]) m_UiState->ShowViewportHud = v.as<bool>();
+                if (const auto v = ui["IntroEnabled"]) m_UiState->IntroEnabled = v.as<bool>();
+                if (const auto v = ui["ShowCameraWindow"]) m_UiState->ShowCameraWindow = v.as<bool>();
+                if (const auto v = ui["ShowSystemWindow"]) m_UiState->ShowSystemWindow = v.as<bool>();
+                if (const auto v = ui["ShowSceneWindow"]) m_UiState->ShowSceneWindow = v.as<bool>();
+                if (const auto v = ui["ShowDebugWindow"]) m_UiState->ShowDebugWindow = v.as<bool>();
+                if (const auto v = ui["ShowGeneralRelativityWindow"])
+                    m_UiState->ShowGeneralRelativityWindow = v.as<bool>();
+                if (const auto v = ui["ShowScienceWindow"]) m_UiState->ShowScienceWindow = v.as<bool>();
+                if (const auto v = ui["ShowAnimationGraphWindow"])
+                    m_UiState->ShowAnimationGraphWindow = v.as<bool>();
             }
             if (const auto render = node["Render"])
             {
@@ -142,6 +153,14 @@ namespace MoleHole
             root["UI"]["FontSize"] = m_Preferences->GetFontSize();
             root["UI"]["UiScale"] = m_Preferences->GetUiScale();
             root["UI"]["ShowViewportHud"] = m_UiState->ShowViewportHud;
+            root["UI"]["IntroEnabled"] = m_UiState->IntroEnabled;
+            root["UI"]["ShowCameraWindow"] = m_UiState->ShowCameraWindow;
+            root["UI"]["ShowSystemWindow"] = m_UiState->ShowSystemWindow;
+            root["UI"]["ShowSceneWindow"] = m_UiState->ShowSceneWindow;
+            root["UI"]["ShowDebugWindow"] = m_UiState->ShowDebugWindow;
+            root["UI"]["ShowGeneralRelativityWindow"] = m_UiState->ShowGeneralRelativityWindow;
+            root["UI"]["ShowScienceWindow"] = m_UiState->ShowScienceWindow;
+            root["UI"]["ShowAnimationGraphWindow"] = m_UiState->ShowAnimationGraphWindow;
 
             root["Render"]["DebugMode"] = m_UiState->Render.DebugMode;
             root["Render"]["PhysicallyAccurate"] = m_UiState->Render.PhysicallyAccurate;

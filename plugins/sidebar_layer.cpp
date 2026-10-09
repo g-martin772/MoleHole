@@ -52,22 +52,19 @@ namespace
             constexpr float buttonHeight = 44.0f;
 
             ImGuiViewport* viewport = ImGui::GetMainViewport();
-            ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + ImGui::GetFrameHeight()));
-            ImGui::SetNextWindowSize(ImVec2(sidebarWidth, viewport->Size.y - ImGui::GetFrameHeight()));
-
-            viewport->WorkPos.x += sidebarWidth;
-            viewport->WorkSize.x -= sidebarWidth;
 
             constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                                                ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
                                                ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoDocking |
-                                               ImGuiWindowFlags_NoSavedSettings;
+                                               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNavFocus;
 
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 8));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
             ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.06f, 0.06f, 0.06f, 0.95f));
 
-            if (ImGui::Begin("##Sidebar", nullptr, flags))
+            // A real viewport side bar reserves its space in the work area, so the dockspace shrinks
+            // to fit instead of sitting underneath the bar.
+            if (ImGui::BeginViewportSideBar("##Sidebar", viewport, ImGuiDir_Left, sidebarWidth, flags))
             {
                 const SidebarButton buttons[] = {
                     {kIconCamera, "CAM", "Camera", &m_UiState->ShowCameraWindow},

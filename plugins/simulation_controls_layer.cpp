@@ -31,6 +31,7 @@ namespace
 
         void OnUiRender() override
         {
+            if (!m_UiState->ViewportVisible) return;
             if (m_UiState->CurrentSceneName.empty()) return;
             const auto runner = m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
             if (!runner) return;

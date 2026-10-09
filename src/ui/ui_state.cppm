@@ -64,6 +64,10 @@ export namespace MoleHole
         bool ShowAnimationGraphWindow = false;
 
         bool IntroActive = false;
+        // User preference: play the startup intro animation on launch.
+        bool IntroEnabled = true;
+        // True only on frames where the Viewport window is docked-visible (its tab is showing).
+        bool ViewportVisible = false;
         bool TutorialActive = false;
         int TutorialStep = 0;
 
