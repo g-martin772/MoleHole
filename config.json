@@ -1,5 +1,9 @@
 {
   "GPP": {
+    "Assets": {
+      "Scripts": {"Directories": ["scripts"], "Extensions": [".lua", ".luau"]},
+      "Combos": {"Directories": ["combos"], "Extensions": [".yaml"]}
+    },
     "Graphics": {
       "Window": {
         "Width": 1600,
