@@ -54,6 +54,7 @@ namespace MoleHole
             case NodeType::Getter: return "Getter";
             case NodeType::Control: return "Control";
             case NodeType::Print: return "Print";
+            case NodeType::Entity: return "Entity";
             }
             return "Event";
         }
@@ -68,6 +69,7 @@ namespace MoleHole
             if (text == "Getter") return NodeType::Getter;
             if (text == "Control") return NodeType::Control;
             if (text == "Print") return NodeType::Print;
+            if (text == "Entity") return NodeType::Entity;
             return NodeType::Event;
         }
 
@@ -93,6 +95,10 @@ namespace MoleHole
             case NodeSubType::Clamp: return "Clamp";
             case NodeSubType::And: return "And";
             case NodeSubType::Or: return "Or";
+            case NodeSubType::LookAt: return "LookAt";
+            case NodeSubType::SpawnEntity: return "SpawnEntity";
+            case NodeSubType::DestroyEntity: return "DestroyEntity";
+            case NodeSubType::CloneEntity: return "CloneEntity";
             case NodeSubType::Branch: return "Branch";
             case NodeSubType::For: return "For";
             case NodeSubType::Start: return "Start";
@@ -126,6 +132,10 @@ namespace MoleHole
             if (text == "Clamp") return NodeSubType::Clamp;
             if (text == "And") return NodeSubType::And;
             if (text == "Or") return NodeSubType::Or;
+            if (text == "LookAt") return NodeSubType::LookAt;
+            if (text == "SpawnEntity") return NodeSubType::SpawnEntity;
+            if (text == "DestroyEntity") return NodeSubType::DestroyEntity;
+            if (text == "CloneEntity") return NodeSubType::CloneEntity;
             if (text == "Branch") return NodeSubType::Branch;
             if (text == "For") return NodeSubType::For;
             if (text == "Start") return NodeSubType::Start;
@@ -422,6 +432,17 @@ namespace MoleHole
         node.Type = NodeType::Function;
         node.SubType = op;
 
+        if (op == NodeSubType::LookAt)
+        {
+            node.Name = "Look At";
+            node.Inputs = {
+                Pin{InputPinId(id, 0), "From", PinType::Vec3, true},
+                Pin{InputPinId(id, 1), "Target", PinType::Vec3, true},
+            };
+            node.Outputs = { Pin{OutputPinId(id, 0), "Rotation", PinType::Vec3, false} };
+            return node;
+        }
+
         const PinType pinType = IsBooleanOp(op) ? PinType::Bool : PinType::Float;
 
         switch (ArityOf(op))
@@ -655,9 +676,50 @@ namespace MoleHole
         return node;
     }
 
+    namespace
+    {
+        Node MakeEntityNode(const int id, const NodeSubType subType, std::string name)
+        {
+            Node node;
+            node.Id = id;
+            node.Name = std::move(name);
+            node.Type = NodeType::Entity;
+            node.SubType = subType;
+            node.Inputs.push_back(Pin{InputPinId(id, 0), "In", PinType::Flow, true});
+            node.Outputs.push_back(Pin{OutputPinId(id, 0), "Out", PinType::Flow, false});
+            return node;
+        }
+    }
+
+    Node CreateSpawnEntityNode(const int id)
+    {
+        Node node = MakeEntityNode(id, NodeSubType::SpawnEntity, "Spawn Entity");
+        node.Inputs.push_back(Pin{InputPinId(id, 1), "Preset", PinType::String, true});
+        node.Inputs.push_back(Pin{InputPinId(id, 2), "Position", PinType::Vec3, true});
+        node.Inputs.push_back(Pin{InputPinId(id, 3), "Name", PinType::String, true});
+        node.Outputs.push_back(Pin{OutputPinId(id, 1), "Entity", PinType::Object, false});
+        return node;
+    }
+
+    Node CreateDestroyEntityNode(const int id)
+    {
+        Node node = MakeEntityNode(id, NodeSubType::DestroyEntity, "Destroy Entity");
+        node.Inputs.push_back(Pin{InputPinId(id, 1), "Entity", PinType::Object, true});
+        return node;
+    }
+
+    Node CreateCloneEntityNode(const int id)
+    {
+        Node node = MakeEntityNode(id, NodeSubType::CloneEntity, "Clone Entity");
+        node.Inputs.push_back(Pin{InputPinId(id, 1), "Source", PinType::Object, true});
+        node.Inputs.push_back(Pin{InputPinId(id, 2), "Position", PinType::Vec3, true});
+        node.Outputs.push_back(Pin{OutputPinId(id, 1), "Entity", PinType::Object, false});
+        return node;
+    }
+
     // ---- Serialization --------------------------------------------------------------------------
 
-    std::string SerializeToYaml(const AnimationGraphData& graph)
+    YAML::Node GraphToNode(const AnimationGraphData& graph)
     {
         YAML::Node root;
         root["NextId"] = graph.NextId;
@@ -713,16 +775,24 @@ namespace MoleHole
             linksNode.push_back(l);
         }
         root["Links"] = linksNode;
+        return root;
+    }
 
+    std::string SerializeToYaml(const AnimationGraphData& graph)
+    {
         std::ostringstream stream;
-        stream << root;
+        stream << GraphToNode(graph);
         return stream.str();
     }
 
     AnimationGraphData DeserializeFromYaml(const std::string& yaml)
     {
+        return GraphFromNode(YAML::Load(yaml));
+    }
+
+    AnimationGraphData GraphFromNode(const YAML::Node& root)
+    {
         AnimationGraphData graph;
-        const auto root = YAML::Load(yaml);
 
         if (root["NextId"]) { graph.NextId = root["NextId"].as<int>(); }
 

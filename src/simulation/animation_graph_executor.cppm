@@ -5,6 +5,7 @@ import glm;
 import GPP;
 import :Simulation.AnimationGraph;
 import :Simulation.AnimationGraphProperties;
+import :Simulation.SceneGraphs;
 
 export namespace MoleHole
 {
@@ -14,7 +15,10 @@ export namespace MoleHole
     class GraphExecutor
     {
     public:
-        explicit GraphExecutor(const AnimationGraphData& graph, std::function<void(std::string)> onPrint = nullptr);
+        explicit GraphExecutor(const AnimationGraphData& graph, std::function<void(std::string)> onPrint = nullptr,
+                               std::uint64_t selfGuid = 0);
+
+        void SetGuidSource(std::function<std::uint64_t()> source) { m_GuidSource = std::move(source); }
 
         [[nodiscard]] PendingWrites ExecuteStartEvent(const GPP::Scene& scene);
         [[nodiscard]] PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime);
@@ -25,10 +29,13 @@ export namespace MoleHole
             const GPP::Scene& Scene;
             float DeltaTime{0.0f};
             PendingWrites Writes;
+            std::unordered_set<std::uint64_t> Spawned;
         };
 
         const AnimationGraphData& m_Graph;
         std::function<void(std::string)> m_OnPrint;
+        std::uint64_t m_SelfGuid{0};
+        std::function<std::uint64_t()> m_GuidSource;
         std::unordered_map<std::string, Value> m_Variables;
         std::unordered_map<int, Value> m_PinValues;
 
@@ -43,9 +50,25 @@ export namespace MoleHole
         void ExecuteDecomposer(const Node* node, ExecutionContext& ctx);
         Value ExecuteSceneGetter(const Node* node, ExecutionContext& ctx);
         void ExecuteSetter(const Node* node, ExecutionContext& ctx);
+        void ExecuteEntityNode(const Node* node, ExecutionContext& ctx);
+        [[nodiscard]] static bool EntityKnown(const ExecutionContext& ctx, std::uint64_t guid);
         void ExecuteControlFlow(const Node* node, ExecutionContext& ctx);
         void ExecutePrint(const Node* node, ExecutionContext& ctx);
         Value ExecuteVariableGet(const Node* node);
         void ExecuteVariableSet(const Node* node, ExecutionContext& ctx);
+    };
+
+    class GraphSetExecutor
+    {
+    public:
+        GraphSetExecutor(const SceneGraphs& graphs, std::function<void(std::string)> onPrint = nullptr);
+
+        void SetGuidSource(const std::function<std::uint64_t()>& source);
+
+        [[nodiscard]] PendingWrites ExecuteStartEvent(const GPP::Scene& scene);
+        [[nodiscard]] PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime);
+
+    private:
+        std::vector<std::unique_ptr<GraphExecutor>> m_Executors;
     };
 }

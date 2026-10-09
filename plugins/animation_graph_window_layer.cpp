@@ -24,6 +24,7 @@ namespace
     constexpr ImVec4 kGetterColor(0.2f, 0.6f, 0.7f, 1.0f);
     constexpr ImVec4 kControlColor(0.7f, 0.3f, 0.9f, 1.0f);
     constexpr ImVec4 kPrintColor(0.2f, 0.7f, 0.9f, 1.0f);
+    constexpr ImVec4 kEntityColor(0.9f, 0.5f, 0.2f, 1.0f);
     constexpr ImVec4 kOtherColor(0.5f, 0.5f, 0.5f, 1.0f);
 
     constexpr ImVec4 kFlowColor(0.8f, 0.8f, 0.8f, 1.0f);
@@ -58,6 +59,7 @@ namespace
         case NodeType::Getter: return kGetterColor;
         case NodeType::Control: return kControlColor;
         case NodeType::Print: return kPrintColor;
+        case NodeType::Entity: return kEntityColor;
         }
         return kOtherColor;
     }
@@ -214,10 +216,7 @@ namespace
 
             if (m_WasPaused && !paused)
             {
-                m_Executor = std::make_unique<GraphExecutor>(m_Graph, [logger = m_Logger](std::string message)
-                {
-                    logger->Info("[AnimationGraph] {}", message);
-                });
+                RebuildExecutor();
                 auto sceneLock = runner->LockRenderScene();
                 ApplyWrites(*runner, m_Executor->ExecuteStartEvent(*sceneLock));
             }
@@ -269,11 +268,15 @@ namespace
 
             SyncSelectedNodeFromEditor();
 
+            RenderGraphToolbar(entities);
+            ImGui::Separator();
+
             constexpr float inspectorWidth = 280.0f;
             const ImVec2 avail = ImGui::GetContentRegionAvail();
 
             ImGui::BeginChild("AnimationGraphEditorPanel", ImVec2(avail.x - inspectorWidth - 8.0f, 0), true);
-            RenderGraphEditor(entities);
+            if (m_Current < m_Graphs.Items.size()) RenderGraphEditor(entities);
+            else ImGui::TextDisabled("No graph in this scene. Click New to create one.");
             ImGui::EndChild();
 
             ImGui::SameLine();
@@ -297,19 +300,21 @@ namespace
     private:
         void LoadGraphFromScene()
         {
-            m_Graph = AnimationGraphData{};
+            m_Graphs = SceneGraphs{};
+            m_Current = 0;
             if (!m_UiState->CurrentSceneName.empty())
             {
                 if (const auto runner = m_Scenes->GetSimulation(m_UiState->CurrentSceneName))
                 {
                     auto sceneLock = runner->LockRenderScene();
-                    for (auto [entity, component] : sceneLock->Registry().view<const AnimationGraphComponent>().each())
-                    {
-                        m_Graph = DeserializeFromYaml(component.GraphYaml);
-                        break;
-                    }
+                    m_Graphs = LoadSceneGraphs(*sceneLock);
                 }
             }
+            ResetEditorView();
+        }
+
+        void ResetEditorView()
+        {
             m_Dirty = false;
             m_SelectedNodeId = 0;
             m_NeedsPositionRestore = true;
@@ -318,22 +323,122 @@ namespace
 
         void SaveGraphToScene(SimulationRunner& runner) const
         {
-            const std::string yaml = SerializeToYaml(m_Graph);
-            runner.EnqueueEdit([yaml](Scene& scene)
+            runner.EnqueueEdit([graphs = m_Graphs](Scene& scene) { StoreSceneGraphs(scene, graphs); });
+        }
+
+        void RebuildExecutor()
+        {
+            m_Executor = std::make_unique<GraphSetExecutor>(m_Graphs, [logger = m_Logger](std::string message)
             {
-                bool found = false;
-                for (auto [entity, component] : scene.Registry().view<AnimationGraphComponent>().each())
-                {
-                    component.GraphYaml = yaml;
-                    found = true;
-                    break;
-                }
-                if (!found)
-                {
-                    const auto entity = scene.CreateEntity("", kAnimationGraphDataTypeTag);
-                    scene.Registry().emplace<AnimationGraphComponent>(entity, AnimationGraphComponent{yaml});
-                }
+                logger->Info("[AnimationGraph] {}", message);
             });
+        }
+
+        AnimationGraphData& CurrentGraph()
+        {
+            return m_Current < m_Graphs.Items.size() ? m_Graphs.Items[m_Current].Graph : m_EmptyGraph;
+        }
+
+        const AnimationGraphData& CurrentGraph() const
+        {
+            return m_Current < m_Graphs.Items.size() ? m_Graphs.Items[m_Current].Graph : m_EmptyGraph;
+        }
+
+        void SelectGraph(const std::size_t index)
+        {
+            m_Current = index;
+            ResetEditorView();
+        }
+
+        void StructureChanged()
+        {
+            if (m_Executor) RebuildExecutor();
+            m_Dirty = true;
+        }
+
+        void RenderGraphToolbar(const std::vector<EntityOption>& entities)
+        {
+            const bool hasGraph = m_Current < m_Graphs.Items.size();
+            ImGui::SetNextItemWidth(180.0f);
+            if (ImGui::BeginCombo("##graphselect", hasGraph ? m_Graphs.Items[m_Current].Name.c_str() : "(No Graph)"))
+            {
+                for (std::size_t i = 0; i < m_Graphs.Items.size(); ++i)
+                {
+                    if (ImGui::Selectable(m_Graphs.Items[i].Name.c_str(), i == m_Current)) SelectGraph(i);
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("New"))
+            {
+                m_Graphs.Items.push_back(NamedGraph{.Name = m_Graphs.UniqueName("Graph")});
+                SelectGraph(m_Graphs.Items.size() - 1);
+                StructureChanged();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Rename") && hasGraph)
+            {
+                std::ranges::fill(m_RenameBuffer, '\0');
+                std::ranges::copy_n(m_Graphs.Items[m_Current].Name.begin(),
+                                    std::min(m_Graphs.Items[m_Current].Name.size(), m_RenameBuffer.size() - 1),
+                                    m_RenameBuffer.begin());
+                ImGui::OpenPopup("RenameAnimationGraph");
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Delete") && hasGraph)
+            {
+                m_Graphs.Items.erase(m_Graphs.Items.begin() + static_cast<std::ptrdiff_t>(m_Current));
+                SelectGraph(m_Current > 0 ? m_Current - 1 : 0);
+                StructureChanged();
+            }
+
+            if (ImGui::BeginPopupModal("RenameAnimationGraph", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+                const bool enter = ImGui::InputText("##renamegraph", m_RenameBuffer.data(), m_RenameBuffer.size(),
+                                                    ImGuiInputTextFlags_EnterReturnsTrue);
+                if ((ImGui::Button("OK") || enter) && m_RenameBuffer[0] != '\0' && m_Current < m_Graphs.Items.size())
+                {
+                    const std::string name = m_RenameBuffer.data();
+                    if (name != m_Graphs.Items[m_Current].Name)
+                    {
+                        m_Graphs.Items[m_Current].Name.clear();
+                        m_Graphs.Items[m_Current].Name = m_Graphs.UniqueName(name);
+                        m_Dirty = true;
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+            }
+
+            if (!hasGraph) return;
+            auto& named = m_Graphs.Items[m_Current];
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Enabled", &named.Enabled)) StructureChanged();
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(180.0f);
+            const EntityOption* bound = named.EntityGuid != 0 ? FindEntityOption(entities, named.EntityGuid) : nullptr;
+            if (ImGui::BeginCombo("##graphentity", bound ? bound->Label.c_str()
+                                                       : (named.EntityGuid != 0 ? "(Missing Entity)" : "(Scene)")))
+            {
+                if (ImGui::Selectable("(Scene)", named.EntityGuid == 0))
+                {
+                    named.EntityGuid = 0;
+                    StructureChanged();
+                }
+                for (const auto& entity : entities)
+                {
+                    if (ImGui::Selectable(entity.Label.c_str(), entity.Guid == named.EntityGuid))
+                    {
+                        named.EntityGuid = entity.Guid;
+                        StructureChanged();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Entity this graph is bound to; unset Getter nodes target it");
         }
 
         // ---- live execution -------------------------------------------------------------------
@@ -368,18 +473,18 @@ namespace
 
             if (m_NeedsPositionRestore)
             {
-                for (const auto& node : m_Graph.Nodes)
+                for (const auto& node : CurrentGraph().Nodes)
                 {
                     ed::SetNodePosition(ed::NodeId(node.Id), ImVec2(node.Position.x, node.Position.y));
                 }
             }
 
-            for (auto& node : m_Graph.Nodes)
+            for (auto& node : CurrentGraph().Nodes)
             {
                 DrawNode(node, entities);
             }
 
-            for (const auto& link : m_Graph.Links)
+            for (const auto& link : CurrentGraph().Links)
             {
                 ed::Link(ed::LinkId(link.Id), ed::PinId(link.StartPinId), ed::PinId(link.EndPinId));
             }
@@ -396,7 +501,7 @@ namespace
             if (m_NeedsPositionRestore)
             {
                 m_NeedsPositionRestore = false;
-                m_PendingNavigateFrames = m_Graph.Nodes.empty() ? 0 : kNavigateToContentRetryFrames;
+                m_PendingNavigateFrames = CurrentGraph().Nodes.empty() ? 0 : kNavigateToContentRetryFrames;
             }
             else if (m_PendingNavigateFrames > 0)
             {
@@ -405,7 +510,7 @@ namespace
             }
             else
             {
-                for (auto& node : m_Graph.Nodes)
+                for (auto& node : CurrentGraph().Nodes)
                 {
                     const auto pos = ed::GetNodePosition(ed::NodeId(node.Id));
                     if (std::abs(pos.x - node.Position.x) > 0.01f || std::abs(pos.y - node.Position.y) > 0.01f)
@@ -421,7 +526,7 @@ namespace
 
         const Pin* FindOutputPin(const int pinId) const
         {
-            for (const auto& node : m_Graph.Nodes)
+            for (const auto& node : CurrentGraph().Nodes)
             {
                 for (const auto& pin : node.Outputs) { if (pin.Id == pinId) return &pin; }
             }
@@ -430,7 +535,7 @@ namespace
 
         const Pin* FindInputPin(const int pinId) const
         {
-            for (const auto& node : m_Graph.Nodes)
+            for (const auto& node : CurrentGraph().Nodes)
             {
                 for (const auto& pin : node.Inputs) { if (pin.Id == pinId) return &pin; }
             }
@@ -449,7 +554,7 @@ namespace
                         const int startId = static_cast<int>(startPinId.Get());
                         const int endId = static_cast<int>(endPinId.Get());
 
-                        const bool inputUsed = std::ranges::any_of(m_Graph.Links, [endId](const Link& link)
+                        const bool inputUsed = std::ranges::any_of(CurrentGraph().Links, [endId](const Link& link)
                         {
                             return link.EndPinId == endId;
                         });
@@ -461,7 +566,7 @@ namespace
                         {
                             if (ed::AcceptNewItem())
                             {
-                                m_Graph.Links.push_back(Link{m_Graph.AllocateId(), startId, endId});
+                                CurrentGraph().Links.push_back(Link{CurrentGraph().AllocateId(), startId, endId});
                                 m_Dirty = true;
                             }
                         }
@@ -484,7 +589,7 @@ namespace
                 {
                     if (ed::AcceptDeletedItem())
                     {
-                        m_Graph.RemoveLink(static_cast<int>(deletedLinkId.Get()));
+                        CurrentGraph().RemoveLink(static_cast<int>(deletedLinkId.Get()));
                         m_Dirty = true;
                     }
                 }
@@ -495,7 +600,7 @@ namespace
                     if (ed::AcceptDeletedItem())
                     {
                         const int id = static_cast<int>(deletedNodeId.Get());
-                        m_Graph.RemoveNode(id);
+                        CurrentGraph().RemoveNode(id);
                         if (m_SelectedNodeId == id) m_SelectedNodeId = 0;
                         m_Dirty = true;
                     }
@@ -520,7 +625,7 @@ namespace
             {
                 node.Position = glm::vec2(canvasPos.x, canvasPos.y);
                 const int id = node.Id;
-                m_Graph.Nodes.push_back(std::move(node));
+                CurrentGraph().Nodes.push_back(std::move(node));
                 ed::SetNodePosition(ed::NodeId(id), canvasPos);
                 ed::SelectNode(ed::NodeId(id));
                 m_SelectedNodeId = id;
@@ -529,8 +634,8 @@ namespace
 
             if (ImGui::BeginMenu("Events"))
             {
-                if (ImGui::MenuItem("Start")) addNode(CreateStartEventNode(m_Graph.AllocateId()));
-                if (ImGui::MenuItem("Tick")) addNode(CreateTickEventNode(m_Graph.AllocateId()));
+                if (ImGui::MenuItem("Start")) addNode(CreateStartEventNode(CurrentGraph().AllocateId()));
+                if (ImGui::MenuItem("Tick")) addNode(CreateTickEventNode(CurrentGraph().AllocateId()));
                 ImGui::EndMenu();
             }
 
@@ -543,7 +648,7 @@ namespace
                 };
                 for (const auto& [label, type] : kTypes)
                 {
-                    if (ImGui::MenuItem(label)) addNode(CreateConstantNode(m_Graph.AllocateId(), type));
+                    if (ImGui::MenuItem(label)) addNode(CreateConstantNode(CurrentGraph().AllocateId(), type));
                 }
                 ImGui::EndMenu();
             }
@@ -556,7 +661,7 @@ namespace
                 };
                 for (const auto& [label, op] : kBinary)
                 {
-                    if (ImGui::MenuItem(label)) addNode(CreateMathNode(m_Graph.AllocateId(), op));
+                    if (ImGui::MenuItem(label)) addNode(CreateMathNode(CurrentGraph().AllocateId(), op));
                 }
                 ImGui::Separator();
                 static constexpr std::pair<const char*, NodeSubType> kUnary[] = {
@@ -565,22 +670,23 @@ namespace
                 };
                 for (const auto& [label, op] : kUnary)
                 {
-                    if (ImGui::MenuItem(label)) addNode(CreateMathNode(m_Graph.AllocateId(), op));
+                    if (ImGui::MenuItem(label)) addNode(CreateMathNode(CurrentGraph().AllocateId(), op));
                 }
                 ImGui::Separator();
-                if (ImGui::MenuItem("Distance")) addNode(CreateMathNode(m_Graph.AllocateId(), NodeSubType::Distance));
-                if (ImGui::MenuItem("Lerp")) addNode(CreateMathNode(m_Graph.AllocateId(), NodeSubType::Lerp));
-                if (ImGui::MenuItem("Clamp")) addNode(CreateMathNode(m_Graph.AllocateId(), NodeSubType::Clamp));
+                if (ImGui::MenuItem("Distance")) addNode(CreateMathNode(CurrentGraph().AllocateId(), NodeSubType::Distance));
+                if (ImGui::MenuItem("Lerp")) addNode(CreateMathNode(CurrentGraph().AllocateId(), NodeSubType::Lerp));
+                if (ImGui::MenuItem("Clamp")) addNode(CreateMathNode(CurrentGraph().AllocateId(), NodeSubType::Clamp));
+                if (ImGui::MenuItem("Look At")) addNode(CreateMathNode(CurrentGraph().AllocateId(), NodeSubType::LookAt));
                 ImGui::Separator();
-                if (ImGui::MenuItem("And")) addNode(CreateMathNode(m_Graph.AllocateId(), NodeSubType::And));
-                if (ImGui::MenuItem("Or")) addNode(CreateMathNode(m_Graph.AllocateId(), NodeSubType::Or));
+                if (ImGui::MenuItem("And")) addNode(CreateMathNode(CurrentGraph().AllocateId(), NodeSubType::And));
+                if (ImGui::MenuItem("Or")) addNode(CreateMathNode(CurrentGraph().AllocateId(), NodeSubType::Or));
                 ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("Control Flow"))
             {
-                if (ImGui::MenuItem("Branch")) addNode(CreateBranchNode(m_Graph.AllocateId()));
-                if (ImGui::MenuItem("For Loop")) addNode(CreateForNode(m_Graph.AllocateId()));
+                if (ImGui::MenuItem("Branch")) addNode(CreateBranchNode(CurrentGraph().AllocateId()));
+                if (ImGui::MenuItem("For Loop")) addNode(CreateForNode(CurrentGraph().AllocateId()));
                 ImGui::EndMenu();
             }
 
@@ -591,12 +697,20 @@ namespace
                     if (ImGui::BeginMenu(category->DisplayName.c_str()))
                     {
                         const auto& name = category->ComponentName;
-                        if (ImGui::MenuItem("Get")) addNode(CreateGetterNode(m_Graph.AllocateId(), name));
-                        if (ImGui::MenuItem("Decompose")) addNode(CreateDecomposerNode(m_Graph.AllocateId(), name));
-                        if (ImGui::MenuItem("Set")) addNode(CreateSetterNode(m_Graph.AllocateId(), name));
+                        if (ImGui::MenuItem("Get")) addNode(CreateGetterNode(CurrentGraph().AllocateId(), name));
+                        if (ImGui::MenuItem("Decompose")) addNode(CreateDecomposerNode(CurrentGraph().AllocateId(), name));
+                        if (ImGui::MenuItem("Set")) addNode(CreateSetterNode(CurrentGraph().AllocateId(), name));
                         ImGui::EndMenu();
                     }
                 }
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Entities"))
+            {
+                if (ImGui::MenuItem("Spawn Entity")) addNode(CreateSpawnEntityNode(CurrentGraph().AllocateId()));
+                if (ImGui::MenuItem("Clone Entity")) addNode(CreateCloneEntityNode(CurrentGraph().AllocateId()));
+                if (ImGui::MenuItem("Destroy Entity")) addNode(CreateDestroyEntityNode(CurrentGraph().AllocateId()));
                 ImGui::EndMenu();
             }
 
@@ -613,7 +727,7 @@ namespace
                     {
                         if (ImGui::MenuItem(label))
                         {
-                            Node node = CreateVariableGetNode(m_Graph.AllocateId(), "", type);
+                            Node node = CreateVariableGetNode(CurrentGraph().AllocateId(), "", type);
                             node.Name = std::string("Get Variable (") + label + ")";
                             addNode(std::move(node));
                         }
@@ -626,7 +740,7 @@ namespace
                     {
                         if (ImGui::MenuItem(label))
                         {
-                            Node node = CreateVariableSetNode(m_Graph.AllocateId(), "", type);
+                            Node node = CreateVariableSetNode(CurrentGraph().AllocateId(), "", type);
                             node.Name = std::string("Set Variable (") + label + ")";
                             addNode(std::move(node));
                         }
@@ -636,7 +750,7 @@ namespace
                 ImGui::EndMenu();
             }
 
-            if (ImGui::MenuItem("Print")) addNode(CreatePrintNode(m_Graph.AllocateId()));
+            if (ImGui::MenuItem("Print")) addNode(CreatePrintNode(CurrentGraph().AllocateId()));
 
             ImGui::EndPopup();
         }
@@ -695,6 +809,9 @@ namespace
             case NodeType::Control:
                 drawList->AddRectFilled(pos, ImVec2(pos.x + iconSize, pos.y + iconSize), ImColor(iconColor),
                                         iconSize / 4);
+                break;
+            case NodeType::Entity:
+                drawList->AddRectFilled(pos, ImVec2(pos.x + iconSize, pos.y + iconSize), ImColor(iconColor), iconSize / 2);
                 break;
             case NodeType::Print:
                 drawList->AddRect(pos, ImVec2(pos.x + iconSize, pos.y + iconSize), ImColor(iconColor), 2.0f, 0, 2.0f);
@@ -869,7 +986,7 @@ namespace
                 return;
             }
 
-            Node* node = m_Graph.FindNode(m_SelectedNodeId);
+            Node* node = CurrentGraph().FindNode(m_SelectedNodeId);
             if (!node)
             {
                 ImGui::TextDisabled("Node not found");
@@ -903,7 +1020,7 @@ namespace
             ImGui::Spacing();
             if (ImGui::Button("Delete Node", ImVec2(-1, 0)))
             {
-                m_Graph.RemoveNode(node->Id);
+                CurrentGraph().RemoveNode(node->Id);
                 m_SelectedNodeId = 0;
                 m_Dirty = true;
             }
@@ -927,13 +1044,13 @@ namespace
                     m_NewVariableBuffer[0] = '\0';
                 }
 
-                const bool anyMatching = std::ranges::any_of(m_Graph.Variables, [varType](const Variable& v)
+                const bool anyMatching = std::ranges::any_of(CurrentGraph().Variables, [varType](const Variable& v)
                 {
                     return v.Type == varType;
                 });
                 if (anyMatching) ImGui::Separator();
 
-                for (const auto& variable : m_Graph.Variables)
+                for (const auto& variable : CurrentGraph().Variables)
                 {
                     if (variable.Type != varType) continue;
                     const bool selected = variable.Name == node.VariableName;
@@ -964,11 +1081,11 @@ namespace
                 if ((ImGui::Button("Create") || enterPressed) && m_NewVariableBuffer[0] != '\0')
                 {
                     const std::string name = m_NewVariableBuffer.data();
-                    const bool exists = std::ranges::any_of(m_Graph.Variables, [&](const Variable& v)
+                    const bool exists = std::ranges::any_of(CurrentGraph().Variables, [&](const Variable& v)
                     {
                         return v.Name == name && v.Type == varType;
                     });
-                    if (!exists) m_Graph.Variables.push_back(Variable{name, varType});
+                    if (!exists) CurrentGraph().Variables.push_back(Variable{name, varType});
                     node.VariableName = name;
                     m_Dirty = true;
                     m_NewVariableBuffer[0] = '\0';
@@ -1017,7 +1134,10 @@ namespace
         std::shared_ptr<UiState> m_UiState;
 
         ed::EditorContext* m_EditorContext = nullptr;
-        AnimationGraphData m_Graph;
+        SceneGraphs m_Graphs;
+        std::size_t m_Current = 0;
+        AnimationGraphData m_EmptyGraph;
+        std::array<char, 128> m_RenameBuffer{};
         bool m_Dirty = false;
         bool m_NeedsPositionRestore = true;
         int m_PendingNavigateFrames = 0;
@@ -1025,7 +1145,7 @@ namespace
 
         std::string m_LastSceneName;
         bool m_WasPaused = true;
-        std::unique_ptr<GraphExecutor> m_Executor;
+        std::unique_ptr<GraphSetExecutor> m_Executor;
 
         bool m_ShowNewVariableDialog = false;
         std::array<char, 128> m_NewVariableBuffer{};

@@ -3,6 +3,10 @@ module MoleHole;
 import :Simulation.AnimationGraphExecutor;
 import :Simulation.AnimationGraph;
 import :Simulation.AnimationGraphProperties;
+import :Simulation.SceneGraphs;
+import :Simulation.CameraMath;
+import :Simulation.EntityPresets;
+import :Simulation.Components;
 import std;
 import glm;
 import GPP;
@@ -14,9 +18,46 @@ namespace MoleHole
         constexpr int kMaxForIterations = 100000;
     }
 
-    GraphExecutor::GraphExecutor(const AnimationGraphData& graph, std::function<void(std::string)> onPrint)
-        : m_Graph(graph), m_OnPrint(std::move(onPrint))
+    GraphExecutor::GraphExecutor(const AnimationGraphData& graph, std::function<void(std::string)> onPrint,
+                                 const std::uint64_t selfGuid)
+        : m_Graph(graph), m_OnPrint(std::move(onPrint)), m_SelfGuid(selfGuid), m_GuidSource(&GPP::GenerateGuid)
     {
+    }
+
+    GraphSetExecutor::GraphSetExecutor(const SceneGraphs& graphs, std::function<void(std::string)> onPrint)
+    {
+        for (const auto& item : graphs.Items)
+        {
+            if (!item.Enabled) continue;
+            m_Executors.push_back(std::make_unique<GraphExecutor>(item.Graph, onPrint, item.EntityGuid));
+        }
+    }
+
+    void GraphSetExecutor::SetGuidSource(const std::function<std::uint64_t()>& source)
+    {
+        for (auto& executor : m_Executors) executor->SetGuidSource(source);
+    }
+
+    PendingWrites GraphSetExecutor::ExecuteStartEvent(const GPP::Scene& scene)
+    {
+        PendingWrites writes;
+        for (auto& executor : m_Executors)
+        {
+            auto result = executor->ExecuteStartEvent(scene);
+            std::ranges::move(result, std::back_inserter(writes));
+        }
+        return writes;
+    }
+
+    PendingWrites GraphSetExecutor::ExecuteTickEvent(const GPP::Scene& scene, const float deltaTime)
+    {
+        PendingWrites writes;
+        for (auto& executor : m_Executors)
+        {
+            auto result = executor->ExecuteTickEvent(scene, deltaTime);
+            std::ranges::move(result, std::back_inserter(writes));
+        }
+        return writes;
     }
 
     PendingWrites GraphExecutor::ExecuteStartEvent(const GPP::Scene& scene)
@@ -76,6 +117,10 @@ namespace MoleHole
             break;
         case NodeType::Control:
             ExecuteControlFlow(node, ctx);
+            break;
+        case NodeType::Entity:
+            ExecuteEntityNode(node, ctx);
+            if (!node->Outputs.empty()) { ExecuteFlowFromPin(node->Outputs[0].Id, ctx); }
             break;
         case NodeType::Setter:
             ExecuteSetter(node, ctx);
@@ -318,6 +363,16 @@ namespace MoleHole
             }
             break;
         }
+        case NodeSubType::LookAt:
+        {
+            const Value from = EvaluatePinValue(in[0].Id, ctx);
+            const Value target = EvaluatePinValue(in[1].Id, ctx);
+            if (std::holds_alternative<glm::vec3>(from) && std::holds_alternative<glm::vec3>(target))
+            {
+                return LookAtEulerDegrees(std::get<glm::vec3>(from), std::get<glm::vec3>(target));
+            }
+            break;
+        }
         case NodeSubType::And:
         {
             const bool a = GetValueAs<bool>(EvaluatePinValue(in[0].Id, ctx), false);
@@ -358,8 +413,9 @@ namespace MoleHole
 
     Value GraphExecutor::ExecuteSceneGetter(const Node* node, ExecutionContext& ctx)
     {
-        const entt::entity entity = ctx.Scene.FindByGuid(node->TargetGuid);
-        if (ctx.Scene.IsValid(entity)) { return node->TargetGuid; }
+        const std::uint64_t guid = node->TargetGuid != 0 ? node->TargetGuid : m_SelfGuid;
+        const entt::entity entity = ctx.Scene.FindByGuid(guid);
+        if (ctx.Scene.IsValid(entity)) { return guid; }
         return std::monostate{};
     }
 
@@ -371,8 +427,7 @@ namespace MoleHole
         if (!std::holds_alternative<std::uint64_t>(entityVal)) { return; }
         const std::uint64_t guid = std::get<std::uint64_t>(entityVal);
 
-        const entt::entity entity = ctx.Scene.FindByGuid(guid);
-        if (!ctx.Scene.IsValid(entity)) { return; }
+        if (!EntityKnown(ctx, guid)) { return; }
 
         const PropertyCategory* category = FindPropertyCategory(node->Component);
         if (!category) { return; }
@@ -399,6 +454,84 @@ namespace MoleHole
         if (node->Outputs.size() > 1)
         {
             m_PinValues[node->Outputs[1].Id] = guid;
+        }
+    }
+
+    bool GraphExecutor::EntityKnown(const ExecutionContext& ctx, const std::uint64_t guid)
+    {
+        return ctx.Spawned.contains(guid) || ctx.Scene.IsValid(ctx.Scene.FindByGuid(guid));
+    }
+
+    void GraphExecutor::ExecuteEntityNode(const Node* node, ExecutionContext& ctx)
+    {
+        const auto asGuid = [](const Value& value) -> std::uint64_t
+        {
+            return std::holds_alternative<std::uint64_t>(value) ? std::get<std::uint64_t>(value) : 0;
+        };
+        const auto outputPin = [node](const std::size_t index) { return node->Outputs.size() > index ? node->Outputs[index].Id : 0; };
+
+        if (node->SubType == NodeSubType::SpawnEntity && node->Inputs.size() >= 4)
+        {
+            const Value presetValue = EvaluatePinValue(node->Inputs[1].Id, ctx);
+            const std::string preset = std::holds_alternative<std::string>(presetValue)
+                                           ? std::get<std::string>(presetValue)
+                                           : std::string("Empty");
+            const glm::vec3 position = GetValueAs<glm::vec3>(EvaluatePinValue(node->Inputs[2].Id, ctx), glm::vec3(0.0f));
+            const Value nameValue = EvaluatePinValue(node->Inputs[3].Id, ctx);
+            const std::string name = std::holds_alternative<std::string>(nameValue) ? std::get<std::string>(nameValue) : "";
+
+            const std::uint64_t guid = m_GuidSource();
+            if (FindEntityPreset(preset))
+            {
+                ctx.Writes.push_back([guid, preset, position, name](GPP::Scene& live)
+                {
+                    SpawnPreset(live, guid, preset, position, name);
+                });
+            }
+            else
+            {
+                std::uint64_t sourceGuid = 0;
+                for (auto [entity, metadata] : ctx.Scene.Registry().view<const GPP::MetadataComponent>().each())
+                {
+                    if (metadata.Name == preset) { sourceGuid = metadata.Guid; break; }
+                }
+                if (sourceGuid == 0) { return; }
+                ctx.Writes.push_back([guid, sourceGuid, position, name](GPP::Scene& live)
+                {
+                    const auto source = live.FindByGuid(sourceGuid);
+                    const auto copy = live.CloneEntity(source, guid);
+                    if (!live.IsValid(copy)) { return; }
+                    if (auto* transform = live.Registry().try_get<GPP::TransformComponent>(copy)) { transform->Position = position; }
+                    if (!name.empty()) { live.Registry().get<GPP::MetadataComponent>(copy).Name = name; }
+                });
+            }
+            ctx.Spawned.insert(guid);
+            if (const int pin = outputPin(1)) { m_PinValues[pin] = guid; }
+        }
+        else if (node->SubType == NodeSubType::DestroyEntity && node->Inputs.size() >= 2)
+        {
+            const std::uint64_t guid = asGuid(EvaluatePinValue(node->Inputs[1].Id, ctx));
+            if (guid == 0) { return; }
+            ctx.Spawned.erase(guid);
+            ctx.Writes.push_back([guid](GPP::Scene& live) { live.DestroyEntity(live.FindByGuid(guid)); });
+        }
+        else if (node->SubType == NodeSubType::CloneEntity && node->Inputs.size() >= 3)
+        {
+            const std::uint64_t sourceGuid = asGuid(EvaluatePinValue(node->Inputs[1].Id, ctx));
+            if (sourceGuid == 0 || !EntityKnown(ctx, sourceGuid)) { return; }
+            const Value positionValue = EvaluatePinValue(node->Inputs[2].Id, ctx);
+            const std::optional<glm::vec3> position = std::holds_alternative<glm::vec3>(positionValue)
+                                                          ? std::optional(std::get<glm::vec3>(positionValue))
+                                                          : std::nullopt;
+            const std::uint64_t guid = m_GuidSource();
+            ctx.Writes.push_back([guid, sourceGuid, position](GPP::Scene& live)
+            {
+                const auto copy = live.CloneEntity(live.FindByGuid(sourceGuid), guid);
+                if (!live.IsValid(copy) || !position) { return; }
+                if (auto* transform = live.Registry().try_get<GPP::TransformComponent>(copy)) { transform->Position = *position; }
+            });
+            ctx.Spawned.insert(guid);
+            if (const int pin = outputPin(1)) { m_PinValues[pin] = guid; }
         }
     }
 

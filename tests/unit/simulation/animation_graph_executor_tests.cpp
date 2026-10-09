@@ -657,3 +657,248 @@ TEST_CASE("SerializeToYaml/DeserializeFromYaml round-trips a graph with every im
     REQUIRE(std::holds_alternative<float>(restoredConst->ConstantValue));
     CHECK(std::get<float>(restoredConst->ConstantValue) == Catch::Approx(2.5f));
 }
+
+namespace
+{
+    int AddConstant(AnimationGraphData& graph, const Value& value, const PinType type)
+    {
+        Node node = CreateConstantNode(graph.AllocateId(), type);
+        node.ConstantValue = value;
+        const int out = node.Outputs[0].Id;
+        graph.Nodes.push_back(std::move(node));
+        return out;
+    }
+
+    GraphExecutor MakeExecutor(const AnimationGraphData& graph, std::uint64_t selfGuid = 0)
+    {
+        GraphExecutor executor(graph, nullptr, selfGuid);
+        executor.SetGuidSource([] { return std::uint64_t{777}; });
+        return executor;
+    }
+}
+
+TEST_CASE("Spawn Entity creates the preset with the pre-allocated guid and its Object pin is usable downstream",
+          "[simulation][animation][spawn]")
+{
+    RegisterComponents();
+    Scene scene("SpawnTest");
+
+    AnimationGraphData graph;
+    Node start = CreateStartEventNode(graph.AllocateId());
+    const int startOut = start.Outputs[0].Id;
+    graph.Nodes.push_back(start);
+
+    const int preset = AddConstant(graph, std::string("BlackHole"), PinType::String);
+    const int position = AddConstant(graph, glm::vec3(1.0f, 2.0f, 3.0f), PinType::Vec3);
+    const int mass = AddConstant(graph, 7.0f, PinType::Float);
+
+    Node spawn = CreateSpawnEntityNode(graph.AllocateId());
+    const int spawnIn = spawn.Inputs[0].Id;
+    const int spawnPreset = spawn.Inputs[1].Id;
+    const int spawnPosition = spawn.Inputs[2].Id;
+    const int spawnFlowOut = spawn.Outputs[0].Id;
+    const int spawnEntityOut = spawn.Outputs[1].Id;
+    graph.Nodes.push_back(spawn);
+
+    Node setter = CreateSetterNode(graph.AllocateId(), NodeSubType::BlackHole);
+    const int setterIn = setter.Inputs[0].Id;
+    const int setterEntity = setter.Inputs[1].Id;
+    const int setterMass = setter.Inputs[2].Id;
+    graph.Nodes.push_back(setter);
+
+    Connect(graph, startOut, spawnIn);
+    Connect(graph, preset, spawnPreset);
+    Connect(graph, position, spawnPosition);
+    Connect(graph, spawnFlowOut, setterIn);
+    Connect(graph, spawnEntityOut, setterEntity);
+    Connect(graph, mass, setterMass);
+
+    auto executor = MakeExecutor(graph);
+    auto writes = executor.ExecuteStartEvent(scene);
+    CHECK(scene.FindByGuid(777) == entt::entity{entt::null});
+    ApplyWrites(writes, scene);
+
+    const auto spawned = scene.FindByGuid(777);
+    REQUIRE(scene.IsValid(spawned));
+    CHECK(scene.Registry().get<TransformComponent>(spawned).Position == glm::vec3(1.0f, 2.0f, 3.0f));
+    CHECK(scene.Registry().get<BlackHoleComponent>(spawned).Mass == 7.0f);
+}
+
+TEST_CASE("Destroy Entity removes the entity", "[simulation][animation][spawn]")
+{
+    RegisterComponents();
+    Scene scene("DestroyTest");
+    const auto sphere = scene.CreateEntity("Sphere", "Sphere");
+    scene.Registry().emplace<SphereComponent>(sphere);
+
+    AnimationGraphData graph;
+    Node start = CreateStartEventNode(graph.AllocateId());
+    const int startOut = start.Outputs[0].Id;
+    graph.Nodes.push_back(start);
+    Node getter = CreateGetterNode(graph.AllocateId(), NodeSubType::Sphere);
+    getter.TargetGuid = scene.GuidOf(sphere);
+    const int getterOut = getter.Outputs[0].Id;
+    graph.Nodes.push_back(getter);
+    Node destroy = CreateDestroyEntityNode(graph.AllocateId());
+    const int destroyIn = destroy.Inputs[0].Id;
+    const int destroyEntity = destroy.Inputs[1].Id;
+    graph.Nodes.push_back(destroy);
+    Connect(graph, startOut, destroyIn);
+    Connect(graph, getterOut, destroyEntity);
+
+    auto executor = MakeExecutor(graph);
+    auto writes = executor.ExecuteStartEvent(scene);
+    ApplyWrites(writes, scene);
+    CHECK_FALSE(scene.IsValid(scene.FindByGuid(777)));
+    CHECK(scene.Registry().view<SphereComponent>().empty());
+}
+
+TEST_CASE("Clone Entity copies components under the new guid and applies the position",
+          "[simulation][animation][spawn]")
+{
+    RegisterComponents();
+    Scene scene("CloneTest");
+    const auto sphere = scene.CreateEntity("Ball", "Sphere");
+    scene.Registry().emplace<TransformComponent>(sphere);
+    scene.Registry().emplace<SphereComponent>(sphere, SphereComponent{.Radius = 3.0f});
+
+    AnimationGraphData graph;
+    Node start = CreateStartEventNode(graph.AllocateId());
+    const int startOut = start.Outputs[0].Id;
+    graph.Nodes.push_back(start);
+    Node getter = CreateGetterNode(graph.AllocateId(), NodeSubType::Sphere);
+    getter.TargetGuid = scene.GuidOf(sphere);
+    const int getterOut = getter.Outputs[0].Id;
+    graph.Nodes.push_back(getter);
+    const int position = AddConstant(graph, glm::vec3(0.0f, 9.0f, 0.0f), PinType::Vec3);
+    Node clone = CreateCloneEntityNode(graph.AllocateId());
+    const int cloneIn = clone.Inputs[0].Id;
+    const int cloneSource = clone.Inputs[1].Id;
+    const int clonePosition = clone.Inputs[2].Id;
+    graph.Nodes.push_back(clone);
+    Connect(graph, startOut, cloneIn);
+    Connect(graph, getterOut, cloneSource);
+    Connect(graph, position, clonePosition);
+
+    auto executor = MakeExecutor(graph);
+    auto writes = executor.ExecuteStartEvent(scene);
+    ApplyWrites(writes, scene);
+
+    const auto copy = scene.FindByGuid(777);
+    REQUIRE(scene.IsValid(copy));
+    CHECK(scene.Registry().get<SphereComponent>(copy).Radius == 3.0f);
+    CHECK(scene.Registry().get<TransformComponent>(copy).Position == glm::vec3(0.0f, 9.0f, 0.0f));
+    CHECK(scene.Registry().get<MetadataComponent>(copy).Guid == 777);
+    CHECK(scene.Registry().view<SphereComponent>().size() == 2);
+}
+
+TEST_CASE("Spawn Entity with a scene entity name clones that entity", "[simulation][animation][spawn]")
+{
+    RegisterComponents();
+    Scene scene("PrefabTest");
+    const auto prefab = scene.CreateEntity("Prefab", "Sphere");
+    scene.Registry().emplace<SphereComponent>(prefab, SphereComponent{.Radius = 2.0f});
+
+    AnimationGraphData graph;
+    Node start = CreateStartEventNode(graph.AllocateId());
+    const int startOut = start.Outputs[0].Id;
+    graph.Nodes.push_back(start);
+    const int name = AddConstant(graph, std::string("Prefab"), PinType::String);
+    Node spawn = CreateSpawnEntityNode(graph.AllocateId());
+    const int spawnIn = spawn.Inputs[0].Id;
+    const int spawnPreset = spawn.Inputs[1].Id;
+    graph.Nodes.push_back(spawn);
+    Connect(graph, startOut, spawnIn);
+    Connect(graph, name, spawnPreset);
+
+    auto executor = MakeExecutor(graph);
+    auto writes = executor.ExecuteStartEvent(scene);
+    ApplyWrites(writes, scene);
+    REQUIRE(scene.IsValid(scene.FindByGuid(777)));
+    CHECK(scene.Registry().get<SphereComponent>(scene.FindByGuid(777)).Radius == 2.0f);
+}
+
+TEST_CASE("Look At node outputs a rotation facing the target", "[simulation][animation][camera]")
+{
+    RegisterComponents();
+    Scene scene("LookAtTest");
+    const auto camera = scene.CreateEntity("Cam", "Camera");
+    scene.Registry().emplace<TransformComponent>(camera);
+    scene.Registry().emplace<CameraComponent>(camera);
+
+    AnimationGraphData graph;
+    Node start = CreateStartEventNode(graph.AllocateId());
+    const int startOut = start.Outputs[0].Id;
+    graph.Nodes.push_back(start);
+    Node getter = CreateGetterNode(graph.AllocateId(), "Camera");
+    getter.TargetGuid = scene.GuidOf(camera);
+    const int getterOut = getter.Outputs[0].Id;
+    graph.Nodes.push_back(getter);
+    const int from = AddConstant(graph, glm::vec3(0.0f), PinType::Vec3);
+    const int target = AddConstant(graph, glm::vec3(10.0f, 0.0f, 0.0f), PinType::Vec3);
+    Node lookAt = CreateMathNode(graph.AllocateId(), NodeSubType::LookAt);
+    const int lookFrom = lookAt.Inputs[0].Id;
+    const int lookTarget = lookAt.Inputs[1].Id;
+    const int lookOut = lookAt.Outputs[0].Id;
+    graph.Nodes.push_back(lookAt);
+    Node setter = CreateSetterNode(graph.AllocateId(), "Transform");
+    const int setterIn = setter.Inputs[0].Id;
+    const int setterEntity = setter.Inputs[1].Id;
+    const int setterRotation = setter.Inputs[3].Id;
+    graph.Nodes.push_back(setter);
+    Connect(graph, startOut, setterIn);
+    Connect(graph, getterOut, setterEntity);
+    Connect(graph, from, lookFrom);
+    Connect(graph, target, lookTarget);
+    Connect(graph, lookOut, setterRotation);
+
+    auto executor = MakeExecutor(graph);
+    auto writes = executor.ExecuteStartEvent(scene);
+    ApplyWrites(writes, scene);
+
+    const glm::vec3 front = scene.Registry().get<TransformComponent>(camera).Rotation * glm::vec3(0.0f, 0.0f, -1.0f);
+    CHECK(front.x == Catch::Approx(1.0f).margin(1e-4));
+    CHECK(front.z == Catch::Approx(0.0f).margin(2e-3));
+}
+
+TEST_CASE("A graph bound to an entity resolves unset Getter targets to it, and the set runs only enabled graphs",
+          "[simulation][animation][graphs]")
+{
+    RegisterComponents();
+    Scene scene("BoundTest");
+    const auto bh = scene.CreateEntity("BH", "BlackHole");
+    scene.Registry().emplace<BlackHoleComponent>(bh, BlackHoleComponent{.Mass = 1.0f});
+
+    const auto build = [&]
+    {
+        AnimationGraphData graph;
+        Node start = CreateStartEventNode(graph.AllocateId());
+        const int startOut = start.Outputs[0].Id;
+        graph.Nodes.push_back(start);
+        Node getter = CreateGetterNode(graph.AllocateId(), NodeSubType::BlackHole);
+        const int getterOut = getter.Outputs[0].Id;
+        graph.Nodes.push_back(getter);
+        const int mass = AddConstant(graph, 5.0f, PinType::Float);
+        Node setter = CreateSetterNode(graph.AllocateId(), NodeSubType::BlackHole);
+        const int in = setter.Inputs[0].Id;
+        const int entity = setter.Inputs[1].Id;
+        const int massIn = setter.Inputs[2].Id;
+        graph.Nodes.push_back(setter);
+        Connect(graph, startOut, in);
+        Connect(graph, getterOut, entity);
+        Connect(graph, mass, massIn);
+        return graph;
+    };
+
+    SceneGraphs graphs;
+    graphs.Items.push_back(NamedGraph{.Name = "Off", .Enabled = false, .EntityGuid = scene.GuidOf(bh), .Graph = build()});
+    GraphSetExecutor disabled(graphs);
+    auto none = disabled.ExecuteStartEvent(scene);
+    CHECK(none.empty());
+
+    graphs.Items[0].Enabled = true;
+    GraphSetExecutor enabled(graphs);
+    auto writes = enabled.ExecuteStartEvent(scene);
+    ApplyWrites(writes, scene);
+    CHECK(scene.Registry().get<BlackHoleComponent>(bh).Mass == 5.0f);
+}

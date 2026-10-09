@@ -1,3 +1,5 @@
+module;
+#include <yaml-cpp/yaml.h>
 export module MoleHole:Simulation.AnimationGraph;
 
 import std;
@@ -29,6 +31,7 @@ export namespace MoleHole
         Getter,
         Control,
         Print,
+        Entity,
     };
 
     enum class NodeSubType
@@ -46,6 +49,10 @@ export namespace MoleHole
         Lerp,
         Clamp,
         And, Or,
+        LookAt,
+
+        // Entity
+        SpawnEntity, DestroyEntity, CloneEntity,
 
         // Control
         Branch,
@@ -145,6 +152,13 @@ export namespace MoleHole
     [[nodiscard]] Node CreateDecomposerNode(int id, const std::string& component);
     [[nodiscard]] Node CreateSetterNode(int id, const std::string& component);
     [[nodiscard]] Node CreateGetterNode(int id, const std::string& component);
+
+    [[nodiscard]] Node CreateSpawnEntityNode(int id);
+    [[nodiscard]] Node CreateDestroyEntityNode(int id);
+    [[nodiscard]] Node CreateCloneEntityNode(int id);
+
+    [[nodiscard]] YAML::Node GraphToNode(const AnimationGraphData& graph);
+    [[nodiscard]] AnimationGraphData GraphFromNode(const YAML::Node& root);
 
     [[nodiscard]] std::string SerializeToYaml(const AnimationGraphData& graph);
     [[nodiscard]] AnimationGraphData DeserializeFromYaml(const std::string& yaml);

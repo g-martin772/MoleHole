@@ -120,11 +120,51 @@ Entities:
       Mesh:
         AssetPath: /home/gabriel/Repos/MoleHole/assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
         CenterOfMassOffset: [0, 0, 0]
-  - Guid: 3377604101991697808
-    Components:
-      Metadata:
-        Guid: 3377604101991697808
-        Name: ""
-        TypeTag: __AnimationGraphData
-      AnimationGraph:
-        GraphYaml: "NextId: 6\nVariables:\n  []\nNodes:\n  - Id: 1\n    Name: Start\n    Type: Event\n    SubType: Start\n    VariableName: \"\"\n    TargetGuid: 0\n    ConstantValue:\n      T: None\n    Position: [-140, 438]\n    Inputs:\n      []\n    Outputs:\n      - Id: 1500\n        Name: Out\n        Type: Flow\n        IsInput: false\n  - Id: 2\n    Name: Print\n    Type: Print\n    SubType: None\n    VariableName: \"\"\n    TargetGuid: 0\n    ConstantValue:\n      T: None\n    Position: [110, 438]\n    Inputs:\n      - Id: 2001\n        Name: In\n        Type: Flow\n        IsInput: true\n      - Id: 2002\n        Name: Value\n        Type: String\n        IsInput: true\n    Outputs:\n      - Id: 2500\n        Name: Out\n        Type: Flow\n        IsInput: false\n  - Id: 3\n    Name: Constant String\n    Type: Constant\n    SubType: None\n    VariableName: \"\"\n    TargetGuid: 0\n    ConstantValue:\n      T: String\n      V: Test\n    Position: [-213, 518]\n    Inputs:\n      []\n    Outputs:\n      - Id: 3500\n        Name: Value\n        Type: String\n        IsInput: false\nLinks:\n  - Id: 4\n    StartPinId: 3500\n    EndPinId: 2002\n  - Id: 5\n    StartPinId: 1500\n    EndPinId: 2001"
+Graphs:
+  Version: 1
+  Items:
+  - Name: Main
+    Enabled: true
+    Entity: 0
+    Graph:
+      NextId: 6
+      Variables: []
+      Nodes:
+      - Id: 1
+        Name: Start
+        Type: Event
+        SubType: Start
+        VariableName: ''
+        TargetGuid: 0
+        ConstantValue: {T: None}
+        Position: [-140, 438]
+        Inputs: []
+        Outputs:
+        - {Id: 1500, Name: Out, Type: Flow, IsInput: false}
+      - Id: 2
+        Name: Print
+        Type: Print
+        SubType: None
+        VariableName: ''
+        TargetGuid: 0
+        ConstantValue: {T: None}
+        Position: [110, 438]
+        Inputs:
+        - {Id: 2001, Name: In, Type: Flow, IsInput: true}
+        - {Id: 2002, Name: Value, Type: String, IsInput: true}
+        Outputs:
+        - {Id: 2500, Name: Out, Type: Flow, IsInput: false}
+      - Id: 3
+        Name: Constant String
+        Type: Constant
+        SubType: None
+        VariableName: ''
+        TargetGuid: 0
+        ConstantValue: {T: String, V: Test}
+        Position: [-213, 518]
+        Inputs: []
+        Outputs:
+        - {Id: 3500, Name: Value, Type: String, IsInput: false}
+      Links:
+      - {Id: 4, StartPinId: 3500, EndPinId: 2002}
+      - {Id: 5, StartPinId: 1500, EndPinId: 2001}

@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <yaml-cpp/yaml.h>
 #include <catch2/catch_approx.hpp>
 
 import GPP;
@@ -101,4 +102,73 @@ TEST_CASE("Node::Position round-trips through SerializeToYaml/DeserializeFromYam
     REQUIRE(restoredNode != nullptr);
     CHECK(restoredNode->Position.x == Catch::Approx(123.5f));
     CHECK(restoredNode->Position.y == Catch::Approx(-45.0f));
+}
+
+TEST_CASE("Named graphs round-trip as structured YAML inside the scene document", "[simulation][scene][animation]")
+{
+    RegisterComponents();
+
+    SceneGraphs graphs;
+    NamedGraph first{.Name = "Main"};
+    first.Graph.Nodes.push_back(CreateStartEventNode(first.Graph.AllocateId()));
+    NamedGraph second{.Name = "Orbit", .Enabled = false, .EntityGuid = 99};
+    second.Graph.Nodes.push_back(CreateTickEventNode(second.Graph.AllocateId()));
+    graphs.Items = {first, second};
+
+    Scene scene("Graphs");
+    StoreSceneGraphs(scene, graphs);
+
+    const auto yaml = scene.SerializeToYaml();
+    const auto root = YAML::Load(yaml);
+    REQUIRE(root["Graphs"]);
+    CHECK(root["Graphs"]["Version"].as<int>() == kSceneGraphsVersion);
+    CHECK(root["Graphs"]["Items"][0]["Graph"].IsMap());
+
+    Scene loaded;
+    loaded.DeserializeFromYaml(yaml);
+    const auto restored = LoadSceneGraphs(loaded);
+    REQUIRE(restored.Items.size() == 2);
+    CHECK(restored.Items[0].Name == "Main");
+    CHECK(restored.Items[0].Enabled);
+    CHECK(restored.Items[0].Graph.Nodes.size() == 1);
+    CHECK(restored.Items[1].Name == "Orbit");
+    CHECK_FALSE(restored.Items[1].Enabled);
+    CHECK(restored.Items[1].EntityGuid == 99);
+    CHECK(restored.Items[1].Graph.Nodes[0].SubType == NodeSubType::Tick);
+}
+
+TEST_CASE("Legacy AnimationGraph component scenes migrate into a graph named Main", "[simulation][scene][animation]")
+{
+    RegisterComponents();
+
+    AnimationGraphData graph;
+    graph.Nodes.push_back(CreateStartEventNode(graph.AllocateId()));
+
+    Scene legacy("Legacy");
+    const auto entity = legacy.CreateEntity("", kAnimationGraphDataTypeTag);
+    legacy.Registry().emplace<AnimationGraphComponent>(entity, AnimationGraphComponent{.GraphYaml = SerializeToYaml(graph)});
+
+    Scene loaded;
+    loaded.DeserializeFromYaml(legacy.SerializeToYaml());
+    auto graphs = LoadSceneGraphs(loaded);
+    REQUIRE(graphs.Items.size() == 1);
+    CHECK(graphs.Items[0].Name == kMainGraphName);
+    CHECK(graphs.Items[0].Graph.Nodes.size() == 1);
+
+    StoreSceneGraphs(loaded, graphs);
+    CHECK(loaded.Registry().view<AnimationGraphComponent>().empty());
+    CHECK(loaded.FindExtension(kSceneGraphsKey) != nullptr);
+}
+
+TEST_CASE("The bundled test scene template carries a Main graph", "[simulation][scene][templates]")
+{
+    RegisterComponents();
+    std::ifstream stream(std::filesystem::path(MOLEHOLE_SOURCE_DIR) / "templates" / "test-scene.yaml");
+    const std::string text{std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    Scene scene;
+    scene.DeserializeFromYaml(text);
+    const auto graphs = LoadSceneGraphs(scene);
+    REQUIRE(graphs.Items.size() == 1);
+    CHECK(graphs.Items[0].Name == kMainGraphName);
+    CHECK(graphs.Items[0].Graph.Nodes.size() == 3);
 }
