@@ -539,7 +539,8 @@ namespace
             HandleShortcuts();
 
             ed::Suspend();
-            HandleContextMenu();
+            if (ed::ShowBackgroundContextMenu()) OpenPalette(std::nullopt, 0);
+            RenderPalette();
             ed::Resume();
 
             ed::End();
@@ -570,56 +571,40 @@ namespace
             ed::SetCurrentEditor(nullptr);
         }
 
-        const Pin* FindOutputPin(const int pinId) const
-        {
-            for (const auto& node : CurrentGraph().Nodes)
-            {
-                for (const auto& pin : node.Outputs) { if (pin.Id == pinId) return &pin; }
-            }
-            return nullptr;
-        }
-
-        const Pin* FindInputPin(const int pinId) const
-        {
-            for (const auto& node : CurrentGraph().Nodes)
-            {
-                for (const auto& pin : node.Inputs) { if (pin.Id == pinId) return &pin; }
-            }
-            return nullptr;
-        }
-
         void HandleLinkCreation()
         {
             if (ed::BeginCreate())
             {
                 ed::PinId startPinId, endPinId;
+                ed::PinId droppedPinId;
                 if (ed::QueryNewLink(&startPinId, &endPinId))
                 {
                     if (startPinId && endPinId && startPinId != endPinId)
                     {
-                        const int startId = static_cast<int>(startPinId.Get());
-                        const int endId = static_cast<int>(endPinId.Get());
+                        int startId = static_cast<int>(startPinId.Get());
+                        int endId = static_cast<int>(endPinId.Get());
+                        const Pin* startPin = FindPin(CurrentGraph(), startId);
+                        if (startPin && startPin->IsInput) std::swap(startId, endId);
 
-                        const bool inputUsed = std::ranges::any_of(CurrentGraph().Links, [endId](const Link& link)
-                        {
-                            return link.EndPinId == endId;
-                        });
-
-                        const Pin* startPin = FindOutputPin(startId);
-                        const Pin* endPin = FindInputPin(endId);
-
-                        if (!inputUsed && startPin && endPin && ArePinsCompatible(startPin->Type, endPin->Type))
+                        if (CanLink(CurrentGraph(), startId, endId))
                         {
                             if (ed::AcceptNewItem())
                             {
-                                CurrentGraph().Links.push_back(Link{CurrentGraph().AllocateId(), startId, endId});
-                                MarkDirty();
+                                TryLink(CurrentGraph(), startId, endId);
+                                StructureChanged();
                             }
                         }
                         else
                         {
                             ed::RejectNewItem(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
                         }
+                    }
+                }
+                else if (ed::QueryNewNode(&droppedPinId))
+                {
+                    if (const Pin* pin = FindPin(CurrentGraph(), static_cast<int>(droppedPinId.Get())); pin && ed::AcceptNewItem())
+                    {
+                        OpenPalette(PinFilter{pin->Type, !pin->IsInput}, pin->Id);
                     }
                 }
             }
@@ -725,149 +710,124 @@ namespace
             ed::EndDelete();
         }
 
-        void HandleContextMenu()
+        const NodeRegistry& Registry()
         {
-            if (ed::ShowBackgroundContextMenu())
+            if (!m_Registry) m_Registry = std::make_unique<NodeRegistry>(BuildNodeRegistry());
+            return *m_Registry;
+        }
+
+        void OpenPalette(const std::optional<PinFilter> filter, const int draggedPin)
+        {
+            m_PaletteFilter = filter;
+            m_PaletteDraggedPin = draggedPin;
+            const ImVec2 canvas = ed::ScreenToCanvas(ImGui::GetMousePos());
+            m_PaletteCanvasPos = glm::vec2(canvas.x, canvas.y);
+            m_OpenPalette = true;
+        }
+
+        void SpawnEntry(const NodeEntry& entry)
+        {
+            auto& graph = CurrentGraph();
+            const auto ids = entry.Spawn(graph);
+            if (ids.empty()) return;
+            for (const int id : ids)
             {
-                ImGui::OpenPopup("AnimationGraphCreateNode");
+                Node* node = graph.FindNode(id);
+                node->Position += m_PaletteCanvasPos;
+                ed::SetNodePosition(ed::NodeId(id), ImVec2(node->Position.x, node->Position.y));
+            }
+            if (m_PaletteFilter && m_PaletteDraggedPin != 0) ConnectNewNode(graph, ids.front(), m_PaletteDraggedPin);
+            SelectNodes(ids);
+            m_Recents = PushRecent(m_Recents, entry.Name);
+            StructureChanged();
+        }
+
+        void RenderPalette()
+        {
+            if (m_OpenPalette)
+            {
+                ImGui::OpenPopup("AnimationGraphPalette");
+                m_PaletteQuery.fill('\0');
+                m_PaletteSelected = 0;
+                m_PaletteFocus = true;
+                m_OpenPalette = false;
             }
 
-            if (!ImGui::BeginPopup("AnimationGraphCreateNode")) return;
+            ImGui::SetNextWindowSize(ImVec2(340, 400));
+            if (!ImGui::BeginPopup("AnimationGraphPalette")) return;
 
-            const ImVec2 openPos = ImGui::GetMousePosOnOpeningCurrentPopup();
-            const ImVec2 canvasPos = ed::ScreenToCanvas(openPos);
-
-            auto addNode = [&](Node node)
+            if (m_PaletteFocus)
             {
-                node.Position = glm::vec2(canvasPos.x, canvasPos.y);
-                const int id = node.Id;
-                CurrentGraph().Nodes.push_back(std::move(node));
-                ed::SetNodePosition(ed::NodeId(id), canvasPos);
-                ed::SelectNode(ed::NodeId(id));
-                m_SelectedNodeId = id;
-                MarkDirty();
-            };
-
-            if (ImGui::BeginMenu("Events"))
+                ImGui::SetKeyboardFocusHere();
+                m_PaletteFocus = false;
+            }
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputTextWithHint("##palettequery", m_PaletteFilter ? "Search compatible nodes..." : "Search nodes...",
+                                         m_PaletteQuery.data(), m_PaletteQuery.size()))
             {
-                if (ImGui::MenuItem("Start")) addNode(CreateStartEventNode(CurrentGraph().AllocateId()));
-                if (ImGui::MenuItem("Tick")) addNode(CreateTickEventNode(CurrentGraph().AllocateId()));
-                ImGui::EndMenu();
+                m_PaletteSelected = 0;
             }
 
-            if (ImGui::BeginMenu("Constants"))
+            const auto extra = VariableNodeEntries(CurrentGraph());
+            const std::string query = m_PaletteQuery.data();
+            const auto results = Registry().Search(query, m_PaletteFilter, m_Recents, extra);
+            const int count = static_cast<int>(results.size());
+
+            bool moved = false;
+            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
             {
-                static constexpr std::pair<const char*, PinType> kTypes[] = {
-                    {"Bool", PinType::Bool}, {"Float", PinType::Float}, {"Int", PinType::Int},
-                    {"Vec2", PinType::Vec2}, {"Vec3", PinType::Vec3}, {"Vec4", PinType::Vec4},
-                    {"String", PinType::String},
-                };
-                for (const auto& [label, type] : kTypes)
+                m_PaletteSelected = MoveSelection(m_PaletteSelected, 1, count);
+                moved = true;
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+            {
+                m_PaletteSelected = MoveSelection(m_PaletteSelected, -1, count);
+                moved = true;
+            }
+            m_PaletteSelected = std::min(m_PaletteSelected, std::max(count - 1, 0));
+
+            const NodeEntry* chosen = nullptr;
+            if ((ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) && count > 0)
+            {
+                chosen = results[m_PaletteSelected].Entry;
+            }
+
+            ImGui::Separator();
+            ImGui::BeginChild("##paletteresults", ImVec2(0, 0));
+            std::string lastHeader;
+            for (int i = 0; i < count; ++i)
+            {
+                const NodeEntry& entry = *results[i].Entry;
+                if (query.empty())
                 {
-                    if (ImGui::MenuItem(label)) addNode(CreateConstantNode(CurrentGraph().AllocateId(), type));
-                }
-                ImGui::EndMenu();
-            }
-
-            if (ImGui::BeginMenu("Math"))
-            {
-                static constexpr std::pair<const char*, NodeSubType> kBinary[] = {
-                    {"Add", NodeSubType::Add}, {"Subtract", NodeSubType::Sub}, {"Multiply", NodeSubType::Mul},
-                    {"Divide", NodeSubType::Div}, {"Min", NodeSubType::Min}, {"Max", NodeSubType::Max},
-                };
-                for (const auto& [label, op] : kBinary)
-                {
-                    if (ImGui::MenuItem(label)) addNode(CreateMathNode(CurrentGraph().AllocateId(), op));
-                }
-                ImGui::Separator();
-                static constexpr std::pair<const char*, NodeSubType> kUnary[] = {
-                    {"Negate", NodeSubType::Negate}, {"Sin", NodeSubType::Sin}, {"Cos", NodeSubType::Cos},
-                    {"Tan", NodeSubType::Tan}, {"Sqrt", NodeSubType::Sqrt}, {"Length", NodeSubType::Length},
-                };
-                for (const auto& [label, op] : kUnary)
-                {
-                    if (ImGui::MenuItem(label)) addNode(CreateMathNode(CurrentGraph().AllocateId(), op));
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Distance")) addNode(CreateMathNode(CurrentGraph().AllocateId(), NodeSubType::Distance));
-                if (ImGui::MenuItem("Lerp")) addNode(CreateMathNode(CurrentGraph().AllocateId(), NodeSubType::Lerp));
-                if (ImGui::MenuItem("Clamp")) addNode(CreateMathNode(CurrentGraph().AllocateId(), NodeSubType::Clamp));
-                if (ImGui::MenuItem("Look At")) addNode(CreateMathNode(CurrentGraph().AllocateId(), NodeSubType::LookAt));
-                ImGui::Separator();
-                if (ImGui::MenuItem("And")) addNode(CreateMathNode(CurrentGraph().AllocateId(), NodeSubType::And));
-                if (ImGui::MenuItem("Or")) addNode(CreateMathNode(CurrentGraph().AllocateId(), NodeSubType::Or));
-                ImGui::EndMenu();
-            }
-
-            if (ImGui::BeginMenu("Control Flow"))
-            {
-                if (ImGui::MenuItem("Branch")) addNode(CreateBranchNode(CurrentGraph().AllocateId()));
-                if (ImGui::MenuItem("For Loop")) addNode(CreateForNode(CurrentGraph().AllocateId()));
-                ImGui::EndMenu();
-            }
-
-            if (ImGui::BeginMenu("Objects"))
-            {
-                for (const auto* category : GetPropertyCategories())
-                {
-                    if (ImGui::BeginMenu(category->DisplayName.c_str()))
+                    const std::string header = results[i].Recent ? "Recent" : entry.Category;
+                    if (header != lastHeader)
                     {
-                        const auto& name = category->ComponentName;
-                        if (ImGui::MenuItem("Get")) addNode(CreateGetterNode(CurrentGraph().AllocateId(), name));
-                        if (ImGui::MenuItem("Decompose")) addNode(CreateDecomposerNode(CurrentGraph().AllocateId(), name));
-                        if (ImGui::MenuItem("Set")) addNode(CreateSetterNode(CurrentGraph().AllocateId(), name));
-                        ImGui::EndMenu();
+                        ImGui::TextDisabled("%s", header.c_str());
+                        lastHeader = header;
                     }
                 }
-                ImGui::EndMenu();
-            }
-
-            if (ImGui::BeginMenu("Entities"))
-            {
-                if (ImGui::MenuItem("Spawn Entity")) addNode(CreateSpawnEntityNode(CurrentGraph().AllocateId()));
-                if (ImGui::MenuItem("Clone Entity")) addNode(CreateCloneEntityNode(CurrentGraph().AllocateId()));
-                if (ImGui::MenuItem("Destroy Entity")) addNode(CreateDestroyEntityNode(CurrentGraph().AllocateId()));
-                ImGui::EndMenu();
-            }
-
-            if (ImGui::BeginMenu("Variables"))
-            {
-                static constexpr std::pair<const char*, PinType> kVarTypes[] = {
-                    {"Bool", PinType::Bool}, {"Float", PinType::Float}, {"Int", PinType::Int},
-                    {"Vec2", PinType::Vec2}, {"Vec3", PinType::Vec3}, {"Vec4", PinType::Vec4},
-                    {"String", PinType::String}, {"Object", PinType::Object},
-                };
-                if (ImGui::BeginMenu("Get"))
+                ImGui::PushID(i);
+                if (ImGui::Selectable(entry.Name.c_str(), i == m_PaletteSelected)) chosen = &entry;
+                if (!query.empty())
                 {
-                    for (const auto& [label, type] : kVarTypes)
-                    {
-                        if (ImGui::MenuItem(label))
-                        {
-                            Node node = CreateVariableGetNode(CurrentGraph().AllocateId(), "", type);
-                            node.Name = std::string("Get Variable (") + label + ")";
-                            addNode(std::move(node));
-                        }
-                    }
-                    ImGui::EndMenu();
+                    ImGui::SameLine();
+                    const float width = ImGui::CalcTextSize(entry.Category.c_str()).x;
+                    ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - width);
+                    ImGui::TextDisabled("%s", entry.Category.c_str());
                 }
-                if (ImGui::BeginMenu("Set"))
-                {
-                    for (const auto& [label, type] : kVarTypes)
-                    {
-                        if (ImGui::MenuItem(label))
-                        {
-                            Node node = CreateVariableSetNode(CurrentGraph().AllocateId(), "", type);
-                            node.Name = std::string("Set Variable (") + label + ")";
-                            addNode(std::move(node));
-                        }
-                    }
-                    ImGui::EndMenu();
-                }
-                ImGui::EndMenu();
+                if (ImGui::IsItemHovered() && !entry.Description.empty()) ImGui::SetTooltip("%s", entry.Description.c_str());
+                if (moved && i == m_PaletteSelected) ImGui::SetScrollHereY();
+                ImGui::PopID();
             }
+            if (count == 0) ImGui::TextDisabled("No matching nodes");
+            ImGui::EndChild();
 
-            if (ImGui::MenuItem("Print")) addNode(CreatePrintNode(CurrentGraph().AllocateId()));
-
+            if (chosen)
+            {
+                SpawnEntry(*chosen);
+                ImGui::CloseCurrentPopup();
+            }
             ImGui::EndPopup();
         }
 
@@ -1261,6 +1221,15 @@ namespace
         std::vector<GraphHistory> m_Histories;
         bool m_RestorePositions = false;
         bool m_EditorFocused = false;
+        std::unique_ptr<NodeRegistry> m_Registry;
+        std::vector<std::string> m_Recents;
+        std::array<char, 128> m_PaletteQuery{};
+        std::optional<PinFilter> m_PaletteFilter;
+        int m_PaletteDraggedPin = 0;
+        int m_PaletteSelected = 0;
+        glm::vec2 m_PaletteCanvasPos{0.0f};
+        bool m_OpenPalette = false;
+        bool m_PaletteFocus = false;
         bool m_NeedsPositionRestore = true;
         int m_PendingNavigateFrames = 0;
         int m_SelectedNodeId = 0;
