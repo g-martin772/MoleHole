@@ -23,6 +23,20 @@ export namespace MoleHole
             UpdateCameraVectors();
         }
 
+        void SetView(const glm::vec3& position, const glm::vec3& front, const glm::vec3& up)
+        {
+            m_Position = position;
+            m_Front = glm::normalize(front);
+            m_Right = glm::normalize(glm::cross(m_Front, up));
+            m_Up = glm::normalize(glm::cross(m_Right, m_Front));
+        }
+
+        void SetClipPlanes(float nearPlane, float farPlane) noexcept
+        {
+            m_NearPlane = nearPlane;
+            m_FarPlane = farPlane;
+        }
+
         void ProcessKeyboard(float forward, float right, float up, float deltaTime, float speed = 5.0f)
         {
             const float velocity = speed * deltaTime;

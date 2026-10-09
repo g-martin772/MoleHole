@@ -126,6 +126,14 @@ export namespace MoleHole
         float CameraFov = 60.0f;
         float CameraSpeed = 5.0f;
         float CameraMouseSensitivity = 0.1f;
+        bool PossessSceneCamera = true;
+        bool PreviewSceneCamera = false;
+        bool SceneCameraActive = false;
+
+        glm::vec3 ViewPosition{0.0f, 20.0f, 100.0f};
+        glm::vec3 ViewFront{0.0f, 0.0f, -1.0f};
+        glm::vec3 ViewUp{0.0f, 1.0f, 0.0f};
+        float ViewFov = 60.0f;
 
         glm::vec2 ViewportScreenMin{0.0f};
         glm::vec2 ViewportScreenMax{0.0f};

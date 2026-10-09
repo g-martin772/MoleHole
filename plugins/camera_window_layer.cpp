@@ -48,6 +48,15 @@ namespace
                 EndSection();
             }
 
+            if (BeginSection(icons, "Scene Camera"))
+            {
+                ImGui::Checkbox("Possess scene camera while playing", &m_UiState->PossessSceneCamera);
+                ImGui::Checkbox("Preview scene camera in edit mode", &m_UiState->PreviewSceneCamera);
+                ImGui::TextDisabled(m_UiState->SceneCameraActive ? "Viewing through the primary scene camera"
+                                                                 : "Free-fly editor camera");
+                EndSection();
+            }
+
             if (BeginSection(icons, "Position"))
             {
                 ImGui::Text("Pos: (%.1f, %.1f, %.1f)", m_UiState->CameraPosition.x,

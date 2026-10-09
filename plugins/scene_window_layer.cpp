@@ -239,11 +239,7 @@ namespace
             {
                 runner.EnqueueEdit([](Scene& scene)
                 {
-                    const auto entity = scene.CreateEntity("Black Hole", "BlackHole");
-                    scene.Registry().emplace<TransformComponent>(
-                        entity, TransformComponent{.Position = {0.0f, 0.0f, -10.0f}});
-                    scene.Registry().emplace<BlackHoleComponent>(entity,
-                                                                 BlackHoleComponent{.Mass = 1.0f, .Spin = 0.3f});
+                    SpawnPreset(scene, GPP::GenerateGuid(), "BlackHole", {0.0f, 0.0f, -10.0f});
                 });
             }
             ImGui::SameLine();
@@ -251,16 +247,18 @@ namespace
             {
                 runner.EnqueueEdit([](Scene& scene)
                 {
-                    const auto entity = scene.CreateEntity("Sphere", "Sphere");
-                    scene.Registry().emplace<TransformComponent>(
-                        entity, TransformComponent{.Position = {5.0f, 0.0f, 0.0f}});
-                    scene.Registry().emplace<SphereComponent>(
-                        entity, SphereComponent{.Radius = 0.5f, .Color = {0.8f, 0.8f, 0.9f}});
-                    scene.Registry().emplace<RigidBodyComponent>(
-                        entity, RigidBodyComponent{.Type = RigidBodyType::Dynamic, .Mass = 5.972e24f,
-                                                   .EnableGravity = true});
-                    scene.Registry().emplace<ColliderComponent>(
-                        entity, ColliderComponent{.Shape = ColliderShape::Sphere, .Radius = 0.5f});
+                    SpawnPreset(scene, GPP::GenerateGuid(), "Sphere", {5.0f, 0.0f, 0.0f});
+                });
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Camera"))
+            {
+                const glm::vec3 position = m_UiState->ViewPosition;
+                const glm::quat rotation = LookAtRotation(position, position + m_UiState->ViewFront, m_UiState->ViewUp);
+                runner.EnqueueEdit([position, rotation](Scene& scene)
+                {
+                    const auto entity = SpawnPreset(scene, GPP::GenerateGuid(), "Camera", position);
+                    if (scene.IsValid(entity)) scene.Registry().get<TransformComponent>(entity).Rotation = rotation;
                 });
             }
             ImGui::SameLine();

@@ -1690,9 +1690,12 @@ namespace
         {
             if (m_UiState->IntroActive) return;
 
+            if (UpdateSceneCamera()) return;
+
             m_Camera.SetPosition(m_UiState->CameraPosition);
             m_Camera.SetYawPitch(m_UiState->CameraYaw, m_UiState->CameraPitch);
             m_Camera.SetFov(m_UiState->CameraFov);
+            m_Camera.SetClipPlanes(0.1f, 10000.0f);
 
             float forward = 0.0f, right = 0.0f, up = 0.0f;
             if (m_Input->IsKeyDown(KeyCode::W)) forward += 1.0f;
@@ -1728,6 +1731,37 @@ namespace
             m_UiState->CameraPosition = m_Camera.GetPosition();
             m_UiState->CameraYaw = m_Camera.GetYaw();
             m_UiState->CameraPitch = m_Camera.GetPitch();
+            PublishView();
+        }
+
+        bool UpdateSceneCamera()
+        {
+            m_UiState->SceneCameraActive = false;
+            const auto sim = m_Sim.Load();
+            if (!sim->Runner) return false;
+            const bool playing = !sim->Runner->IsPaused();
+            if (!m_UiState->PreviewSceneCamera && !(playing && m_UiState->PossessSceneCamera)) return false;
+
+            const auto snapshot = sim->Runner->AcquireSnapshot();
+            if (!snapshot) return false;
+            const auto view = FindPrimarySceneCamera(*snapshot);
+            if (!view) return false;
+
+            m_Camera.SetView(view->Position, view->Front, view->Up);
+            m_Camera.SetFov(view->Fov);
+            m_Camera.SetClipPlanes(view->NearPlane, view->FarPlane);
+            m_HasLastMouse = false;
+            m_UiState->SceneCameraActive = true;
+            PublishView();
+            return true;
+        }
+
+        void PublishView()
+        {
+            m_UiState->ViewPosition = m_Camera.GetPosition();
+            m_UiState->ViewFront = m_Camera.GetFront();
+            m_UiState->ViewUp = m_Camera.GetUp();
+            m_UiState->ViewFov = m_Camera.GetFov();
         }
 
         void UploadParams(vk::Extent3D extent, const GPP::Scene& scene)

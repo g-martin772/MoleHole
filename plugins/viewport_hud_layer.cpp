@@ -14,13 +14,8 @@ namespace
 {
     glm::mat4 BuildViewProjection(const UiState& state, float aspect)
     {
-        const glm::vec3 front = glm::normalize(glm::vec3(
-            std::cos(glm::radians(state.CameraYaw)) * std::cos(glm::radians(state.CameraPitch)),
-            std::sin(glm::radians(state.CameraPitch)),
-            std::sin(glm::radians(state.CameraYaw)) * std::cos(glm::radians(state.CameraPitch))));
-        const glm::vec3 up{0.0f, 1.0f, 0.0f};
-        glm::mat4 projection = glm::perspective(glm::radians(state.CameraFov), aspect, 0.1f, 10000.0f);
-        return projection * glm::lookAt(state.CameraPosition, state.CameraPosition + front, up);
+        glm::mat4 projection = glm::perspective(glm::radians(state.ViewFov), aspect, 0.1f, 10000.0f);
+        return projection * glm::lookAt(state.ViewPosition, state.ViewPosition + state.ViewFront, state.ViewUp);
     }
 
     bool WorldToScreen(const glm::vec3& worldPos, const glm::mat4& viewProj, const glm::vec2& min,
