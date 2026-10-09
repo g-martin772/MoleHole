@@ -74,7 +74,7 @@ namespace
             constexpr float lineHeight = 16.0f;
 
             auto sceneLock = runner->LockRenderScene();
-            Scene& scene = *sceneLock;
+            const Scene& scene = *sceneLock;
 
             for (auto [entity, transform, metadata] :
                  scene.Registry().view<const TransformComponent, const MetadataComponent>().each())

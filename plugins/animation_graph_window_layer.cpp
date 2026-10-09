@@ -141,7 +141,7 @@ namespace
         bool HasTransform{false};
     };
 
-    std::vector<EntityOption> CollectEntityOptions(Scene& scene)
+    std::vector<EntityOption> CollectEntityOptions(const Scene& scene)
     {
         std::vector<EntityOption> result;
         for (auto [entity, metadata] : scene.Registry().view<const MetadataComponent>().each())

@@ -62,8 +62,6 @@ namespace
             ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
             ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.06f, 0.06f, 0.06f, 0.95f));
 
-            // A real viewport side bar reserves its space in the work area, so the dockspace shrinks
-            // to fit instead of sitting underneath the bar.
             if (ImGui::BeginViewportSideBar("##Sidebar", viewport, ImGuiDir_Left, sidebarWidth, flags))
             {
                 const SidebarButton buttons[] = {

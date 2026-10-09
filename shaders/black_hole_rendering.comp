@@ -61,6 +61,12 @@ layout(set = 0, binding = 3) uniform sampler2D u_blackbodyLUT;
 layout(set = 0, binding = 4) uniform sampler2D u_accelerationLUT;
 layout(set = 0, binding = 5) uniform sampler2D u_hrDiagramLUT;
 
+layout(push_constant) uniform SlicePushBlock
+{
+    uint u_firstWorkgroup;
+    uint u_workgroupsPerRow;
+};
+
 #include "kerr.glsl"
 #include "doppler.glsl"
 #include "noise.glsl"
@@ -73,7 +79,9 @@ layout(set = 0, binding = 5) uniform sampler2D u_hrDiagramLUT;
 #include "ray_tracing.glsl"
 
 void main() {
-    ivec2 texCoords = ivec2(gl_GlobalInvocationID.xy);
+    uint workgroup = u_firstWorkgroup + gl_WorkGroupID.x;
+    uvec2 workgroupCoords = uvec2(workgroup % u_workgroupsPerRow, workgroup / u_workgroupsPerRow);
+    ivec2 texCoords = ivec2(workgroupCoords * 16u + gl_LocalInvocationID.xy);
     ivec2 imageSize = imageSize(l_outputImage);
 
     if (texCoords.x >= imageSize.x || texCoords.y >= imageSize.y) {

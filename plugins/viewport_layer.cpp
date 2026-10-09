@@ -65,6 +65,143 @@ namespace
         };
     }
 
+    struct ViewportFrameParams
+    {
+        Camera ViewCamera;
+        RenderToggles Render;
+    };
+
+    struct SimBinding
+    {
+        std::shared_ptr<SimulationRunner> Runner;
+        std::shared_ptr<PhysicsSimulationModule> Physics;
+        std::shared_ptr<GravitySimulationModule> Gravity;
+    };
+
+    class MeshCache
+    {
+    public:
+        MeshCache(std::shared_ptr<Renderer> renderer, std::shared_ptr<IFileSystem> fileSystem,
+                  std::shared_ptr<Logger> logger)
+            : m_Renderer(std::move(renderer)), m_FileSystem(std::move(fileSystem)), m_Logger(std::move(logger))
+        {
+        }
+
+        std::shared_ptr<GltfSceneData> GetOrLoad(const std::string& assetPath)
+        {
+            if (const auto cached = TryGet(assetPath)) return cached.value_or(nullptr);
+            std::scoped_lock loadLock(m_LoadMutex); // one load at a time; a second caller waits and reuses it
+            if (const auto cached = TryGet(assetPath)) return cached.value_or(nullptr);
+
+            std::shared_ptr<GltfSceneData> result;
+            float radius = 0.5f;
+            try
+            {
+                result = std::make_shared<GltfSceneData>(
+                    LoadGltfScene(m_Renderer->GetDevice(), m_FileSystem, assetPath, m_Logger));
+                if (!result->Geometry.Vertices.empty())
+                {
+                    float maxDistSq = 0.0f;
+                    for (const auto& vertex : result->Geometry.Vertices)
+                    {
+                        maxDistSq = std::max(maxDistSq, glm::dot(vertex, vertex));
+                    }
+                    radius = std::sqrt(maxDistSq);
+                }
+            }
+            catch (const std::exception& error)
+            {
+                m_Logger->Warn("ViewportLayer: failed to load mesh '{}': {}", assetPath, error.what());
+            }
+            std::scoped_lock lock(m_Mutex);
+            m_Meshes.emplace(assetPath, result);
+            m_Radii.emplace(assetPath, radius);
+            return result;
+        }
+
+        std::optional<std::shared_ptr<GltfSceneData>> TryGet(const std::string& assetPath) const
+        {
+            std::scoped_lock lock(m_Mutex);
+            const auto it = m_Meshes.find(assetPath);
+            if (it == m_Meshes.end()) return std::nullopt;
+            return it->second;
+        }
+
+        float BoundingRadius(const std::string& assetPath) const
+        {
+            std::scoped_lock lock(m_Mutex);
+            const auto it = m_Radii.find(assetPath);
+            return it != m_Radii.end() ? it->second : 0.5f;
+        }
+
+    private:
+        std::shared_ptr<Renderer> m_Renderer;
+        std::shared_ptr<IFileSystem> m_FileSystem;
+        std::shared_ptr<Logger> m_Logger;
+        mutable std::mutex m_Mutex;
+        std::mutex m_LoadMutex;
+        std::unordered_map<std::string, std::shared_ptr<GltfSceneData>> m_Meshes;
+        std::unordered_map<std::string, float> m_Radii;
+    };
+
+    struct SceneLoadResult
+    {
+        enum class Kind { Startup, File, Template };
+        Kind LoadKind = Kind::File;
+        bool Ok = false;
+        std::string Path;
+        std::string SceneName;
+        std::string Error;
+    };
+
+    struct SceneLoadState
+    {
+        std::mutex Mutex;
+        std::optional<SceneLoadResult> Result;
+        std::atomic<bool> InFlight{false};
+    };
+
+    void PopulateConvexHulls(GPP::Scene& scene, MeshCache& meshes)
+    {
+        for (auto [entity, mesh, collider] :
+             scene.Registry().view<const MeshComponent, ColliderComponent>().each())
+        {
+            if (collider.Shape != ColliderShape::ConvexMesh || !collider.ConvexHullPoints.empty()) continue;
+            if (mesh.AssetPath.empty()) continue;
+            if (const auto gltfScene = meshes.GetOrLoad(mesh.AssetPath); gltfScene && !gltfScene->Geometry.Vertices.empty())
+            {
+                collider.ConvexHullPoints = gltfScene->Geometry.Vertices;
+            }
+        }
+    }
+
+    void RunSceneLoad(const std::shared_ptr<SceneLoadState>& state, const std::shared_ptr<SceneManager>& scenes,
+                      const std::shared_ptr<MeshCache>& meshes, const std::shared_ptr<Logger>& logger,
+                      std::string path, SceneLoadResult::Kind kind)
+    {
+        SceneLoadResult result;
+        result.LoadKind = kind;
+        result.Path = path;
+        try
+        {
+            auto& scene = scenes->LoadSceneFromFile(path);
+            PopulateConvexHulls(scene, *meshes);
+            result.Ok = true;
+            result.SceneName = scene.Metadata().Name;
+        }
+        catch (const std::exception& error)
+        {
+            result.Error = error.what();
+            logger->Warn("ViewportLayer: failed to load '{}': {}", path, error.what());
+        }
+        {
+            std::scoped_lock lock(state->Mutex);
+            state->Result = std::move(result);
+        }
+        state->InFlight.store(false, std::memory_order_release);
+        state->InFlight.notify_all();
+    }
+
     // raytrace -> bloom extract -> bloom blur (ping-pong) -> lens flare -> composite
     // -> gravity-grid overlay -> physics debug lines -> object-path trails -> mesh overlay
     struct ViewportLayer final : public HotReloadableLayer
@@ -82,19 +219,20 @@ namespace
                       const std::shared_ptr<UiState>& uiState,
                       const std::shared_ptr<AppStateService>& appState)
             : HotReloadableLayer(logger), m_Renderer(renderer), m_FileSystem(fileSystem),
-              m_Dispatcher(dispatcher), m_Scenes(scenes), m_Input(input), m_UiState(uiState), m_AppState(appState)
+              m_Dispatcher(dispatcher), m_Scenes(scenes), m_Input(input), m_UiState(uiState), m_AppState(appState),
+              m_Meshes(std::make_shared<MeshCache>(renderer, fileSystem, logger)),
+              m_SceneLoad(std::make_shared<SceneLoadState>())
         {
         }
 
         void OnAttach() override
         {
             MoleHole::RegisterComponents();
-            const auto sceneName = LoadScene();
-            StartSimulationFor(sceneName);
+            BeginSceneLoad(StartupScenePath(), SceneLoadResult::Kind::Startup);
 
             const auto device = m_Renderer->GetDevice();
             m_UploadPool = std::make_unique<VulkanCommandPool>(device, m_Logger, device->GetQueueIndices().Graphics);
-            const auto queue = device->GetGraphicsQueue();
+            const auto queue = device->GetBackgroundQueue();
 
             m_RaytracePipeline = MakeComputePipeline(device, "black_hole_rendering.comp");
             m_BloomExtractPipeline = MakeComputePipeline(device, "bloom_extract.comp");
@@ -124,30 +262,51 @@ namespace
 
         void OnDetach() override
         {
-            if (m_Runner) m_Runner->Stop();
+            m_SceneLoad->InFlight.wait(true, std::memory_order_acquire);
+            if (const auto sim = m_Sim.Load(); sim->Runner) sim->Runner->Stop();
             m_Logger->Info("ViewportLayer detached");
         }
 
         void OnUpdate(float deltaTime) override
         {
+            PollSceneLoad();
             CheckPendingSceneSwitch();
             UpdateCamera(deltaTime);
             ProcessExport();
-            if (m_GravityModule) m_GravityModule->SetGravityMultiplier(m_UiState->GravityMultiplier);
-            FixupPendingConvexHulls();
+            if (const auto sim = m_Sim.Load(); sim->Runner)
+            {
+                if (sim->Gravity) sim->Gravity->SetGravityMultiplier(m_UiState->GravityMultiplier);
+                // Tick rate is a UI setting; the runner is told whenever it differs (also covers a
+                // freshly started simulation).
+                if (sim->Runner->GetTickRate() != m_UiState->SimulationTickRate)
+                    sim->Runner->SetTickRate(m_UiState->SimulationTickRate);
+            }
             RecordObjectPaths();
+            m_FrameParams.Publish(ViewportFrameParams{m_Camera, m_UiState->Render});
+        }
+
+        void OnRender() override
+        {
+            FixupPendingConvexHulls();
+            m_ExportPipelinesReady.store(AllExportPipelinesReady(), std::memory_order_release);
         }
 
         void OnRenderGraph(RenderGraph& graph) override
         {
+            const auto sim = m_Sim.Load();
             const auto colorTarget = graph.GetPrimaryColorTarget();
-            if (colorTarget == kInvalidRenderGraphHandle || !m_RaytracePipeline || !m_Runner) return;
+            if (colorTarget == kInvalidRenderGraphHandle || !m_RaytracePipeline || !sim->Runner) return;
             const auto extent = graph.GetImageExtent(colorTarget);
             if (extent.width == 0 || extent.height == 0) return;
-            m_Camera.SetAspect(static_cast<float>(extent.width) / static_cast<float>(extent.height));
 
-            auto sceneLock = m_Runner->LockRenderScene();
-            Scene& scene = *sceneLock;
+            const auto frameParams = m_FrameParams.Load();
+            m_RenderCamera = frameParams->ViewCamera;
+            m_RenderToggles = frameParams->Render;
+            m_RenderCamera.SetAspect(static_cast<float>(extent.width) / static_cast<float>(extent.height));
+            m_RenderPhysics = sim->Physics;
+
+            const auto sceneLock = sim->Runner->AcquireSnapshot();
+            const Scene& scene = *sceneLock;
 
             const auto depthTarget = graph.GetPrimaryDepthTarget();
             const auto depthFormat = depthTarget != kInvalidRenderGraphHandle
@@ -162,24 +321,31 @@ namespace
             const std::uint32_t groupsX = (extent.width + 15u) / 16u;
             const std::uint32_t groupsY = (extent.height + 15u) / 16u;
 
-            graph.AddComputePass(
-                "ViewportLayer.Raytrace", {}, {},
-                [this, device, groupsX, groupsY](const vk::CommandBuffer cmd, RenderGraph& g)
+            graph.AddBudgetedComputePass(
+                "ViewportLayer.Raytrace", {}, {}, groupsX * groupsY,
+                [this, device, groupsX, set = vk::DescriptorSet{}](const vk::CommandBuffer cmd, RenderGraph& g,
+                                                                  const RenderGraphWorkSlice& slice) mutable
                 {
                     const auto pipeline = m_RaytracePipeline->GetPipeline();
                     if (!pipeline) return;
                     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->GetPipeline());
-                    const auto set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
-                    DescriptorSetWriter(device->GetDevice())
-                        .WriteStorageImage(set, 0, m_RaytraceImage->GetImageView())
-                        .WriteUniformBuffer(set, 1, m_ParamsBuffer->GetBuffer())
-                        .WriteCombinedImageSampler(set, 2, m_Skybox->GetImageView(), m_Skybox->GetSampler())
-                        .WriteCombinedImageSampler(set, 3, m_BlackbodyLut->GetImageView(), m_BlackbodyLut->GetSampler())
-                        .WriteCombinedImageSampler(set, 4, m_AccelerationLut->GetImageView(), m_AccelerationLut->GetSampler())
-                        .WriteCombinedImageSampler(set, 5, m_HrDiagramLut->GetImageView(), m_HrDiagramLut->GetSampler())
-                        .Update();
+                    if (!set)
+                    {
+                        set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
+                        DescriptorSetWriter(device->GetDevice())
+                            .WriteStorageImage(set, 0, m_RaytraceImage->GetImageView())
+                            .WriteUniformBuffer(set, 1, m_ParamsBuffer->GetBuffer())
+                            .WriteCombinedImageSampler(set, 2, m_Skybox->GetImageView(), m_Skybox->GetSampler())
+                            .WriteCombinedImageSampler(set, 3, m_BlackbodyLut->GetImageView(), m_BlackbodyLut->GetSampler())
+                            .WriteCombinedImageSampler(set, 4, m_AccelerationLut->GetImageView(), m_AccelerationLut->GetSampler())
+                            .WriteCombinedImageSampler(set, 5, m_HrDiagramLut->GetImageView(), m_HrDiagramLut->GetSampler())
+                            .Update();
+                    }
                     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline->GetLayout(), 0, set, {});
-                    cmd.dispatch(groupsX, groupsY, 1);
+                    const std::array<std::uint32_t, 2> push{slice.First, groupsX};
+                    cmd.pushConstants(pipeline->GetLayout(), vk::ShaderStageFlagBits::eCompute, 0,
+                                      sizeof(push), push.data());
+                    cmd.dispatch(slice.Count, 1, 1);
                 });
 
             graph.AddComputePass(
@@ -253,9 +419,6 @@ namespace
                 std::optional<RenderGraphAttachment> compositeDepthAttachment;
                 if (depthTarget != kInvalidRenderGraphHandle)
                 {
-                    // First (and only, until the mesh pass) writer of depth this frame -- clears to
-                    // 1.0 (far), then black_hole_rendering.comp's per-pixel depth (carried via alpha,
-                    // written to gl_FragDepth in the fragment shader below) overwrites every pixel.
                     compositeDepthAttachment = RenderGraphAttachment{
                         .Handle = depthTarget, .LoadOp = vk::AttachmentLoadOp::eClear,
                         .Clear = vk::ClearValue(vk::ClearDepthStencilValue(1.0f, 0))
@@ -301,7 +464,7 @@ namespace
                     });
             }
 
-            if (m_UiState->Render.ShowGravityGrid)
+            if (m_RenderToggles.ShowGravityGrid)
             {
                 EnsureGravityGridPipeline(graph.GetImageFormat(colorTarget));
                 if (m_GravityGridPipeline)
@@ -334,7 +497,7 @@ namespace
                 EnsurePhysicsDebugPipeline(graph.GetImageFormat(colorTarget));
                 if (m_PhysicsDebugPipeline)
                 {
-                    const glm::mat4 viewProjection = m_Camera.GetViewProjectionMatrix();
+                    const glm::mat4 viewProjection = m_RenderCamera.GetViewProjectionMatrix();
                     graph.AddGraphicsPass(
                         "ViewportLayer.PhysicsDebug", {}, {},
                         {RenderGraphAttachment{.Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
@@ -358,7 +521,7 @@ namespace
                 EnsurePhysicsDebugPipeline(graph.GetImageFormat(colorTarget));
                 if (m_PhysicsDebugPipeline)
                 {
-                    const glm::mat4 viewProjection = m_Camera.GetViewProjectionMatrix();
+                    const glm::mat4 viewProjection = m_RenderCamera.GetViewProjectionMatrix();
                     graph.AddGraphicsPass(
                         "ViewportLayer.ObjectPaths", {}, {},
                         {RenderGraphAttachment{.Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
@@ -386,9 +549,6 @@ namespace
                     graph.AddGraphicsPass(
                         "ViewportLayer.Mesh", {}, {},
                         {RenderGraphAttachment{.Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
-                        // eLoad, not eClear: the composite pass (run earlier this frame) already
-                        // wrote the raytraced spheres/disk's depth here -- clearing would discard it
-                        // and meshes would once again always draw on top regardless of 3D position.
                         RenderGraphAttachment{.Handle = depthTarget, .LoadOp = vk::AttachmentLoadOp::eLoad},
                         [this, device, drawables = std::move(drawables)](const vk::CommandBuffer cmd, RenderGraph& g)
                         {
@@ -431,6 +591,7 @@ namespace
             ImGuizmo::BeginFrame();
             const bool viewportOpen = ImGui::Begin("Viewport");
             m_UiState->ViewportVisible = viewportOpen;
+            m_Renderer->SetBufferTargetVisible(m_LayerTarget.Id, viewportOpen || m_UiState->ExportActive);
             if (!viewportOpen)
             {
                 m_UiState->ViewportScreenMin = {0.0f, 0.0f};
@@ -442,6 +603,7 @@ namespace
             const ImVec2 avail = ImGui::GetContentRegionAvail();
             if (!m_UiState->ExportActive && avail.x >= 1.0f && avail.y >= 1.0f)
             {
+                m_Camera.SetAspect(avail.x / avail.y);
                 m_Renderer->ResizeBufferTarget(
                     m_LayerTarget.Id,
                     glm::uvec2{static_cast<std::uint32_t>(avail.x), static_cast<std::uint32_t>(avail.y)});
@@ -563,25 +725,26 @@ namespace
             ImGuizmo::SetRect(min.x, min.y, max.x - min.x, max.y - min.y);
 
             bool gizmoActive = false;
-            if (m_UiState->SelectedEntityGuid != 0 && m_Runner)
+            const auto sim = m_Sim.Load();
+            if (m_UiState->SelectedEntityGuid != 0 && sim->Runner)
             {
-                gizmoActive = ManipulateSelectedEntity();
+                gizmoActive = ManipulateSelectedEntity(*sim);
             }
 
-            if (imageHovered && !toolbarHovered && !gizmoActive && !ImGuizmo::IsOver() && m_Runner &&
+            if (imageHovered && !toolbarHovered && !gizmoActive && !ImGuizmo::IsOver() && sim->Runner &&
                 ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
-                PickEntityUnderMouse(min, max);
+                PickEntityUnderMouse(min, max, *sim);
             }
         }
 
-        bool ManipulateSelectedEntity()
+        bool ManipulateSelectedEntity(const SimBinding& sim)
         {
             glm::mat4 model(1.0f);
             bool hasTransform = false;
             {
-                auto sceneLock = m_Runner->LockRenderScene();
-                Scene& scene = *sceneLock;
+                const auto sceneLock = sim.Runner->AcquireSnapshot();
+                const Scene& scene = *sceneLock;
                 const auto entity = scene.FindByGuid(m_UiState->SelectedEntityGuid);
                 if (scene.IsValid(entity) && scene.Registry().all_of<TransformComponent>(entity))
                 {
@@ -596,9 +759,6 @@ namespace
             }
 
             const glm::mat4 view = m_Camera.GetViewMatrix();
-            // ImGuizmo computes its own screen-space handle geometry assuming a GL-style projection
-            // (NDC Y up); GetProjectionMatrix() flips Y for Vulkan's NDC convention, which inverts
-            // the gizmo vertically if handed to it directly, so undo that flip for this call only.
             glm::mat4 projection = m_Camera.GetProjectionMatrix();
             projection[1][1] *= -1.0f;
             const auto operation = ToImGuizmoOperation(m_UiState->ActiveGizmoOperation);
@@ -635,7 +795,7 @@ namespace
                 const glm::quat rotation(glm::radians(glm::vec3(r[0], r[1], r[2])));
                 const glm::vec3 scale(s[0], s[1], s[2]);
                 const auto guid = m_UiState->SelectedEntityGuid;
-                m_Runner->EnqueueEdit([guid, position, rotation, scale, physics = m_PhysicsModule](Scene& scene)
+                sim.Runner->EnqueueEdit([guid, position, rotation, scale, physics = sim.Physics](Scene& scene)
                 {
                     const auto entity = scene.FindByGuid(guid);
                     if (scene.IsValid(entity) && scene.Registry().all_of<TransformComponent>(entity))
@@ -645,11 +805,6 @@ namespace
                         transform.Rotation = rotation;
                         transform.Scale = scale;
 
-                        // Dynamic rigid bodies are physics-authoritative: PhysicsSimulationModule
-                        // overwrites TransformComponent from the PxRigidActor's pose every tick, so a
-                        // plain component edit here would be clobbered again before the next frame
-                        // renders. Push the gizmo's new pose into the live actor too, so physics picks
-                        // up from here instead of fighting the edit.
                         if (physics)
                         {
                             if (auto* actor = physics->FindActor(entity))
@@ -666,7 +821,7 @@ namespace
             return ImGuizmo::IsOver() || ImGuizmo::IsUsing();
         }
 
-        void PickEntityUnderMouse(ImVec2 min, ImVec2 max)
+        void PickEntityUnderMouse(ImVec2 min, ImVec2 max, const SimBinding& sim)
         {
             const glm::vec2 viewportMin{min.x, min.y};
             const glm::vec2 viewportSize{max.x - min.x, max.y - min.y};
@@ -677,13 +832,13 @@ namespace
                                               m_Camera.GetViewMatrix(), m_Camera.GetProjectionMatrix(),
                                               m_Camera.GetPosition());
 
-            auto sceneLock = m_Runner->LockRenderScene();
-            Scene& scene = *sceneLock;
+            const auto sceneLock = sim.Runner->AcquireSnapshot();
+            const Scene& scene = *sceneLock;
             const auto radiusOverride = [this](const Scene& s, entt::entity entity) -> std::optional<float>
             {
                 const auto* mesh = s.Registry().try_get<const MeshComponent>(entity);
                 if (!mesh || mesh->AssetPath.empty()) return std::nullopt;
-                const float localRadius = GetMeshBoundingRadius(mesh->AssetPath);
+                const float localRadius = m_Meshes->BoundingRadius(mesh->AssetPath);
                 if (const auto* transform = s.Registry().try_get<const TransformComponent>(entity))
                 {
                     return localRadius * std::max({transform->Scale.x, transform->Scale.y, transform->Scale.z});
@@ -698,26 +853,6 @@ namespace
             {
                 m_UiState->SelectedEntityGuid = 0;
             }
-        }
-
-        float GetMeshBoundingRadius(const std::string& assetPath)
-        {
-            if (const auto it = m_MeshBoundingRadiusCache.find(assetPath); it != m_MeshBoundingRadiusCache.end())
-            {
-                return it->second;
-            }
-            float radius = 0.5f;
-            if (const auto gltfScene = GetOrLoadMesh(assetPath); gltfScene && !gltfScene->Geometry.Vertices.empty())
-            {
-                float maxDistSq = 0.0f;
-                for (const auto& vertex : gltfScene->Geometry.Vertices)
-                {
-                    maxDistSq = std::max(maxDistSq, glm::dot(vertex, vertex));
-                }
-                radius = std::sqrt(maxDistSq);
-            }
-            m_MeshBoundingRadiusCache.emplace(assetPath, radius);
-            return radius;
         }
 
         std::shared_ptr<ShaderPipeline> MakeComputePipeline(const std::shared_ptr<VulkanDevice>& device,
@@ -895,13 +1030,13 @@ namespace
         void UpdatePhysicsDebugLines()
         {
             m_PhysicsDebugLineVertexCount = 0;
-            if (!m_PhysicsModule) return;
+            if (!m_RenderPhysics) return;
 
-            const bool enabled = m_UiState->Render.ShowPhysicsDebug;
-            m_PhysicsModule->SetDebugVisualizationEnabled(enabled);
+            const bool enabled = m_RenderToggles.ShowPhysicsDebug;
+            m_RenderPhysics->SetDebugVisualizationEnabled(enabled);
             if (!enabled) return;
 
-            const auto lines = m_PhysicsModule->GetDebugLines();
+            const auto lines = m_RenderPhysics->GetDebugLines();
             if (lines.empty()) return;
 
             std::vector<float> vertices;
@@ -926,9 +1061,11 @@ namespace
 
         void RecordObjectPaths()
         {
-            if (!m_Runner) return;
-            if (m_Runner->IsPaused()) return;
-            auto sceneLock = m_Runner->LockRenderScene();
+            const auto sim = m_Sim.Load();
+            if (!sim->Runner) return;
+            if (sim->Runner->IsPaused()) return;
+            const auto sceneLock = sim->Runner->AcquireSnapshot();
+            std::scoped_lock lock(m_PathMutex);
             m_ObjectPathTracker.RecordPositions(*sceneLock);
         }
 
@@ -942,11 +1079,12 @@ namespace
         void UpdateObjectPathLines()
         {
             m_ObjectPathLineVertexCount = 0;
-            if (!m_UiState->Render.ShowObjectPaths) return;
+            if (!m_RenderToggles.ShowObjectPaths) return;
 
             static const glm::vec3 kMeshColor{0.2f, 0.8f, 0.2f};
             static const glm::vec3 kSphereColor{0.8f, 0.2f, 0.8f};
 
+            std::scoped_lock pathLock(m_PathMutex);
             std::vector<float> vertices;
             for (const auto& [guid, history] : m_ObjectPathTracker.MeshHistories())
             {
@@ -1021,32 +1159,13 @@ namespace
             m_GravityGridIndexCount = static_cast<std::uint32_t>(indices.size());
         }
 
-        std::shared_ptr<GltfSceneData> GetOrLoadMesh(const std::string& assetPath)
-        {
-            if (const auto it = m_MeshCache.find(assetPath); it != m_MeshCache.end())
-            {
-                return it->second;
-            }
-            std::shared_ptr<GltfSceneData> result;
-            try
-            {
-                result = std::make_shared<GltfSceneData>(
-                    LoadGltfScene(m_Renderer->GetDevice(), m_FileSystem, assetPath, m_Logger));
-            }
-            catch (const std::exception& error)
-            {
-                m_Logger->Warn("ViewportLayer: failed to load mesh '{}': {}", assetPath, error.what());
-            }
-            m_MeshCache.emplace(assetPath, result);
-            return result;
-        }
-
         void FixupPendingConvexHulls()
         {
-            if (!m_Runner) return;
+            const auto sim = m_Sim.Load();
+            if (!sim->Runner) return;
             std::vector<std::pair<std::uint64_t, std::string>> pending;
             {
-                auto sceneLock = m_Runner->LockRenderScene();
+                const auto sceneLock = sim->Runner->AcquireSnapshot();
                 for (auto [entity, mesh, collider, metadata] :
                      sceneLock->Registry()
                          .view<const MeshComponent, const ColliderComponent, const MetadataComponent>()
@@ -1061,10 +1180,10 @@ namespace
             }
             for (const auto& [guid, assetPath] : pending)
             {
-                const auto gltfScene = GetOrLoadMesh(assetPath);
+                const auto gltfScene = m_Meshes->GetOrLoad(assetPath);
                 if (!gltfScene || gltfScene->Geometry.Vertices.empty()) continue;
                 auto points = gltfScene->Geometry.Vertices;
-                m_Runner->EnqueueEdit([guid, points = std::move(points)](Scene& scene)
+                sim->Runner->EnqueueEdit([guid, points = std::move(points)](Scene& scene)
                 {
                     const auto entity = scene.FindByGuid(guid);
                     if (scene.IsValid(entity) && scene.Registry().all_of<ColliderComponent>(entity))
@@ -1075,28 +1194,14 @@ namespace
             }
         }
 
-        void PopulateConvexHulls(GPP::Scene& scene)
-        {
-            for (auto [entity, mesh, collider] :
-                 scene.Registry().view<const MeshComponent, ColliderComponent>().each())
-            {
-                if (collider.Shape != ColliderShape::ConvexMesh || !collider.ConvexHullPoints.empty()) continue;
-                if (mesh.AssetPath.empty()) continue;
-                if (const auto gltfScene = GetOrLoadMesh(mesh.AssetPath); gltfScene && !gltfScene->Geometry.Vertices.empty())
-                {
-                    collider.ConvexHullPoints = gltfScene->Geometry.Vertices;
-                }
-            }
-        }
-
-        std::vector<MeshDrawable> CollectMeshDrawables(GPP::Scene& scene)
+        std::vector<MeshDrawable> CollectMeshDrawables(const GPP::Scene& scene)
         {
             std::vector<MeshDrawable> drawables;
             for (auto [entity, meshComponent, transform] :
                  scene.Registry().view<const MeshComponent, const TransformComponent>().each())
             {
                 if (meshComponent.AssetPath.empty()) continue;
-                const auto gltfScene = GetOrLoadMesh(meshComponent.AssetPath);
+                const auto gltfScene = m_Meshes->GetOrLoad(meshComponent.AssetPath);
                 if (!gltfScene) continue;
                 const glm::mat4 model = transform.GetMatrix();
                 for (const auto& mesh : gltfScene->Meshes)
@@ -1125,17 +1230,17 @@ namespace
         void UploadMeshCamera()
         {
             MeshCameraParamsGpu params{};
-            params.View = m_Camera.GetViewMatrix();
-            params.Projection = m_Camera.GetProjectionMatrix();
-            params.CameraPos = m_Camera.GetPosition();
+            params.View = m_RenderCamera.GetViewMatrix();
+            params.Projection = m_RenderCamera.GetProjectionMatrix();
+            params.CameraPos = m_RenderCamera.GetPosition();
             params.LightDir = glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f));
             m_MeshCameraBuffer->Upload(&params, sizeof(params));
         }
 
-        void UploadGravityGridParams(GPP::Scene& scene)
+        void UploadGravityGridParams(const GPP::Scene& scene)
         {
             GravityGridParamsGpu params{};
-            params.ViewProjection = m_Camera.GetViewProjectionMatrix();
+            params.ViewProjection = m_RenderCamera.GetViewProjectionMatrix();
             params.PlaneY = kGravityGridPlaneY;
             params.CellSize = kGravityGridCellSize;
             params.LineThickness = kGravityGridLineThickness;
@@ -1173,67 +1278,126 @@ namespace
             {
                 image->Resize(extent);
             }
-            ImmediateSubmit(*m_UploadPool, device->GetGraphicsQueue(), [&](const vk::CommandBuffer cmd)
+            ImmediateSubmit(*m_UploadPool, device->GetBackgroundQueue(), [&](const vk::CommandBuffer cmd)
             {
                 TransitionImageLayout(cmd, image->GetImage(), vk::Format::eR32G32B32A32Sfloat,
                                       vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
             });
         }
 
-        std::string LoadScene()
+        [[nodiscard]] std::string StartupScenePath() const
         {
             static constexpr auto kDefaultScenePath = "templates/test-scene.yaml";
             // Explicit --scene (or export request) wins; otherwise resume the last session's
             // scene if one was persisted; otherwise fall back to the bundled default.
-            const auto scenePath = m_UiState->StartupScenePath.value_or(
+            return m_UiState->StartupScenePath.value_or(
                 [this]
                 {
                     const auto lastScene = m_AppState->GetLastScenePath();
                     return lastScene.empty() ? std::string(kDefaultScenePath) : lastScene;
                 }());
+        }
+
+        bool BeginSceneLoad(std::string path, const SceneLoadResult::Kind kind)
+        {
+            bool expected = false;
+            if (!m_SceneLoad->InFlight.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+            {
+                return false;
+            }
             try
             {
-                auto& scene = m_Scenes->LoadSceneFromFile(scenePath);
-                m_Logger->Info("ViewportLayer: loaded scene '{}'", scene.Metadata().Name);
-                m_UiState->CurrentScenePath = scenePath;
-                m_AppState->NotifySceneOpened(scenePath);
-                return scene.Metadata().Name;
+                ThreadPool::Instance().Submit(
+                    [state = m_SceneLoad, scenes = m_Scenes, meshes = m_Meshes, logger = m_Logger,
+                     path = std::move(path), kind]() mutable
+                    {
+                        RunSceneLoad(state, scenes, meshes, logger, std::move(path), kind);
+                    });
             }
-            catch (const std::exception& error)
+            catch (const std::exception&)
             {
-                m_Logger->Warn("ViewportLayer: failed to load '{}' ({}), creating a default scene",
-                               scenePath, error.what());
-                auto& scene = m_Scenes->CreateScene("ViewportDefault");
-                const auto entity = scene.CreateEntity("BlackHole", "BlackHole");
-                scene.Registry().emplace<TransformComponent>(entity, TransformComponent{});
-                scene.Registry().emplace<BlackHoleComponent>(entity, BlackHoleComponent{.Mass = 1.0f, .Spin = 0.5f});
+                // The pool is shutting down together with the application: nothing to load for.
+                m_SceneLoad->InFlight.store(false, std::memory_order_release);
+                m_SceneLoad->InFlight.notify_all();
+                return false;
+            }
+            return true;
+        }
+
+        void CreateDefaultScene(const std::string& name, const std::string& entityName)
+        {
+            auto& scene = m_Scenes->CreateScene(name);
+            const auto entity = scene.CreateEntity(entityName, "BlackHole");
+            scene.Registry().emplace<TransformComponent>(entity, TransformComponent{});
+            scene.Registry().emplace<BlackHoleComponent>(entity, BlackHoleComponent{.Mass = 1.0f, .Spin = 0.5f});
+        }
+
+        void PollSceneLoad()
+        {
+            std::optional<SceneLoadResult> result;
+            {
+                std::scoped_lock lock(m_SceneLoad->Mutex);
+                result = std::exchange(m_SceneLoad->Result, std::nullopt);
+            }
+            if (!result) return;
+
+            using Kind = SceneLoadResult::Kind;
+            if (result->Ok)
+            {
+                if (result->LoadKind == Kind::Template)
+                {
+                    m_UiState->CurrentScenePath.clear();
+                }
+                else
+                {
+                    m_UiState->CurrentScenePath = result->Path;
+                    m_AppState->NotifySceneOpened(result->Path);
+                }
+                if (result->LoadKind == Kind::Startup)
+                {
+                    m_Logger->Info("ViewportLayer: loaded scene '{}'", result->SceneName);
+                }
+                StartSimulationFor(result->SceneName);
+            }
+            else if (result->LoadKind == Kind::Startup)
+            {
+                m_Logger->Warn("ViewportLayer: failed to load '{}' ({}), creating a default scene", result->Path,
+                               result->Error);
+                CreateDefaultScene("ViewportDefault", "BlackHole");
                 m_UiState->CurrentScenePath.clear();
-                return scene.Metadata().Name;
+                StartSimulationFor("ViewportDefault");
+            }
+            else
+            {
+                m_Logger->Error("ViewportLayer: failed to load scene '{}': {}", result->Path, result->Error);
             }
         }
 
         void StartSimulationFor(const std::string& sceneName)
         {
-            if (m_Runner && !m_UiState->CurrentSceneName.empty())
+            if (const auto previous = m_Sim.Load(); previous->Runner && !m_UiState->CurrentSceneName.empty())
             {
-                m_Scenes->DestroySimulation(m_UiState->CurrentSceneName);
+                // Joined on a worker: the old simulation may be in the middle of a long tick.
+                m_Scenes->DestroySimulationAsync(m_UiState->CurrentSceneName);
             }
 
-            if (auto* scene = m_Scenes->FindScene(sceneName))
-            {
-                PopulateConvexHulls(*scene);
-            }
-            m_PhysicsModule = std::make_shared<PhysicsSimulationModule>(m_Dispatcher, m_Logger);
-            m_GravityModule = std::make_shared<GravitySimulationModule>(m_PhysicsModule, m_Dispatcher, m_Logger);
-            m_GravityModule->SetGravityMultiplier(m_UiState->GravityMultiplier);
-            m_Runner = m_Scenes->CreateSimulation(
-                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{m_GravityModule, m_PhysicsModule});
-            m_Runner->Start();
-            m_Runner->SetPaused(true);
+            auto physics = std::make_shared<PhysicsSimulationModule>(m_Dispatcher, m_Logger);
+            auto gravity = std::make_shared<GravitySimulationModule>(physics, m_Dispatcher, m_Logger);
+            gravity->SetGravityMultiplier(m_UiState->GravityMultiplier);
+            SimulationOptions options;
+            options.FixedTimestep = std::chrono::duration<float>(1.0f / std::max(m_UiState->SimulationTickRate, 1.0f));
+            auto runner = m_Scenes->CreateSimulation(
+                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravity, physics}, options);
+            runner->Start();
+            runner->SetPaused(true);
+            m_Sim.Publish(SimBinding{runner, physics, gravity});
             m_PlaySnapshot.reset();
             m_UiState->CurrentSceneName = sceneName;
             m_UiState->SelectedEntityGuid = 0;
-            m_ObjectPathTracker.Clear();
+            {
+                std::scoped_lock lock(m_PathMutex);
+                m_ObjectPathTracker.Clear();
+            }
         }
 
         void CheckPendingSceneSwitch()
@@ -1241,65 +1405,50 @@ namespace
             if (m_UiState->PendingNewScene)
             {
                 m_UiState->PendingNewScene = false;
-                auto& scene = m_Scenes->CreateScene("Untitled-" + std::to_string(++m_SceneCounter));
-                const auto entity = scene.CreateEntity("Black Hole", "BlackHole");
-                scene.Registry().emplace<TransformComponent>(entity, TransformComponent{});
-                scene.Registry().emplace<BlackHoleComponent>(entity, BlackHoleComponent{.Mass = 1.0f, .Spin = 0.5f});
+                const auto name = "Untitled-" + std::to_string(++m_SceneCounter);
+                CreateDefaultScene(name, "Black Hole");
                 m_UiState->CurrentScenePath.clear();
-                StartSimulationFor(scene.Metadata().Name);
+                StartSimulationFor(name);
             }
             else if (m_UiState->PendingLoadScenePath)
             {
-                const auto path = *m_UiState->PendingLoadScenePath;
-                m_UiState->PendingLoadScenePath.reset();
-                try
+                if (BeginSceneLoad(*m_UiState->PendingLoadScenePath, SceneLoadResult::Kind::File))
                 {
-                    auto& scene = m_Scenes->LoadSceneFromFile(path);
-                    m_UiState->CurrentScenePath = path;
-                    m_AppState->NotifySceneOpened(path);
-                    StartSimulationFor(scene.Metadata().Name);
-                }
-                catch (const std::exception& error)
-                {
-                    m_Logger->Error("ViewportLayer: failed to load scene '{}': {}", path, error.what());
+                    m_UiState->PendingLoadScenePath.reset();
                 }
             }
             else if (m_UiState->PendingLoadTemplatePath)
             {
-                const auto path = *m_UiState->PendingLoadTemplatePath;
-                m_UiState->PendingLoadTemplatePath.reset();
-                try
+                if (BeginSceneLoad(*m_UiState->PendingLoadTemplatePath, SceneLoadResult::Kind::Template))
                 {
-                    auto& scene = m_Scenes->LoadSceneFromFile(path);
-                    m_UiState->CurrentScenePath.clear();
-                    StartSimulationFor(scene.Metadata().Name);
-                }
-                catch (const std::exception& error)
-                {
-                    m_Logger->Error("ViewportLayer: failed to load template '{}': {}", path, error.what());
+                    m_UiState->PendingLoadTemplatePath.reset();
                 }
             }
 
+            const auto sim = m_Sim.Load();
             if (m_UiState->PendingSnapshotForPlay)
             {
                 m_UiState->PendingSnapshotForPlay = false;
-                if (m_Runner && !m_PlaySnapshot)
+                if (sim->Runner && !m_PlaySnapshot)
                 {
-                    m_PlaySnapshot = m_Runner->LockRenderScene()->Clone();
-                    m_ObjectPathTracker.Clear();
-                    m_Runner->SetPaused(false);
+                    m_PlaySnapshot = sim->Runner->AcquireSnapshot()->Clone();
+                    {
+                        std::scoped_lock lock(m_PathMutex);
+                        m_ObjectPathTracker.Clear();
+                    }
+                    sim->Runner->SetPaused(false);
                 }
             }
 
             if (m_UiState->PendingStopSimulation)
             {
                 m_UiState->PendingStopSimulation = false;
-                if (m_Runner)
+                if (sim->Runner)
                 {
                     if (m_PlaySnapshot)
                     {
                         auto snapshot = *m_PlaySnapshot;
-                        m_Runner->EnqueueEdit([snapshot = std::move(snapshot), physics = m_PhysicsModule](Scene& scene)
+                        sim->Runner->EnqueueEdit([snapshot = std::move(snapshot), physics = sim->Physics](Scene& scene)
                         {
                             Scene::SyncInto(snapshot, scene);
 
@@ -1330,10 +1479,19 @@ namespace
                         });
                         m_PlaySnapshot.reset();
                     }
-                    m_Runner->SetPaused(true);
+                    sim->Runner->SetPaused(true);
                 }
             }
         }
+
+        struct ExportJob
+        {
+            std::atomic<int> WritesInFlight{0};
+            std::atomic<int> FramesWritten{0};
+            std::atomic<bool> WriteFailed{false};
+            std::atomic<bool> EncodeFinished{false};
+            std::atomic<bool> EncodeFailed{false};
+        };
 
         void ProcessExport()
         {
@@ -1353,7 +1511,11 @@ namespace
             {
                 m_Renderer->ResizeBufferTarget(m_LayerTarget.Id, m_UiState->ExportResolution);
 
-                if (AllExportPipelinesReady())
+                if (m_ExportAllCaptured)
+                {
+                    PollExportCompletion();
+                }
+                else if (m_ExportPipelinesReady.load(std::memory_order_acquire))
                 {
                     m_PendingCapture = true;
                 }
@@ -1384,10 +1546,16 @@ namespace
             m_ExportTotalFrames = request.RequestKind == ExportRequest::Kind::Video
                                       ? std::max(1, static_cast<int>(request.DurationSeconds * request.Framerate))
                                       : 1;
+            m_ExportAllCaptured = false;
+            m_ExportEncodeStarted = false;
+            m_ExportJob = std::make_shared<ExportJob>();
 
             m_SavedRenderToggles = m_UiState->Render;
             if (request.RayStepSize) m_UiState->Render.RayStepSize = *request.RayStepSize;
             if (request.MaxRaySteps) m_UiState->Render.MaxRaySteps = *request.MaxRaySteps;
+
+            const auto stats = m_Renderer->GetBufferTargetStats(m_LayerTarget.Id);
+            m_ExportMinSerial = (stats ? stats->FramesRendered : 0) + 3;
 
             if (request.RequestKind == ExportRequest::Kind::Video)
             {
@@ -1402,36 +1570,61 @@ namespace
 
         void CaptureExportFrame()
         {
-            const auto readback = m_Renderer->ReadBackBufferTarget(m_LayerTarget.Id);
-            if (readback.Pixels.empty() ||
-                readback.Extent.width != m_UiState->ExportResolution.x ||
-                readback.Extent.height != m_UiState->ExportResolution.y)
+            if (m_ExportJob->WritesInFlight.load() >= 2)
             {
                 m_PendingCapture = true;
                 return;
             }
 
-            const bool bgr = readback.Format == vk::Format::eB8G8R8A8Unorm ||
-                            readback.Format == vk::Format::eB8G8R8A8Srgb;
-            const auto pixelCount = static_cast<std::size_t>(readback.Extent.width) * readback.Extent.height;
-            std::vector<unsigned char> rgb(pixelCount * 3);
-            for (std::size_t i = 0; i < pixelCount; ++i)
+            auto readback = m_Renderer->ReadBackBufferTarget(m_LayerTarget.Id, m_ExportMinSerial,
+                                                             m_UiState->ExportResolution);
+            if (readback.Pixels.empty())
             {
-                const auto* p = &readback.Pixels[i * 4];
-                rgb[i * 3 + 0] = bgr ? p[2] : p[0];
-                rgb[i * 3 + 1] = p[1];
-                rgb[i * 3 + 2] = bgr ? p[0] : p[2];
+                m_PendingCapture = true;
+                return;
             }
+            m_ExportMinSerial = readback.Serial + 1;
 
             const auto path = m_ExportRequest.RequestKind == ExportRequest::Kind::Image
                                   ? std::filesystem::path(m_ExportRequest.OutputPath)
                                   : m_ExportTempDir / std::format("frame_{:06d}.png", m_ExportFrameIndex);
-            stbi_write_png(path.string().c_str(), static_cast<int>(readback.Extent.width),
-                          static_cast<int>(readback.Extent.height), 3, rgb.data(),
-                          static_cast<int>(readback.Extent.width) * 3);
-
             ++m_ExportFrameIndex;
-            m_UiState->ExportProgress = static_cast<float>(m_ExportFrameIndex) / static_cast<float>(m_ExportTotalFrames);
+
+            m_ExportJob->WritesInFlight.fetch_add(1);
+            auto write = [job = m_ExportJob, logger = m_Logger, path,
+                          readback = std::move(readback)]() mutable
+            {
+                const bool bgr = readback.Format == vk::Format::eB8G8R8A8Unorm ||
+                                readback.Format == vk::Format::eB8G8R8A8Srgb;
+                const auto pixelCount = static_cast<std::size_t>(readback.Extent.width) * readback.Extent.height;
+                std::vector<unsigned char> rgb(pixelCount * 3);
+                for (std::size_t i = 0; i < pixelCount; ++i)
+                {
+                    const auto* p = &readback.Pixels[i * 4];
+                    rgb[i * 3 + 0] = bgr ? p[2] : p[0];
+                    rgb[i * 3 + 1] = p[1];
+                    rgb[i * 3 + 2] = bgr ? p[0] : p[2];
+                }
+                if (!stbi_write_png(path.string().c_str(), static_cast<int>(readback.Extent.width),
+                                    static_cast<int>(readback.Extent.height), 3, rgb.data(),
+                                    static_cast<int>(readback.Extent.width) * 3))
+                {
+                    logger->Error("ViewportLayer: failed to write '{}'", path.string());
+                    job->WriteFailed = true;
+                }
+                job->FramesWritten.fetch_add(1);
+                job->WritesInFlight.fetch_sub(1);
+            };
+            try
+            {
+                ThreadPool::Instance().Submit(std::move(write));
+            }
+            catch (const std::exception&)
+            {
+                m_ExportJob->WritesInFlight.fetch_sub(1);
+                m_ExportJob->WriteFailed = true;
+            }
+
             m_UiState->ExportStatus =
                 m_ExportRequest.RequestKind == ExportRequest::Kind::Video
                     ? std::format("Rendering frame {}/{}", m_ExportFrameIndex, m_ExportTotalFrames)
@@ -1439,7 +1632,7 @@ namespace
 
             if (m_ExportFrameIndex >= m_ExportTotalFrames)
             {
-                FinishExport();
+                m_ExportAllCaptured = true;
             }
             else
             {
@@ -1447,29 +1640,72 @@ namespace
             }
         }
 
+        void PollExportCompletion()
+        {
+            const int written = m_ExportJob->FramesWritten.load();
+            m_UiState->ExportProgress = static_cast<float>(written) / static_cast<float>(m_ExportTotalFrames);
+
+            if (written < m_ExportTotalFrames && m_ExportJob->WritesInFlight.load() > 0)
+            {
+                m_UiState->ExportStatus = std::format("Writing frames {}/{}", written, m_ExportTotalFrames);
+                return;
+            }
+
+            if (m_ExportRequest.RequestKind == ExportRequest::Kind::Video)
+            {
+                if (!m_ExportEncodeStarted)
+                {
+                    m_ExportEncodeStarted = true;
+                    m_UiState->ExportStatus = "Encoding video...";
+                    auto encode = [job = m_ExportJob, logger = m_Logger, framerate = m_ExportRequest.Framerate,
+                                   frames = (m_ExportTempDir / "frame_%06d.png").string(),
+                                   output = m_ExportRequest.OutputPath, tempDir = m_ExportTempDir]
+                    {
+                        const auto cmd = std::format(
+                            "ffmpeg -y -framerate {} -i {} -c:v libx264 -pix_fmt yuv420p {} > /dev/null 2>&1",
+                            framerate, frames, output);
+                        if (std::system(cmd.c_str()) != 0)
+                        {
+                            logger->Error("ViewportLayer: ffmpeg encoding failed (is ffmpeg installed?)");
+                            job->EncodeFailed = true;
+                        }
+                        std::error_code ec;
+                        std::filesystem::remove_all(tempDir, ec);
+                        job->EncodeFinished = true;
+                    };
+                    try
+                    {
+                        ThreadPool::Instance().Submit(std::move(encode));
+                    }
+                    catch (const std::exception&)
+                    {
+                        m_ExportJob->EncodeFailed = true;
+                        m_ExportJob->EncodeFinished = true;
+                    }
+                    return;
+                }
+                if (!m_ExportJob->EncodeFinished.load())
+                {
+                    return;
+                }
+            }
+
+            FinishExport();
+        }
+
         void FinishExport()
         {
             m_UiState->Render = m_SavedRenderToggles;
 
-            if (m_ExportRequest.RequestKind == ExportRequest::Kind::Video)
-            {
-                m_UiState->ExportStatus = "Encoding video...";
-                const auto cmd = std::format(
-                    "ffmpeg -y -framerate {} -i {} -c:v libx264 -pix_fmt yuv420p {} > /dev/null 2>&1",
-                    m_ExportRequest.Framerate, (m_ExportTempDir / "frame_%06d.png").string(),
-                    m_ExportRequest.OutputPath);
-                if (std::system(cmd.c_str()) != 0)
-                {
-                    m_Logger->Error("ViewportLayer: ffmpeg encoding failed (is ffmpeg installed?)");
-                    m_UiState->ExportStatus = "Failed: ffmpeg encoding error";
-                }
-                std::error_code ec;
-                std::filesystem::remove_all(m_ExportTempDir, ec);
-            }
-
+            const bool failed = m_ExportJob->EncodeFailed.load() || m_ExportJob->WriteFailed.load();
             m_UiState->ExportActive = false;
             m_UiState->ExportProgress = 1.0f;
-            if (m_UiState->ExportStatus.find("Failed") == std::string::npos)
+            if (failed)
+            {
+                m_UiState->ExportStatus = m_ExportJob->EncodeFailed.load() ? "Failed: ffmpeg encoding error"
+                                                                           : "Failed: could not write image";
+            }
+            else
             {
                 m_UiState->ExportStatus = "Complete";
                 m_Logger->Info("Export complete: {}", m_ExportRequest.OutputPath);
@@ -1526,20 +1762,20 @@ namespace
             m_UiState->CameraPitch = m_Camera.GetPitch();
         }
 
-        void UploadParams(vk::Extent3D extent, GPP::Scene& scene)
+        void UploadParams(vk::Extent3D extent, const GPP::Scene& scene)
         {
             RaytraceParamsGpu params{};
-            params.CameraPos = m_Camera.GetPosition();
-            params.CameraFront = m_Camera.GetFront();
-            params.CameraUp = m_Camera.GetUp();
-            params.CameraRight = m_Camera.GetRight();
-            params.Fov = m_Camera.GetFov();
+            params.CameraPos = m_RenderCamera.GetPosition();
+            params.CameraFront = m_RenderCamera.GetFront();
+            params.CameraUp = m_RenderCamera.GetUp();
+            params.CameraRight = m_RenderCamera.GetRight();
+            params.Fov = m_RenderCamera.GetFov();
             params.Aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
             params.Time = std::chrono::duration<float>(std::chrono::steady_clock::now() - m_StartTime).count();
-            params.ViewProjection = m_Camera.GetViewProjectionMatrix();
+            params.ViewProjection = m_RenderCamera.GetViewProjectionMatrix();
             FillSceneData(params, scene);
 
-            const auto& render = m_UiState->Render;
+            const auto& render = m_RenderToggles;
             params.DebugMode = render.DebugMode;
             params.MetricType = render.MetricType;
             params.IsPhysicallyAccurate = render.PhysicallyAccurate ? 1 : 0;
@@ -1568,23 +1804,39 @@ namespace
         std::shared_ptr<InputState> m_Input;
         std::shared_ptr<UiState> m_UiState;
         std::shared_ptr<AppStateService> m_AppState;
+        std::shared_ptr<MeshCache> m_Meshes;
+        std::shared_ptr<SceneLoadState> m_SceneLoad;
 
+        LatestValue<ViewportFrameParams> m_FrameParams; // UI -> viewport: camera + render toggles
+        LatestValue<SimBinding> m_Sim;                  // UI -> viewport: which simulation to draw
+
+        std::mutex m_PathMutex;
+        ObjectPathTracker m_ObjectPathTracker;
+        std::atomic<bool> m_ExportPipelinesReady{false}; // viewport -> UI
+
+        // ---- UI thread only ----
         bool m_PendingCapture{false};
         ExportRequest m_ExportRequest;
         int m_ExportFrameIndex{0};
         int m_ExportTotalFrames{0};
+        bool m_ExportAllCaptured{false};
+        bool m_ExportEncodeStarted{false};
+        std::uint64_t m_ExportMinSerial{0};
+        std::shared_ptr<ExportJob> m_ExportJob = std::make_shared<ExportJob>();
         std::filesystem::path m_ExportTempDir;
         RenderToggles m_SavedRenderToggles;
 
-        std::shared_ptr<SimulationRunner> m_Runner;
-        std::shared_ptr<PhysicsSimulationModule> m_PhysicsModule;
-        std::shared_ptr<GravitySimulationModule> m_GravityModule;
         std::optional<Scene> m_PlaySnapshot;
         int m_SceneCounter{0};
         Camera m_Camera;
         bool m_HasLastMouse{false};
         float m_LastMouseX{0.0f};
         float m_LastMouseY{0.0f};
+
+        // viewport thread only
+        Camera m_RenderCamera;
+        RenderToggles m_RenderToggles;
+        std::shared_ptr<PhysicsSimulationModule> m_RenderPhysics;
         std::chrono::steady_clock::time_point m_StartTime;
 
         std::unique_ptr<VulkanCommandPool> m_UploadPool;
@@ -1614,8 +1866,6 @@ namespace
         vk::Format m_MeshColorFormat{vk::Format::eUndefined};
         vk::Format m_MeshDepthFormat{vk::Format::eUndefined};
         std::unique_ptr<VulkanBuffer> m_MeshCameraBuffer;
-        std::unordered_map<std::string, std::shared_ptr<GltfSceneData>> m_MeshCache;
-        std::unordered_map<std::string, float> m_MeshBoundingRadiusCache;
 
         std::shared_ptr<ShaderPipeline> m_GravityGridPipeline;
         vk::Format m_GravityGridColorFormat{vk::Format::eUndefined};
@@ -1624,7 +1874,6 @@ namespace
         vk::Format m_PhysicsDebugColorFormat{vk::Format::eUndefined};
         std::unique_ptr<VulkanBuffer> m_PhysicsDebugVertexBuffer;
         std::uint32_t m_PhysicsDebugLineVertexCount{0};
-        ObjectPathTracker m_ObjectPathTracker;
         std::unique_ptr<VulkanBuffer> m_ObjectPathVertexBuffer;
         std::uint32_t m_ObjectPathLineVertexCount{0};
         std::unique_ptr<VulkanBuffer> m_GravityGridVertexBuffer;

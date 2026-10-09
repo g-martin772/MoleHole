@@ -112,7 +112,7 @@ namespace
 
     private:
 
-        void RenderEntityList(SimulationRunner& runner, Scene& scene)
+        void RenderEntityList(SimulationRunner& runner, const Scene& scene)
         {
             ImGui::BeginChild("EntityList", ImVec2(0, 160), true);
             for (auto [entity, metadata] : scene.Registry().view<const MetadataComponent>().each())
@@ -264,7 +264,7 @@ namespace
             return result;
         }
 
-        void RenderSelectedEntity(SimulationRunner& runner, Scene& scene)
+        void RenderSelectedEntity(SimulationRunner& runner, const Scene& scene)
         {
             if (m_UiState->SelectedEntityGuid == 0) return;
             const auto entity = scene.FindByGuid(m_UiState->SelectedEntityGuid);

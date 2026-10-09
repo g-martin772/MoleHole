@@ -22,6 +22,12 @@ namespace
         float ResolutionY = 0.0f;
     };
 
+    struct IntroFrame
+    {
+        bool Active = false;
+        IntroPlanetPushConstants Push;
+    };
+
     constexpr const char* kTitleText = "MOLEHOLE";
     constexpr int kMoleLetters = 4;
 
@@ -40,14 +46,18 @@ namespace
         {
         }
 
-        void OnAttach() override
-        {
-            EnsureTitleFont();
-        }
-
         void OnUpdate(float deltaTime) override
         {
-            if (!m_UiState->IntroActive) return;
+            m_Renderer->SetBufferTargetVisible(m_LayerTarget.Id, m_UiState->IntroActive);
+            if (!m_UiState->IntroActive)
+            {
+                if (m_IntroPublishedActive)
+                {
+                    m_IntroPublishedActive = false;
+                    m_Frame.Publish(IntroFrame{});
+                }
+                return;
+            }
 
             if (m_Input->IsKeyDown(KeyCode::Escape) || m_Input->IsKeyDown(KeyCode::Space))
             {
@@ -62,11 +72,20 @@ namespace
             {
                 m_UiState->IntroActive = false;
             }
+
+            IntroFrame frame;
+            frame.Active = m_UiState->IntroActive;
+            frame.Push.Time = m_Timeline.Time();
+            frame.Push.Alpha = m_Timeline.Alpha();
+            frame.Push.LightIntensity = m_Timeline.LightIntensity();
+            m_Frame.Publish(frame);
+            m_IntroPublishedActive = frame.Active;
         }
 
         void OnRenderGraph(RenderGraph& graph) override
         {
-            if (!m_UiState->IntroActive) return;
+            const auto frame = m_Frame.Load();
+            if (!frame->Active) return;
 
             const auto colorTarget = graph.GetPrimaryColorTarget();
             if (colorTarget == kInvalidRenderGraphHandle) return;
@@ -76,10 +95,7 @@ namespace
             EnsurePlanetPipeline(graph.GetImageFormat(colorTarget));
             if (!m_PlanetPipeline) return;
 
-            IntroPlanetPushConstants push{};
-            push.Time = m_Timeline.Time();
-            push.Alpha = m_Timeline.Alpha();
-            push.LightIntensity = m_Timeline.LightIntensity();
+            IntroPlanetPushConstants push = frame->Push;
             push.ResolutionX = static_cast<float>(extent.width);
             push.ResolutionY = static_cast<float>(extent.height);
 
@@ -105,6 +121,7 @@ namespace
         {
             if (!m_UiState->IntroActive) return;
 
+            EnsureTitleFont();
             const ImGuiIO& io = ImGui::GetIO();
             const float windowWidth = io.DisplaySize.x;
             const float windowHeight = io.DisplaySize.y;
@@ -214,6 +231,9 @@ namespace
 
         IntroTimeline m_Timeline;
         ImFont* m_TitleFont = nullptr;
+        bool m_IntroPublishedActive = false;
+
+        LatestValue<IntroFrame> m_Frame;
 
         std::shared_ptr<ShaderPipeline> m_PlanetPipeline;
         vk::Format m_PlanetColorFormat = vk::Format::eUndefined;

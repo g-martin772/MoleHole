@@ -96,6 +96,11 @@ namespace MoleHole
                 if (const auto v = render["DebugMode"]) m_UiState->Render.DebugMode = v.as<int>();
                 if (const auto v = render["PhysicallyAccurate"]) m_UiState->Render.PhysicallyAccurate = v.as<bool>();
             }
+            if (const auto simulation = node["Simulation"])
+            {
+                if (const auto v = simulation["TickRate"])
+                    m_UiState->SimulationTickRate = std::clamp(v.as<float>(), 1.0f, 2000.0f);
+            }
             if (const auto v = node["LastExportDirectory"]; v && v.IsScalar())
             {
                 m_LastExportDirectory = v.as<std::string>();
@@ -164,6 +169,8 @@ namespace MoleHole
 
             root["Render"]["DebugMode"] = m_UiState->Render.DebugMode;
             root["Render"]["PhysicallyAccurate"] = m_UiState->Render.PhysicallyAccurate;
+
+            root["Simulation"]["TickRate"] = m_UiState->SimulationTickRate;
 
             root["LastExportDirectory"] = GetLastExportDirectory();
             root["TutorialCompleted"] = GetTutorialCompleted();
