@@ -312,10 +312,26 @@ namespace
 
         void RebuildExecutor()
         {
-            m_Executor = std::make_unique<GraphSetExecutor>(m_Graphs, [logger = m_Logger](std::string message)
+            const auto onPrint = [logger = m_Logger](std::string message)
             {
                 logger->Info("[AnimationGraph] {}", message);
-            });
+            };
+            m_RuntimeNote.clear();
+            m_Executor.reset();
+            if (m_UseLuau)
+            {
+                auto script = std::make_unique<ScriptRuntime>(m_Graphs, m_ScriptCache, onPrint);
+                if (script->Ok())
+                {
+                    m_Executor = std::move(script);
+                }
+                else
+                {
+                    m_RuntimeNote = "Luau runtime unavailable, using the interpreter: " + script->Error();
+                    m_Logger->Warn("[AnimationGraph] {}", m_RuntimeNote);
+                }
+            }
+            if (!m_Executor) m_Executor = std::make_unique<GraphSetExecutor>(m_Graphs, onPrint);
             m_Executor->SetTraceSink(&m_Trace);
         }
 
@@ -552,6 +568,23 @@ namespace
         void RenderDebugToolbar()
         {
             const bool running = m_Executor != nullptr;
+            ImGui::TextDisabled("Runtime");
+            ImGui::SameLine();
+            ImGui::BeginDisabled(running);
+            ImGui::SetNextItemWidth(110.0f);
+            if (ImGui::BeginCombo("##runtime", m_UseLuau ? "Luau" : "Interpreter"))
+            {
+                if (ImGui::Selectable("Luau", m_UseLuau)) m_UseLuau = true;
+                if (ImGui::Selectable("Interpreter", !m_UseLuau)) m_UseLuau = false;
+                ImGui::EndCombo();
+            }
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::SetTooltip("Luau transpiles the graph and runs it in an embedded VM; the interpreter walks the graph directly.\n"
+                                  "Applies the next time the simulation is played.");
+            }
+            ImGui::SameLine();
             ImGui::TextDisabled("Debug");
             ImGui::SameLine();
             ImGui::BeginDisabled(!running);
@@ -615,7 +648,45 @@ namespace
                 RenderTraceList();
                 ImGui::EndTabItem();
             }
+            if (ImGui::BeginTabItem("Generated Luau###luau"))
+            {
+                RenderGeneratedLuau();
+                ImGui::EndTabItem();
+            }
             ImGui::EndTabBar();
+        }
+
+        void RenderGeneratedLuau()
+        {
+            if (!m_RuntimeNote.empty()) ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", m_RuntimeNote.c_str());
+            if (m_Current >= m_Graphs.Items.size() || m_Graphs.Items[m_Current].IsFunction)
+            {
+                ImGui::TextDisabled("Select an event graph. Functions are emitted into every graph that calls them.");
+                return;
+            }
+            ImGui::Checkbox("Inline pure nodes", &m_InlineLuauView);
+            ImGui::SameLine();
+            if (!m_LuauViewScript || m_LuauViewRevision != m_Revision || m_LuauViewGraph != m_Current ||
+                m_LuauViewInline != m_InlineLuauView)
+            {
+                m_LuauViewScript = m_ScriptCache.Get(m_Graphs, m_Graphs.Items[m_Current],
+                                                     TranspileOptions{.InlinePure = m_InlineLuauView});
+                m_LuauViewRevision = m_Revision;
+                m_LuauViewGraph = m_Current;
+                m_LuauViewInline = m_InlineLuauView;
+                m_LuauViewText = m_LuauViewScript->Source;
+            }
+            const auto& script = m_LuauViewScript;
+            if (!script->Ok())
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", script->Error.c_str());
+                return;
+            }
+            if (ImGui::Button("Copy")) ImGui::SetClipboardText(script->Source.c_str());
+            ImGui::SameLine();
+            ImGui::TextDisabled("Read-only; select text with the mouse and Ctrl+C");
+            ImGui::InputTextMultiline("##luausource", m_LuauViewText.data(), m_LuauViewText.size() + 1,
+                                      ImGui::GetContentRegionAvail(), ImGuiInputTextFlags_ReadOnly);
         }
 
         void RenderProblemsList()
@@ -2166,7 +2237,16 @@ namespace
 
         std::string m_LastSceneName;
         bool m_WasPaused = true;
-        std::unique_ptr<GraphSetExecutor> m_Executor;
+        std::unique_ptr<IGraphRuntime> m_Executor;
+        ScriptCache m_ScriptCache;
+        bool m_UseLuau = true;
+        bool m_InlineLuauView = false;
+        std::string m_RuntimeNote;
+        std::string m_LuauViewText;
+        std::shared_ptr<const TranspiledScript> m_LuauViewScript;
+        std::uint64_t m_LuauViewRevision = 0;
+        std::size_t m_LuauViewGraph = 0;
+        bool m_LuauViewInline = false;
 
         bool m_ShowNewVariableDialog = false;
         std::array<char, 128> m_NewVariableBuffer{};
