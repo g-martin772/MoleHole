@@ -55,10 +55,35 @@ namespace MoleHole
             std::uint64_t SelfGuid{0};
             int Handle{0};
             std::shared_ptr<const TranspiledScript> Source;
+            std::unique_ptr<GPP::LuauScheduler> Sched;
+            // Component graph instances only.
+            bool Component{false};
+            bool Started{false};
+            bool Seen{false};
+            std::size_t Index{0};
+            std::string LastError;
+            std::vector<std::pair<std::string, GPP::FieldValue>> Props;
+            bool Failed{false};
+        };
+
+        struct PendingEvent
+        {
+            std::string Name;
+            std::vector<GPP::LuauValue> Args;
         };
 
         GPP::LuauVm Vm;
+        std::shared_ptr<GPP::LuauTaskErrors> TaskErrors = std::make_shared<GPP::LuauTaskErrors>();
+        std::shared_ptr<GPP::SceneBindings> Bindings = std::make_shared<GPP::SceneBindings>();
+        std::shared_ptr<GPP::ScriptHostContext> HostContext;
+        std::unique_ptr<GPP::ScriptHost> Host;
         std::vector<Script> Scripts;
+        std::map<std::string, std::pair<std::shared_ptr<const TranspiledScript>, GPP::ScriptDescriptor>> ComponentGraphs;
+        std::vector<GPP::ScriptError> ComponentErrors;
+        std::mutex EventMutex;
+        std::vector<PendingEvent> Events;
+        std::vector<PendingEvent> Delivering;
+        PendingEvent Current;
         ITraceSink* Sink{nullptr};
         std::function<void(std::string)> OnPrint;
         std::function<std::uint64_t()> GuidSource{&GPP::GenerateGuid};
@@ -158,7 +183,7 @@ namespace MoleHole
                 const Value from = call.ToValue(1, GPP::LuauType::Vec3);
                 const Value target = call.ToValue(2, GPP::LuauType::Vec3);
                 if (!std::holds_alternative<glm::vec3>(from) || !std::holds_alternative<glm::vec3>(target)) return 0;
-                call.PushValue(LookAtEulerDegrees(std::get<glm::vec3>(from), std::get<glm::vec3>(target)));
+                call.PushValue(GPP::LookAtEulerDegrees(std::get<glm::vec3>(from), std::get<glm::vec3>(target)));
                 return 1;
             });
             vm.Register("host", "entity", [this](GPP::LuauNativeCall& call)
@@ -244,87 +269,134 @@ namespace MoleHole
             });
             vm.Register("host", "spawn", [this](GPP::LuauNativeCall& call)
             {
-                const int node = static_cast<int>(call.Number(1));
                 const Value presetValue = call.ToValue(2, GPP::LuauType::String);
-                const std::string preset = std::holds_alternative<std::string>(presetValue) ? std::get<std::string>(presetValue)
-                                                                                           : std::string("Empty");
                 const Value positionValue = call.ToValue(3, GPP::LuauType::Vec3);
-                const glm::vec3 position = std::holds_alternative<glm::vec3>(positionValue) ? std::get<glm::vec3>(positionValue)
-                                                                                            : glm::vec3(0.0f);
                 const Value nameValue = call.ToValue(4, GPP::LuauType::String);
-                const std::string name = std::holds_alternative<std::string>(nameValue) ? std::get<std::string>(nameValue) : "";
-
-                const std::uint64_t guid = GuidSource();
-                if (FindEntityPreset(preset))
-                {
-                    Writes->push_back([guid, preset, position, name](GPP::Scene& live)
-                    {
-                        SpawnPreset(live, guid, preset, position, name);
-                    });
-                }
-                else
-                {
-                    std::uint64_t sourceGuid = 0;
-                    for (auto [entity, metadata] : Scene->Registry().view<const GPP::MetadataComponent>().each())
-                    {
-                        if (metadata.Name == preset) { sourceGuid = metadata.Guid; break; }
-                    }
-                    if (sourceGuid == 0)
-                    {
-                        Report(node, TraceSeverity::Warning, "No preset or entity named '" + preset + "'");
-                        return 0;
-                    }
-                    Writes->push_back([guid, sourceGuid, position, name](GPP::Scene& live)
-                    {
-                        const auto source = live.FindByGuid(sourceGuid);
-                        const auto copy = live.CloneEntity(source, guid);
-                        if (!live.IsValid(copy)) { return; }
-                        if (auto* transform = live.Registry().try_get<GPP::TransformComponent>(copy)) { transform->Position = position; }
-                        if (!name.empty()) { live.Registry().get<GPP::MetadataComponent>(copy).Name = name; }
-                    });
-                }
-                Spawned.insert(guid);
-                call.PushEntity(guid);
-                return 1;
+                return PushGuid(call, Spawn(static_cast<int>(call.Number(1)),
+                                            std::holds_alternative<std::string>(presetValue) ? std::get<std::string>(presetValue) : "Empty",
+                                            std::holds_alternative<glm::vec3>(positionValue) ? std::get<glm::vec3>(positionValue) : glm::vec3(0.0f),
+                                            std::holds_alternative<std::string>(nameValue) ? std::get<std::string>(nameValue) : ""));
             });
             vm.Register("host", "destroy", [this](GPP::LuauNativeCall& call)
             {
-                const std::uint64_t guid = call.Entity(2);
-                if (guid == 0)
-                {
-                    Report(static_cast<int>(call.Number(1)), TraceSeverity::Warning, "Entity input is empty");
-                    return 0;
-                }
-                Spawned.erase(guid);
-                Writes->push_back([guid](GPP::Scene& live) { live.DestroyEntity(live.FindByGuid(guid)); });
+                Destroy(static_cast<int>(call.Number(1)), call.Entity(2));
                 return 0;
             });
             vm.Register("host", "clone", [this](GPP::LuauNativeCall& call)
             {
-                const std::uint64_t sourceGuid = call.Entity(2);
-                if (sourceGuid == 0 || !EntityKnown(sourceGuid))
-                {
-                    Report(static_cast<int>(call.Number(1)), TraceSeverity::Warning, "Source entity is empty or not found");
-                    return 0;
-                }
                 const Value positionValue = call.ToValue(3, GPP::LuauType::Vec3);
-                const std::optional<glm::vec3> position = std::holds_alternative<glm::vec3>(positionValue)
-                                                              ? std::optional(std::get<glm::vec3>(positionValue))
-                                                              : std::nullopt;
-                const std::uint64_t guid = GuidSource();
-                Writes->push_back([guid, sourceGuid, position](GPP::Scene& live)
-                {
-                    const auto copy = live.CloneEntity(live.FindByGuid(sourceGuid), guid);
-                    if (!live.IsValid(copy) || !position) { return; }
-                    if (auto* transform = live.Registry().try_get<GPP::TransformComponent>(copy)) { transform->Position = *position; }
-                });
-                Spawned.insert(guid);
-                call.PushEntity(guid);
+                return PushGuid(call, Clone(static_cast<int>(call.Number(1)), call.Entity(2),
+                                            std::holds_alternative<glm::vec3>(positionValue)
+                                                ? std::optional(std::get<glm::vec3>(positionValue)) : std::nullopt));
+            });
+            vm.Register("host", "event", [this](GPP::LuauNativeCall& call)
+            {
+                call.PushString(Current.Name);
+                for (const auto& arg : Current.Args) call.PushValue(arg);
+                return static_cast<int>(1 + Current.Args.size());
+            });
+            vm.Register("host", "props", [this](GPP::LuauNativeCall& call)
+            {
+                call.PushMap(HostContext->Props);
                 return 1;
+            });
+
+            // Script components use the same entity operations through the scene table.
+            vm.Register("scene", "spawn", [this](GPP::LuauNativeCall& call)
+            {
+                const Value presetValue = call.ToValue(1, GPP::LuauType::String);
+                const Value positionValue = call.ToValue(2, GPP::LuauType::Vec3);
+                const Value nameValue = call.ToValue(3, GPP::LuauType::String);
+                return PushGuid(call, Spawn(0, std::holds_alternative<std::string>(presetValue) ? std::get<std::string>(presetValue) : "Empty",
+                                            std::holds_alternative<glm::vec3>(positionValue) ? std::get<glm::vec3>(positionValue) : glm::vec3(0.0f),
+                                            std::holds_alternative<std::string>(nameValue) ? std::get<std::string>(nameValue) : ""));
+            });
+            vm.Register("scene", "destroy", [this](GPP::LuauNativeCall& call)
+            {
+                Destroy(0, call.Entity(1));
+                return 0;
+            });
+            vm.Register("scene", "clone", [this](GPP::LuauNativeCall& call)
+            {
+                const Value positionValue = call.ToValue(2, GPP::LuauType::Vec3);
+                return PushGuid(call, Clone(0, call.Entity(1),
+                                            std::holds_alternative<glm::vec3>(positionValue)
+                                                ? std::optional(std::get<glm::vec3>(positionValue)) : std::nullopt));
             });
         }
 
-        void ReportError(const Script& script, const GPP::LuauError& error)
+        static int PushGuid(GPP::LuauNativeCall& call, const std::uint64_t guid)
+        {
+            if (guid == 0) return 0;
+            call.PushEntity(guid);
+            return 1;
+        }
+
+        std::uint64_t Spawn(const int node, const std::string& preset, const glm::vec3& position, const std::string& name)
+        {
+            const std::uint64_t guid = GuidSource();
+            if (FindEntityPreset(preset))
+            {
+                Writes->push_back([guid, preset, position, name](GPP::Scene& live)
+                {
+                    SpawnPreset(live, guid, preset, position, name);
+                });
+            }
+            else
+            {
+                std::uint64_t sourceGuid = 0;
+                for (auto [entity, metadata] : Scene->Registry().view<const GPP::MetadataComponent>().each())
+                {
+                    if (metadata.Name == preset) { sourceGuid = metadata.Guid; break; }
+                }
+                if (sourceGuid == 0)
+                {
+                    Report(node, TraceSeverity::Warning, "No preset or entity named '" + preset + "'");
+                    return 0;
+                }
+                Writes->push_back([guid, sourceGuid, position, name](GPP::Scene& live)
+                {
+                    const auto source = live.FindByGuid(sourceGuid);
+                    const auto copy = live.CloneEntity(source, guid);
+                    if (!live.IsValid(copy)) { return; }
+                    if (auto* transform = live.Registry().try_get<GPP::TransformComponent>(copy)) { transform->Position = position; }
+                    if (!name.empty()) { live.Registry().get<GPP::MetadataComponent>(copy).Name = name; }
+                });
+            }
+            Spawned.insert(guid);
+            return guid;
+        }
+
+        void Destroy(const int node, const std::uint64_t guid)
+        {
+            if (guid == 0)
+            {
+                Report(node, TraceSeverity::Warning, "Entity input is empty");
+                return;
+            }
+            Spawned.erase(guid);
+            Writes->push_back([guid](GPP::Scene& live) { live.DestroyEntity(live.FindByGuid(guid)); });
+        }
+
+        std::uint64_t Clone(const int node, const std::uint64_t sourceGuid, const std::optional<glm::vec3>& position)
+        {
+            if (sourceGuid == 0 || !EntityKnown(sourceGuid))
+            {
+                Report(node, TraceSeverity::Warning, "Source entity is empty or not found");
+                return 0;
+            }
+            const std::uint64_t guid = GuidSource();
+            Writes->push_back([guid, sourceGuid, position](GPP::Scene& live)
+            {
+                const auto copy = live.CloneEntity(live.FindByGuid(sourceGuid), guid);
+                if (!live.IsValid(copy) || !position) { return; }
+                if (auto* transform = live.Registry().try_get<GPP::TransformComponent>(copy)) { transform->Position = *position; }
+            });
+            Spawned.insert(guid);
+            return guid;
+        }
+
+        void ReportError(Script& script, const GPP::LuauError& error)
         {
             const SourceLocation where = script.Source->Locate(error.Line);
             LastRuntimeError = (where.Graph.empty() ? script.Name : where.Graph) + ": " + error.Message;
@@ -332,34 +404,155 @@ namespace MoleHole
             {
                 Sink->OnDiagnostic(where.Graph.empty() ? script.Name : where.Graph, where.NodeId, TraceSeverity::Error, error.Message);
             }
+            script.Failed = true;
+            if (script.Component && script.LastError != error.Message)
+            {
+                script.LastError = error.Message;
+                ComponentErrors.push_back(GPP::ScriptError{script.SelfGuid, script.Index, script.Name, error.Message, error.Line});
+            }
+        }
+
+        void DrainTaskErrors(Script& script)
+        {
+            for (const auto& error : TaskErrors->Take()) ReportError(script, error);
+        }
+
+        void BindScheduler(Script& script)
+        {
+            if (!script.Source->UsesTasks) return;
+            script.Sched = std::make_unique<GPP::LuauScheduler>(Vm, TaskErrors);
+            if (!script.Sched->Ok()) { script.Sched.reset(); return; }
+            const std::array<int, 1> refs{script.Sched->Handle()};
+            if (auto bound = Vm.CallWith(script.Handle, "bind", refs); !bound) ReportError(script, bound.error());
+        }
+
+        // Starts component graph instances for entities whose Scripts list names a component graph; drops stale ones.
+        void SyncComponentGraphs(const GPP::Scene& scene)
+        {
+            if (ComponentGraphs.empty()) return;
+            for (auto& script : Scripts) script.Seen = !script.Component;
+            for (auto [entity, scripts, metadata] : scene.Registry().view<const GPP::ScriptsComponent, const GPP::MetadataComponent>().each())
+            {
+                for (std::size_t i = 0; i < scripts.Entries.size(); ++i)
+                {
+                    const auto& entry = scripts.Entries[i];
+                    const auto graph = ComponentGraphs.find(entry.Name);
+                    if (graph == ComponentGraphs.end()) continue;
+                    auto existing = std::ranges::find_if(Scripts, [&](const Script& s)
+                    {
+                        return s.Component && s.SelfGuid == metadata.Guid && s.Index == i && s.Name == entry.Name;
+                    });
+                    if (existing == Scripts.end())
+                    {
+                        auto handle = Vm.Load(graph->second.first->Source, "=graph");
+                        if (!handle)
+                        {
+                            LastRuntimeError = entry.Name + ": " + handle.error().Message;
+                            continue;
+                        }
+                        Script created;
+                        created.Name = entry.Name;
+                        created.SelfGuid = metadata.Guid;
+                        created.Handle = *handle;
+                        created.Source = graph->second.first;
+                        created.Component = true;
+                        created.Index = i;
+                        BindScheduler(created);
+                        Scripts.push_back(std::move(created));
+                        existing = Scripts.end() - 1;
+                    }
+                    existing->Seen = true;
+                    existing->Props = GPP::ResolveProps(graph->second.second, entry);
+                }
+            }
+            std::erase_if(Scripts, [this](const Script& script)
+            {
+                if (script.Seen) return false;
+                Vm.Release(script.Handle);
+                return true;
+            });
+        }
+
+        void DeliverEvents(Script& script)
+        {
+            if (!script.Source->HandlesEvents || !script.Sched) return;
+            for (auto& event : Delivering)
+            {
+                Current = event;
+                if (auto result = Vm.Call(script.Handle, "dispatch"); !result) ReportError(script, result.error());
+                DrainTaskErrors(script);
+                if (Aborted) break;
+            }
         }
 
         PendingWrites Run(const char* event, const bool tick, const GPP::Scene& scene, const float deltaTime)
         {
             PendingWrites writes;
             if (Sink) Sink->OnTickBegin(event);
-            const std::array<double, 1> args{deltaTime};
-            for (auto& script : Scripts)
+            Scene = &scene;
+            Writes = &writes;
+            Bindings->Read = &scene;
+            Bindings->Write = [&writes](std::function<void(GPP::Scene&)> write) { writes.push_back(std::move(write)); };
+            SyncComponentGraphs(scene);
+            if (tick)
             {
-                Scene = &scene;
-                Writes = &writes;
+                std::scoped_lock lock(EventMutex);
+                Delivering = std::exchange(Events, {});
+            }
+
+            const std::array<double, 1> args{deltaTime};
+            for (std::size_t i = 0; i < Scripts.size(); ++i)
+            {
+                auto& script = Scripts[i];
                 Spawned.clear();
                 Stack.assign(1, script.Name);
                 Aborted = false;
                 Self = script.SelfGuid;
-                auto result = tick ? Vm.Call(script.Handle, "tick", args) : Vm.Call(script.Handle, "start");
-                if (!result) ReportError(script, result.error());
+                script.Failed = false;
+                HostContext->Entity = script.SelfGuid;
+                HostContext->Props = script.Props;
+                if (!tick || (script.Component && !script.Started))
+                {
+                    script.Started = true;
+                    if (auto result = Vm.Call(script.Handle, "start"); !result) ReportError(script, result.error());
+                    DrainTaskErrors(script);
+                }
+                if (tick && !Aborted)
+                {
+                    if (script.Sched) script.Sched->Tick(deltaTime);
+                    DrainTaskErrors(script);
+                    DeliverEvents(script);
+                    if (auto result = Vm.Call(script.Handle, "tick", args); !result) ReportError(script, result.error());
+                    DrainTaskErrors(script);
+                    if (!script.Failed) script.LastError.clear();
+                }
                 if (Aborted) break;
             }
+
+            if (Host && !Aborted)
+            {
+                Stack.assign(1, "Scripts");
+                tick ? Host->Tick(scene, deltaTime) : Host->Start(scene);
+                for (auto& error : Host->TakeErrors())
+                {
+                    ComponentErrors.push_back(error);
+                    LastRuntimeError = error.Script + ": " + error.Message;
+                    if (Sink) Sink->OnDiagnostic(error.Script, 0, TraceSeverity::Error, error.Message);
+                }
+            }
+            Delivering.clear();
             Scene = nullptr;
             Writes = nullptr;
+            Bindings->Read = nullptr;
+            Bindings->Write = nullptr;
             if (Sink) Sink->OnTickEnd();
             return writes;
         }
     };
 
     ScriptRuntime::ScriptRuntime(const SceneGraphs& graphs, ScriptCache& cache, std::function<void(std::string)> onPrint,
-                                 const TranspileOptions& options, const GPP::LuauLimits& limits)
+                                 const TranspileOptions& options, const GPP::LuauLimits& limits,
+                                 const GPP::AssetDirectories* assets)
         : m_Impl(std::make_unique<Impl>())
     {
         auto& impl = *m_Impl;
@@ -368,6 +561,9 @@ namespace MoleHole
         try
         {
             GPP::RegisterMathBindings(impl.Vm);
+            GPP::RegisterSceneBindings(impl.Vm, impl.Bindings);
+            GPP::RegisterTaskBindings(impl.Vm, impl.TaskErrors);
+            impl.HostContext = GPP::RegisterScriptHostBindings(impl.Vm);
         }
         catch (const std::exception& e)
         {
@@ -391,13 +587,30 @@ namespace MoleHole
                 impl.Error = "graph '" + item.Name + "': " + source->Error;
                 return;
             }
+            if (item.IsComponent)
+            {
+                impl.ComponentGraphs[item.Name] = {std::move(source), DescribeComponentGraph(item)};
+                continue;
+            }
             auto handle = impl.Vm.Load(source->Source, "=graph");
             if (!handle)
             {
                 impl.Error = "graph '" + item.Name + "' failed to load: " + handle.error().Message;
                 return;
             }
-            impl.Scripts.push_back(Impl::Script{item.Name, item.EntityGuid, *handle, std::move(source)});
+            Impl::Script script;
+            script.Name = item.Name;
+            script.SelfGuid = item.EntityGuid;
+            script.Handle = *handle;
+            script.Source = std::move(source);
+            impl.BindScheduler(script);
+            impl.Scripts.push_back(std::move(script));
+        }
+
+        if (assets)
+        {
+            impl.Host = std::make_unique<GPP::ScriptHost>(impl.Vm, impl.HostContext, impl.TaskErrors, *assets);
+            impl.Host->SetIgnored([&impl](const std::string& name) { return impl.ComponentGraphs.contains(name); });
         }
     }
 
@@ -418,5 +631,34 @@ namespace MoleHole
     PendingWrites ScriptRuntime::ExecuteTickEvent(const GPP::Scene& scene, const float deltaTime)
     {
         return m_Impl->Run("Tick", true, scene, deltaTime);
+    }
+
+    void ScriptRuntime::PostEvent(std::string name, std::vector<GPP::LuauValue> args)
+    {
+        std::scoped_lock lock(m_Impl->EventMutex);
+        m_Impl->Events.push_back(Impl::PendingEvent{std::move(name), std::move(args)});
+    }
+
+    std::vector<GPP::ScriptError> ScriptRuntime::TakeScriptErrors() { return std::exchange(m_Impl->ComponentErrors, {}); }
+
+    std::vector<GPP::ScriptStatus> ScriptRuntime::ScriptStatuses() const
+    {
+        std::vector<GPP::ScriptStatus> statuses;
+        if (m_Impl->Host) statuses = m_Impl->Host->Statuses();
+        for (const auto& script : m_Impl->Scripts)
+        {
+            if (script.Component) statuses.push_back({script.SelfGuid, script.Index, script.Name, script.LastError});
+        }
+        return statuses;
+    }
+
+    std::size_t ScriptRuntime::ActiveTasks() const
+    {
+        std::size_t count = 0;
+        for (const auto& script : m_Impl->Scripts)
+        {
+            if (script.Sched) count += script.Sched->Active();
+        }
+        return count;
     }
 }

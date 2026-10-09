@@ -43,7 +43,7 @@ namespace MoleHole
         YAML::Emitter out;
         out << GraphToNode(graph.Graph);
         std::string text = out.c_str();
-        text += graph.IsFunction ? "|fn|" : "|ev|";
+        text += graph.IsFunction ? "|fn|" : (graph.IsComponent ? "|cmp|" : "|ev|");
         if (graph.IsFunction)
         {
             YAML::Emitter sig;
@@ -60,6 +60,7 @@ namespace MoleHole
         IrGraph ir;
         ir.Name = named.Name;
         ir.IsFunction = named.IsFunction;
+        ir.IsComponent = named.IsComponent;
         ir.Signature = named.Signature;
         ir.Variables = graph.Variables;
         ir.Hash = HashGraph(named);
@@ -79,6 +80,7 @@ namespace MoleHole
             out.Variable = node.VariableName;
             out.Component = node.Component;
             out.Function = node.FunctionName;
+            out.Label = node.Label;
             out.TargetGuid = node.TargetGuid;
             out.Pure = IsPureNode(node);
             out.Inputs.resize(node.Inputs.size());
@@ -101,6 +103,8 @@ namespace MoleHole
                 if (node.SubType == NodeSubType::FunctionEntry && ir.Entry < 0) ir.Entry = index;
             }
             if (node.SubType == NodeSubType::FunctionReturn && ir.Return < 0) ir.Return = index;
+            if (!EventNameOf(node).empty() && !node.Outputs.empty() && node.Type == NodeType::Event) ir.EventHandlers.push_back(index);
+            if (IsLatentNode(node)) ir.HasLatent = true;
         }
 
         std::vector<bool> inputTaken;
@@ -114,7 +118,7 @@ namespace MoleHole
             IrNode& source = ir.Nodes[fromNode];
             if (source.OutputTypes[fromPin] == PinType::Flow)
             {
-                source.Flow[fromPin].push_back(IrFlowEdge{link.Id, toNode, false});
+                source.Flow[fromPin].push_back(IrFlowEdge{link.Id, toNode, toPin, false});
                 continue;
             }
             IrInput& input = ir.Nodes[toNode].Inputs[toPin];
@@ -185,7 +189,7 @@ namespace MoleHole
             }
             state[index] = 2;
         };
-        for (const auto& roots : {ir.StartEvents, ir.TickEvents})
+        for (const auto& roots : {ir.StartEvents, ir.TickEvents, ir.EventHandlers})
         {
             for (const int root : roots) if (state[root] == 0) flowVisit(flowVisit, root);
         }

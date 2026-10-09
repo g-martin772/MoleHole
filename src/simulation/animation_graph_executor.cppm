@@ -22,6 +22,12 @@ export namespace MoleHole
         virtual void SetTraceSink(ITraceSink* sink) = 0;
         [[nodiscard]] virtual PendingWrites ExecuteStartEvent(const GPP::Scene& scene) = 0;
         [[nodiscard]] virtual PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime) = 0;
+
+        // Named events (key presses, trigger overlaps) for graphs that handle them; the interpreter ignores them.
+        virtual void PostEvent(std::string name, std::vector<GPP::LuauValue> args) { (void)name; (void)args; }
+        // Script components: errors raised since the last call, and the current health of every instance.
+        [[nodiscard]] virtual std::vector<GPP::ScriptError> TakeScriptErrors() { return {}; }
+        [[nodiscard]] virtual std::vector<GPP::ScriptStatus> ScriptStatuses() const { return {}; }
     };
 
     class GraphExecutor

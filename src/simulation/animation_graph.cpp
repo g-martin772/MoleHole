@@ -57,6 +57,7 @@ namespace MoleHole
             case NodeType::Entity: return "Entity";
             case NodeType::Reroute: return "Reroute";
             case NodeType::Call: return "Call";
+            case NodeType::Latent: return "Latent";
             }
             return "Event";
         }
@@ -74,6 +75,7 @@ namespace MoleHole
             if (text == "Entity") return NodeType::Entity;
             if (text == "Reroute") return NodeType::Reroute;
             if (text == "Call") return NodeType::Call;
+            if (text == "Latent") return NodeType::Latent;
             return NodeType::Event;
         }
 
@@ -116,6 +118,20 @@ namespace MoleHole
             case NodeSubType::FunctionEntry: return "FunctionEntry";
             case NodeSubType::FunctionReturn: return "FunctionReturn";
             case NodeSubType::FunctionCall: return "FunctionCall";
+            case NodeSubType::Delay: return "Delay";
+            case NodeSubType::WaitUntil: return "WaitUntil";
+            case NodeSubType::WaitForEvent: return "WaitForEvent";
+            case NodeSubType::Interpolate: return "Interpolate";
+            case NodeSubType::Sequence: return "Sequence";
+            case NodeSubType::DoOnce: return "DoOnce";
+            case NodeSubType::Gate: return "Gate";
+            case NodeSubType::Switch: return "Switch";
+            case NodeSubType::ForEach: return "ForEach";
+            case NodeSubType::While: return "While";
+            case NodeSubType::CustomEvent: return "CustomEvent";
+            case NodeSubType::CustomEventCall: return "CustomEventCall";
+            case NodeSubType::OnTrigger: return "OnTrigger";
+            case NodeSubType::OnKey: return "OnKey";
             }
             return "None";
         }
@@ -156,6 +172,20 @@ namespace MoleHole
             if (text == "FunctionEntry") return NodeSubType::FunctionEntry;
             if (text == "FunctionReturn") return NodeSubType::FunctionReturn;
             if (text == "FunctionCall") return NodeSubType::FunctionCall;
+            if (text == "Delay") return NodeSubType::Delay;
+            if (text == "WaitUntil") return NodeSubType::WaitUntil;
+            if (text == "WaitForEvent") return NodeSubType::WaitForEvent;
+            if (text == "Interpolate") return NodeSubType::Interpolate;
+            if (text == "Sequence") return NodeSubType::Sequence;
+            if (text == "DoOnce") return NodeSubType::DoOnce;
+            if (text == "Gate") return NodeSubType::Gate;
+            if (text == "Switch") return NodeSubType::Switch;
+            if (text == "ForEach") return NodeSubType::ForEach;
+            if (text == "While") return NodeSubType::While;
+            if (text == "CustomEvent") return NodeSubType::CustomEvent;
+            if (text == "CustomEventCall") return NodeSubType::CustomEventCall;
+            if (text == "OnTrigger") return NodeSubType::OnTrigger;
+            if (text == "OnKey") return NodeSubType::OnKey;
             return NodeSubType::None;
         }
 
@@ -745,6 +775,196 @@ namespace MoleHole
         return node;
     }
 
+    // ---- Latent and event nodes --------------------------------------------------------------
+
+    namespace
+    {
+        Node MakeFlowNode(const int id, const NodeType type, const NodeSubType subType, std::string name, const bool flowIn = true)
+        {
+            Node node;
+            node.Id = id;
+            node.Name = std::move(name);
+            node.Type = type;
+            node.SubType = subType;
+            if (flowIn) node.Inputs.push_back(Pin{InputPinId(id, 0), "In", PinType::Flow, true});
+            return node;
+        }
+
+        void AddInput(Node& node, std::string name, const PinType type)
+        {
+            node.Inputs.push_back(Pin{InputPinId(node.Id, static_cast<int>(node.Inputs.size())), std::move(name), type, true});
+        }
+
+        void AddOutput(Node& node, std::string name, const PinType type)
+        {
+            node.Outputs.push_back(Pin{OutputPinId(node.Id, static_cast<int>(node.Outputs.size())), std::move(name), type, false});
+        }
+    }
+
+    Node CreateDelayNode(const int id)
+    {
+        Node node = MakeFlowNode(id, NodeType::Latent, NodeSubType::Delay, "Delay");
+        AddInput(node, "Seconds", PinType::Float);
+        AddOutput(node, "Completed", PinType::Flow);
+        return node;
+    }
+
+    Node CreateWaitUntilNode(const int id)
+    {
+        Node node = MakeFlowNode(id, NodeType::Latent, NodeSubType::WaitUntil, "Wait Until");
+        AddInput(node, "Condition", PinType::Bool);
+        AddOutput(node, "Completed", PinType::Flow);
+        return node;
+    }
+
+    Node CreateWaitForEventNode(const int id, const std::string& event)
+    {
+        Node node = MakeFlowNode(id, NodeType::Latent, NodeSubType::WaitForEvent, "Wait For Event");
+        node.Label = event;
+        AddOutput(node, "Completed", PinType::Flow);
+        return node;
+    }
+
+    Node CreateInterpolateNode(const int id, const PinType valueType, const std::string& easing)
+    {
+        Node node = MakeFlowNode(id, NodeType::Latent, NodeSubType::Interpolate,
+                                 valueType == PinType::Float ? "Interpolate" : "Interpolate " + PinTypeToString(valueType));
+        node.Label = easing;
+        AddInput(node, "From", valueType);
+        AddInput(node, "To", valueType);
+        AddInput(node, "Duration", PinType::Float);
+        AddOutput(node, "Update", PinType::Flow);
+        AddOutput(node, "Value", valueType);
+        AddOutput(node, "Completed", PinType::Flow);
+        return node;
+    }
+
+    Node CreateSequenceNode(const int id, const int outputs)
+    {
+        Node node = MakeFlowNode(id, NodeType::Control, NodeSubType::Sequence, "Sequence");
+        for (int i = 0; i < std::clamp(outputs, 1, 16); ++i) AddOutput(node, "Then " + std::to_string(i), PinType::Flow);
+        return node;
+    }
+
+    Node CreateDoOnceNode(const int id)
+    {
+        Node node = MakeFlowNode(id, NodeType::Control, NodeSubType::DoOnce, "Do Once");
+        AddInput(node, "Reset", PinType::Flow);
+        AddOutput(node, "Completed", PinType::Flow);
+        return node;
+    }
+
+    Node CreateGateNode(const int id)
+    {
+        Node node = MakeFlowNode(id, NodeType::Control, NodeSubType::Gate, "Gate");
+        node.Inputs[0].Name = "Enter";
+        AddInput(node, "Open", PinType::Flow);
+        AddInput(node, "Close", PinType::Flow);
+        AddInput(node, "Toggle", PinType::Flow);
+        AddOutput(node, "Exit", PinType::Flow);
+        return node;
+    }
+
+    Node CreateSwitchNode(const int id, const int cases)
+    {
+        Node node = MakeFlowNode(id, NodeType::Control, NodeSubType::Switch, "Switch");
+        AddInput(node, "Selection", PinType::Int);
+        for (int i = 0; i < std::clamp(cases, 1, 16); ++i) AddOutput(node, "Case " + std::to_string(i), PinType::Flow);
+        AddOutput(node, "Default", PinType::Flow);
+        return node;
+    }
+
+    Node CreateForEachEntityNode(const int id, const std::string& component)
+    {
+        Node node = MakeFlowNode(id, NodeType::Control, NodeSubType::ForEach, "For Each Entity");
+        node.Label = component;
+        AddOutput(node, "Body", PinType::Flow);
+        AddOutput(node, "Entity", PinType::Object);
+        AddOutput(node, "Index", PinType::Int);
+        AddOutput(node, "Completed", PinType::Flow);
+        return node;
+    }
+
+    Node CreateWhileNode(const int id)
+    {
+        Node node = MakeFlowNode(id, NodeType::Control, NodeSubType::While, "While");
+        AddInput(node, "Condition", PinType::Bool);
+        AddOutput(node, "Body", PinType::Flow);
+        AddOutput(node, "Completed", PinType::Flow);
+        return node;
+    }
+
+    Node CreateOnTriggerNode(const int id)
+    {
+        Node node = MakeFlowNode(id, NodeType::Event, NodeSubType::OnTrigger, "On Trigger", false);
+        AddOutput(node, "Out", PinType::Flow);
+        AddOutput(node, "Trigger", PinType::Object);
+        AddOutput(node, "Other", PinType::Object);
+        AddOutput(node, "Entered", PinType::Bool);
+        return node;
+    }
+
+    Node CreateOnKeyNode(const int id, const std::string& key)
+    {
+        Node node = MakeFlowNode(id, NodeType::Event, NodeSubType::OnKey, "On Key", false);
+        node.Label = key;
+        AddOutput(node, "Out", PinType::Flow);
+        return node;
+    }
+
+    Node CreateCustomEventNode(const int id, const std::string& name, const std::vector<EventParam>& params)
+    {
+        Node node = MakeFlowNode(id, NodeType::Event, NodeSubType::CustomEvent, "Custom Event", false);
+        node.Label = name;
+        node.Outputs.push_back(Pin{OutputPinId(id, 0), "Out", PinType::Flow, false});
+        for (const auto& param : params) node.Outputs.push_back(Pin{OutputPinId(id, param.Key + 1), param.Name, param.Type, false});
+        return node;
+    }
+
+    Node CreateCallEventNode(const int id, const std::string& name, const std::vector<EventParam>& params)
+    {
+        Node node = MakeFlowNode(id, NodeType::Control, NodeSubType::CustomEventCall, "Call Event");
+        node.Label = name;
+        for (const auto& param : params) node.Inputs.push_back(Pin{InputPinId(id, param.Key + 1), param.Name, param.Type, true});
+        node.Outputs.push_back(Pin{OutputPinId(id, 0), "Out", PinType::Flow, false});
+        return node;
+    }
+
+    bool IsLatentNode(const Node& node) { return node.Type == NodeType::Latent; }
+
+    bool IsLuauOnly(const Node& node) { return IsLuauOnly(node.Type, node.SubType); }
+
+    bool IsLuauOnly(const NodeType type, const NodeSubType subType)
+    {
+        if (type == NodeType::Latent) return true;
+        switch (subType)
+        {
+        case NodeSubType::Sequence:
+        case NodeSubType::DoOnce:
+        case NodeSubType::Gate:
+        case NodeSubType::Switch:
+        case NodeSubType::ForEach:
+        case NodeSubType::While:
+        case NodeSubType::CustomEvent:
+        case NodeSubType::CustomEventCall:
+        case NodeSubType::OnTrigger:
+        case NodeSubType::OnKey: return true;
+        default: return false;
+        }
+    }
+
+    std::string EventNameOf(const Node& node)
+    {
+        switch (node.SubType)
+        {
+        case NodeSubType::CustomEvent:
+        case NodeSubType::CustomEventCall: return node.Label;
+        case NodeSubType::OnTrigger: return kTriggerEventName;
+        case NodeSubType::OnKey: return kKeyEventPrefix + node.Label;
+        default: return {};
+        }
+    }
+
     // ---- Serialization --------------------------------------------------------------------------
 
     YAML::Node GraphToNode(const AnimationGraphData& graph)
@@ -791,6 +1011,7 @@ namespace MoleHole
             n["TargetGuid"] = node.TargetGuid;
             if (node.SubType == NodeSubType::Component) { n["Component"] = node.Component; }
             if (!node.FunctionName.empty()) { n["FunctionName"] = node.FunctionName; }
+            if (!node.Label.empty()) { n["Label"] = node.Label; }
             n["ConstantValue"] = EncodeValue(node.ConstantValue);
 
             YAML::Node positionNode;
@@ -890,6 +1111,7 @@ namespace MoleHole
                 node.VariableName = n["VariableName"] ? n["VariableName"].as<std::string>() : std::string{};
                 node.TargetGuid = n["TargetGuid"] ? n["TargetGuid"].as<std::uint64_t>() : std::uint64_t{0};
                 node.FunctionName = n["FunctionName"] ? n["FunctionName"].as<std::string>() : std::string{};
+                node.Label = n["Label"] ? n["Label"].as<std::string>() : std::string{};
                 node.Component = n["Component"] ? n["Component"].as<std::string>() : NodeSubTypeToString(node.SubType);
                 if (n["ConstantValue"]) { node.ConstantValue = DecodeValue(n["ConstantValue"]); }
                 if (const auto position = n["Position"]; position && position.IsSequence() && position.size() >= 2)

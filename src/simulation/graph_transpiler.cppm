@@ -30,6 +30,11 @@ export namespace MoleHole
         GPP::LuauSourceMap Map;
         std::string Error;
         std::uint64_t Hash{0};
+        // The module has M.bind(scheduler); call it before start/tick when set.
+        bool UsesTasks{false};
+        // The module has M.dispatch(); the host posts named events through host.event.
+        bool HandlesEvents{false};
+        bool IsComponent{false};
 
         [[nodiscard]] bool Ok() const { return Error.empty(); }
         [[nodiscard]] SourceLocation Locate(int line) const;

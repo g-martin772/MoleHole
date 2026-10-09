@@ -19,6 +19,9 @@ export namespace MoleHole
         bool Enabled{true};
         std::uint64_t EntityGuid{0};
         bool IsFunction{false};
+        // A component graph is attached to entities through their Scripts list instead of running on its own;
+        // its variables are the component's properties.
+        bool IsComponent{false};
         FunctionSignature Signature;
         AnimationGraphData Graph;
     };
@@ -45,6 +48,34 @@ export namespace MoleHole
         }
     };
 
+    // The properties a component graph exposes: its variables of types a script property can hold.
+    [[nodiscard]] inline GPP::ScriptDescriptor DescribeComponentGraph(const NamedGraph& graph)
+    {
+        GPP::ScriptDescriptor descriptor;
+        descriptor.Name = graph.Name;
+        for (const auto& variable : graph.Graph.Variables)
+        {
+            GPP::ScriptPropType type{};
+            switch (variable.Type)
+            {
+            case PinType::Float: type = GPP::ScriptPropType::Float; break;
+            case PinType::Int: type = GPP::ScriptPropType::Int; break;
+            case PinType::Bool: type = GPP::ScriptPropType::Bool; break;
+            case PinType::Vec3: type = GPP::ScriptPropType::Vec3; break;
+            case PinType::String: type = GPP::ScriptPropType::String; break;
+            case PinType::Object: type = GPP::ScriptPropType::Entity; break;
+            default: continue;
+            }
+            GPP::ScriptProperty property;
+            property.Name = variable.Name;
+            property.Type = type;
+            property.Default = GPP::CoerceProperty(variable.Default, type);
+            if (std::holds_alternative<std::monostate>(property.Default)) property.Default = GPP::DefaultPropValue(type);
+            descriptor.Properties.push_back(std::move(property));
+        }
+        return descriptor;
+    }
+
     [[nodiscard]] inline YAML::Node SceneGraphsToNode(const SceneGraphs& graphs)
     {
         YAML::Node root;
@@ -61,6 +92,7 @@ export namespace MoleHole
                 entry["IsFunction"] = true;
                 entry["Signature"] = SignatureToNode(item.Signature);
             }
+            if (item.IsComponent) entry["IsComponent"] = true;
             entry["Graph"] = GraphToNode(item.Graph);
             items.push_back(entry);
         }
@@ -83,6 +115,7 @@ export namespace MoleHole
                 graph.Enabled = entry["Enabled"] ? entry["Enabled"].as<bool>() : true;
                 graph.EntityGuid = entry["Entity"] ? entry["Entity"].as<std::uint64_t>() : std::uint64_t{0};
                 graph.IsFunction = entry["IsFunction"] ? entry["IsFunction"].as<bool>() : false;
+                graph.IsComponent = entry["IsComponent"] ? entry["IsComponent"].as<bool>() : false;
                 if (graph.IsFunction) graph.Signature = SignatureFromNode(entry["Signature"]);
                 if (entry["Graph"]) graph.Graph = GraphFromNode(entry["Graph"]);
                 graphs.Items.push_back(std::move(graph));

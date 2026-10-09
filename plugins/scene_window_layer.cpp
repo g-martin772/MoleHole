@@ -254,7 +254,7 @@ namespace
             if (ImGui::Button("Camera"))
             {
                 const glm::vec3 position = m_UiState->ViewPosition;
-                const glm::quat rotation = LookAtRotation(position, position + m_UiState->ViewFront, m_UiState->ViewUp);
+                const glm::quat rotation = GPP::LookAtRotation(position, position + m_UiState->ViewFront, m_UiState->ViewUp);
                 runner.EnqueueEdit([position, rotation](Scene& scene)
                 {
                     const auto entity = SpawnPreset(scene, GPP::GenerateGuid(), "Camera", position);

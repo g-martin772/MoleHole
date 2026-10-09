@@ -14,19 +14,19 @@ TEST_CASE("LookAtRotation points -Z at the target", "[simulation][camera]")
 {
     const glm::vec3 eye{1.0f, 2.0f, 3.0f};
     const glm::vec3 target{1.0f, 2.0f, -7.0f};
-    const glm::vec3 front = LookAtRotation(eye, target) * glm::vec3(0.0f, 0.0f, -1.0f);
+    const glm::vec3 front = GPP::LookAtRotation(eye, target) * glm::vec3(0.0f, 0.0f, -1.0f);
     CHECK(front.z == Approx(-1.0f).margin(1e-5));
 
-    const glm::vec3 diagonal = LookAtRotation({0, 0, 0}, {3, 4, 0}) * glm::vec3(0.0f, 0.0f, -1.0f);
+    const glm::vec3 diagonal = GPP::LookAtRotation({0, 0, 0}, {3, 4, 0}) * glm::vec3(0.0f, 0.0f, -1.0f);
     CHECK(glm::length(diagonal - glm::normalize(glm::vec3(3, 4, 0))) == Approx(0.0f).margin(1e-5));
 }
 
 TEST_CASE("LookAtRotation survives degenerate input", "[simulation][camera]")
 {
-    const auto same = LookAtRotation({1, 1, 1}, {1, 1, 1});
+    const auto same = GPP::LookAtRotation({1, 1, 1}, {1, 1, 1});
     CHECK(same.w == Approx(1.0f));
 
-    const glm::vec3 up = LookAtRotation({0, 0, 0}, {0, 5, 0}) * glm::vec3(0.0f, 0.0f, -1.0f);
+    const glm::vec3 up = GPP::LookAtRotation({0, 0, 0}, {0, 5, 0}) * glm::vec3(0.0f, 0.0f, -1.0f);
     CHECK(up.y == Approx(1.0f).margin(1e-5));
 }
 
@@ -34,7 +34,7 @@ TEST_CASE("Euler output reproduces the look-at orientation through the Transform
           "[simulation][camera]")
 {
     const glm::vec3 eye{0.0f}, target{2.0f, -1.0f, -5.0f};
-    const glm::quat rebuilt{glm::radians(LookAtEulerDegrees(eye, target))};
+    const glm::quat rebuilt{glm::radians(GPP::LookAtEulerDegrees(eye, target))};
     const glm::vec3 front = rebuilt * glm::vec3(0.0f, 0.0f, -1.0f);
     CHECK(glm::length(front - glm::normalize(target - eye)) == Approx(0.0f).margin(1e-4));
 }
@@ -42,7 +42,7 @@ TEST_CASE("Euler output reproduces the look-at orientation through the Transform
 TEST_CASE("Scene camera view and matrix follow the transform", "[simulation][camera]")
 {
     TransformComponent transform{.Position = {5.0f, 0.0f, 0.0f}};
-    transform.Rotation = LookAtRotation(transform.Position, {0.0f, 0.0f, 0.0f});
+    transform.Rotation = GPP::LookAtRotation(transform.Position, {0.0f, 0.0f, 0.0f});
     const CameraComponent camera{.Fov = 45.0f};
 
     const auto view = MakeSceneCameraView(transform, camera);

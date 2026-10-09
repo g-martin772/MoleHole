@@ -83,9 +83,36 @@ export namespace MoleHole
         std::optional<T> m_Value;
     };
 
+    // Script component health published by the runtime owner and shown by the inspector.
+    class ScriptStatusBoard
+    {
+    public:
+        void Publish(std::vector<GPP::ScriptStatus> statuses)
+        {
+            std::scoped_lock lock(m_Mutex);
+            m_Statuses = std::move(statuses);
+        }
+
+        // Empty when the instance is healthy or unknown.
+        [[nodiscard]] std::string Error(const std::uint64_t entity, const std::size_t index) const
+        {
+            std::scoped_lock lock(m_Mutex);
+            for (const auto& status : m_Statuses)
+            {
+                if (status.Entity == entity && status.Index == index) return status.Message;
+            }
+            return {};
+        }
+
+    private:
+        mutable std::mutex m_Mutex;
+        std::vector<GPP::ScriptStatus> m_Statuses;
+    };
+
     class UiState final : public GPP::IService
     {
     public:
+        ScriptStatusBoard ScriptStatuses;
         bool ShowCameraWindow = false;
         bool ShowSystemWindow = false;
         bool ShowSceneWindow = true;

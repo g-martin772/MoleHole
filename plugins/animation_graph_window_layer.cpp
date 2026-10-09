@@ -107,23 +107,35 @@ namespace
 
     struct AnimationGraphWindowLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, SceneManager, UiState, AssetDirectories, AssetOptions>;
+        using Dependencies = std::tuple<Logger, SceneManager, UiState, AssetDirectories, AssetOptions, EventDispatcher>;
 
         AnimationGraphWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<SceneManager> scenes,
                                   std::shared_ptr<UiState> uiState, std::shared_ptr<AssetDirectories> assets,
-                                  std::shared_ptr<AssetOptions> assetOptions)
+                                  std::shared_ptr<AssetOptions> assetOptions, std::shared_ptr<EventDispatcher> dispatcher)
             : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState)),
-              m_Assets(std::move(assets)), m_AssetOptions(std::move(assetOptions))
+              m_Assets(std::move(assets)), m_AssetOptions(std::move(assetOptions)), m_Dispatcher(std::move(dispatcher))
         {
         }
 
         void OnAttach() override
         {
             if (!m_EditorContext) m_EditorContext = CreateEditorContext();
+            m_KeySubscription = m_Dispatcher->Subscribe<KeyEvent>([this](const KeyEvent& event)
+            {
+                if (!event.Down || event.Repeat) return;
+                if (ImGui::GetCurrentContext() && ImGui::GetIO().WantTextInput) return;
+                if (const auto name = KeyEventName(event.Key)) QueueEvent(kKeyEventPrefix + *name, {});
+            });
+            m_TriggerSubscription = m_Dispatcher->Subscribe<PhysicsTriggerEvent>([this](const PhysicsTriggerEvent& event)
+            {
+                QueueEvent(kTriggerEventName, {event.TriggerGuid, event.OtherGuid, event.Entered});
+            });
         }
 
         void OnDetach() override
         {
+            m_KeySubscription = {};
+            m_TriggerSubscription = {};
             if (m_EditorContext)
             {
                 ed::DestroyEditor(m_EditorContext);
@@ -165,9 +177,15 @@ namespace
 
             if (!paused && m_Executor && m_Trace.ShouldRunTick())
             {
+                ForwardEvents();
                 auto sceneLock = runner->LockRenderScene();
                 ApplyWrites(*runner, m_Executor->ExecuteTickEvent(*sceneLock, deltaTime));
             }
+            else
+            {
+                DiscardEvents();
+            }
+            PublishScriptHealth();
 
             m_WasPaused = paused;
         }
@@ -252,6 +270,42 @@ namespace
         }
 
     private:
+        void QueueEvent(std::string name, std::vector<LuauValue> args)
+        {
+            std::scoped_lock lock(m_EventMutex);
+            if (m_QueuedEvents.size() < 256) m_QueuedEvents.push_back({std::move(name), std::move(args)});
+        }
+
+        void ForwardEvents()
+        {
+            std::vector<std::pair<std::string, std::vector<LuauValue>>> events;
+            {
+                std::scoped_lock lock(m_EventMutex);
+                events = std::exchange(m_QueuedEvents, {});
+            }
+            for (auto& [name, args] : events) m_Executor->PostEvent(std::move(name), std::move(args));
+        }
+
+        void DiscardEvents()
+        {
+            std::scoped_lock lock(m_EventMutex);
+            m_QueuedEvents.clear();
+        }
+
+        void PublishScriptHealth()
+        {
+            if (!m_Executor)
+            {
+                m_UiState->ScriptStatuses.Publish({});
+                return;
+            }
+            for (const auto& error : m_Executor->TakeScriptErrors())
+            {
+                m_Logger->Error("[Script] {} on entity {}: {}", error.Script, error.Entity, error.Message);
+            }
+            m_UiState->ScriptStatuses.Publish(m_Executor->ScriptStatuses());
+        }
+
         void LoadGraphFromScene()
         {
             ++m_Revision;
@@ -320,7 +374,8 @@ namespace
             m_Executor.reset();
             if (m_UseLuau)
             {
-                auto script = std::make_unique<ScriptRuntime>(m_Graphs, m_ScriptCache, onPrint);
+                auto script = std::make_unique<ScriptRuntime>(m_Graphs, m_ScriptCache, onPrint, TranspileOptions{}, LuauLimits{},
+                                                              m_Assets.get());
                 if (script->Ok())
                 {
                     m_Executor = std::move(script);
@@ -332,7 +387,20 @@ namespace
                 }
             }
             if (!m_Executor) m_Executor = std::make_unique<GraphSetExecutor>(m_Graphs, onPrint);
+            if (dynamic_cast<ScriptRuntime*>(m_Executor.get()) == nullptr && AnyLuauOnly())
+            {
+                const std::string note = "The interpreter cannot run latent, event or flow-control nodes marked Luau runtime only; reaching one reports an error.";
+                m_RuntimeNote = m_RuntimeNote.empty() ? note : m_RuntimeNote + "\n" + note;
+            }
             m_Executor->SetTraceSink(&m_Trace);
+        }
+
+        bool AnyLuauOnly() const
+        {
+            return std::ranges::any_of(m_Graphs.Items, [](const NamedGraph& item)
+            {
+                return item.Enabled && std::ranges::any_of(item.Graph.Nodes, [](const Node& n) { return IsLuauOnly(n); });
+            });
         }
 
         AnimationGraphData& CurrentGraph()
@@ -472,6 +540,16 @@ namespace
             RenderComboSaveModal();
             ImGui::SameLine();
             if (ImGui::Checkbox("Enabled", &named.Enabled)) StructureChanged();
+            if (!named.IsFunction)
+            {
+                ImGui::SameLine();
+                if (ImGui::Checkbox("Component", &named.IsComponent)) StructureChanged();
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Attach this graph to entities as a script component. Its variables become the component's\n"
+                                      "properties (set in the inspector) and Start/Tick run once per attached entity.");
+                }
+            }
             ImGui::SameLine();
             ImGui::SetNextItemWidth(180.0f);
             const EntityOption* bound = named.EntityGuid != 0 ? FindEntityOption(entities, named.EntityGuid) : nullptr;
@@ -1391,6 +1469,7 @@ namespace
             }
 
             auto extra = VariableNodeEntries(CurrentGraph());
+            std::ranges::move(CustomEventNodeEntries(CurrentGraph()), std::back_inserter(extra));
             std::ranges::move(FunctionNodeEntries(m_Graphs, m_Current < m_Graphs.Items.size() ? &m_Graphs.Items[m_Current] : nullptr),
                               std::back_inserter(extra));
             const std::string query = m_PaletteQuery.data();
@@ -1595,6 +1674,11 @@ namespace
                 drawList->AddTriangleFilled(ImVec2(pos.x, pos.y), ImVec2(pos.x + iconSize, pos.y + iconSize / 2),
                                             ImVec2(pos.x, pos.y + iconSize), ImColor(iconColor));
                 break;
+            case NodeType::Latent:
+                drawList->AddCircle(ImVec2(pos.x + iconSize / 2, pos.y + iconSize / 2), iconSize / 2 - 1.0f, ImColor(iconColor), 16, 2.0f);
+                drawList->AddLine(ImVec2(pos.x + iconSize / 2, pos.y + iconSize / 2), ImVec2(pos.x + iconSize / 2, pos.y + 3.0f),
+                                  ImColor(iconColor), 1.5f);
+                break;
             case NodeType::Reroute:
                 break;
             }
@@ -1680,6 +1764,18 @@ namespace
 
         void DrawInlineContent(Node& node, const float nodeWidth, const std::vector<EntityOption>& entities)
         {
+            if (IsLuauOnly(node))
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.85f, 0.85f, 1.0f));
+                ImGui::TextUnformatted("Luau runtime only");
+                ImGui::PopStyleColor();
+            }
+            if (!node.Label.empty())
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
+                ImGui::TextWrapped("%s", node.Label.c_str());
+                ImGui::PopStyleColor();
+            }
             if (node.Type == NodeType::Constant)
             {
                 DrawConstantValueInput(node, nodeWidth);
@@ -1974,6 +2070,10 @@ namespace
             {
                 ImGui::TextDisabled("Type: %s", PinTypeName(node->Inputs.front().Type));
             }
+            else if (IsLuauOnly(*node))
+            {
+                RenderLatentProperties(*node);
+            }
             else
             {
                 ImGui::TextDisabled("No editable properties.");
@@ -1999,6 +2099,134 @@ namespace
                 CurrentGraph().RemoveNode(node->Id);
                 m_SelectedNodeId = 0;
                 MarkDirty();
+            }
+        }
+
+        static bool LabelCombo(const char* id, std::string& value, const std::vector<std::string>& options)
+        {
+            bool changed = false;
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::BeginCombo(id, value.empty() ? "(none)" : value.c_str()))
+            {
+                for (const auto& option : options)
+                {
+                    if (ImGui::Selectable(option.c_str(), option == value))
+                    {
+                        value = option;
+                        changed = true;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            return changed;
+        }
+
+        void RenderLatentProperties(Node& node)
+        {
+            auto& graph = CurrentGraph();
+            ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.85f, 1.0f), "Luau runtime only");
+            ImGui::TextDisabled("The interpreter reports an error when this node runs.");
+            ImGui::Spacing();
+            switch (node.SubType)
+            {
+            case NodeSubType::CustomEvent:
+            {
+                ImGui::TextUnformatted("Event name");
+                std::string name = node.Label;
+                ImGui::SetNextItemWidth(-1);
+                if (TextValue("##eventname", name)) m_EventRename = name;
+                if (ImGui::IsItemDeactivatedAfterEdit())
+                {
+                    if (RenameCustomEvent(graph, node.Label, m_EventRename)) MarkDirty();
+                }
+                ImGui::Spacing();
+                ImGui::TextUnformatted("Parameters");
+                int remove = -1;
+                for (const auto& param : EventParams(node))
+                {
+                    ImGui::PushID(param.Key);
+                    ImGui::TextColored(PinColor(param.Type), "%s", PinTypeName(param.Type));
+                    ImGui::SameLine();
+                    std::string paramName = param.Name;
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+                    if (TextValue("##param", paramName)) m_EventParamRename = {param.Key, paramName};
+                    if (ImGui::IsItemDeactivatedAfterEdit() && m_EventParamRename.first == param.Key)
+                    {
+                        if (RenameEventParam(graph, node.Id, param.Key, m_EventParamRename.second)) MarkDirty();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("x")) remove = param.Key;
+                    ImGui::PopID();
+                }
+                if (remove >= 0 && RemoveEventParam(graph, node.Id, remove)) MarkDirty();
+                if (ImGui::Button("+ Add Parameter")) ImGui::OpenPopup("AddEventParam");
+                if (ImGui::BeginPopup("AddEventParam"))
+                {
+                    for (const PinType type : {PinType::Bool, PinType::Float, PinType::Int, PinType::Vec3, PinType::String, PinType::Object})
+                    {
+                        if (ImGui::MenuItem(PinTypeName(type)) && AddEventParam(graph, node.Id, "Param", type)) MarkDirty();
+                    }
+                    ImGui::EndPopup();
+                }
+                break;
+            }
+            case NodeSubType::CustomEventCall:
+            case NodeSubType::WaitForEvent:
+            {
+                ImGui::TextUnformatted("Event");
+                std::string label = node.Label;
+                if (LabelCombo("##eventpick", label, CustomEventNames(graph)))
+                {
+                    node.Label = label;
+                    if (node.SubType == NodeSubType::CustomEventCall)
+                    {
+                        node.Name = "Call " + label;
+                        SyncCustomEvent(graph, label);
+                    }
+                    MarkDirty();
+                }
+                break;
+            }
+            case NodeSubType::OnKey:
+            {
+                ImGui::TextUnformatted("Key");
+                std::vector<std::string> names;
+                for (const auto& key : SupportedKeys()) names.emplace_back(key.Name);
+                std::string label = node.Label;
+                if (LabelCombo("##keypick", label, names))
+                {
+                    node.Label = label;
+                    MarkDirty();
+                }
+                break;
+            }
+            case NodeSubType::ForEach:
+            {
+                ImGui::TextUnformatted("Component");
+                std::vector<std::string> names;
+                ComponentRegistry::Instance().ForEach([&](const ComponentTypeInfo& info) { names.push_back(info.Name); });
+                std::string label = node.Label;
+                if (LabelCombo("##componentpick", label, names))
+                {
+                    node.Label = label;
+                    MarkDirty();
+                }
+                break;
+            }
+            case NodeSubType::Interpolate:
+            {
+                ImGui::TextUnformatted("Easing");
+                std::vector<std::string> names;
+                for (const auto kind : kEaseKinds) names.emplace_back(EaseName(kind));
+                std::string label = node.Label;
+                if (LabelCombo("##easingpick", label, names))
+                {
+                    node.Label = label;
+                    MarkDirty();
+                }
+                break;
+            }
+            default: break;
             }
         }
 
@@ -2250,6 +2478,14 @@ namespace
 
         bool m_ShowNewVariableDialog = false;
         std::array<char, 128> m_NewVariableBuffer{};
+
+        std::shared_ptr<EventDispatcher> m_Dispatcher;
+        EventSubscription m_KeySubscription;
+        EventSubscription m_TriggerSubscription;
+        std::mutex m_EventMutex;
+        std::vector<std::pair<std::string, std::vector<LuauValue>>> m_QueuedEvents;
+        std::string m_EventRename;
+        std::pair<int, std::string> m_EventParamRename;
     };
 }
 

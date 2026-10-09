@@ -114,6 +114,7 @@ namespace MoleHole
             bool HasDone{false};
             bool ThunkTable{false};
             bool FlowTable{false};
+            bool HasLatent{false};
             std::set<int> Needed;
             std::set<int> Shared;
             std::string Tail{"return"};
@@ -141,18 +142,41 @@ namespace MoleHole
                 m_Graphs.push_back(m_Cache.Get(main, &m_Scene));
                 CollectFunctions(*m_Graphs[0]);
 
-                Block body;
-                Add(body, 0, "local M = {}", 0);
-                Add(body, 0, "local vars = " + VariableTable(m_Graphs[0]->Variables), 0);
+                m_HasHandlers = !m_Graphs[0]->EventHandlers.empty();
+                for (const auto& graph : m_Graphs)
+                {
+                    if (graph->HasLatent || !graph->EventHandlers.empty()) m_UsesTasks = true;
+                    for (const auto& node : graph->Nodes) if (IsLuauOnly(node.Type, node.SubType)) m_UsesTasks = true;
+                }
+
+                Block fns;
                 if (m_Graphs.size() > 1)
                 {
                     std::string names;
                     for (std::size_t i = 1; i < m_Graphs.size(); ++i) names += (i > 1 ? ", " : "") + FnName(i);
-                    Add(body, 0, "local " + names, 0);
-                    for (std::size_t i = 1; i < m_Graphs.size(); ++i) EmitFunction(body, i);
+                    Add(fns, 0, "local " + names, 0);
+                    for (std::size_t i = 1; i < m_Graphs.size(); ++i) EmitFunction(fns, i);
                 }
-                EmitEvent(body, FnKind::Start);
-                EmitEvent(body, FnKind::Tick);
+                EmitEvent(fns, FnKind::Start);
+                EmitEvent(fns, FnKind::Tick);
+                EmitHandlers(fns);
+
+                Block body;
+                Add(body, 0, "local M = {}", 0);
+                Add(body, 0, "local vars = " + VariableTable(m_Graphs[0]->Variables), 0);
+                if (m_UsesTasks)
+                {
+                    Add(body, 0, "local S", 0);
+                    Add(body, 0, "local once, gates, handlers = {}, {}, {}", 0);
+                    Add(body, 0, "local function fire_event(name, ...)", 0);
+                    Add(body, 1, "local h = handlers[name]", 0);
+                    Add(body, 1, "if h then S.spawn(h, ...) end", 0);
+                    Add(body, 1, "S.signal(name, ...)", 0);
+                    Add(body, 0, "end", 0);
+                    Add(body, 0, "function M.bind(s) S = s end", 0);
+                    if (m_HasHandlers) Add(body, 0, "function M.dispatch() fire_event(" + Host("event") + "()) end", 0);
+                }
+                Append(body, fns);
                 Add(body, 0, "return M", 0);
 
                 Block header = Header();
@@ -160,6 +184,9 @@ namespace MoleHole
                 Append(all, header);
                 Append(all, body);
                 for (const auto& graph : m_Graphs) script.Graphs.push_back(graph->Name);
+                script.UsesTasks = m_UsesTasks;
+                script.HandlesEvents = m_HasHandlers;
+                script.IsComponent = m_Graphs[0]->IsComponent;
                 for (const auto& line : all)
                 {
                     script.Source += std::string(static_cast<std::size_t>(line.Indent) * 4, ' ') + line.Text + "\n";
@@ -178,6 +205,8 @@ namespace MoleHole
             std::set<std::string> m_UsedHost;
             std::set<PinType> m_UsedTypes;
             int m_CurrentGraph{0};
+            bool m_UsesTasks{false};
+            bool m_HasHandlers{false};
 
             // Source-map ids carry the graph so errors inside called functions point at the right graph.
             int MapId(const int node) const { return node == 0 ? 0 : m_CurrentGraph * kSourceMapGraphStride + node; }
@@ -317,7 +346,9 @@ namespace MoleHole
                 if (source.Type == NodeType::Event)
                 {
                     if (source.SubType == NodeSubType::Tick && pin == 1) return "dt";
-                    if (source.SubType == NodeSubType::FunctionEntry && source.OutputTypes[pin] != PinType::Flow)
+                    const bool paramSource = source.SubType == NodeSubType::FunctionEntry || source.SubType == NodeSubType::CustomEvent ||
+                                             source.SubType == NodeSubType::OnTrigger;
+                    if (paramSource && source.OutputTypes[pin] != PinType::Flow)
                     {
                         int ordinal = 0;
                         for (int i = 0; i < pin; ++i) ordinal += source.OutputTypes[i] != PinType::Flow;
@@ -429,7 +460,8 @@ namespace MoleHole
                 Block out;
                 const IrNode& node = fn.G->Nodes[index];
                 if (pin >= node.Flow.size()) return out;
-                for (const auto& edge : node.Flow[pin])
+                const auto& edges = node.Flow[pin];
+                for (const auto& edge : edges)
                 {
                     if (edge.Cut)
                     {
@@ -437,15 +469,24 @@ namespace MoleHole
                         continue;
                     }
                     Add(out, 0, std::format("if {}({}) then", Host("link"), edge.LinkId), node.Id);
-                    if (fn.Shared.contains(edge.Target))
+                    // Siblings of a branch that may suspend run in their own task, so they do not wait for it.
+                    const bool detach = edges.size() > 1 && ReachesLatent(fn, edge.Target);
+                    int indent = 1;
+                    if (detach)
                     {
-                        Add(out, 1, FlowName(fn, fn.G->Nodes[edge.Target].Id) + "()", fn.G->Nodes[edge.Target].Id);
-                        if (fn.HasDone) Add(out, 1, "if done then " + fn.Tail + " end", node.Id);
+                        Add(out, 1, "S.spawn(function()", node.Id);
+                        indent = 2;
+                    }
+                    if (edge.TargetPin == 0 && fn.Shared.contains(edge.Target))
+                    {
+                        Add(out, indent, FlowName(fn, fn.G->Nodes[edge.Target].Id) + "()", fn.G->Nodes[edge.Target].Id);
+                        if (fn.HasDone && !detach) Add(out, indent, "if done then " + fn.Tail + " end", node.Id);
                     }
                     else
                     {
-                        Append(out, ExecNode(fn, edge.Target), 1);
+                        Append(out, ExecNode(fn, edge.Target, edge.TargetPin), indent);
                     }
+                    if (detach) Add(out, 1, "end)", node.Id);
                     Add(out, 0, "end", node.Id);
                 }
                 return out;
@@ -460,7 +501,48 @@ namespace MoleHole
                 return input.Type;
             }
 
-            Block ExecNode(FnState& fn, const int index)
+            bool ReachesLatentNode(const FnState& fn, const int index) const
+            {
+                const IrNode& node = fn.G->Nodes[index];
+                if (node.Type == NodeType::Latent) return true;
+                if (node.SubType != NodeSubType::FunctionCall) return false;
+                const auto it = m_FunctionIndex.find(node.Function);
+                return it != m_FunctionIndex.end() && m_Graphs[it->second]->HasLatent;
+            }
+
+            // True when running the flow below this output pin may suspend the coroutine.
+            bool ReachesLatent(const FnState& fn, const int index, const std::set<int>& visiting = {}) const
+            {
+                const IrNode& node = fn.G->Nodes[index];
+                if (node.Type == NodeType::Latent) return true;
+                if (node.SubType == NodeSubType::FunctionCall)
+                {
+                    const auto it = m_FunctionIndex.find(node.Function);
+                    if (it != m_FunctionIndex.end() && m_Graphs[it->second]->HasLatent) return true;
+                }
+                std::set<int> next = visiting;
+                next.insert(index);
+                for (const auto& edges : node.Flow)
+                {
+                    for (const auto& edge : edges)
+                    {
+                        if (!edge.Cut && !next.contains(edge.Target) && ReachesLatent(fn, edge.Target, next)) return true;
+                    }
+                }
+                return false;
+            }
+
+            bool PinReachesLatent(const FnState& fn, const int index, const std::size_t pin) const
+            {
+                const IrNode& node = fn.G->Nodes[index];
+                if (pin >= node.Flow.size()) return false;
+                return std::ranges::any_of(node.Flow[pin], [&](const IrFlowEdge& edge)
+                {
+                    return !edge.Cut && ReachesLatent(fn, edge.Target);
+                });
+            }
+
+            Block ExecNode(FnState& fn, const int index, const int pin = 0)
             {
                 const IrNode& node = fn.G->Nodes[index];
                 const int id = node.Id;
@@ -478,7 +560,8 @@ namespace MoleHole
                     flow(0);
                     break;
                 case NodeType::Reroute: flow(0); break;
-                case NodeType::Control: ExecControl(fn, index, out); break;
+                case NodeType::Control: ExecControl(fn, index, pin, out); break;
+                case NodeType::Latent: ExecLatent(fn, index, out); break;
                 case NodeType::Call: ExecCall(fn, index, out); break;
                 case NodeType::Entity: ExecEntity(fn, index, out); flow(0); break;
                 case NodeType::Setter: ExecSetter(fn, index, out); flow(0); break;
@@ -501,10 +584,15 @@ namespace MoleHole
                 return out;
             }
 
-            void ExecControl(FnState& fn, const int index, Block& out)
+            void ExecControl(FnState& fn, const int index, const int pin, Block& out)
             {
                 const IrNode& node = fn.G->Nodes[index];
                 const int id = node.Id;
+                if (IsLuauOnly(node.Type, node.SubType))
+                {
+                    ExecFlowNode(fn, index, pin, out);
+                    return;
+                }
                 if (node.SubType == NodeSubType::FunctionReturn)
                 {
                     std::size_t slot = 0;
@@ -558,6 +646,191 @@ namespace MoleHole
                     Append(out, FlowFrom(fn, index, 0), 1);
                     Add(out, 0, "end", id);
                     if (node.OutputPinIds.size() > 2) Append(out, FlowFrom(fn, index, 2));
+                }
+            }
+
+            // Runs the flow below an output pin in a new task when it may suspend, so sibling branches do not wait for it.
+            void Branched(FnState& fn, const int index, const std::size_t pin, Block& out)
+            {
+                Block flow = FlowFrom(fn, index, pin);
+                if (flow.empty()) return;
+                if (PinReachesLatent(fn, index, pin))
+                {
+                    Add(out, 0, "S.spawn(function()", fn.G->Nodes[index].Id);
+                    Append(out, flow, 1);
+                    Add(out, 0, "end)", fn.G->Nodes[index].Id);
+                }
+                else
+                {
+                    Append(out, flow);
+                }
+            }
+
+            void ExecFlowNode(FnState& fn, const int index, const int pin, Block& out)
+            {
+                const IrNode& node = fn.G->Nodes[index];
+                const int id = node.Id;
+                switch (node.SubType)
+                {
+                case NodeSubType::Sequence:
+                    for (std::size_t k = 0; k < node.Flow.size(); ++k) Branched(fn, index, k, out);
+                    break;
+                case NodeSubType::DoOnce:
+                    if (pin == 1)
+                    {
+                        Add(out, 0, std::format("once[{}] = nil", id), id);
+                        break;
+                    }
+                    {
+                        Block flow = FlowFrom(fn, index, 0);
+                        if (flow.empty()) break;
+                        Add(out, 0, std::format("if not once[{}] then", id), id);
+                        Add(out, 1, std::format("once[{}] = true", id), id);
+                        Append(out, flow, 1);
+                        Add(out, 0, "end", id);
+                    }
+                    break;
+                case NodeSubType::Gate:
+                    if (pin == 1) Add(out, 0, std::format("gates[{}] = true", id), id);
+                    else if (pin == 2) Add(out, 0, std::format("gates[{}] = false", id), id);
+                    else if (pin == 3) Add(out, 0, std::format("gates[{0}] = (gates[{0}] == false)", id), id);
+                    else
+                    {
+                        Block flow = FlowFrom(fn, index, 0);
+                        if (flow.empty()) break;
+                        Add(out, 0, std::format("if gates[{}] ~= false then", id), id);
+                        Append(out, flow, 1);
+                        Add(out, 0, "end", id);
+                    }
+                    break;
+                case NodeSubType::Switch:
+                {
+                    if (node.Inputs.size() < 2 || node.Flow.empty()) break;
+                    const std::size_t cases = node.Flow.size() - 1;
+                    std::vector<Block> branches;
+                    bool any = false;
+                    for (std::size_t k = 0; k < node.Flow.size(); ++k)
+                    {
+                        branches.push_back(FlowFrom(fn, index, k));
+                        any = any || !branches.back().empty();
+                    }
+                    if (!any) break;
+                    Add(out, 0, std::format("local k{} = {}({})", id, Rt("int"), PinExpr(fn, node, 1)), id);
+                    bool first = true;
+                    for (std::size_t k = 0; k < cases; ++k)
+                    {
+                        if (branches[k].empty()) continue;
+                        Add(out, 0, std::format("{} k{} == {} then", first ? "if" : "elseif", id, k), id);
+                        Append(out, branches[k], 1);
+                        first = false;
+                    }
+                    if (!branches[cases].empty())
+                    {
+                        if (first)
+                        {
+                            Append(out, branches[cases]);
+                            break;
+                        }
+                        Add(out, 0, "else", id);
+                        Append(out, branches[cases], 1);
+                    }
+                    if (!first) Add(out, 0, "end", id);
+                    break;
+                }
+                case NodeSubType::ForEach:
+                {
+                    const std::string list = std::format("l{}", id);
+                    Add(out, 0, std::format("local {} = scene.query({})", list, Quote(node.Label)), id);
+                    Add(out, 0, std::format("for i{0}, e{0} in {1} do", id, list), id);
+                    Add(out, 1, std::format("if not {}() then break end", Host("alive")), id);
+                    Add(out, 1, Rt("fresh") + "(c)", id);
+                    if (node.OutputPinIds.size() > 1)
+                    {
+                        Add(out, 1, std::format("{}(c, {}, {}, e{})", Rt("setp"), node.OutputPinIds[1], Ty(PinType::Object), id), id);
+                    }
+                    if (node.OutputPinIds.size() > 2)
+                    {
+                        Add(out, 1, std::format("{}(c, {}, {}, i{} - 1)", Rt("setp"), node.OutputPinIds[2], Ty(PinType::Int), id), id);
+                    }
+                    Append(out, FlowFrom(fn, index, 0), 1);
+                    Add(out, 0, "end", id);
+                    if (node.OutputPinIds.size() > 3) Append(out, FlowFrom(fn, index, 3));
+                    break;
+                }
+                case NodeSubType::While:
+                {
+                    if (node.Inputs.size() < 2) break;
+                    Add(out, 0, std::format("local w{} = 0", id), id);
+                    Add(out, 0, "while true do", id);
+                    Add(out, 1, Rt("fresh") + "(c)", id);
+                    Add(out, 1, std::format("if not {}({}) or not {}() then break end", Rt("bool"), PinExpr(fn, node, 1), Host("alive")), id);
+                    Add(out, 1, std::format("w{0} += 1", id), id);
+                    Add(out, 1, std::format("if w{} > {} then", id, kMaxForIterations), id);
+                    Add(out, 2, std::format("{}(\"[GraphExecutor] While loop aborted: exceeded max iteration cap\")", Host("log")), id);
+                    Add(out, 2, std::format("{}({}, 2, \"Loop aborted: iteration cap exceeded\")", Host("diag"), id), id);
+                    Add(out, 2, "break", id);
+                    Add(out, 1, "end", id);
+                    Append(out, FlowFrom(fn, index, 0), 1);
+                    Add(out, 0, "end", id);
+                    if (node.OutputPinIds.size() > 1) Append(out, FlowFrom(fn, index, 1));
+                    break;
+                }
+                case NodeSubType::CustomEventCall:
+                {
+                    std::string args;
+                    for (std::size_t i = 1; i < node.Inputs.size(); ++i)
+                    {
+                        if (node.Inputs[i].Type == PinType::Flow) continue;
+                        args += ", " + PinExpr(fn, node, i);
+                    }
+                    Add(out, 0, "fire_event(" + Quote(node.Label) + args + ")", id);
+                    Append(out, FlowFrom(fn, index, 0));
+                    break;
+                }
+                default: break;
+                }
+            }
+
+            void ExecLatent(FnState& fn, const int index, Block& out)
+            {
+                const IrNode& node = fn.G->Nodes[index];
+                const int id = node.Id;
+                const auto flow = [&](const std::size_t pin) { Append(out, FlowFrom(fn, index, pin)); };
+                switch (node.SubType)
+                {
+                case NodeSubType::Delay:
+                    if (node.Inputs.size() >= 2) Add(out, 0, "task.wait(" + PinExpr(fn, node, 1) + ")", id);
+                    flow(0);
+                    break;
+                case NodeSubType::WaitUntil:
+                    if (node.Inputs.size() >= 2)
+                    {
+                        Add(out, 0, "task.wait_until(function()", id);
+                        Add(out, 1, Rt("fresh") + "(c)", id);
+                        Add(out, 1, "return " + Rt("bool") + "(" + PinExpr(fn, node, 1) + ")", id);
+                        Add(out, 0, "end)", id);
+                    }
+                    flow(0);
+                    break;
+                case NodeSubType::WaitForEvent:
+                    Add(out, 0, "task.wait_event(" + Quote(node.Label) + ")", id);
+                    flow(0);
+                    break;
+                case NodeSubType::Interpolate:
+                {
+                    if (node.Inputs.size() < 4 || node.OutputPinIds.size() < 3) break;
+                    Add(out, 0, std::format("local from{0}, to{0}, dur{0} = {1}, {2}, {3}", id, PinExpr(fn, node, 1),
+                                            PinExpr(fn, node, 2), PinExpr(fn, node, 3)), id);
+                    Add(out, 0, std::format("{}(dur{}, {}, function(e)", Rt("tween"), id, Quote(node.Label)), id);
+                    Add(out, 1, Rt("fresh") + "(c)", id);
+                    Add(out, 1, std::format("{}(c, {}, {}, {}(from{}, to{}, e))", Rt("setp"), node.OutputPinIds[1],
+                                            Ty(node.OutputTypes[1]), Rt("lerp"), id, id), id);
+                    Append(out, FlowFrom(fn, index, 0), 1);
+                    Add(out, 0, "end)", id);
+                    flow(2);
+                    break;
+                }
+                default: break;
                 }
             }
 
@@ -663,7 +936,7 @@ namespace MoleHole
                         for (const auto& edge : edges)
                         {
                             if (edge.Cut) continue;
-                            ++incoming[edge.Target];
+                            if (edge.TargetPin == 0) ++incoming[edge.Target];
                             if (!seen.contains(edge.Target)) self(self, edge.Target);
                         }
                     }
@@ -677,6 +950,7 @@ namespace MoleHole
                 for (const int index : seen)
                 {
                     if (fn.G->Nodes[index].SubType == NodeSubType::FunctionReturn) fn.HasDone = !fn.PureFn;
+                    if (ReachesLatentNode(fn, index)) fn.HasLatent = true;
                 }
                 fn.ThunkTable = fn.G->PureOrder.size() > kTableThreshold;
                 fn.FlowTable = fn.Shared.size() > kTableThreshold;
@@ -738,7 +1012,19 @@ namespace MoleHole
                     Append(root, FlowFrom(fn, index, 0), 1);
                     Add(root, 0, "end", node.Id);
                 }
+                if (fn.HasLatent && !root.empty())
+                {
+                    Block wrapped;
+                    Add(wrapped, 0, "S.spawn(function()", 0);
+                    Append(wrapped, root, 1);
+                    Add(wrapped, 0, "end)", 0);
+                    root = std::move(wrapped);
+                }
                 Block inner;
+                if (kind == FnKind::Start && m_Graphs[0]->IsComponent)
+                {
+                    Add(inner, 0, "for k, v in " + Host("props") + "() do vars[k] = v end", 0);
+                }
                 Add(inner, 0, Rt("reset") + "()", 0);
                 Add(inner, 0, "local c = {}", 0);
                 if (fn.HasDone) Add(inner, 0, "local done = false", 0);
@@ -747,6 +1033,44 @@ namespace MoleHole
                 Add(out, 0, kind == FnKind::Start ? "function M.start()" : "function M.tick(dt)", 0);
                 Append(out, inner, 1);
                 Add(out, 0, "end", 0);
+            }
+
+            void EmitHandlers(Block& out)
+            {
+                const IrGraph& graph = *m_Graphs[0];
+                std::set<std::string> seenNames;
+                for (const int index : graph.EventHandlers)
+                {
+                    const IrNode& node = graph.Nodes[index];
+                    const std::string name = node.SubType == NodeSubType::OnTrigger ? std::string(kTriggerEventName)
+                                           : node.SubType == NodeSubType::OnKey ? kKeyEventPrefix + node.Label
+                                                                                : node.Label;
+                    FnState fn;
+                    fn.G = &graph;
+                    fn.GraphIndex = 0;
+                    m_CurrentGraph = 0;
+                    std::vector<int> post;
+                    Reach(fn, {index}, post);
+                    Block root;
+                    Add(root, 0, std::format("if {}({}) then", Host("enter"), node.Id), node.Id);
+                    Append(root, FlowFrom(fn, index, 0), 1);
+                    Add(root, 0, "end", node.Id);
+                    std::string params;
+                    int ordinal = 0;
+                    for (const auto type : node.OutputTypes)
+                    {
+                        if (type == PinType::Flow) continue;
+                        ++ordinal;
+                        params += (ordinal > 1 ? ", a" : "a") + std::to_string(ordinal);
+                    }
+                    Block inner;
+                    Add(inner, 0, "local c = {}", 0);
+                    Assemble(inner, fn, post, root, 0);
+                    for (auto& line : inner) line.Node = MapId(line.Node);
+                    Add(out, 0, "handlers[" + Quote(name) + "] = function(" + params + ")", 0);
+                    Append(out, inner, 1);
+                    Add(out, 0, "end", 0);
+                }
             }
 
             void EmitFunction(Block& out, const std::size_t index)
@@ -1014,15 +1338,37 @@ function rt.lookat(a, b)
 end
 
 function rt.lazy(c, key, fn)
+    local slot = -key
     return function()
-        local v = c[key]
+        local v = c[slot]
         if v == nil then
             v = fn()
             if v == nil then v = NIL end
-            c[key] = v
+            c[slot] = v
         end
         if v == NIL then return nil end
         return v
+    end
+end
+
+function rt.fresh(c)
+    for k in c do
+        if k < 0 then c[k] = nil end
+    end
+end
+
+function rt.tween(duration, easing, update)
+    if type(duration) ~= "number" or duration <= 0 then
+        update(1)
+        return
+    end
+    local elapsed = 0
+    update(ease(easing, 0))
+    while elapsed < duration do
+        local dt = task.frame()
+        if not host.alive() then return end
+        elapsed += dt
+        update(ease(easing, math.min(elapsed / duration, 1)))
     end
 end
 

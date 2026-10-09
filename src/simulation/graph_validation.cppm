@@ -5,6 +5,7 @@ import :Simulation.AnimationGraph;
 import :Simulation.SceneGraphs;
 import :Simulation.GraphEdit;
 import :Simulation.GraphFunctions;
+import :Simulation.GraphEvents;
 import :Simulation.GraphTrace;
 
 export namespace MoleHole
@@ -13,6 +14,7 @@ export namespace MoleHole
     {
         BrokenLink, TypeMismatch, UnconnectedInput, NeverRuns, DataCycle, FlowCycle, DanglingCall, StaleCall,
         RecursiveCall, UnassignedVariable, UnknownVariable, MissingReturn, MisplacedFunctionNode,
+        LuauOnly, LatentInPureFunction, EventName, UndefinedEvent, StaleEventCall,
     };
 
     struct Diagnostic
@@ -56,6 +58,7 @@ export namespace MoleHole
             case NodeType::Entity:
                 return node.SubType == NodeSubType::SpawnEntity ? TraceSeverity::Info : TraceSeverity::Error;
             case NodeType::Control:
+            case NodeType::Latent:
             case NodeType::Print:
             case NodeType::Variable:
             case NodeType::Call:
@@ -186,6 +189,50 @@ export namespace MoleHole
                     add(TraceSeverity::Error, DiagnosticCode::UnknownVariable, node.Id, 0, 0,
                         "Variable '" + node.VariableName + "' does not exist");
                 }
+            }
+
+            if (IsLuauOnly(node))
+            {
+                add(TraceSeverity::Info, DiagnosticCode::LuauOnly, node.Id, 0, 0,
+                    "Luau runtime only: the interpreter cannot run this node");
+            }
+            if (IsLatentNode(node) && self && self->IsFunction && self->Signature.Pure)
+            {
+                add(TraceSeverity::Error, DiagnosticCode::LatentInPureFunction, node.Id, 0, 0,
+                    "Latent nodes cannot be used inside a pure function");
+            }
+            if (node.SubType == NodeSubType::CustomEvent || node.SubType == NodeSubType::CustomEventCall)
+            {
+                if (node.Label.empty())
+                {
+                    add(TraceSeverity::Error, DiagnosticCode::EventName, node.Id, 0, 0, "The event has no name");
+                }
+                else if (node.SubType == NodeSubType::CustomEvent)
+                {
+                    const auto count = std::ranges::count_if(graph.Nodes, [&](const Node& other)
+                    {
+                        return other.SubType == NodeSubType::CustomEvent && other.Label == node.Label;
+                    });
+                    if (count > 1)
+                    {
+                        add(TraceSeverity::Error, DiagnosticCode::EventName, node.Id, 0, 0,
+                            "Event '" + node.Label + "' is defined more than once");
+                    }
+                }
+                else if (const Node* definition = FindEventDefinition(graph, node.Label); !definition)
+                {
+                    add(TraceSeverity::Error, DiagnosticCode::UndefinedEvent, node.Id, 0, 0,
+                        "Event '" + node.Label + "' is not defined in this graph");
+                }
+                else if (!CallMatchesEvent(node, *definition))
+                {
+                    add(TraceSeverity::Warning, DiagnosticCode::StaleEventCall, node.Id, 0, 0,
+                        "Pins no longer match the event's parameters");
+                }
+            }
+            if (node.SubType == NodeSubType::WaitForEvent && node.Label.empty())
+            {
+                add(TraceSeverity::Warning, DiagnosticCode::EventName, node.Id, 0, 0, "No event name set; this wait never ends");
             }
 
             const bool functionNode = node.SubType == NodeSubType::FunctionEntry || node.SubType == NodeSubType::FunctionReturn;

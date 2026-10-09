@@ -18,6 +18,7 @@ export namespace MoleHole
     {
         int LinkId{0};
         int Target{-1};
+        int TargetPin{0};
         bool Cut{false};
     };
 
@@ -30,6 +31,7 @@ export namespace MoleHole
         std::string Variable;
         std::string Component;
         std::string Function;
+        std::string Label;
         std::uint64_t TargetGuid{0};
         std::vector<IrInput> Inputs;
         std::vector<int> OutputPinIds;
@@ -44,11 +46,15 @@ export namespace MoleHole
     {
         std::string Name;
         bool IsFunction{false};
+        bool IsComponent{false};
         FunctionSignature Signature;
         std::vector<IrNode> Nodes;
         std::vector<int> PureOrder;
         std::vector<int> StartEvents;
         std::vector<int> TickEvents;
+        // Custom event, on-trigger and on-key definitions: roots that other flows or the host invoke by name.
+        std::vector<int> EventHandlers;
+        bool HasLatent{false};
         int Entry{-1};
         int Return{-1};
         std::vector<Variable> Variables;

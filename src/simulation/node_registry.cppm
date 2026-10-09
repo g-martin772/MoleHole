@@ -188,7 +188,7 @@ export namespace MoleHole
     private:
         static int CategoryOrder(const std::string& category)
         {
-            static const std::vector<std::string> order = {"Events", "Flow Control", "Math", "Constants", "Variables",
+            static const std::vector<std::string> order = {"Events", "Flow Control", "Latent", "Math", "Constants", "Variables",
                                                            "Objects", "Entities", "Utility", "Reroute", kCombosCategory};
             const auto it = std::ranges::find(order, category);
             return static_cast<int>(it - order.begin());
@@ -236,6 +236,41 @@ export namespace MoleHole
             CreateBranchNode);
         add("For Loop", "Flow Control", "Repeats the loop body for each index in a range.", {"loop", "iterate", "repeat"},
             CreateForNode);
+
+        constexpr const char* luau = " (Luau runtime only)";
+        add("Custom Event", "Events", std::string("Defines an event other flows can call or wait for; add parameters in the details panel.") + luau,
+            {"event", "define", "custom", "function"}, [](const int id) { return CreateCustomEventNode(id, "Event"); });
+        add("On Trigger", "Events", std::string("Runs when a physics trigger volume is entered or left.") + luau,
+            {"event", "collision", "overlap", "physics", "trigger"}, CreateOnTriggerNode);
+        add("On Key", "Events", std::string("Runs when the chosen key is pressed.") + luau, {"event", "input", "keyboard", "press"},
+            [](const int id) { return CreateOnKeyNode(id); });
+
+        add("Sequence", "Flow Control", std::string("Runs Then 0, Then 1, Then 2 in order; latent branches do not block the next one.") + luau,
+            {"order", "then", "chain"}, [](const int id) { return CreateSequenceNode(id, 3); });
+        add("Sequence (5)", "Flow Control", std::string("Runs five outputs in order; latent branches do not block the next one.") + luau,
+            {"order", "then", "chain"}, [](const int id) { return CreateSequenceNode(id, 5); });
+        add("Do Once", "Flow Control", std::string("Lets the flow through the first time only, until it is reset.") + luau,
+            {"once", "single", "reset"}, CreateDoOnceNode);
+        add("Gate", "Flow Control", std::string("Lets the flow through while open; Open, Close and Toggle change its state.") + luau,
+            {"open", "close", "toggle", "door"}, CreateGateNode);
+        add("Switch", "Flow Control", std::string("Continues down the case matching the selection, or Default.") + luau,
+            {"case", "select", "match"}, [](const int id) { return CreateSwitchNode(id, 4); });
+        add("For Each Entity", "Flow Control", std::string("Runs the body once for every entity that has the chosen component.") + luau,
+            {"loop", "query", "iterate", "entities"}, [](const int id) { return CreateForEachEntityNode(id); });
+        add("While", "Flow Control", std::string("Repeats the body while the condition holds (capped at 100000 iterations).") + luau,
+            {"loop", "repeat", "condition"}, CreateWhileNode);
+
+        add("Delay", "Latent", std::string("Pauses this flow for a number of seconds, then continues.") + luau,
+            {"wait", "sleep", "timer", "latent"}, CreateDelayNode);
+        add("Wait Until", "Latent", std::string("Pauses this flow until the condition becomes true.") + luau,
+            {"wait", "condition", "latent"}, CreateWaitUntilNode);
+        add("Wait For Event", "Latent", std::string("Pauses this flow until the named custom event is called.") + luau,
+            {"wait", "event", "signal", "latent"}, [](const int id) { return CreateWaitForEventNode(id); });
+        add("Interpolate", "Latent", std::string("Moves a float from A to B over time with an easing curve, running Update every tick.") + luau,
+            {"timeline", "tween", "move", "lerp", "ease", "latent"}, [](const int id) { return CreateInterpolateNode(id, PinType::Float); });
+        add("Interpolate Vec3", "Latent", std::string("Moves a vector from A to B over time with an easing curve, running Update every tick.") + luau,
+            {"timeline", "tween", "move", "lerp", "ease", "latent", "position"},
+            [](const int id) { return CreateInterpolateNode(id, PinType::Vec3); });
 
         struct TypeOption { const char* Label; PinType Type; };
         static constexpr TypeOption kConstantTypes[] = {

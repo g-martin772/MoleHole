@@ -42,6 +42,7 @@ namespace MoleHole
         std::call_once(flag, []
         {
             GPP::RegisterBaseComponents();
+            GPP::RegisterScriptComponents();
 
             GPP::RegisterComponent<BlackHoleComponent>("BlackHole", GPP::ComponentDescription<BlackHoleComponent>{
                 .DisplayName = "Black Hole",

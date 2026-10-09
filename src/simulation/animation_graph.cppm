@@ -34,6 +34,7 @@ export namespace MoleHole
         Entity,
         Reroute,
         Call,
+        Latent,
     };
 
     enum class NodeSubType
@@ -76,6 +77,13 @@ export namespace MoleHole
 
         // Functions: entry/return live inside a function graph, call nodes in any graph (named by Node::FunctionName)
         FunctionEntry, FunctionReturn, FunctionCall,
+
+        // Latent nodes suspend the running flow (Luau runtime only)
+        Delay, WaitUntil, WaitForEvent, Interpolate,
+
+        // Flow control and events (Luau runtime only)
+        Sequence, DoOnce, Gate, Switch, ForEach, While,
+        CustomEvent, CustomEventCall, OnTrigger, OnKey,
     };
 
     constexpr int kPinIdStride = 1000;
@@ -104,6 +112,8 @@ export namespace MoleHole
         std::uint64_t TargetGuid{0};
         std::string Component;
         std::string FunctionName;
+        // Event name, key name, component query or easing, depending on the node.
+        std::string Label;
         glm::vec2 Position{0.0f, 0.0f};
     };
 
@@ -195,6 +205,38 @@ export namespace MoleHole
     [[nodiscard]] Node CreateSpawnEntityNode(int id);
     [[nodiscard]] Node CreateDestroyEntityNode(int id);
     [[nodiscard]] Node CreateCloneEntityNode(int id);
+
+    [[nodiscard]] Node CreateDelayNode(int id);
+    [[nodiscard]] Node CreateWaitUntilNode(int id);
+    [[nodiscard]] Node CreateWaitForEventNode(int id, const std::string& event = {});
+    [[nodiscard]] Node CreateInterpolateNode(int id, PinType valueType, const std::string& easing = "smoothstep");
+    [[nodiscard]] Node CreateSequenceNode(int id, int outputs);
+    [[nodiscard]] Node CreateDoOnceNode(int id);
+    [[nodiscard]] Node CreateGateNode(int id);
+    [[nodiscard]] Node CreateSwitchNode(int id, int cases);
+    [[nodiscard]] Node CreateForEachEntityNode(int id, const std::string& component = "Transform");
+    [[nodiscard]] Node CreateWhileNode(int id);
+    [[nodiscard]] Node CreateOnTriggerNode(int id);
+    [[nodiscard]] Node CreateOnKeyNode(int id, const std::string& key = "Space");
+
+    // Keys of custom event parameters index the pins: parameter k lives at pin index k + 1 (index 0 is the flow pin).
+    struct EventParam
+    {
+        int Key{0};
+        std::string Name;
+        PinType Type{PinType::Float};
+    };
+    [[nodiscard]] Node CreateCustomEventNode(int id, const std::string& name, const std::vector<EventParam>& params = {});
+    [[nodiscard]] Node CreateCallEventNode(int id, const std::string& name, const std::vector<EventParam>& params = {});
+
+    // Nodes that only the Luau runtime can run; the interpreter reports an error when execution reaches them.
+    [[nodiscard]] bool IsLuauOnly(NodeType type, NodeSubType subType);
+    [[nodiscard]] bool IsLuauOnly(const Node& node);
+    [[nodiscard]] bool IsLatentNode(const Node& node);
+    // Event name a node registers or fires (empty for other nodes); on-trigger and on-key use reserved names.
+    [[nodiscard]] std::string EventNameOf(const Node& node);
+    constexpr const char* kTriggerEventName = "@trigger";
+    constexpr const char* kKeyEventPrefix = "@key:";
 
     [[nodiscard]] YAML::Node GraphToNode(const AnimationGraphData& graph);
     [[nodiscard]] AnimationGraphData GraphFromNode(const YAML::Node& root);

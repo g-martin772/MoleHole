@@ -15,8 +15,10 @@ export namespace MoleHole
     class ScriptRuntime final : public IGraphRuntime
     {
     public:
+        // Script components (.luau files attached to entities) run when assets is given; component graphs always do.
         ScriptRuntime(const SceneGraphs& graphs, ScriptCache& cache, std::function<void(std::string)> onPrint = nullptr,
-                      const TranspileOptions& options = {}, const GPP::LuauLimits& limits = {});
+                      const TranspileOptions& options = {}, const GPP::LuauLimits& limits = {},
+                      const GPP::AssetDirectories* assets = nullptr);
         ~ScriptRuntime() override;
         ScriptRuntime(const ScriptRuntime&) = delete;
         ScriptRuntime& operator=(const ScriptRuntime&) = delete;
@@ -30,6 +32,11 @@ export namespace MoleHole
         void SetTraceSink(ITraceSink* sink) override;
         [[nodiscard]] PendingWrites ExecuteStartEvent(const GPP::Scene& scene) override;
         [[nodiscard]] PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime) override;
+        void PostEvent(std::string name, std::vector<GPP::LuauValue> args) override;
+        [[nodiscard]] std::vector<GPP::ScriptError> TakeScriptErrors() override;
+        [[nodiscard]] std::vector<GPP::ScriptStatus> ScriptStatuses() const override;
+        // Tasks currently suspended across all graphs (latent nodes waiting on time, conditions or events).
+        [[nodiscard]] std::size_t ActiveTasks() const;
 
     private:
         struct Impl;

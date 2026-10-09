@@ -40,6 +40,7 @@ export namespace MoleHole
         case NodeType::Entity: return HexColor(0xb4671f);
         case NodeType::Reroute: return HexColor(0x5a5a5a);
         case NodeType::Call: return HexColor(0x3a6fd0);
+        case NodeType::Latent: return HexColor(0x1f8f8f);
         }
         return HexColor(0x808080);
     }

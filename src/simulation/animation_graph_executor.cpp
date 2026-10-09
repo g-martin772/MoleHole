@@ -170,6 +170,11 @@ namespace MoleHole
     void GraphExecutor::ExecuteNode(const Node* node, ExecutionContext& ctx)
     {
         if (!Enter(node)) { return; }
+        if (IsLuauOnly(*node))
+        {
+            Report(node, TraceSeverity::Error, "'" + node->Name + "' needs the Luau runtime; the interpreter cannot run it");
+            return;
+        }
         switch (node->Type)
         {
         case NodeType::Print:
@@ -462,7 +467,7 @@ namespace MoleHole
             const Value target = EvaluatePinValue(in[1].Id, ctx);
             if (std::holds_alternative<glm::vec3>(from) && std::holds_alternative<glm::vec3>(target))
             {
-                return LookAtEulerDegrees(std::get<glm::vec3>(from), std::get<glm::vec3>(target));
+                return GPP::LookAtEulerDegrees(std::get<glm::vec3>(from), std::get<glm::vec3>(target));
             }
             break;
         }
