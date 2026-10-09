@@ -10,17 +10,147 @@ using namespace MoleHole;
 
 namespace
 {
-    template <typename Component, typename Field>
-    void EditField(SimulationRunner& runner, std::uint64_t guid, Field Component::* member, Field newValue)
+    void EditField(SimulationRunner& runner, std::uint64_t guid, std::string component, std::string field,
+                   FieldValue value)
     {
-        runner.EnqueueEdit([guid, member, newValue](Scene& scene)
+        runner.EnqueueTrackedEdit([guid, component = std::move(component), field = std::move(field),
+                                   value = std::move(value)](Scene& scene)
         {
             const auto entity = scene.FindByGuid(guid);
-            if (scene.IsValid(entity) && scene.Registry().all_of<Component>(entity))
+            if (!scene.IsValid(entity)) return;
+            const auto* info = ComponentRegistry::Instance().FindByName(component);
+            if (!info) return;
+            for (const auto& candidate : info->Fields)
             {
-                scene.Registry().get<Component>(entity).*member = newValue;
+                if (candidate.Name != field || !candidate.Set) continue;
+                if (candidate.Set(scene.Registry(), entity, value)) scene.MarkDirty(entity);
+                return;
             }
         });
+    }
+
+    std::string SpacedName(const std::string& name)
+    {
+        std::string result;
+        for (std::size_t i = 0; i < name.size(); ++i)
+        {
+            if (i > 0 && std::isupper(static_cast<unsigned char>(name[i]))) result += ' ';
+            result += name[i];
+        }
+        return result;
+    }
+
+    std::string UpperName(std::string name)
+    {
+        std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+        return name;
+    }
+
+    bool FieldVisible(const FieldInfo& field, const ComponentTypeInfo& info, const entt::registry& registry,
+                      entt::entity entity)
+    {
+        if (field.Meta.VisibleField.empty()) return true;
+        for (const auto& other : info.Fields)
+        {
+            if (other.Name != field.Meta.VisibleField) continue;
+            const auto value = other.Get(registry, entity);
+            const auto* index = std::get_if<int>(&value);
+            return index != nullptr && (field.Meta.VisibleMask & (1u << *index)) != 0;
+        }
+        return true;
+    }
+
+    // The single place a descriptor field becomes a widget; returns the edited value when the user changed it.
+    std::optional<FieldValue> DrawField(const FieldInfo& field, const FieldValue& current)
+    {
+        const auto& meta = field.Meta;
+        const char* label = meta.Label.c_str();
+        const bool bounded = meta.Max > meta.Min;
+        const float speed = meta.Speed > 0.0f ? meta.Speed : 0.1f;
+        const char* format = meta.Format.empty() ? "%.3f" : meta.Format.c_str();
+
+        ImGui::BeginDisabled(field.ReadOnly());
+        std::optional<FieldValue> edited;
+        switch (field.Type)
+        {
+        case FieldType::Bool:
+        {
+            bool v = std::get<bool>(current);
+            if (ImGui::Checkbox(label, &v)) edited = v;
+            break;
+        }
+        case FieldType::Int:
+        {
+            int v = std::get<int>(current);
+            if (ImGui::DragInt(label, &v)) edited = v;
+            break;
+        }
+        case FieldType::Float:
+        {
+            float v = std::get<float>(current);
+            if (ImGui::DragFloat(label, &v, speed, meta.Min, meta.Max, format)) edited = v;
+            break;
+        }
+        case FieldType::Vec2:
+        {
+            glm::vec2 v = std::get<glm::vec2>(current);
+            if (ImGui::DragFloat2(label, &v.x, speed, meta.Min, meta.Max, format)) edited = v;
+            break;
+        }
+        case FieldType::Vec3:
+        {
+            glm::vec3 v = std::get<glm::vec3>(current);
+            const bool changed = meta.Kind == FieldKind::Color
+                                     ? ImGui::ColorEdit3(label, &v.x)
+                                     : ImGui::DragFloat3(label, &v.x, speed, meta.Min, meta.Max, format);
+            if (changed) edited = v;
+            break;
+        }
+        case FieldType::Vec4:
+        {
+            glm::vec4 v = std::get<glm::vec4>(current);
+            const bool changed = meta.Kind == FieldKind::Color
+                                     ? ImGui::ColorEdit4(label, &v.x)
+                                     : ImGui::DragFloat4(label, &v.x, speed, meta.Min, meta.Max, format);
+            if (changed) edited = v;
+            break;
+        }
+        case FieldType::String:
+        {
+            std::array<char, 512> buffer{};
+            const auto& text = std::get<std::string>(current);
+            std::ranges::copy(text.substr(0, buffer.size() - 1), buffer.begin());
+            const bool changed = meta.Kind == FieldKind::Multiline
+                                     ? ImGui::InputTextMultiline(label, buffer.data(), buffer.size())
+                                     : ImGui::InputText(label, buffer.data(), buffer.size());
+            if (changed) edited = std::string(buffer.data());
+            break;
+        }
+        case FieldType::Entity:
+        {
+            auto v = static_cast<ImU64>(std::get<std::uint64_t>(current));
+            if (ImGui::InputScalar(label, ImGuiDataType_U64, &v)) edited = static_cast<std::uint64_t>(v);
+            break;
+        }
+        case FieldType::Enum:
+        {
+            int index = std::get<int>(current);
+            const auto preview = index >= 0 && index < static_cast<int>(meta.Options.size())
+                                     ? SpacedName(meta.Options[index])
+                                     : std::string{};
+            if (ImGui::BeginCombo(label, preview.c_str()))
+            {
+                for (int i = 0; i < static_cast<int>(meta.Options.size()); ++i)
+                {
+                    if (ImGui::Selectable(SpacedName(meta.Options[i]).c_str(), i == index)) edited = i;
+                }
+                ImGui::EndCombo();
+            }
+            break;
+        }
+        }
+        ImGui::EndDisabled();
+        return edited;
     }
 
     struct SceneWindowLayer final : public HotReloadableLayer
@@ -264,6 +394,29 @@ namespace
             return result;
         }
 
+        void RenderAddComponentMenu(SimulationRunner& runner, const Scene& scene, entt::entity entity,
+                                    std::uint64_t guid)
+        {
+            ImGui::Spacing();
+            if (ImGui::Button("Add Component", ImVec2(-1, 0))) ImGui::OpenPopup("AddComponent");
+            if (!ImGui::BeginPopup("AddComponent")) return;
+
+            ComponentRegistry::Instance().ForEach([&](const ComponentTypeInfo& info)
+            {
+                if (!info.Inspectable || !info.Add || info.Has(scene.Registry(), entity)) return;
+                if (!ImGui::MenuItem(info.DisplayName.c_str())) return;
+                runner.EnqueueTrackedEdit([guid, name = info.Name](Scene& s)
+                {
+                    const auto e = s.FindByGuid(guid);
+                    const auto* type = ComponentRegistry::Instance().FindByName(name);
+                    if (!s.IsValid(e) || !type) return;
+                    type->Add(s.Registry(), e);
+                    s.MarkDirty(e);
+                });
+            });
+            ImGui::EndPopup();
+        }
+
         void RenderSelectedEntity(SimulationRunner& runner, const Scene& scene)
         {
             if (m_UiState->SelectedEntityGuid == 0) return;
@@ -277,131 +430,28 @@ namespace
 
             SectionHeader("SELECTED ENTITY");
 
-            if (const auto* transform = scene.Registry().try_get<const TransformComponent>(entity))
+            ComponentRegistry::Instance().ForEach([&](const ComponentTypeInfo& info)
             {
-                glm::vec3 pos = transform->Position;
-                if (ImGui::DragFloat3("Position", &pos.x, 0.1f))
-                    EditField(runner, guid, &TransformComponent::Position, pos);
-            }
-
-            if (const auto* blackHole = scene.Registry().try_get<const BlackHoleComponent>(entity))
-            {
-                float mass = blackHole->Mass;
-                if (ImGui::DragFloat("Mass (solar)", &mass, 0.01f, 0.0f, 1000.0f))
-                    EditField(runner, guid, &BlackHoleComponent::Mass, mass);
-                float spin = blackHole->Spin;
-                if (ImGui::SliderFloat("Spin", &spin, 0.0f, 1.0f))
-                    EditField(runner, guid, &BlackHoleComponent::Spin, spin);
-                float charge = blackHole->Charge;
-                if (ImGui::SliderFloat("Charge", &charge, 0.0f, 1.0f))
-                    EditField(runner, guid, &BlackHoleComponent::Charge, charge);
-                glm::vec3 spinAxis = blackHole->SpinAxis;
-                if (ImGui::DragFloat3("Spin Axis", &spinAxis.x, 0.01f))
-                    EditField(runner, guid, &BlackHoleComponent::SpinAxis, spinAxis);
-            }
-
-            if (const auto* sphere = scene.Registry().try_get<const SphereComponent>(entity))
-            {
-                float radius = sphere->Radius;
-                if (ImGui::DragFloat("Radius", &radius, 0.01f, 0.01f, 100.0f))
-                    EditField(runner, guid, &SphereComponent::Radius, radius);
-                glm::vec3 color = sphere->Color;
-                if (ImGui::ColorEdit3("Color", &color.x))
-                    EditField(runner, guid, &SphereComponent::Color, color);
-                float spin = sphere->Spin;
-                if (ImGui::SliderFloat("Sphere Spin", &spin, 0.0f, 1.0f))
-                    EditField(runner, guid, &SphereComponent::Spin, spin);
-            }
-
-            if (const auto* body = scene.Registry().try_get<const RigidBodyComponent>(entity))
-            {
-                SectionHeader("RIGID BODY");
-                static constexpr std::array kBodyTypeNames{"Static", "Kinematic", "Dynamic"};
-                int typeIndex = static_cast<int>(body->Type);
-                if (ImGui::Combo("Type", &typeIndex, kBodyTypeNames.data(),
-                                 static_cast<int>(kBodyTypeNames.size())))
-                    EditField(runner, guid, &RigidBodyComponent::Type, static_cast<RigidBodyType>(typeIndex));
-                float mass = body->Mass;
-                if (ImGui::DragFloat("Mass (kg)", &mass, 1.0e22f, 0.0f, 0.0f, "%.3e"))
-                    EditField(runner, guid, &RigidBodyComponent::Mass, mass);
-                float linearDamping = body->LinearDamping;
-                if (ImGui::DragFloat("Linear Damping", &linearDamping, 0.01f, 0.0f, 10.0f))
-                    EditField(runner, guid, &RigidBodyComponent::LinearDamping, linearDamping);
-                float angularDamping = body->AngularDamping;
-                if (ImGui::DragFloat("Angular Damping", &angularDamping, 0.01f, 0.0f, 10.0f))
-                    EditField(runner, guid, &RigidBodyComponent::AngularDamping, angularDamping);
-                bool enableGravity = body->EnableGravity;
-                if (ImGui::Checkbox("Enable Gravity", &enableGravity))
-                    EditField(runner, guid, &RigidBodyComponent::EnableGravity, enableGravity);
-            }
-
-            if (const auto* collider = scene.Registry().try_get<const ColliderComponent>(entity))
-            {
-                SectionHeader("COLLIDER");
-                ImGui::TextDisabled("Shape/size changes apply on next scene reload");
-                static constexpr std::array kShapeNames{"Box", "Sphere", "Capsule", "Plane", "Convex Mesh"};
-                int shapeIndex = static_cast<int>(collider->Shape);
-                if (ImGui::Combo("Shape", &shapeIndex, kShapeNames.data(),
-                                 static_cast<int>(kShapeNames.size())))
-                    EditField(runner, guid, &ColliderComponent::Shape, static_cast<ColliderShape>(shapeIndex));
-
-                switch (collider->Shape)
+                if (!info.Inspectable || !info.Has(scene.Registry(), entity)) return;
+                ImGui::PushID(info.Name.c_str());
+                SectionHeader(UpperName(info.DisplayName).c_str());
+                if (!info.Note.empty()) ImGui::TextDisabled("%s", info.Note.c_str());
+                for (const auto& field : info.Fields)
                 {
-                case ColliderShape::Box:
-                {
-                    glm::vec3 halfExtents = collider->HalfExtents;
-                    if (ImGui::DragFloat3("Half Extents", &halfExtents.x, 0.01f, 0.01f, 1000.0f))
-                        EditField(runner, guid, &ColliderComponent::HalfExtents, halfExtents);
-                    break;
+                    if (!FieldVisible(field, info, scene.Registry(), entity)) continue;
+                    const auto current = field.Get(scene.Registry(), entity);
+                    if (std::holds_alternative<std::monostate>(current)) continue;
+                    ImGui::PushID(field.Name.c_str());
+                    if (auto edited = DrawField(field, current))
+                    {
+                        EditField(runner, guid, info.Name, field.Name, std::move(*edited));
+                    }
+                    ImGui::PopID();
                 }
-                case ColliderShape::Sphere:
-                {
-                    float radius = collider->Radius;
-                    if (ImGui::DragFloat("Radius", &radius, 0.01f, 0.01f, 1000.0f))
-                        EditField(runner, guid, &ColliderComponent::Radius, radius);
-                    break;
-                }
-                case ColliderShape::Capsule:
-                {
-                    float radius = collider->Radius;
-                    if (ImGui::DragFloat("Radius", &radius, 0.01f, 0.01f, 1000.0f))
-                        EditField(runner, guid, &ColliderComponent::Radius, radius);
-                    float halfHeight = collider->HalfHeight;
-                    if (ImGui::DragFloat("Half Height", &halfHeight, 0.01f, 0.01f, 1000.0f))
-                        EditField(runner, guid, &ColliderComponent::HalfHeight, halfHeight);
-                    break;
-                }
-                case ColliderShape::Plane:
-                    break;
-                case ColliderShape::ConvexMesh:
-                    ImGui::Text("%zu hull points", collider->ConvexHullPoints.size());
-                    break;
-                }
+                ImGui::PopID();
+            });
 
-                float staticFriction = collider->StaticFriction;
-                if (ImGui::DragFloat("Static Friction", &staticFriction, 0.01f, 0.0f, 10.0f))
-                    EditField(runner, guid, &ColliderComponent::StaticFriction, staticFriction);
-                float dynamicFriction = collider->DynamicFriction;
-                if (ImGui::DragFloat("Dynamic Friction", &dynamicFriction, 0.01f, 0.0f, 10.0f))
-                    EditField(runner, guid, &ColliderComponent::DynamicFriction, dynamicFriction);
-                float restitution = collider->Restitution;
-                if (ImGui::DragFloat("Restitution", &restitution, 0.01f, 0.0f, 1.0f))
-                    EditField(runner, guid, &ColliderComponent::Restitution, restitution);
-                bool isTrigger = collider->IsTrigger;
-                if (ImGui::Checkbox("Is Trigger", &isTrigger))
-                    EditField(runner, guid, &ColliderComponent::IsTrigger, isTrigger);
-            }
-
-            if (const auto* velocity = scene.Registry().try_get<const VelocityComponent>(entity))
-            {
-                SectionHeader("VELOCITY (read-only)");
-                glm::vec3 linear = velocity->Linear;
-                ImGui::BeginDisabled();
-                ImGui::DragFloat3("Linear", &linear.x);
-                glm::vec3 angular = velocity->Angular;
-                ImGui::DragFloat3("Angular", &angular.x);
-                ImGui::EndDisabled();
-            }
+            RenderAddComponentMenu(runner, scene, entity, guid);
 
             ImGui::Spacing();
             if (ImGui::Button("Delete Entity", ImVec2(-1, 0)))

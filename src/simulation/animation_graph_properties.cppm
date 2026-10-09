@@ -17,11 +17,11 @@ export namespace MoleHole
 
     struct PropertyCategory
     {
-        NodeSubType Category{NodeSubType::None};
+        std::string ComponentName;
         std::string DisplayName;
         std::vector<PropertyEntry> Properties;
     };
 
-    [[nodiscard]] const std::vector<PropertyCategory>& GetPropertyCategories();
-    [[nodiscard]] const PropertyCategory* FindPropertyCategory(NodeSubType category);
+    [[nodiscard]] std::vector<const PropertyCategory*> GetPropertyCategories();
+    [[nodiscard]] const PropertyCategory* FindPropertyCategory(const std::string& componentName);
 }

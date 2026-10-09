@@ -347,7 +347,7 @@ namespace MoleHole
         const entt::entity entity = ctx.Scene.FindByGuid(guid);
         if (!ctx.Scene.IsValid(entity)) { return; }
 
-        const PropertyCategory* category = FindPropertyCategory(node->SubType);
+        const PropertyCategory* category = FindPropertyCategory(node->Component);
         if (!category) { return; }
 
         for (std::size_t i = 0; i < node->Outputs.size() && i < category->Properties.size(); ++i)
@@ -374,7 +374,7 @@ namespace MoleHole
         const entt::entity entity = ctx.Scene.FindByGuid(guid);
         if (!ctx.Scene.IsValid(entity)) { return; }
 
-        const PropertyCategory* category = FindPropertyCategory(node->SubType);
+        const PropertyCategory* category = FindPropertyCategory(node->Component);
         if (!category) { return; }
 
         for (std::size_t i = 2; i < node->Inputs.size(); ++i)

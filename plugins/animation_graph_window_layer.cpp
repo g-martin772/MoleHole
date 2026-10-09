@@ -136,9 +136,7 @@ namespace
     {
         std::uint64_t Guid{0};
         std::string Label;
-        bool HasBlackHole{false};
-        bool HasSphere{false};
-        bool HasTransform{false};
+        std::unordered_set<std::string> Components;
     };
 
     std::vector<EntityOption> CollectEntityOptions(const Scene& scene)
@@ -154,9 +152,10 @@ namespace
             option.Label = metadata.Name.empty()
                                ? (metadata.TypeTag + " #" + std::to_string(metadata.Guid))
                                : metadata.Name;
-            option.HasBlackHole = scene.Registry().all_of<BlackHoleComponent>(entity);
-            option.HasSphere = scene.Registry().all_of<SphereComponent>(entity);
-            option.HasTransform = scene.Registry().all_of<TransformComponent>(entity);
+            ComponentRegistry::Instance().ForEach([&](const ComponentTypeInfo& info)
+            {
+                if (info.Has(scene.Registry(), entity)) option.Components.insert(info.Name);
+            });
             result.push_back(std::move(option));
         }
         return result;
@@ -168,15 +167,9 @@ namespace
         return nullptr;
     }
 
-    bool EntityMatchesCategory(const EntityOption& entity, const NodeSubType category)
+    bool EntityMatchesCategory(const EntityOption& entity, const Node& node)
     {
-        switch (category)
-        {
-        case NodeSubType::BlackHole: return entity.HasBlackHole;
-        case NodeSubType::Sphere: return entity.HasSphere;
-        case NodeSubType::Transform: return entity.HasTransform;
-        default: return true;
-        }
+        return node.Component.empty() || entity.Components.contains(node.Component);
     }
 
     struct AnimationGraphWindowLayer final : public HotReloadableLayer
@@ -593,17 +586,14 @@ namespace
 
             if (ImGui::BeginMenu("Objects"))
             {
-                static constexpr std::pair<const char*, NodeSubType> kCategories[] = {
-                    {"Black Hole", NodeSubType::BlackHole}, {"Sphere", NodeSubType::Sphere},
-                    {"Transform", NodeSubType::Transform},
-                };
-                for (const auto& [label, category] : kCategories)
+                for (const auto* category : GetPropertyCategories())
                 {
-                    if (ImGui::BeginMenu(label))
+                    if (ImGui::BeginMenu(category->DisplayName.c_str()))
                     {
-                        if (ImGui::MenuItem("Get")) addNode(CreateGetterNode(m_Graph.AllocateId(), category));
-                        if (ImGui::MenuItem("Decompose")) addNode(CreateDecomposerNode(m_Graph.AllocateId(), category));
-                        if (ImGui::MenuItem("Set")) addNode(CreateSetterNode(m_Graph.AllocateId(), category));
+                        const auto& name = category->ComponentName;
+                        if (ImGui::MenuItem("Get")) addNode(CreateGetterNode(m_Graph.AllocateId(), name));
+                        if (ImGui::MenuItem("Decompose")) addNode(CreateDecomposerNode(m_Graph.AllocateId(), name));
+                        if (ImGui::MenuItem("Set")) addNode(CreateSetterNode(m_Graph.AllocateId(), name));
                         ImGui::EndMenu();
                     }
                 }
@@ -1008,7 +998,7 @@ namespace
                 bool any = false;
                 for (const auto& entity : entities)
                 {
-                    if (!EntityMatchesCategory(entity, node.SubType)) continue;
+                    if (!EntityMatchesCategory(entity, node)) continue;
                     any = true;
                     const bool selected = entity.Guid == node.TargetGuid;
                     if (ImGui::Selectable(entity.Label.c_str(), selected))

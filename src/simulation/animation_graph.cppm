@@ -61,6 +61,9 @@ export namespace MoleHole
 
         // Variable
         VariableGet, VariableSet,
+
+        // Decomposer/Setter/Getter for any registered component (named by Node::Component)
+        Component,
     };
 
     using Value = std::variant<std::monostate, bool, int, float, glm::vec2, glm::vec3, glm::vec4,
@@ -85,6 +88,7 @@ export namespace MoleHole
         Value ConstantValue;
         std::string VariableName;
         std::uint64_t TargetGuid{0};
+        std::string Component;
         glm::vec2 Position{0.0f, 0.0f};
     };
 
@@ -137,6 +141,10 @@ export namespace MoleHole
     [[nodiscard]] Node CreateDecomposerNode(int id, NodeSubType category);
     [[nodiscard]] Node CreateSetterNode(int id, NodeSubType category);
     [[nodiscard]] Node CreateGetterNode(int id, NodeSubType category);
+
+    [[nodiscard]] Node CreateDecomposerNode(int id, const std::string& component);
+    [[nodiscard]] Node CreateSetterNode(int id, const std::string& component);
+    [[nodiscard]] Node CreateGetterNode(int id, const std::string& component);
 
     [[nodiscard]] std::string SerializeToYaml(const AnimationGraphData& graph);
     [[nodiscard]] AnimationGraphData DeserializeFromYaml(const std::string& yaml);

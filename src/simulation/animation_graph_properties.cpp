@@ -2,7 +2,6 @@ module MoleHole;
 
 import :Simulation.AnimationGraphProperties;
 import :Simulation.AnimationGraph;
-import :Simulation.Components;
 import std;
 import glm;
 import GPP;
@@ -11,236 +10,84 @@ namespace MoleHole
 {
     namespace
     {
-        glm::vec3 RotationToEulerDegrees(const glm::quat& rotation)
+        PinType PinTypeOf(const GPP::FieldType type)
         {
-            return glm::degrees(glm::gtc::eulerAngles(rotation));
-        }
-
-        glm::quat EulerDegreesToRotation(const glm::vec3& eulerDegrees)
-        {
-            return glm::quat(glm::radians(eulerDegrees));
-        }
-
-        const std::vector<PropertyCategory>& BuildPropertyCategories()
-        {
-            static const std::vector<PropertyCategory> categories = []
+            switch (type)
             {
-                std::vector<PropertyCategory> result;
-
-                {
-                    PropertyCategory category;
-                    category.Category = NodeSubType::BlackHole;
-                    category.DisplayName = "BlackHole";
-                    category.Properties = {
-                        PropertyEntry{
-                            .Label = "Mass", .Type = PinType::Float,
-                            .Get = [](const GPP::Scene& scene, const entt::entity entity) -> Value
-                            {
-                                if (const auto* c = scene.Registry().try_get<BlackHoleComponent>(entity)) { return c->Mass; }
-                                return std::monostate{};
-                            },
-                            .Set = [](GPP::Scene& scene, const entt::entity entity, const Value& value)
-                            {
-                                if (auto* c = scene.Registry().try_get<BlackHoleComponent>(entity))
-                                {
-                                    c->Mass = GetValueAs<float>(value, c->Mass);
-                                }
-                            },
-                        },
-                        PropertyEntry{
-                            .Label = "Spin", .Type = PinType::Float,
-                            .Get = [](const GPP::Scene& scene, const entt::entity entity) -> Value
-                            {
-                                if (const auto* c = scene.Registry().try_get<BlackHoleComponent>(entity)) { return c->Spin; }
-                                return std::monostate{};
-                            },
-                            .Set = [](GPP::Scene& scene, const entt::entity entity, const Value& value)
-                            {
-                                if (auto* c = scene.Registry().try_get<BlackHoleComponent>(entity))
-                                {
-                                    c->Spin = GetValueAs<float>(value, c->Spin);
-                                }
-                            },
-                        },
-                        PropertyEntry{
-                            .Label = "Charge", .Type = PinType::Float,
-                            .Get = [](const GPP::Scene& scene, const entt::entity entity) -> Value
-                            {
-                                if (const auto* c = scene.Registry().try_get<BlackHoleComponent>(entity)) { return c->Charge; }
-                                return std::monostate{};
-                            },
-                            .Set = [](GPP::Scene& scene, const entt::entity entity, const Value& value)
-                            {
-                                if (auto* c = scene.Registry().try_get<BlackHoleComponent>(entity))
-                                {
-                                    c->Charge = GetValueAs<float>(value, c->Charge);
-                                }
-                            },
-                        },
-                        PropertyEntry{
-                            .Label = "SpinAxis", .Type = PinType::Vec3,
-                            .Get = [](const GPP::Scene& scene, const entt::entity entity) -> Value
-                            {
-                                if (const auto* c = scene.Registry().try_get<BlackHoleComponent>(entity)) { return c->SpinAxis; }
-                                return std::monostate{};
-                            },
-                            .Set = [](GPP::Scene& scene, const entt::entity entity, const Value& value)
-                            {
-                                if (auto* c = scene.Registry().try_get<BlackHoleComponent>(entity))
-                                {
-                                    c->SpinAxis = GetValueAs<glm::vec3>(value, c->SpinAxis);
-                                }
-                            },
-                        },
-                    };
-                    result.push_back(std::move(category));
-                }
-
-                {
-                    PropertyCategory category;
-                    category.Category = NodeSubType::Sphere;
-                    category.DisplayName = "Sphere";
-                    category.Properties = {
-                        PropertyEntry{
-                            .Label = "Radius", .Type = PinType::Float,
-                            .Get = [](const GPP::Scene& scene, const entt::entity entity) -> Value
-                            {
-                                if (const auto* c = scene.Registry().try_get<SphereComponent>(entity)) { return c->Radius; }
-                                return std::monostate{};
-                            },
-                            .Set = [](GPP::Scene& scene, const entt::entity entity, const Value& value)
-                            {
-                                if (auto* c = scene.Registry().try_get<SphereComponent>(entity))
-                                {
-                                    c->Radius = GetValueAs<float>(value, c->Radius);
-                                }
-                            },
-                        },
-                        PropertyEntry{
-                            .Label = "Spin", .Type = PinType::Float,
-                            .Get = [](const GPP::Scene& scene, const entt::entity entity) -> Value
-                            {
-                                if (const auto* c = scene.Registry().try_get<SphereComponent>(entity)) { return c->Spin; }
-                                return std::monostate{};
-                            },
-                            .Set = [](GPP::Scene& scene, const entt::entity entity, const Value& value)
-                            {
-                                if (auto* c = scene.Registry().try_get<SphereComponent>(entity))
-                                {
-                                    c->Spin = GetValueAs<float>(value, c->Spin);
-                                }
-                            },
-                        },
-                        PropertyEntry{
-                            .Label = "Color", .Type = PinType::Vec3,
-                            .Get = [](const GPP::Scene& scene, const entt::entity entity) -> Value
-                            {
-                                if (const auto* c = scene.Registry().try_get<SphereComponent>(entity)) { return c->Color; }
-                                return std::monostate{};
-                            },
-                            .Set = [](GPP::Scene& scene, const entt::entity entity, const Value& value)
-                            {
-                                if (auto* c = scene.Registry().try_get<SphereComponent>(entity))
-                                {
-                                    c->Color = GetValueAs<glm::vec3>(value, c->Color);
-                                }
-                            },
-                        },
-                        PropertyEntry{
-                            .Label = "SpinAxis", .Type = PinType::Vec3,
-                            .Get = [](const GPP::Scene& scene, const entt::entity entity) -> Value
-                            {
-                                if (const auto* c = scene.Registry().try_get<SphereComponent>(entity)) { return c->SpinAxis; }
-                                return std::monostate{};
-                            },
-                            .Set = [](GPP::Scene& scene, const entt::entity entity, const Value& value)
-                            {
-                                if (auto* c = scene.Registry().try_get<SphereComponent>(entity))
-                                {
-                                    c->SpinAxis = GetValueAs<glm::vec3>(value, c->SpinAxis);
-                                }
-                            },
-                        },
-                    };
-                    result.push_back(std::move(category));
-                }
-
-                {
-                    PropertyCategory category;
-                    category.Category = NodeSubType::Transform;
-                    category.DisplayName = "Transform";
-                    category.Properties = {
-                        PropertyEntry{
-                            .Label = "Position", .Type = PinType::Vec3,
-                            .Get = [](const GPP::Scene& scene, const entt::entity entity) -> Value
-                            {
-                                if (const auto* t = scene.Registry().try_get<GPP::TransformComponent>(entity)) { return t->Position; }
-                                return std::monostate{};
-                            },
-                            .Set = [](GPP::Scene& scene, const entt::entity entity, const Value& value)
-                            {
-                                if (auto* t = scene.Registry().try_get<GPP::TransformComponent>(entity))
-                                {
-                                    t->Position = GetValueAs<glm::vec3>(value, t->Position);
-                                }
-                            },
-                        },
-                        PropertyEntry{
-                            .Label = "Rotation", .Type = PinType::Vec3,
-                            .Get = [](const GPP::Scene& scene, const entt::entity entity) -> Value
-                            {
-                                if (const auto* t = scene.Registry().try_get<GPP::TransformComponent>(entity))
-                                {
-                                    return RotationToEulerDegrees(t->Rotation);
-                                }
-                                return std::monostate{};
-                            },
-                            .Set = [](GPP::Scene& scene, const entt::entity entity, const Value& value)
-                            {
-                                if (auto* t = scene.Registry().try_get<GPP::TransformComponent>(entity))
-                                {
-                                    const glm::vec3 currentDegrees = RotationToEulerDegrees(t->Rotation);
-                                    const glm::vec3 degrees = GetValueAs<glm::vec3>(value, currentDegrees);
-                                    t->Rotation = EulerDegreesToRotation(degrees);
-                                }
-                            },
-                        },
-                        PropertyEntry{
-                            .Label = "Scale", .Type = PinType::Vec3,
-                            .Get = [](const GPP::Scene& scene, const entt::entity entity) -> Value
-                            {
-                                if (const auto* t = scene.Registry().try_get<GPP::TransformComponent>(entity)) { return t->Scale; }
-                                return std::monostate{};
-                            },
-                            .Set = [](GPP::Scene& scene, const entt::entity entity, const Value& value)
-                            {
-                                if (auto* t = scene.Registry().try_get<GPP::TransformComponent>(entity))
-                                {
-                                    t->Scale = GetValueAs<glm::vec3>(value, t->Scale);
-                                }
-                            },
-                        },
-                    };
-                    result.push_back(std::move(category));
-                }
-
-                return result;
-            }();
-            return categories;
+            case GPP::FieldType::Bool: return PinType::Bool;
+            case GPP::FieldType::Int:
+            case GPP::FieldType::Enum: return PinType::Int;
+            case GPP::FieldType::Vec2: return PinType::Vec2;
+            case GPP::FieldType::Vec3: return PinType::Vec3;
+            case GPP::FieldType::Vec4: return PinType::Vec4;
+            case GPP::FieldType::String: return PinType::String;
+            case GPP::FieldType::Entity: return PinType::Object;
+            case GPP::FieldType::Float: default: return PinType::Float;
+            }
         }
-    }
 
-    const std::vector<PropertyCategory>& GetPropertyCategories()
-    {
-        return BuildPropertyCategories();
-    }
-
-    const PropertyCategory* FindPropertyCategory(const NodeSubType category)
-    {
-        for (const auto& entry : GetPropertyCategories())
+        PropertyCategory BuildCategory(const GPP::ComponentTypeInfo& info)
         {
-            if (entry.Category == category) { return &entry; }
+            PropertyCategory category;
+            category.ComponentName = info.Name;
+            category.DisplayName = info.Name;
+            for (const auto& field : info.Fields)
+            {
+                category.Properties.push_back(PropertyEntry{
+                    .Label = field.Name,
+                    .Type = PinTypeOf(field.Type),
+                    .Get = [field](const GPP::Scene& scene, const entt::entity entity) -> Value
+                    {
+                        return field.Get(scene.Registry(), entity);
+                    },
+                    .Set = [field](GPP::Scene& scene, const entt::entity entity, const Value& value)
+                    {
+                        if (field.Set) { field.Set(scene.Registry(), entity, value); }
+                    },
+                });
+            }
+            return category;
         }
-        return nullptr;
+
+        struct CategoryCache
+        {
+            std::mutex Mutex;
+            std::map<std::string, std::unique_ptr<PropertyCategory>> ByName;
+        };
+
+        CategoryCache& Cache()
+        {
+            static CategoryCache cache;
+            return cache;
+        }
+
+        const PropertyCategory* Resolve(const GPP::ComponentTypeInfo& info)
+        {
+            if (!info.GraphExposed) { return nullptr; }
+            auto& cache = Cache();
+            std::scoped_lock lock(cache.Mutex);
+            auto& slot = cache.ByName[info.Name];
+            if (!slot || slot->Properties.size() != info.Fields.size())
+            {
+                slot = std::make_unique<PropertyCategory>(BuildCategory(info));
+            }
+            return slot.get();
+        }
+    }
+
+    std::vector<const PropertyCategory*> GetPropertyCategories()
+    {
+        std::vector<const PropertyCategory*> result;
+        GPP::ComponentRegistry::Instance().ForEach([&result](const GPP::ComponentTypeInfo& info)
+        {
+            if (const auto* category = Resolve(info)) { result.push_back(category); }
+        });
+        return result;
+    }
+
+    const PropertyCategory* FindPropertyCategory(const std::string& componentName)
+    {
+        const auto* info = GPP::ComponentRegistry::Instance().FindByName(componentName);
+        return info ? Resolve(*info) : nullptr;
     }
 }

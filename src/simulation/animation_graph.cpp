@@ -102,6 +102,7 @@ namespace MoleHole
             case NodeSubType::Transform: return "Transform";
             case NodeSubType::VariableGet: return "VariableGet";
             case NodeSubType::VariableSet: return "VariableSet";
+            case NodeSubType::Component: return "Component";
             }
             return "None";
         }
@@ -134,6 +135,7 @@ namespace MoleHole
             if (text == "Transform") return NodeSubType::Transform;
             if (text == "VariableGet") return NodeSubType::VariableGet;
             if (text == "VariableSet") return NodeSubType::VariableSet;
+            if (text == "Component") return NodeSubType::Component;
             return NodeSubType::None;
         }
 
@@ -550,15 +552,47 @@ namespace MoleHole
         return node;
     }
 
+    namespace
+    {
+        NodeSubType SubTypeForComponent(const std::string& component)
+        {
+            const auto legacy = NodeSubTypeFromString(component);
+            const bool isLegacyComponent = legacy == NodeSubType::BlackHole || legacy == NodeSubType::Sphere
+                                           || legacy == NodeSubType::Transform;
+            return isLegacyComponent ? legacy : NodeSubType::Component;
+        }
+
+        void InitComponentNode(Node& node, const int id, const NodeType type, const std::string& component)
+        {
+            node.Id = id;
+            node.Type = type;
+            node.SubType = SubTypeForComponent(component);
+            node.Component = component;
+        }
+    }
+
     Node CreateDecomposerNode(const int id, const NodeSubType category)
     {
+        return CreateDecomposerNode(id, NodeSubTypeToString(category));
+    }
+
+    Node CreateSetterNode(const int id, const NodeSubType category)
+    {
+        return CreateSetterNode(id, NodeSubTypeToString(category));
+    }
+
+    Node CreateGetterNode(const int id, const NodeSubType category)
+    {
+        return CreateGetterNode(id, NodeSubTypeToString(category));
+    }
+
+    Node CreateDecomposerNode(const int id, const std::string& component)
+    {
         Node node;
-        node.Id = id;
-        node.Type = NodeType::Decomposer;
-        node.SubType = category;
+        InitComponentNode(node, id, NodeType::Decomposer, component);
         node.Inputs = { Pin{InputPinId(id, 0), "Entity", PinType::Object, true} };
 
-        if (const auto* propertyCategory = FindPropertyCategory(category))
+        if (const auto* propertyCategory = FindPropertyCategory(component))
         {
             node.Name = "Decompose " + propertyCategory->DisplayName;
             for (std::size_t i = 0; i < propertyCategory->Properties.size(); ++i)
@@ -574,16 +608,14 @@ namespace MoleHole
         return node;
     }
 
-    Node CreateSetterNode(const int id, const NodeSubType category)
+    Node CreateSetterNode(const int id, const std::string& component)
     {
         Node node;
-        node.Id = id;
-        node.Type = NodeType::Setter;
-        node.SubType = category;
+        InitComponentNode(node, id, NodeType::Setter, component);
         node.Inputs.push_back(Pin{InputPinId(id, 0), "In", PinType::Flow, true});
         node.Inputs.push_back(Pin{InputPinId(id, 1), "Entity", PinType::Object, true});
 
-        if (const auto* propertyCategory = FindPropertyCategory(category))
+        if (const auto* propertyCategory = FindPropertyCategory(component))
         {
             node.Name = "Set " + propertyCategory->DisplayName;
             for (std::size_t i = 0; i < propertyCategory->Properties.size(); ++i)
@@ -604,15 +636,13 @@ namespace MoleHole
         return node;
     }
 
-    Node CreateGetterNode(const int id, const NodeSubType category)
+    Node CreateGetterNode(const int id, const std::string& component)
     {
         Node node;
-        node.Id = id;
-        node.Type = NodeType::Getter;
-        node.SubType = category;
+        InitComponentNode(node, id, NodeType::Getter, component);
         node.TargetGuid = 0;
 
-        if (const auto* propertyCategory = FindPropertyCategory(category))
+        if (const auto* propertyCategory = FindPropertyCategory(component))
         {
             node.Name = "Get " + propertyCategory->DisplayName;
         }
@@ -652,6 +682,7 @@ namespace MoleHole
             n["SubType"] = NodeSubTypeToString(node.SubType);
             n["VariableName"] = node.VariableName;
             n["TargetGuid"] = node.TargetGuid;
+            if (node.SubType == NodeSubType::Component) { n["Component"] = node.Component; }
             n["ConstantValue"] = EncodeValue(node.ConstantValue);
 
             YAML::Node positionNode;
@@ -717,6 +748,7 @@ namespace MoleHole
                 node.SubType = n["SubType"] ? NodeSubTypeFromString(n["SubType"].as<std::string>()) : NodeSubType::None;
                 node.VariableName = n["VariableName"] ? n["VariableName"].as<std::string>() : std::string{};
                 node.TargetGuid = n["TargetGuid"] ? n["TargetGuid"].as<std::uint64_t>() : std::uint64_t{0};
+                node.Component = n["Component"] ? n["Component"].as<std::string>() : NodeSubTypeToString(node.SubType);
                 if (n["ConstantValue"]) { node.ConstantValue = DecodeValue(n["ConstantValue"]); }
                 if (const auto position = n["Position"]; position && position.IsSequence() && position.size() >= 2)
                 {

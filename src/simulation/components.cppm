@@ -44,74 +44,6 @@ export namespace MoleHole
     constexpr const char* kAnimationGraphDataTypeTag = "__AnimationGraphData";
 }
 
-namespace YAML
-{
-    template <>
-    struct convert<MoleHole::BlackHoleComponent>
-    {
-        static Node encode(const MoleHole::BlackHoleComponent& value)
-        {
-            Node node;
-            node["Mass"] = value.Mass;
-            node["Spin"] = value.Spin;
-            node["Charge"] = value.Charge;
-            node["SpinAxis"] = value.SpinAxis;
-            return node;
-        }
-
-        static bool decode(const Node& node, MoleHole::BlackHoleComponent& out)
-        {
-            if (node["Mass"]) out.Mass = node["Mass"].as<float>();
-            if (node["Spin"]) out.Spin = node["Spin"].as<float>();
-            if (node["Charge"]) out.Charge = node["Charge"].as<float>();
-            if (node["SpinAxis"]) out.SpinAxis = node["SpinAxis"].as<glm::vec3>();
-            return true;
-        }
-    };
-
-    template <>
-    struct convert<MoleHole::SphereComponent>
-    {
-        static Node encode(const MoleHole::SphereComponent& value)
-        {
-            Node node;
-            node["Radius"] = value.Radius;
-            node["Spin"] = value.Spin;
-            node["Color"] = value.Color;
-            node["SpinAxis"] = value.SpinAxis;
-            node["TexturePath"] = value.TexturePath;
-            return node;
-        }
-
-        static bool decode(const Node& node, MoleHole::SphereComponent& out)
-        {
-            if (node["Radius"]) out.Radius = node["Radius"].as<float>();
-            if (node["Spin"]) out.Spin = node["Spin"].as<float>();
-            if (node["Color"]) out.Color = node["Color"].as<glm::vec3>();
-            if (node["SpinAxis"]) out.SpinAxis = node["SpinAxis"].as<glm::vec3>();
-            if (node["TexturePath"]) out.TexturePath = node["TexturePath"].as<std::string>();
-            return true;
-        }
-    };
-
-    template <>
-    struct convert<MoleHole::AnimationGraphComponent>
-    {
-        static Node encode(const MoleHole::AnimationGraphComponent& value)
-        {
-            Node node;
-            node["GraphYaml"] = value.GraphYaml;
-            return node;
-        }
-
-        static bool decode(const Node& node, MoleHole::AnimationGraphComponent& out)
-        {
-            if (node["GraphYaml"]) out.GraphYaml = node["GraphYaml"].as<std::string>();
-            return true;
-        }
-    };
-}
-
 namespace MoleHole
 {
     export void RegisterComponents()
@@ -120,9 +52,38 @@ namespace MoleHole
         std::call_once(flag, []
         {
             GPP::RegisterBaseComponents();
-            GPP::RegisterComponent<BlackHoleComponent>("BlackHole");
-            GPP::RegisterComponent<SphereComponent>("Sphere");
-            GPP::RegisterComponent<AnimationGraphComponent>("AnimationGraph");
+
+            GPP::RegisterComponent<BlackHoleComponent>("BlackHole", GPP::ComponentDescription<BlackHoleComponent>{
+                .DisplayName = "Black Hole",
+                .Fields = {
+                    GPP::Field("Mass", &BlackHoleComponent::Mass,
+                               {.Label = "Mass (solar)", .Min = 0.0f, .Max = 1000.0f, .Speed = 0.01f}),
+                    GPP::Field("Spin", &BlackHoleComponent::Spin, {.Min = 0.0f, .Max = 1.0f, .Speed = 0.01f}),
+                    GPP::Field("Charge", &BlackHoleComponent::Charge, {.Min = 0.0f, .Max = 1.0f, .Speed = 0.01f}),
+                    GPP::Field("SpinAxis", &BlackHoleComponent::SpinAxis,
+                               {.Label = "Spin Axis", .Speed = 0.01f, .Kind = GPP::FieldKind::Direction}),
+                }});
+
+            GPP::RegisterComponent<SphereComponent>("Sphere", GPP::ComponentDescription<SphereComponent>{
+                .Fields = {
+                    GPP::Field("Radius", &SphereComponent::Radius, {.Min = 0.01f, .Max = 100.0f, .Speed = 0.01f}),
+                    GPP::Field("Spin", &SphereComponent::Spin, {.Min = 0.0f, .Max = 1.0f, .Speed = 0.01f}),
+                    GPP::Field("Color", &SphereComponent::Color, {.Kind = GPP::FieldKind::Color}),
+                    GPP::Field("SpinAxis", &SphereComponent::SpinAxis,
+                               {.Label = "Spin Axis", .Speed = 0.01f, .Kind = GPP::FieldKind::Direction}),
+                    GPP::Field("TexturePath", &SphereComponent::TexturePath,
+                               {.Label = "Texture", .Kind = GPP::FieldKind::AssetPath}),
+                }});
+
+            GPP::RegisterComponent<AnimationGraphComponent>("AnimationGraph",
+                GPP::ComponentDescription<AnimationGraphComponent>{
+                    .DisplayName = "Animation Graph",
+                    .Inspectable = false,
+                    .GraphExposed = false,
+                    .Fields = {
+                        GPP::Field("GraphYaml", &AnimationGraphComponent::GraphYaml,
+                                   {.Kind = GPP::FieldKind::Multiline}),
+                    }});
         });
     }
 }
