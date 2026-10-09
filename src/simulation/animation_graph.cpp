@@ -56,6 +56,7 @@ namespace MoleHole
             case NodeType::Print: return "Print";
             case NodeType::Entity: return "Entity";
             case NodeType::Reroute: return "Reroute";
+            case NodeType::Call: return "Call";
             }
             return "Event";
         }
@@ -72,6 +73,7 @@ namespace MoleHole
             if (text == "Print") return NodeType::Print;
             if (text == "Entity") return NodeType::Entity;
             if (text == "Reroute") return NodeType::Reroute;
+            if (text == "Call") return NodeType::Call;
             return NodeType::Event;
         }
 
@@ -111,6 +113,9 @@ namespace MoleHole
             case NodeSubType::VariableGet: return "VariableGet";
             case NodeSubType::VariableSet: return "VariableSet";
             case NodeSubType::Component: return "Component";
+            case NodeSubType::FunctionEntry: return "FunctionEntry";
+            case NodeSubType::FunctionReturn: return "FunctionReturn";
+            case NodeSubType::FunctionCall: return "FunctionCall";
             }
             return "None";
         }
@@ -148,6 +153,9 @@ namespace MoleHole
             if (text == "VariableGet") return NodeSubType::VariableGet;
             if (text == "VariableSet") return NodeSubType::VariableSet;
             if (text == "Component") return NodeSubType::Component;
+            if (text == "FunctionEntry") return NodeSubType::FunctionEntry;
+            if (text == "FunctionReturn") return NodeSubType::FunctionReturn;
+            if (text == "FunctionCall") return NodeSubType::FunctionCall;
             return NodeSubType::None;
         }
 
@@ -782,6 +790,7 @@ namespace MoleHole
             n["VariableName"] = node.VariableName;
             n["TargetGuid"] = node.TargetGuid;
             if (node.SubType == NodeSubType::Component) { n["Component"] = node.Component; }
+            if (!node.FunctionName.empty()) { n["FunctionName"] = node.FunctionName; }
             n["ConstantValue"] = EncodeValue(node.ConstantValue);
 
             YAML::Node positionNode;
@@ -880,6 +889,7 @@ namespace MoleHole
                 node.SubType = n["SubType"] ? NodeSubTypeFromString(n["SubType"].as<std::string>()) : NodeSubType::None;
                 node.VariableName = n["VariableName"] ? n["VariableName"].as<std::string>() : std::string{};
                 node.TargetGuid = n["TargetGuid"] ? n["TargetGuid"].as<std::uint64_t>() : std::uint64_t{0};
+                node.FunctionName = n["FunctionName"] ? n["FunctionName"].as<std::string>() : std::string{};
                 node.Component = n["Component"] ? n["Component"].as<std::string>() : NodeSubTypeToString(node.SubType);
                 if (n["ConstantValue"]) { node.ConstantValue = DecodeValue(n["ConstantValue"]); }
                 if (const auto position = n["Position"]; position && position.IsSequence() && position.size() >= 2)
@@ -913,6 +923,65 @@ namespace MoleHole
         }
 
         return graph;
+    }
+
+    std::string PinTypeToText(const PinType type) { return PinTypeToString(type); }
+    PinType PinTypeFromText(const std::string& text) { return PinTypeFromString(text); }
+    YAML::Node ValueToYaml(const Value& value) { return EncodeValue(value); }
+    Value ValueFromYaml(const YAML::Node& node) { return DecodeValue(node); }
+
+    namespace
+    {
+        YAML::Node EncodeParams(const std::vector<FunctionParam>& params)
+        {
+            YAML::Node list(YAML::NodeType::Sequence);
+            for (const auto& param : params)
+            {
+                YAML::Node p;
+                p["Key"] = param.Key;
+                p["Name"] = param.Name;
+                p["Type"] = PinTypeToString(param.Type);
+                list.push_back(p);
+            }
+            return list;
+        }
+
+        std::vector<FunctionParam> DecodeParams(const YAML::Node& list)
+        {
+            std::vector<FunctionParam> params;
+            if (!list || !list.IsSequence()) { return params; }
+            for (const auto& p : list)
+            {
+                params.push_back(FunctionParam{
+                    p["Key"] ? p["Key"].as<int>() : static_cast<int>(params.size()),
+                    p["Name"] ? p["Name"].as<std::string>() : std::string{},
+                    p["Type"] ? PinTypeFromString(p["Type"].as<std::string>()) : PinType::Float});
+            }
+            return params;
+        }
+    }
+
+    YAML::Node SignatureToNode(const FunctionSignature& signature)
+    {
+        YAML::Node node;
+        node["Pure"] = signature.Pure;
+        node["NextKey"] = signature.NextKey;
+        node["Inputs"] = EncodeParams(signature.Inputs);
+        node["Outputs"] = EncodeParams(signature.Outputs);
+        return node;
+    }
+
+    FunctionSignature SignatureFromNode(const YAML::Node& node)
+    {
+        FunctionSignature signature;
+        if (!node || !node.IsMap()) { return signature; }
+        signature.Pure = node["Pure"] ? node["Pure"].as<bool>() : false;
+        signature.Inputs = DecodeParams(node["Inputs"]);
+        signature.Outputs = DecodeParams(node["Outputs"]);
+        signature.NextKey = node["NextKey"] ? node["NextKey"].as<int>() : 0;
+        for (const auto& param : signature.Inputs) { signature.NextKey = std::max(signature.NextKey, param.Key + 1); }
+        for (const auto& param : signature.Outputs) { signature.NextKey = std::max(signature.NextKey, param.Key + 1); }
+        return signature;
     }
 
     std::string ValueToString(const Value& value)

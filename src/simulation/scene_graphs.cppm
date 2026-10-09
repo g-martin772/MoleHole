@@ -9,7 +9,7 @@ import :Simulation.AnimationGraph;
 
 export namespace MoleHole
 {
-    constexpr int kSceneGraphsVersion = 2;
+    constexpr int kSceneGraphsVersion = 3;
     constexpr const char* kSceneGraphsKey = "Graphs";
     constexpr const char* kMainGraphName = "Main";
 
@@ -18,6 +18,8 @@ export namespace MoleHole
         std::string Name;
         bool Enabled{true};
         std::uint64_t EntityGuid{0};
+        bool IsFunction{false};
+        FunctionSignature Signature;
         AnimationGraphData Graph;
     };
 
@@ -46,7 +48,7 @@ export namespace MoleHole
     [[nodiscard]] inline YAML::Node SceneGraphsToNode(const SceneGraphs& graphs)
     {
         YAML::Node root;
-        root["Version"] = graphs.Version;
+        root["Version"] = kSceneGraphsVersion;
         YAML::Node items(YAML::NodeType::Sequence);
         for (const auto& item : graphs.Items)
         {
@@ -54,6 +56,11 @@ export namespace MoleHole
             entry["Name"] = item.Name;
             entry["Enabled"] = item.Enabled;
             entry["Entity"] = item.EntityGuid;
+            if (item.IsFunction)
+            {
+                entry["IsFunction"] = true;
+                entry["Signature"] = SignatureToNode(item.Signature);
+            }
             entry["Graph"] = GraphToNode(item.Graph);
             items.push_back(entry);
         }
@@ -75,6 +82,8 @@ export namespace MoleHole
                 graph.Name = graphs.UniqueName(graph.Name);
                 graph.Enabled = entry["Enabled"] ? entry["Enabled"].as<bool>() : true;
                 graph.EntityGuid = entry["Entity"] ? entry["Entity"].as<std::uint64_t>() : std::uint64_t{0};
+                graph.IsFunction = entry["IsFunction"] ? entry["IsFunction"].as<bool>() : false;
+                if (graph.IsFunction) graph.Signature = SignatureFromNode(entry["Signature"]);
                 if (entry["Graph"]) graph.Graph = GraphFromNode(entry["Graph"]);
                 graphs.Items.push_back(std::move(graph));
             }

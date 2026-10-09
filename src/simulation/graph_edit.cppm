@@ -16,6 +16,25 @@ export namespace MoleHole
         return nullptr;
     }
 
+    // Math nodes declare Float pins but operate on any numeric type, so they accept and produce all numeric pins.
+    [[nodiscard]] inline bool IsGenericMathNode(const Node& node)
+    {
+        return node.Type == NodeType::Function && node.SubType != NodeSubType::LookAt &&
+               node.SubType != NodeSubType::And && node.SubType != NodeSubType::Or;
+    }
+
+    [[nodiscard]] inline bool IsNumericPin(const PinType type)
+    {
+        return type == PinType::Float || type == PinType::Int || type == PinType::Vec2 || type == PinType::Vec3 ||
+               type == PinType::Vec4;
+    }
+
+    [[nodiscard]] inline bool PinsLinkable(const Node& fromNode, const Pin& out, const Node& toNode, const Pin& in)
+    {
+        if (ArePinsCompatible(out.Type, in.Type)) return true;
+        return IsNumericPin(out.Type) && IsNumericPin(in.Type) && (IsGenericMathNode(fromNode) || IsGenericMathNode(toNode));
+    }
+
     [[nodiscard]] inline bool CanLink(const AnimationGraphData& graph, const int outputPinId, const int inputPinId)
     {
         const Node* from = graph.FindNodeByOutputPin(outputPinId);
@@ -23,7 +42,7 @@ export namespace MoleHole
         if (!from || !to || from == to) return false;
         const Pin* out = FindPin(graph, outputPinId);
         const Pin* in = FindPin(graph, inputPinId);
-        if (!out || !in || out->IsInput || !in->IsInput || !ArePinsCompatible(out->Type, in->Type)) return false;
+        if (!out || !in || out->IsInput || !in->IsInput || !PinsLinkable(*from, *out, *to, *in)) return false;
         return std::ranges::none_of(graph.Links, [inputPinId](const Link& l) { return l.EndPinId == inputPinId; });
     }
 

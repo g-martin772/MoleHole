@@ -33,6 +33,7 @@ export namespace MoleHole
         Print,
         Entity,
         Reroute,
+        Call,
     };
 
     enum class NodeSubType
@@ -72,6 +73,9 @@ export namespace MoleHole
 
         // Decomposer/Setter/Getter for any registered component (named by Node::Component)
         Component,
+
+        // Functions: entry/return live inside a function graph, call nodes in any graph (named by Node::FunctionName)
+        FunctionEntry, FunctionReturn, FunctionCall,
     };
 
     constexpr int kPinIdStride = 1000;
@@ -99,6 +103,7 @@ export namespace MoleHole
         std::string VariableName;
         std::uint64_t TargetGuid{0};
         std::string Component;
+        std::string FunctionName;
         glm::vec2 Position{0.0f, 0.0f};
     };
 
@@ -114,6 +119,22 @@ export namespace MoleHole
         std::string Name;
         PinType Type{PinType::Float};
         Value Default;
+    };
+
+    struct FunctionParam
+    {
+        int Key{0};
+        std::string Name;
+        PinType Type{PinType::Float};
+    };
+
+    // A non-pure function also has one flow input and one flow output; Key keeps pin ids stable across edits.
+    struct FunctionSignature
+    {
+        bool Pure{false};
+        std::vector<FunctionParam> Inputs;
+        std::vector<FunctionParam> Outputs;
+        int NextKey{0};
     };
 
     struct Comment
@@ -182,6 +203,13 @@ export namespace MoleHole
     [[nodiscard]] AnimationGraphData DeserializeFromYaml(const std::string& yaml);
 
     [[nodiscard]] std::string ValueToString(const Value& value);
+
+    [[nodiscard]] std::string PinTypeToText(PinType type);
+    [[nodiscard]] PinType PinTypeFromText(const std::string& text);
+    [[nodiscard]] YAML::Node ValueToYaml(const Value& value);
+    [[nodiscard]] Value ValueFromYaml(const YAML::Node& node);
+    [[nodiscard]] YAML::Node SignatureToNode(const FunctionSignature& signature);
+    [[nodiscard]] FunctionSignature SignatureFromNode(const YAML::Node& node);
 
     template <typename T>
     [[nodiscard]] T GetValueAs(const Value& value, T defaultValue = T{})

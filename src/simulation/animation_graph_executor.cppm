@@ -6,6 +6,7 @@ import GPP;
 import :Simulation.AnimationGraph;
 import :Simulation.AnimationGraphProperties;
 import :Simulation.SceneGraphs;
+import :Simulation.GraphFunctions;
 
 export namespace MoleHole
 {
@@ -19,6 +20,7 @@ export namespace MoleHole
                                std::uint64_t selfGuid = 0);
 
         void SetGuidSource(std::function<std::uint64_t()> source) { m_GuidSource = std::move(source); }
+        void SetFunctionLibrary(const FunctionLibrary* library) { m_Functions = library; }
 
         [[nodiscard]] PendingWrites ExecuteStartEvent(const GPP::Scene& scene);
         [[nodiscard]] PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime);
@@ -38,6 +40,12 @@ export namespace MoleHole
         std::function<std::uint64_t()> m_GuidSource;
         std::unordered_map<std::string, Value> m_Variables;
         std::unordered_map<int, Value> m_PinValues;
+        const FunctionLibrary* m_Functions{nullptr};
+        std::vector<std::string> m_CallStack;
+        std::vector<Value> m_ReturnValues;
+        bool m_Returned{false};
+        std::unordered_set<int> m_Evaluating;
+        int m_FlowDepth{0};
 
         void ExecuteFlowFromPin(int pinId, ExecutionContext& ctx);
         void ExecuteNode(const Node* node, ExecutionContext& ctx);
@@ -54,6 +62,9 @@ export namespace MoleHole
         [[nodiscard]] static bool EntityKnown(const ExecutionContext& ctx, std::uint64_t guid);
         void ExecuteControlFlow(const Node* node, ExecutionContext& ctx);
         void ExecutePrint(const Node* node, ExecutionContext& ctx);
+        void ExecuteCall(const Node* node, ExecutionContext& ctx);
+        std::vector<Value> RunFunction(const std::string& name, const FunctionDefinition& definition,
+                                       const std::vector<Value>& args, ExecutionContext& ctx);
         Value ExecuteVariableGet(const Node* node);
         void ExecuteVariableSet(const Node* node, ExecutionContext& ctx);
     };
@@ -69,6 +80,7 @@ export namespace MoleHole
         [[nodiscard]] PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime);
 
     private:
+        std::unique_ptr<FunctionLibrary> m_Functions;
         std::vector<std::unique_ptr<GraphExecutor>> m_Executors;
     };
 }

@@ -4,6 +4,7 @@ import :Simulation.AnimationGraphExecutor;
 import :Simulation.AnimationGraph;
 import :Simulation.AnimationGraphProperties;
 import :Simulation.SceneGraphs;
+import :Simulation.GraphFunctions;
 import :Simulation.CameraMath;
 import :Simulation.EntityPresets;
 import :Simulation.Components;
@@ -16,6 +17,8 @@ namespace MoleHole
     namespace
     {
         constexpr int kMaxForIterations = 100000;
+        constexpr int kMaxCallDepth = 16;
+        constexpr int kMaxFlowDepth = 512;
     }
 
     GraphExecutor::GraphExecutor(const AnimationGraphData& graph, std::function<void(std::string)> onPrint,
@@ -29,11 +32,13 @@ namespace MoleHole
     }
 
     GraphSetExecutor::GraphSetExecutor(const SceneGraphs& graphs, std::function<void(std::string)> onPrint)
+        : m_Functions(std::make_unique<FunctionLibrary>(BuildFunctionLibrary(graphs)))
     {
         for (const auto& item : graphs.Items)
         {
-            if (!item.Enabled) continue;
+            if (!item.Enabled || item.IsFunction) continue;
             m_Executors.push_back(std::make_unique<GraphExecutor>(item.Graph, onPrint, item.EntityGuid));
+            m_Executors.back()->SetFunctionLibrary(m_Functions.get());
         }
     }
 
@@ -99,8 +104,11 @@ namespace MoleHole
 
     void GraphExecutor::ExecuteFlowFromPin(const int pinId, ExecutionContext& ctx)
     {
+        if (m_FlowDepth >= kMaxFlowDepth) { return; }
+        ++m_FlowDepth;
         for (const auto& link : m_Graph.Links)
         {
+            if (m_Returned) { break; }
             if (link.StartPinId == pinId)
             {
                 if (const Node* target = m_Graph.FindNodeByInputPin(link.EndPinId))
@@ -109,6 +117,7 @@ namespace MoleHole
                 }
             }
         }
+        --m_FlowDepth;
     }
 
     void GraphExecutor::ExecuteNode(const Node* node, ExecutionContext& ctx)
@@ -124,6 +133,10 @@ namespace MoleHole
             break;
         case NodeType::Reroute:
             if (!node->Outputs.empty()) { ExecuteFlowFromPin(node->Outputs[0].Id, ctx); }
+            break;
+        case NodeType::Call:
+            ExecuteCall(node, ctx);
+            if (!node->Outputs.empty() && node->Outputs[0].Type == PinType::Flow) { ExecuteFlowFromPin(node->Outputs[0].Id, ctx); }
             break;
         case NodeType::Entity:
             ExecuteEntityNode(node, ctx);
@@ -170,6 +183,21 @@ namespace MoleHole
 
         const Node* sourceNode = m_Graph.FindNodeByOutputPin(outputPinId);
         if (!sourceNode) { return std::monostate{}; }
+
+        if (!m_Evaluating.insert(outputPinId).second) { return std::monostate{}; }
+        struct Release
+        {
+            std::unordered_set<int>& Set;
+            int Pin;
+            ~Release() { Set.erase(Pin); }
+        } release{m_Evaluating, outputPinId};
+
+        if (sourceNode->Type == NodeType::Call)
+        {
+            if (!sourceNode->Outputs.empty() && sourceNode->Outputs[0].Type != PinType::Flow) { ExecuteCall(sourceNode, ctx); }
+            const auto it = m_PinValues.find(outputPinId);
+            return it != m_PinValues.end() ? it->second : Value{std::monostate{}};
+        }
 
         if (sourceNode->Type == NodeType::Decomposer)
         {
@@ -546,7 +574,16 @@ namespace MoleHole
 
     void GraphExecutor::ExecuteControlFlow(const Node* node, ExecutionContext& ctx)
     {
-        if (node->SubType == NodeSubType::Branch)
+        if (node->SubType == NodeSubType::FunctionReturn)
+        {
+            m_ReturnValues.clear();
+            for (const auto& pin : node->Inputs)
+            {
+                if (pin.Type != PinType::Flow) { m_ReturnValues.push_back(EvaluatePinValue(pin.Id, ctx)); }
+            }
+            m_Returned = true;
+        }
+        else if (node->SubType == NodeSubType::Branch)
         {
             if (node->Inputs.size() < 2) { return; }
             const bool condition = GetValueAs<bool>(EvaluatePinValue(node->Inputs[1].Id, ctx), false);
@@ -566,7 +603,7 @@ namespace MoleHole
             const int end = GetValueAs<int>(EvaluatePinValue(node->Inputs[2].Id, ctx), 0);
 
             int iterations = 0;
-            for (int i = start; i < end; ++i)
+            for (int i = start; i < end && !m_Returned; ++i)
             {
                 if (++iterations > kMaxForIterations)
                 {
@@ -593,6 +630,86 @@ namespace MoleHole
         if (node->Inputs.size() < 2) { return; }
         const Value val = EvaluatePinValue(node->Inputs[1].Id, ctx);
         if (m_OnPrint) { m_OnPrint(ValueToString(val)); }
+    }
+
+    std::vector<Value> GraphExecutor::RunFunction(const std::string& name, const FunctionDefinition& definition,
+                                                  const std::vector<Value>& args, ExecutionContext& ctx)
+    {
+        GraphExecutor callee(*definition.Graph, m_OnPrint, m_SelfGuid);
+        callee.m_GuidSource = m_GuidSource;
+        callee.m_Functions = m_Functions;
+        callee.m_CallStack = m_CallStack;
+        callee.m_CallStack.push_back(name);
+
+        const Node* entry = nullptr;
+        const Node* ret = nullptr;
+        for (const auto& node : definition.Graph->Nodes)
+        {
+            if (!entry && node.SubType == NodeSubType::FunctionEntry) { entry = &node; }
+            if (!ret && node.SubType == NodeSubType::FunctionReturn) { ret = &node; }
+        }
+
+        std::vector<Value> results;
+        for (const auto& param : definition.Signature->Outputs) { results.push_back(DefaultValueFor(param.Type)); }
+        if (!entry) { return results; }
+
+        std::size_t argIndex = 0;
+        for (const auto& pin : entry->Outputs)
+        {
+            if (pin.Type == PinType::Flow) { continue; }
+            if (argIndex < args.size()) { callee.m_PinValues[pin.Id] = args[argIndex]; }
+            ++argIndex;
+        }
+
+        if (definition.Signature->Pure)
+        {
+            if (!ret) { return results; }
+            std::size_t index = 0;
+            for (const auto& pin : ret->Inputs)
+            {
+                if (pin.Type == PinType::Flow) { continue; }
+                if (index < results.size()) { results[index] = callee.EvaluatePinValue(pin.Id, ctx); }
+                ++index;
+            }
+            return results;
+        }
+
+        if (!entry->Outputs.empty() && entry->Outputs[0].Type == PinType::Flow)
+        {
+            callee.ExecuteFlowFromPin(entry->Outputs[0].Id, ctx);
+        }
+        for (std::size_t i = 0; i < results.size() && i < callee.m_ReturnValues.size(); ++i)
+        {
+            if (!std::holds_alternative<std::monostate>(callee.m_ReturnValues[i])) { results[i] = callee.m_ReturnValues[i]; }
+        }
+        return results;
+    }
+
+    void GraphExecutor::ExecuteCall(const Node* node, ExecutionContext& ctx)
+    {
+        if (!m_Functions) { return; }
+        const auto it = m_Functions->find(node->FunctionName);
+        if (it == m_Functions->end()) { return; }
+        if (static_cast<int>(m_CallStack.size()) >= kMaxCallDepth ||
+            std::ranges::contains(m_CallStack, node->FunctionName))
+        {
+            return;
+        }
+
+        std::vector<Value> args;
+        for (const auto& pin : node->Inputs)
+        {
+            if (pin.Type != PinType::Flow) { args.push_back(EvaluatePinValue(pin.Id, ctx)); }
+        }
+        const auto results = RunFunction(node->FunctionName, it->second, args, ctx);
+
+        std::size_t index = 0;
+        for (const auto& pin : node->Outputs)
+        {
+            if (pin.Type == PinType::Flow) { continue; }
+            if (index < results.size()) { m_PinValues[pin.Id] = results[index]; }
+            ++index;
+        }
     }
 
     Value GraphExecutor::ExecuteVariableGet(const Node* node)

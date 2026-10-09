@@ -271,6 +271,7 @@ namespace
             if (m_Current >= m_Graphs.Items.size()) return;
             auto& history = History();
             if (!(undo ? history.Undo(CurrentGraph()) : history.Redo(CurrentGraph()))) return;
+            if (m_Graphs.Items[m_Current].IsFunction) SyncFunction(m_Graphs, m_Graphs.Items[m_Current].Name);
             m_SelectedNodeId = 0;
             m_RestorePositions = true;
             StructureChanged();
@@ -328,7 +329,10 @@ namespace
             {
                 for (std::size_t i = 0; i < m_Graphs.Items.size(); ++i)
                 {
-                    if (ImGui::Selectable(m_Graphs.Items[i].Name.c_str(), i == m_Current)) SelectGraph(i);
+                    const std::string label = (m_Graphs.Items[i].IsFunction ? "fn  " : "") + m_Graphs.Items[i].Name;
+                    ImGui::PushID(static_cast<int>(i));
+                    if (ImGui::Selectable(label.c_str(), i == m_Current)) SelectGraph(i);
+                    ImGui::PopID();
                 }
                 ImGui::EndCombo();
             }
@@ -337,6 +341,12 @@ namespace
             {
                 m_Graphs.Items.push_back(NamedGraph{.Name = m_Graphs.UniqueName("Graph")});
                 SelectGraph(m_Graphs.Items.size() - 1);
+                StructureChanged();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("New Function"))
+            {
+                SelectGraph(AddFunctionGraph(m_Graphs));
                 StructureChanged();
             }
             ImGui::SameLine();
@@ -367,9 +377,13 @@ namespace
                     const std::string name = m_RenameBuffer.data();
                     if (name != m_Graphs.Items[m_Current].Name)
                     {
+                        const std::string oldName = m_Graphs.Items[m_Current].Name;
                         m_Graphs.Items[m_Current].Name.clear();
-                        m_Graphs.Items[m_Current].Name = m_Graphs.UniqueName(name);
-                        MarkDirty();
+                        const std::string unique = m_Graphs.UniqueName(name);
+                        m_Graphs.Items[m_Current].Name = oldName;
+                        if (m_Graphs.Items[m_Current].IsFunction) RenameFunction(m_Graphs, oldName, unique);
+                        else m_Graphs.Items[m_Current].Name = unique;
+                        StructureChanged();
                     }
                     ImGui::CloseCurrentPopup();
                 }
@@ -938,7 +952,9 @@ namespace
                 m_PaletteSelected = 0;
             }
 
-            const auto extra = VariableNodeEntries(CurrentGraph());
+            auto extra = VariableNodeEntries(CurrentGraph());
+            std::ranges::move(FunctionNodeEntries(m_Graphs, m_Current < m_Graphs.Items.size() ? &m_Graphs.Items[m_Current] : nullptr),
+                              std::back_inserter(extra));
             const std::string query = m_PaletteQuery.data();
             const auto results = Registry().Search(query, m_PaletteFilter, m_Recents, extra);
             const int count = static_cast<int>(results.size());
@@ -1061,6 +1077,10 @@ namespace
                 break;
             case NodeType::Print:
                 drawList->AddRect(pos, ImVec2(pos.x + iconSize, pos.y + iconSize), ImColor(iconColor), 2.0f, 0, 2.0f);
+                break;
+            case NodeType::Call:
+                drawList->AddTriangleFilled(ImVec2(pos.x, pos.y), ImVec2(pos.x + iconSize, pos.y + iconSize / 2),
+                                            ImVec2(pos.x, pos.y + iconSize), ImColor(iconColor));
                 break;
             case NodeType::Reroute:
                 break;
@@ -1232,6 +1252,8 @@ namespace
                 return;
             }
 
+            const bool dangling = node.SubType == NodeSubType::FunctionCall && !FunctionExists(node.FunctionName);
+            if (dangling) ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.95f, 0.2f, 0.2f, 1.0f));
             ed::PushStyleVar(ed::StyleVar_NodePadding, ImVec4(0, 0, 0, 0));
             ed::PushStyleVar(ed::StyleVar_NodeRounding, kNodeRounding);
 
@@ -1242,6 +1264,7 @@ namespace
             ed::EndNode();
 
             ed::PopStyleVar(2);
+            if (dangling) ed::PopStyleColor();
         }
 
         // ---- inspector panel -------------------------------------------------------------------
@@ -1250,7 +1273,77 @@ namespace
         {
             RenderSelectionDetails(entities);
             ImGui::Spacing();
+            RenderSignaturePanel();
             RenderVariablesPanel();
+        }
+
+        bool FunctionExists(const std::string& name) const
+        {
+            return std::ranges::any_of(m_Graphs.Items, [&](const NamedGraph& g) { return g.IsFunction && g.Name == name; });
+        }
+
+        void RenderSignaturePanel()
+        {
+            if (m_Current >= m_Graphs.Items.size() || !m_Graphs.Items[m_Current].IsFunction) return;
+            if (!ImGui::CollapsingHeader("Function Signature", ImGuiTreeNodeFlags_DefaultOpen)) return;
+
+            auto& named = m_Graphs.Items[m_Current];
+            auto& signature = named.Signature;
+            bool changed = ImGui::Checkbox("Pure", &signature.Pure);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pure functions have no flow pins and are evaluated on demand");
+
+            for (const bool output : {false, true})
+            {
+                ImGui::Spacing();
+                ImGui::TextDisabled(output ? "Outputs" : "Inputs");
+                auto& params = output ? signature.Outputs : signature.Inputs;
+                int removeKey = -1;
+                for (auto& param : params)
+                {
+                    ImGui::PushID(param.Key + (output ? 10000 : 0));
+                    const bool editing = m_ParamEdit.Active && m_ParamEdit.Output == output && m_ParamEdit.Key == param.Key;
+                    std::string text = editing ? m_ParamEdit.Text : param.Name;
+                    ImGui::SetNextItemWidth(100.0f);
+                    if (TextValue("##paramname", text)) m_ParamEdit = {true, output, param.Key, text};
+                    if (ImGui::IsItemDeactivatedAfterEdit())
+                    {
+                        if (RenameParam(signature, output, param.Key, m_ParamEdit.Text)) changed = true;
+                        m_ParamEdit = {};
+                    }
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(70.0f);
+                    if (ImGui::BeginCombo("##paramtype", PinTypeName(param.Type)))
+                    {
+                        for (const PinType type : {PinType::Bool, PinType::Float, PinType::Int, PinType::Vec2, PinType::Vec3,
+                                                   PinType::Vec4, PinType::String, PinType::Object})
+                        {
+                            if (ImGui::Selectable(PinTypeName(type), type == param.Type) &&
+                                RetypeParam(signature, output, param.Key, type))
+                            {
+                                changed = true;
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("x")) removeKey = param.Key;
+                    ImGui::PopID();
+                }
+                if (removeKey >= 0) changed |= RemoveParam(signature, output, removeKey);
+                ImGui::PushID(output ? "addout" : "addin");
+                if (ImGui::SmallButton(output ? "+ Output" : "+ Input"))
+                {
+                    AddParam(signature, output, output ? "Result" : "Input", PinType::Float);
+                    changed = true;
+                }
+                ImGui::PopID();
+            }
+
+            if (changed)
+            {
+                SyncFunction(m_Graphs, named.Name);
+                StructureChanged();
+            }
         }
 
         void RenderSelectionDetails(const std::vector<EntityOption>& entities)
@@ -1533,6 +1626,15 @@ namespace
         bool m_NeedsPositionRestore = true;
         int m_PendingNavigateFrames = 0;
         int m_SelectedNodeId = 0;
+
+        struct ParamEdit
+        {
+            bool Active{false};
+            bool Output{false};
+            int Key{0};
+            std::string Text;
+        };
+        ParamEdit m_ParamEdit;
 
         std::string m_LastSceneName;
         bool m_WasPaused = true;
