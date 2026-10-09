@@ -56,6 +56,11 @@ namespace
                     m_IntroPublishedActive = false;
                     m_Frame.Publish(IntroFrame{});
                 }
+                if (!m_TargetDetachRequested)
+                {
+                    m_TargetDetachRequested = true;
+                    m_Renderer->DetachBufferTarget(m_LayerTarget.Id);
+                }
                 return;
             }
 
@@ -232,6 +237,7 @@ namespace
         IntroTimeline m_Timeline;
         ImFont* m_TitleFont = nullptr;
         bool m_IntroPublishedActive = false;
+        bool m_TargetDetachRequested = false;
 
         LatestValue<IntroFrame> m_Frame;
 
