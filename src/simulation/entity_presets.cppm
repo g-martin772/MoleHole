@@ -63,4 +63,31 @@ export namespace MoleHole
         }
         return entity;
     }
+
+    // The spawn as a replayable command; `reference` decides whether a new camera becomes the primary one.
+    inline std::optional<GPP::SpawnEntityCommand> MakeSpawnPresetCommand(
+        const GPP::Scene& reference, const std::uint64_t guid, const std::string_view preset,
+        const glm::vec3& position, const std::optional<glm::quat>& rotation = std::nullopt)
+    {
+        GPP::Scene scratch;
+        const auto entity = SpawnPreset(scratch, guid, preset, position);
+        if (!scratch.IsValid(entity)) return std::nullopt;
+        auto& registry = scratch.Registry();
+        if (auto* camera = registry.try_get<GPP::CameraComponent>(entity))
+        {
+            camera->Primary = !std::ranges::any_of(reference.Registry().view<const GPP::CameraComponent>().each(),
+                                                   [](const auto& row) { return std::get<1>(row).Primary; });
+        }
+        if (rotation) { registry.get<GPP::TransformComponent>(entity).Rotation = *rotation; }
+        return GPP::SpawnEntityCommand{guid, scratch.SerializeEntity(entity)};
+    }
+
+    inline GPP::SpawnEntityCommand MakeSpawnEmptyCommand(const std::uint64_t guid, const std::uint64_t parent)
+    {
+        GPP::Scene scratch;
+        const auto entity = scratch.CreateEntityWithGuid(guid, "Empty", "Empty");
+        scratch.Registry().emplace<GPP::TransformComponent>(entity);
+        if (parent != 0) { scratch.Registry().emplace<GPP::HierarchyComponent>(entity, parent); }
+        return GPP::SpawnEntityCommand{guid, scratch.SerializeEntity(entity)};
+    }
 }

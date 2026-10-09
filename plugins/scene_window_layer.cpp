@@ -14,20 +14,21 @@ namespace
     void EditField(SimulationRunner& runner, std::uint64_t guid, std::string component, std::string field,
                    FieldValue value)
     {
-        runner.EnqueueTrackedEdit([guid, component = std::move(component), field = std::move(field),
-                                   value = std::move(value)](Scene& scene)
-        {
-            const auto entity = scene.FindByGuid(guid);
-            if (!scene.IsValid(entity)) return;
-            const auto* info = ComponentRegistry::Instance().FindByName(component);
-            if (!info) return;
-            for (const auto& candidate : info->Fields)
-            {
-                if (candidate.Name != field || !candidate.Set) continue;
-                if (candidate.Set(scene.Registry(), entity, value)) scene.MarkDirty(entity);
-                return;
-            }
-        });
+        CommandOptions options;
+        options.Undoable = runner.IsPaused();
+        options.Label = "Edit " + field;
+        options.CoalesceKey = std::format("{}:{}:{}", guid, component, field);
+        runner.EnqueueCommand(SetFieldCommand{guid, std::move(component), std::move(field), std::move(value)},
+                              std::move(options));
+    }
+
+    CommandOptions UndoStep(const SimulationRunner& runner, std::string label, std::string key = {})
+    {
+        CommandOptions options;
+        options.Undoable = runner.IsPaused();
+        options.Label = std::move(label);
+        options.CoalesceKey = std::move(key);
+        return options;
     }
 
     constexpr float kRowHeight = 24.0f;
@@ -197,6 +198,8 @@ namespace
                 return;
             }
 
+            if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) HandleSceneUndoShortcuts(*runner);
+
             ImFont* icons = m_UiState->IconFont;
             ImGui::TextDisabled("%s", m_UiState->CurrentScenePath.empty() ? "(unsaved)"
                                                                           : m_UiState->CurrentScenePath.c_str());
@@ -218,8 +221,8 @@ namespace
 
             if (BeginSection(icons, "Outliner"))
             {
-                RenderToolbar(*runner);
                 auto sceneLock = runner->LockRenderScene();
+                RenderToolbar(*runner, *sceneLock);
                 RenderOutliner(*runner, *sceneLock);
                 EndSection();
             }
@@ -234,33 +237,25 @@ namespace
 
     private:
 
-        void RenderToolbar(SimulationRunner& runner)
+        void RenderToolbar(SimulationRunner& runner, const Scene& scene)
         {
-            if (ImGui::Button("Black Hole"))
+            const auto spawn = [&](const char* label, const std::string_view preset, const glm::vec3& position,
+                                   const std::optional<glm::quat>& rotation = std::nullopt)
             {
-                runner.EnqueueEdit([](Scene& scene)
+                if (const auto command = MakeSpawnPresetCommand(scene, GPP::GenerateGuid(), preset, position, rotation))
                 {
-                    SpawnPreset(scene, GPP::GenerateGuid(), "BlackHole", {0.0f, 0.0f, -10.0f});
-                });
-            }
+                    runner.EnqueueCommand(*command, UndoStep(runner, std::string("Add ") + label));
+                }
+            };
+            if (ImGui::Button("Black Hole")) spawn("Black Hole", "BlackHole", {0.0f, 0.0f, -10.0f});
             ImGui::SameLine();
-            if (ImGui::Button("Sphere"))
-            {
-                runner.EnqueueEdit([](Scene& scene)
-                {
-                    SpawnPreset(scene, GPP::GenerateGuid(), "Sphere", {5.0f, 0.0f, 0.0f});
-                });
-            }
+            if (ImGui::Button("Sphere")) spawn("Sphere", "Sphere", {5.0f, 0.0f, 0.0f});
             ImGui::SameLine();
             if (ImGui::Button("Camera"))
             {
                 const glm::vec3 position = m_UiState->ViewPosition;
-                const glm::quat rotation = GPP::LookAtRotation(position, position + m_UiState->ViewFront, m_UiState->ViewUp);
-                runner.EnqueueEdit([position, rotation](Scene& scene)
-                {
-                    const auto entity = SpawnPreset(scene, GPP::GenerateGuid(), "Camera", position);
-                    if (scene.IsValid(entity)) scene.Registry().get<TransformComponent>(entity).Rotation = rotation;
-                });
+                spawn("Camera", "Camera", position,
+                      GPP::LookAtRotation(position, position + m_UiState->ViewFront, m_UiState->ViewUp));
             }
             ImGui::SameLine();
             if (ImGui::Button("Empty")) SpawnEmpty(runner, 0);
@@ -271,93 +266,45 @@ namespace
 
         static void SpawnEmpty(SimulationRunner& runner, std::uint64_t parent)
         {
-            runner.EnqueueEdit([parent](Scene& scene)
-            {
-                const auto entity = scene.CreateEntity("Empty", "Empty");
-                scene.Registry().emplace<TransformComponent>(entity);
-                if (parent != 0) scene.Registry().emplace<HierarchyComponent>(entity, parent);
-            });
+            runner.EnqueueCommand(MakeSpawnEmptyCommand(GPP::GenerateGuid(), parent), UndoStep(runner, "Add Empty"));
         }
 
         static void Reparent(SimulationRunner& runner, std::vector<std::uint64_t> guids, std::uint64_t parent)
         {
-            runner.EnqueueTrackedEdit([guids = std::move(guids), parent](Scene& scene)
-            {
-                for (const auto guid : guids)
-                {
-                    const auto entity = scene.FindByGuid(guid);
-                    if (!scene.IsValid(entity)) continue;
-                    if (parent == 0) scene.Registry().remove<HierarchyComponent>(entity);
-                    else scene.Registry().emplace_or_replace<HierarchyComponent>(entity, parent);
-                    scene.MarkDirty(entity);
-                }
-            });
+            std::vector<Command> commands;
+            for (const auto guid : guids) commands.push_back(SetParentCommand{guid, parent});
+            runner.EnqueueCommands(std::move(commands), UndoStep(runner, "Reparent"));
         }
 
         static void Rename(SimulationRunner& runner, std::uint64_t guid, std::string name)
         {
-            runner.EnqueueTrackedEdit([guid, name = std::move(name)](Scene& scene)
-            {
-                const auto entity = scene.FindByGuid(guid);
-                if (!scene.IsValid(entity)) return;
-                if (auto* metadata = scene.Registry().try_get<MetadataComponent>(entity)) metadata->Name = name;
-                scene.MarkDirty(entity);
-            });
+            runner.EnqueueCommand(SetFieldCommand{guid, "Metadata", "Name", std::move(name)},
+                                  UndoStep(runner, "Rename", std::format("rename:{}", guid)));
         }
 
-        static void Duplicate(SimulationRunner& runner, std::vector<std::uint64_t> guids)
+        static void Duplicate(SimulationRunner& runner, const std::vector<OutlinerEntry>& entries,
+                              const std::vector<std::uint64_t>& guids)
         {
-            runner.EnqueueEdit([guids = std::move(guids)](Scene& scene)
+            std::vector<Command> commands;
+            for (const auto guid : guids)
             {
-                for (const auto guid : guids)
-                {
-                    const auto source = scene.FindByGuid(guid);
-                    if (!scene.IsValid(source)) continue;
-                    const auto& metadata = scene.Registry().get<MetadataComponent>(source);
-                    const auto copy = scene.CreateEntity(metadata.Name + " Copy", metadata.TypeTag);
-                    ComponentRegistry::Instance().ForEach([&](const ComponentTypeInfo& info)
-                    {
-                        if (info.Name == "Metadata" || !info.Serializable || !info.Add || !info.Has ||
-                            !info.Has(scene.Registry(), source))
-                        {
-                            return;
-                        }
-                        info.Add(scene.Registry(), copy);
-                        for (const auto& field : info.Fields)
-                        {
-                            if (!field.Set) continue;
-                            const auto value = field.Get(scene.Registry(), source);
-                            if (!std::holds_alternative<std::monostate>(value))
-                            {
-                                field.Set(scene.Registry(), copy, value);
-                            }
-                        }
-                    });
-                    scene.MarkDirty(copy);
-                }
-            });
+                const auto entry = std::ranges::find(entries, guid, &OutlinerEntry::Guid);
+                if (entry == entries.end()) continue;
+                const auto copy = GPP::GenerateGuid();
+                commands.push_back(CloneEntityCommand{guid, copy});
+                commands.push_back(SetFieldCommand{copy, "Metadata", "Name", entry->Name + " Copy"});
+            }
+            runner.EnqueueCommands(std::move(commands), UndoStep(runner, "Duplicate"));
         }
 
         void DeleteEntities(SimulationRunner& runner, const std::vector<OutlinerEntry>& entries,
                             const std::unordered_set<std::uint64_t>& guids)
         {
             const auto orphans = OrphanedChildren(entries, guids);
-            const std::vector<std::uint64_t> removed(guids.begin(), guids.end());
-            runner.EnqueueEdit([removed, orphans](Scene& scene)
-            {
-                for (const auto child : orphans)
-                {
-                    const auto entity = scene.FindByGuid(child);
-                    if (!scene.IsValid(entity)) continue;
-                    scene.Registry().remove<HierarchyComponent>(entity);
-                    scene.MarkDirty(entity);
-                }
-                for (const auto guid : removed)
-                {
-                    const auto entity = scene.FindByGuid(guid);
-                    if (scene.IsValid(entity)) scene.DestroyEntity(entity);
-                }
-            });
+            std::vector<Command> commands;
+            for (const auto child : orphans) commands.push_back(SetParentCommand{child, 0});
+            for (const auto guid : guids) commands.push_back(DestroyEntityCommand{guid});
+            runner.EnqueueCommands(std::move(commands), UndoStep(runner, "Delete"));
             m_Selection.clear();
             m_UiState->SelectedEntityGuid = 0;
         }
@@ -475,7 +422,7 @@ namespace
                     if (ImGui::MenuItem("Rename", "F2")) StartRename(entry);
                     if (ImGui::MenuItem("Duplicate"))
                     {
-                        Duplicate(runner, {m_Selection.begin(), m_Selection.end()});
+                        Duplicate(runner, entries, {m_Selection.begin(), m_Selection.end()});
                     }
                     if (ImGui::MenuItem("Add Child"))
                     {
@@ -749,14 +696,8 @@ namespace
                 if (!ContainsInsensitive(info.DisplayName, m_AddFilter)) return;
                 any = true;
                 if (!ImGui::MenuItem(info.DisplayName.c_str())) return;
-                runner.EnqueueTrackedEdit([guid, name = info.Name](Scene& s)
-                {
-                    const auto e = s.FindByGuid(guid);
-                    const auto* type = ComponentRegistry::Instance().FindByName(name);
-                    if (!s.IsValid(e) || !type) return;
-                    type->Add(s.Registry(), e);
-                    s.MarkDirty(e);
-                });
+                runner.EnqueueCommand(AddComponentCommand{guid, info.Name, {}},
+                                      UndoStep(runner, "Add " + info.DisplayName));
             });
             if (!any) ImGui::TextDisabled("No matching components");
             ImGui::EndPopup();
@@ -818,14 +759,8 @@ namespace
                 }
                 if (remove && info.Remove)
                 {
-                    runner.EnqueueTrackedEdit([guid, name = info.Name](Scene& s)
-                    {
-                        const auto e = s.FindByGuid(guid);
-                        const auto* type = ComponentRegistry::Instance().FindByName(name);
-                        if (!s.IsValid(e) || !type) return;
-                        type->Remove(s.Registry(), e);
-                        s.MarkDirty(e);
-                    });
+                    runner.EnqueueCommand(RemoveComponentCommand{guid, info.Name},
+                                          UndoStep(runner, "Remove " + info.DisplayName));
                 }
             });
 

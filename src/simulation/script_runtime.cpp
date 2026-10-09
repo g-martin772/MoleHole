@@ -87,6 +87,7 @@ namespace MoleHole
         ITraceSink* Sink{nullptr};
         std::function<void(std::string)> OnPrint;
         std::function<std::uint64_t()> GuidSource{&GPP::GenerateGuid};
+        std::shared_ptr<GPP::SimulationRandom> Random;
         const GPP::Scene* Scene{nullptr};
         PendingWrites* Writes{nullptr};
         std::unordered_set<std::uint64_t> Spawned;
@@ -264,7 +265,7 @@ namespace MoleHole
                 if (!info || call.IsNil(4)) return 0;
                 Value value = call.ToValue(4, GPP::ToLuauType(info->Type));
                 if (std::holds_alternative<std::monostate>(value)) return 0;
-                Writes->push_back(GPP::MakeComponentFieldWrite(call.Entity(2), component, field, std::move(value)));
+                Writes->push_back(GPP::SetFieldCommand{call.Entity(2), component, field, std::move(value)});
                 return 0;
             });
             vm.Register("host", "spawn", [this](GPP::LuauNativeCall& call)
@@ -354,14 +355,9 @@ namespace MoleHole
                     Report(node, TraceSeverity::Warning, "No preset or entity named '" + preset + "'");
                     return 0;
                 }
-                Writes->push_back([guid, sourceGuid, position, name](GPP::Scene& live)
-                {
-                    const auto source = live.FindByGuid(sourceGuid);
-                    const auto copy = live.CloneEntity(source, guid);
-                    if (!live.IsValid(copy)) { return; }
-                    if (auto* transform = live.Registry().try_get<GPP::TransformComponent>(copy)) { transform->Position = position; }
-                    if (!name.empty()) { live.Registry().get<GPP::MetadataComponent>(copy).Name = name; }
-                });
+                Writes->push_back(GPP::CloneEntityCommand{sourceGuid, guid});
+                Writes->push_back(GPP::SetFieldCommand{guid, "Transform", "Position", position});
+                if (!name.empty()) { Writes->push_back(GPP::SetFieldCommand{guid, "Metadata", "Name", name}); }
             }
             Spawned.insert(guid);
             return guid;
@@ -375,7 +371,7 @@ namespace MoleHole
                 return;
             }
             Spawned.erase(guid);
-            Writes->push_back([guid](GPP::Scene& live) { live.DestroyEntity(live.FindByGuid(guid)); });
+            Writes->push_back(GPP::DestroyEntityCommand{guid});
         }
 
         std::uint64_t Clone(const int node, const std::uint64_t sourceGuid, const std::optional<glm::vec3>& position)
@@ -386,12 +382,8 @@ namespace MoleHole
                 return 0;
             }
             const std::uint64_t guid = GuidSource();
-            Writes->push_back([guid, sourceGuid, position](GPP::Scene& live)
-            {
-                const auto copy = live.CloneEntity(live.FindByGuid(sourceGuid), guid);
-                if (!live.IsValid(copy) || !position) { return; }
-                if (auto* transform = live.Registry().try_get<GPP::TransformComponent>(copy)) { transform->Position = *position; }
-            });
+            Writes->push_back(GPP::CloneEntityCommand{sourceGuid, guid});
+            if (position) { Writes->push_back(GPP::SetFieldCommand{guid, "Transform", "Position", *position}); }
             Spawned.insert(guid);
             return guid;
         }
@@ -493,6 +485,7 @@ namespace MoleHole
             Writes = &writes;
             Bindings->Read = &scene;
             Bindings->Write = [&writes](std::function<void(GPP::Scene&)> write) { writes.push_back(std::move(write)); };
+            Bindings->WriteCommand = [&writes](GPP::Command command) { writes.push_back(std::move(command)); };
             SyncComponentGraphs(scene);
             if (tick)
             {
@@ -545,6 +538,7 @@ namespace MoleHole
             Writes = nullptr;
             Bindings->Read = nullptr;
             Bindings->Write = nullptr;
+            Bindings->WriteCommand = nullptr;
             if (Sink) Sink->OnTickEnd();
             return writes;
         }
@@ -561,6 +555,7 @@ namespace MoleHole
         try
         {
             GPP::RegisterMathBindings(impl.Vm);
+            GPP::RegisterRandomBindings(impl.Vm, [&impl] { return impl.Random.get(); });
             GPP::RegisterSceneBindings(impl.Vm, impl.Bindings);
             GPP::RegisterTaskBindings(impl.Vm, impl.TaskErrors);
             impl.HostContext = GPP::RegisterScriptHostBindings(impl.Vm);
@@ -622,6 +617,11 @@ namespace MoleHole
 
     void ScriptRuntime::SetGuidSource(const std::function<std::uint64_t()>& source) { m_Impl->GuidSource = source; }
     void ScriptRuntime::SetTraceSink(ITraceSink* sink) { m_Impl->Sink = sink; }
+
+    void ScriptRuntime::SetRandom(std::shared_ptr<GPP::SimulationRandom> random)
+    {
+        m_Impl->Random = std::move(random);
+    }
 
     PendingWrites ScriptRuntime::ExecuteStartEvent(const GPP::Scene& scene)
     {

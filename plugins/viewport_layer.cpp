@@ -75,6 +75,7 @@ namespace
     {
         std::mutex Mutex;
         std::optional<Scene> Snapshot;
+        std::optional<RunnerState> Hidden;
         std::atomic<bool> Active{false};
     };
 
@@ -598,6 +599,10 @@ namespace
             ImGuizmo::BeginFrame();
             const bool viewportOpen = ImGui::Begin("Viewport");
             m_UiState->ViewportVisible = viewportOpen;
+            if (viewportOpen && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+            {
+                if (const auto sim = m_Sim.Load(); sim->Runner) HandleSceneUndoShortcuts(*sim->Runner);
+            }
             m_Renderer->SetBufferTargetVisible(m_LayerTarget.Id, viewportOpen || m_UiState->ExportActive);
             if (!viewportOpen)
             {
@@ -799,21 +804,17 @@ namespace
                 float t[3], r[3], s[3];
                 ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), t, r, s);
                 const glm::vec3 position(t[0], t[1], t[2]);
-                const glm::quat rotation(glm::radians(glm::vec3(r[0], r[1], r[2])));
                 const glm::vec3 scale(s[0], s[1], s[2]);
                 const auto guid = m_UiState->SelectedEntityGuid;
-                sim.Runner->EnqueueTrackedEdit([guid, position, rotation, scale](Scene& scene)
-                {
-                    const auto entity = scene.FindByGuid(guid);
-                    if (scene.IsValid(entity) && scene.Registry().all_of<TransformComponent>(entity))
-                    {
-                        auto& transform = scene.Registry().get<TransformComponent>(entity);
-                        transform.Position = position;
-                        transform.Rotation = rotation;
-                        transform.Scale = scale;
-                        scene.MarkDirty(entity);
-                    }
-                });
+                CommandOptions options;
+                options.Undoable = sim.Runner->IsPaused();
+                options.Label = "Transform";
+                options.CoalesceKey = std::format("gizmo:{}", guid);
+                sim.Runner->EnqueueCommands(
+                    {SetFieldCommand{guid, "Transform", "Position", position},
+                     SetFieldCommand{guid, "Transform", "Rotation", glm::vec3(r[0], r[1], r[2])},
+                     SetFieldCommand{guid, "Transform", "Scale", scale}},
+                    std::move(options));
             }
 
             return ImGuizmo::IsOver() || ImGuizmo::IsUsing();
@@ -1432,7 +1433,9 @@ namespace
                     {
                         std::scoped_lock lock(play->Mutex);
                         play->Snapshot = scene.Clone();
+                        play->Hidden = runner->CaptureState();
                     }
+                    runner->ClearHistory();
                     runner->SetPaused(false);
                 });
             }
@@ -1443,11 +1446,15 @@ namespace
                 sim->Runner->EnqueueEdit([play = sim->Play, runner = sim->Runner.get()](Scene& scene)
                 {
                     std::optional<Scene> snapshot;
+                    std::optional<RunnerState> hidden;
                     {
                         std::scoped_lock lock(play->Mutex);
                         snapshot = std::exchange(play->Snapshot, std::nullopt);
+                        hidden = std::exchange(play->Hidden, std::nullopt);
                     }
                     if (snapshot) Scene::SyncInto(*snapshot, scene);
+                    if (hidden) runner->RestoreState(*hidden);
+                    runner->ClearHistory();
                     runner->SetPaused(true);
                 });
             }

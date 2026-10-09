@@ -3,6 +3,7 @@ export module MoleHole:UI.Widgets;
 import std;
 import glm;
 import imgui;
+import GPP;
 import :UI.State;
 import :UI.WidgetLogic;
 
@@ -70,6 +71,16 @@ export namespace MoleHole
         constexpr const char* Eye = "\xef\x81\xae"; // f06e
         constexpr const char* Copy = "\xef\x83\x85"; // f0c5
         constexpr const char* Pen = "\xef\x8c\x84"; // f304
+    }
+
+    // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y for the scene history; call while the owning window is focused.
+    inline bool HandleSceneUndoShortcuts(GPP::SimulationRunner& runner)
+    {
+        const ImGuiIO& io = ImGui::GetIO();
+        if (!io.KeyCtrl || io.WantTextInput || ImGui::IsAnyItemActive() || !runner.IsPaused()) return false;
+        if (ImGui::IsKeyPressed(ImGuiKey_Z)) return io.KeyShift ? runner.Redo() : runner.Undo();
+        if (ImGui::IsKeyPressed(ImGuiKey_Y)) return runner.Redo();
+        return false;
     }
 
     inline void SectionHeader(const char* title)

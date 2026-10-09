@@ -11,7 +11,32 @@ import :Simulation.GraphTrace;
 
 export namespace MoleHole
 {
-    using PendingWrite = std::function<void(GPP::Scene&)>;
+    // A scene mutation produced by a graph or script: a replayable command where one exists, else a closure.
+    class PendingWrite
+    {
+    public:
+        PendingWrite() = default;
+        template <typename C>
+            requires(!std::same_as<std::remove_cvref_t<C>, PendingWrite> && !std::invocable<C&, GPP::Scene&> &&
+                     std::constructible_from<GPP::Command, C>)
+        PendingWrite(C&& command) : m_Command(GPP::Command(std::forward<C>(command))) {}
+        template <typename F>
+            requires(!std::same_as<std::remove_cvref_t<F>, PendingWrite> && std::invocable<F&, GPP::Scene&>)
+        PendingWrite(F&& fn) : m_Fn(std::forward<F>(fn)) {}
+
+        void operator()(GPP::Scene& scene) const
+        {
+            if (m_Command) { GPP::ApplyCommand(scene, *m_Command); }
+            else if (m_Fn) { m_Fn(scene); }
+        }
+
+        [[nodiscard]] const std::optional<GPP::Command>& AsCommand() const { return m_Command; }
+        [[nodiscard]] const std::function<void(GPP::Scene&)>& AsClosure() const { return m_Fn; }
+
+    private:
+        std::optional<GPP::Command> m_Command;
+        std::function<void(GPP::Scene&)> m_Fn;
+    };
     using PendingWrites = std::vector<PendingWrite>;
 
     class IGraphRuntime
@@ -20,6 +45,8 @@ export namespace MoleHole
         virtual ~IGraphRuntime() = default;
         virtual void SetGuidSource(const std::function<std::uint64_t()>& source) = 0;
         virtual void SetTraceSink(ITraceSink* sink) = 0;
+        // Script randomness follows the simulation's generator; the interpreter has no random nodes.
+        virtual void SetRandom(std::shared_ptr<GPP::SimulationRandom> random) { (void)random; }
         [[nodiscard]] virtual PendingWrites ExecuteStartEvent(const GPP::Scene& scene) = 0;
         [[nodiscard]] virtual PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime) = 0;
 

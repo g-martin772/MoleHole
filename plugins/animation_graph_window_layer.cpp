@@ -159,6 +159,7 @@ namespace
             if (!runner) return;
 
             const bool paused = runner->IsPaused();
+            m_Random = runner->Random();
 
             if (m_WasPaused && !paused)
             {
@@ -393,6 +394,7 @@ namespace
                 m_RuntimeNote = m_RuntimeNote.empty() ? note : m_RuntimeNote + "\n" + note;
             }
             m_Executor->SetTraceSink(&m_Trace);
+            m_Executor->SetRandom(m_Random);
         }
 
         bool AnyLuauOnly() const
@@ -840,12 +842,22 @@ namespace
 
         void ApplyWrites(SimulationRunner& runner, PendingWrites writes)
         {
-            if (writes.empty()) return;
-            // TODO
-            runner.EnqueueEdit([writes = std::move(writes)](Scene& scene)
+            std::vector<Command> commands;
+            const auto flush = [&]
             {
-                for (const auto& write : writes) { write(scene); }
-            });
+                if (!commands.empty()) runner.EnqueueCommands(std::exchange(commands, {}));
+            };
+            for (auto& write : writes)
+            {
+                if (const auto& command = write.AsCommand())
+                {
+                    commands.push_back(*command);
+                    continue;
+                }
+                flush();
+                if (write.AsClosure()) runner.EnqueueEdit([fn = write.AsClosure()](Scene& scene) { fn(scene); });
+            }
+            flush();
         }
 
         // ---- node-editor canvas ----------------------------------------------------------------
@@ -2468,6 +2480,7 @@ namespace
         std::unique_ptr<IGraphRuntime> m_Executor;
         ScriptCache m_ScriptCache;
         bool m_UseLuau = true;
+        std::shared_ptr<SimulationRandom> m_Random;
         bool m_InlineLuauView = false;
         std::string m_RuntimeNote;
         std::string m_LuauViewText;

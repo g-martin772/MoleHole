@@ -567,12 +567,8 @@ namespace MoleHole
                 continue;
             }
 
-            auto setFn = category->Properties[propertyIndex].Set;
-            ctx.Writes.push_back([guid, val, setFn](GPP::Scene& liveScene)
-            {
-                const entt::entity liveEntity = liveScene.FindByGuid(guid);
-                if (liveScene.IsValid(liveEntity)) { setFn(liveScene, liveEntity, val); }
-            });
+            ctx.Writes.push_back(GPP::SetFieldCommand{guid, category->ComponentName,
+                                                      category->Properties[propertyIndex].Label, val});
         }
 
         if (node->Outputs.size() > 1)
@@ -624,14 +620,9 @@ namespace MoleHole
                     Report(node, TraceSeverity::Warning, "No preset or entity named '" + preset + "'");
                     return;
                 }
-                ctx.Writes.push_back([guid, sourceGuid, position, name](GPP::Scene& live)
-                {
-                    const auto source = live.FindByGuid(sourceGuid);
-                    const auto copy = live.CloneEntity(source, guid);
-                    if (!live.IsValid(copy)) { return; }
-                    if (auto* transform = live.Registry().try_get<GPP::TransformComponent>(copy)) { transform->Position = position; }
-                    if (!name.empty()) { live.Registry().get<GPP::MetadataComponent>(copy).Name = name; }
-                });
+                ctx.Writes.push_back(GPP::CloneEntityCommand{sourceGuid, guid});
+                ctx.Writes.push_back(GPP::SetFieldCommand{guid, "Transform", "Position", position});
+                if (!name.empty()) { ctx.Writes.push_back(GPP::SetFieldCommand{guid, "Metadata", "Name", name}); }
             }
             ctx.Spawned.insert(guid);
             if (const int pin = outputPin(1)) { SetPin(pin, guid); }
@@ -645,7 +636,7 @@ namespace MoleHole
                 return;
             }
             ctx.Spawned.erase(guid);
-            ctx.Writes.push_back([guid](GPP::Scene& live) { live.DestroyEntity(live.FindByGuid(guid)); });
+            ctx.Writes.push_back(GPP::DestroyEntityCommand{guid});
         }
         else if (node->SubType == NodeSubType::CloneEntity && node->Inputs.size() >= 3)
         {
@@ -660,12 +651,8 @@ namespace MoleHole
                                                           ? std::optional(std::get<glm::vec3>(positionValue))
                                                           : std::nullopt;
             const std::uint64_t guid = m_GuidSource();
-            ctx.Writes.push_back([guid, sourceGuid, position](GPP::Scene& live)
-            {
-                const auto copy = live.CloneEntity(live.FindByGuid(sourceGuid), guid);
-                if (!live.IsValid(copy) || !position) { return; }
-                if (auto* transform = live.Registry().try_get<GPP::TransformComponent>(copy)) { transform->Position = *position; }
-            });
+            ctx.Writes.push_back(GPP::CloneEntityCommand{sourceGuid, guid});
+            if (position) { ctx.Writes.push_back(GPP::SetFieldCommand{guid, "Transform", "Position", *position}); }
             ctx.Spawned.insert(guid);
             if (const int pin = outputPin(1)) { SetPin(pin, guid); }
         }

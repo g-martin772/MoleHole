@@ -30,6 +30,7 @@ export namespace MoleHole
 
         void SetGuidSource(const std::function<std::uint64_t()>& source) override;
         void SetTraceSink(ITraceSink* sink) override;
+        void SetRandom(std::shared_ptr<GPP::SimulationRandom> random) override;
         [[nodiscard]] PendingWrites ExecuteStartEvent(const GPP::Scene& scene) override;
         [[nodiscard]] PendingWrites ExecuteTickEvent(const GPP::Scene& scene, float deltaTime) override;
         void PostEvent(std::string name, std::vector<GPP::LuauValue> args) override;
