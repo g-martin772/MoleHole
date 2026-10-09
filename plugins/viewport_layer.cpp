@@ -1532,6 +1532,15 @@ namespace
             const auto stats = m_Renderer->GetBufferTargetStats(m_LayerTarget.Id);
             m_ExportMinSerial = (stats ? stats->FramesRendered : 0) + 3;
 
+            m_ExportStepping = false;
+            m_ExportTickDebt = 0.0;
+            if (const auto sim = m_Sim.Load();
+                request.RequestKind == ExportRequest::Kind::Video && sim->Runner && !sim->Runner->IsPaused())
+            {
+                sim->Runner->SetManualStepping(true);
+                m_ExportStepping = true;
+            }
+
             if (request.RequestKind == ExportRequest::Kind::Video)
             {
                 m_ExportTempDir = std::filesystem::temp_directory_path() /
@@ -1559,6 +1568,17 @@ namespace
                 return;
             }
             m_ExportMinSerial = readback.Serial + 1;
+            if (m_ExportStepping)
+            {
+                if (const auto sim = m_Sim.Load(); sim->Runner)
+                {
+                    m_ExportTickDebt += sim->Runner->GetTickRate() / std::max(1, m_ExportRequest.Framerate);
+                    const auto ticks = static_cast<std::uint64_t>(m_ExportTickDebt);
+                    m_ExportTickDebt -= static_cast<double>(ticks);
+                    sim->Runner->StepAndWait(ticks);
+                    m_ExportMinSerial = readback.Serial + 3; // frames already in flight still show the old snapshot
+                }
+            }
 
             const auto path = m_ExportRequest.RequestKind == ExportRequest::Kind::Image
                                   ? std::filesystem::path(m_ExportRequest.OutputPath)
@@ -1673,6 +1693,11 @@ namespace
             m_UiState->Render = m_SavedRenderToggles;
 
             const bool failed = m_ExportJob->EncodeFailed.load() || m_ExportJob->WriteFailed.load();
+            if (m_ExportStepping)
+            {
+                m_ExportStepping = false;
+                if (const auto sim = m_Sim.Load(); sim->Runner) sim->Runner->SetManualStepping(false);
+            }
             m_UiState->ExportActive = false;
             m_UiState->ExportProgress = 1.0f;
             if (failed)
@@ -1831,6 +1856,8 @@ namespace
         bool m_ExportAllCaptured{false};
         bool m_ExportEncodeStarted{false};
         std::uint64_t m_ExportMinSerial{0};
+        bool m_ExportStepping{false};
+        double m_ExportTickDebt{0.0};
         std::shared_ptr<ExportJob> m_ExportJob = std::make_shared<ExportJob>();
         std::filesystem::path m_ExportTempDir;
         RenderToggles m_SavedRenderToggles;

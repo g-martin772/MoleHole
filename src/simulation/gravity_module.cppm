@@ -23,6 +23,19 @@ export namespace MoleHole
         void OnInit(GPP::Scene& scene) override;
         void OnTick(GPP::Scene& scene, float deltaTime) override;
 
+        [[nodiscard]] std::string SaveState() const override
+        {
+            return std::to_string(m_GravityMultiplier.load(std::memory_order_relaxed));
+        }
+        void LoadState(const std::string& state) override
+        {
+            float value = 1.0f;
+            if (std::from_chars(state.data(), state.data() + state.size(), value).ec == std::errc{})
+            {
+                m_GravityMultiplier.store(value, std::memory_order_relaxed);
+            }
+        }
+
         // Thread-safe: called from the main thread (ViewportLayer mirrors UiState::GravityMultiplier
         // here every frame), read from the simulation thread inside OnTick.
         void SetGravityMultiplier(float multiplier) noexcept { m_GravityMultiplier.store(multiplier, std::memory_order_relaxed); }
