@@ -156,14 +156,15 @@ namespace
 
     struct SceneWindowLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, SceneManager, UiState, AppStateService, IFileSystem, FileDialog>;
+        using Dependencies = std::tuple<Logger, SceneManager, UiState, AppStateService, IFileSystem, FileDialog, AssetDirectories>;
 
         SceneWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<SceneManager> scenes,
                          std::shared_ptr<UiState> uiState, std::shared_ptr<AppStateService> appState,
-                         std::shared_ptr<IFileSystem> fileSystem, std::shared_ptr<FileDialog> fileDialog)
+                         std::shared_ptr<IFileSystem> fileSystem, std::shared_ptr<FileDialog> fileDialog,
+                         std::shared_ptr<AssetDirectories> assets)
             : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState)),
               m_AppState(std::move(appState)), m_FileSystem(std::move(fileSystem)),
-              m_FileDialog(std::move(fileDialog))
+              m_FileDialog(std::move(fileDialog)), m_Assets(std::move(assets))
         {
         }
 
@@ -828,12 +829,144 @@ namespace
                 }
             });
 
+            RenderScripts(runner, scene, entity, guid, choices);
             RenderAddComponent(runner, scene, entity, guid);
             ImGui::Spacing();
             if (ImGui::Button("Delete Entity", ImVec2(-1, 0)))
             {
                 DeleteEntities(runner, CollectEntries(scene), {guid});
             }
+        }
+
+        // Component graphs of the scene by name; refreshed a couple of times a second because the graphs live in YAML.
+        const std::map<std::string, ScriptDescriptor>& ComponentGraphs(const Scene& scene)
+        {
+            const double now = ImGui::GetTime();
+            if (now - m_ComponentGraphsStamp < 0.5) return m_ComponentGraphs;
+            m_ComponentGraphsStamp = now;
+            m_ComponentGraphs.clear();
+            if (const auto* node = scene.FindExtension(kSceneGraphsKey))
+            {
+                for (const auto& item : SceneGraphsFromNode(*node).Items)
+                {
+                    if (item.IsComponent && !item.IsFunction) m_ComponentGraphs[item.Name] = DescribeComponentGraph(item);
+                }
+            }
+            return m_ComponentGraphs;
+        }
+
+        static void EditScript(SimulationRunner& runner, std::uint64_t guid, std::function<void(ScriptsComponent&)> edit)
+        {
+            runner.EnqueueTrackedEdit([guid, edit = std::move(edit)](Scene& s)
+            {
+                const auto e = s.FindByGuid(guid);
+                if (!s.IsValid(e)) return;
+                edit(s.Registry().get_or_emplace<ScriptsComponent>(e));
+                s.MarkDirty(e);
+            });
+        }
+
+        void RenderScripts(SimulationRunner& runner, const Scene& scene, entt::entity entity, std::uint64_t guid,
+                           const std::vector<EntityChoice>& choices)
+        {
+            ImFont* icons = m_UiState->IconFont;
+            if (!m_Catalog && m_Assets) m_Catalog = std::make_unique<ScriptCatalog>(*m_Assets);
+            const auto& graphs = ComponentGraphs(scene);
+            const auto* scripts = scene.Registry().try_get<ScriptsComponent>(entity);
+
+            if (scripts)
+            {
+                bool removeAll = false;
+                if (BeginSection(icons, "Scripts", true, &removeAll))
+                {
+                    std::optional<std::size_t> removeEntry;
+                    for (std::size_t i = 0; i < scripts->Entries.size(); ++i)
+                    {
+                        const auto& entry = scripts->Entries[i];
+                        ImGui::PushID(static_cast<int>(i));
+                        std::shared_ptr<const ScriptDescriptor> external;
+                        const ScriptDescriptor* descriptor = nullptr;
+                        if (const auto graph = graphs.find(entry.Name); graph != graphs.end()) descriptor = &graph->second;
+                        else if (m_Catalog)
+                        {
+                            external = m_Catalog->Describe(entry.Name);
+                            descriptor = external.get();
+                        }
+                        const std::string error = m_UiState->ScriptStatuses.Error(guid, i);
+                        const bool broken = !error.empty() || (descriptor && !descriptor->Ok());
+
+                        ImGui::TextColored(broken ? ImVec4(0.95f, 0.35f, 0.3f, 1.0f) : ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "%s%s",
+                                           broken ? "(!) " : "", entry.Name.c_str());
+                        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 14.0f);
+                        if (ImGui::SmallButton("x")) removeEntry = i;
+                        Tooltip("Remove this script");
+                        if (descriptor && !descriptor->Ok())
+                        {
+                            ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.3f, 1.0f), "%s", descriptor->Error.c_str());
+                        }
+                        if (!error.empty()) ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.3f, 1.0f), "%s", error.c_str());
+
+                        if (descriptor)
+                        {
+                            for (const auto& property : descriptor->Properties)
+                            {
+                                FieldInfo field{.Name = property.Name, .Type = ToFieldType(property.Type), .Meta = PropertyMeta(property)};
+                                field.Set = [](entt::registry&, entt::entity, const FieldValue&) { return true; };
+                                FieldValue current = property.Default;
+                                if (const auto stored = entry.Props.find(property.Name); stored != entry.Props.end())
+                                {
+                                    auto coerced = CoerceProperty(stored->second, property.Type);
+                                    if (!std::holds_alternative<std::monostate>(coerced)) current = std::move(coerced);
+                                }
+                                ImGui::PushID(property.Name.c_str());
+                                if (auto edited = DrawField(icons, field, current, &property.Default, choices))
+                                {
+                                    EditScript(runner, guid, [i, name = property.Name, value = std::move(*edited),
+                                                              fallback = property.Default](ScriptsComponent& component)
+                                    {
+                                        if (i >= component.Entries.size()) return;
+                                        if (value == fallback) component.Entries[i].Props.erase(name);
+                                        else component.Entries[i].Props[name] = value;
+                                    });
+                                }
+                                ImGui::PopID();
+                            }
+                        }
+                        ImGui::Spacing();
+                        ImGui::PopID();
+                    }
+                    if (removeEntry)
+                    {
+                        EditScript(runner, guid, [index = *removeEntry](ScriptsComponent& component)
+                        {
+                            if (index < component.Entries.size()) component.Entries.erase(component.Entries.begin() + static_cast<std::ptrdiff_t>(index));
+                        });
+                    }
+                    EndSection();
+                }
+                if (removeAll)
+                {
+                    runner.EnqueueTrackedEdit([guid](Scene& s)
+                    {
+                        const auto e = s.FindByGuid(guid);
+                        if (!s.IsValid(e)) return;
+                        s.Registry().remove<ScriptsComponent>(e);
+                        s.MarkDirty(e);
+                    });
+                }
+            }
+
+            if (ImGui::Button("Add Script", ImVec2(-1, 0))) ImGui::OpenPopup("AddScript");
+            if (!ImGui::BeginPopup("AddScript")) return;
+            std::vector<std::string> names = m_Assets ? ListScripts(*m_Assets) : std::vector<std::string>{};
+            for (const auto& [name, descriptor] : graphs) names.push_back(name);
+            if (names.empty()) ImGui::TextDisabled("No scripts in the Scripts directories and no component graphs");
+            for (const auto& name : names)
+            {
+                if (!ImGui::MenuItem(name.c_str())) continue;
+                EditScript(runner, guid, [name](ScriptsComponent& component) { component.Entries.push_back(ScriptEntry{name, {}}); });
+            }
+            ImGui::EndPopup();
         }
 
         void DrawComponentFields(SimulationRunner& runner, const Scene& scene, entt::entity entity,
@@ -882,6 +1015,10 @@ namespace
         std::shared_ptr<AppStateService> m_AppState;
         std::shared_ptr<IFileSystem> m_FileSystem;
         std::shared_ptr<FileDialog> m_FileDialog;
+        std::shared_ptr<AssetDirectories> m_Assets;
+        std::unique_ptr<ScriptCatalog> m_Catalog;
+        std::map<std::string, ScriptDescriptor> m_ComponentGraphs;
+        double m_ComponentGraphsStamp = -1.0;
 
         std::array<char, 512> m_MeshPathBuffer{};
         bool m_MeshAddCollider = true;
