@@ -33,6 +33,56 @@ namespace
         return true;
     }
 
+    bool ProjectLine(glm::vec4 a, glm::vec4 b, const glm::vec2& min, const glm::vec2& max, ImVec2& outA, ImVec2& outB)
+    {
+        constexpr float kNear = 0.01f;
+        if (a.w < kNear && b.w < kNear) return false;
+        if (a.w < kNear) a = glm::mix(a, b, (kNear - a.w) / (b.w - a.w));
+        else if (b.w < kNear) b = glm::mix(b, a, (kNear - b.w) / (a.w - b.w));
+        const auto toScreen = [&](const glm::vec4& c)
+        {
+            const glm::vec2 ndc = glm::vec2(c) / c.w;
+            return ImVec2(min.x + (ndc.x * 0.5f + 0.5f) * (max.x - min.x),
+                          min.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * (max.y - min.y));
+        };
+        outA = toScreen(a);
+        outB = toScreen(b);
+        return true;
+    }
+
+    void DrawCameraFrustum(ImDrawList* list, const TransformComponent& transform, const CameraComponent& camera,
+                           const glm::mat4& viewProj, const glm::vec2& min, const glm::vec2& max, float aspect,
+                           ImU32 color, float thickness)
+    {
+        const glm::quat rotation = glm::normalize(transform.Rotation);
+        const glm::vec3 right = rotation * glm::vec3(1.0f, 0.0f, 0.0f);
+        const glm::vec3 up = rotation * glm::vec3(0.0f, 1.0f, 0.0f);
+        const glm::vec3 front = rotation * glm::vec3(0.0f, 0.0f, -1.0f);
+        constexpr float kDepth = 2.0f;
+        const float halfH = std::tan(glm::radians(camera.Fov) * 0.5f) * kDepth;
+        const float halfW = halfH * aspect;
+        const glm::vec3 center = transform.Position + front * kDepth;
+        const glm::vec3 corners[4] = {center + right * halfW + up * halfH, center - right * halfW + up * halfH,
+                                      center - right * halfW - up * halfH, center + right * halfW - up * halfH};
+        const glm::vec3 apex = transform.Position;
+        const glm::vec3 tip = center + up * (halfH * 1.35f);
+
+        const auto line = [&](const glm::vec3& a, const glm::vec3& b)
+        {
+            ImVec2 pa, pb;
+            if (ProjectLine(viewProj * glm::vec4(a, 1.0f), viewProj * glm::vec4(b, 1.0f), min, max, pa, pb))
+                list->AddLine(pa, pb, color, thickness);
+        };
+        for (int i = 0; i < 4; ++i)
+        {
+            line(apex, corners[i]);
+            line(corners[i], corners[(i + 1) % 4]);
+        }
+        line(corners[0], tip);
+        line(corners[1], tip);
+        line(apex, center);
+    }
+
     struct ViewportHudLayer final : public HotReloadableLayer
     {
         using Dependencies = std::tuple<Logger, SceneManager, UiState>;
@@ -45,7 +95,7 @@ namespace
 
         void OnUiRender() override
         {
-            if (!m_UiState->ShowViewportHud) return;
+            if (!m_UiState->ShowViewportHud && !m_UiState->ShowCameraGizmos) return;
             if (m_UiState->CurrentSceneName.empty()) return;
             const auto runner = m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
             if (!runner) return;
@@ -70,6 +120,27 @@ namespace
 
             auto sceneLock = runner->LockRenderScene();
             const Scene& scene = *sceneLock;
+
+            if (m_UiState->ShowCameraGizmos)
+            {
+                for (auto [entity, transform, camera, metadata] :
+                     scene.Registry().view<const TransformComponent, const CameraComponent, const MetadataComponent>().each())
+                {
+                    if (camera.Primary && m_UiState->SceneCameraActive) continue;
+                    const bool selected = metadata.Guid == m_UiState->SelectedEntityGuid;
+                    const ImU32 color = selected ? IM_COL32(255, 190, 90, 255)
+                                        : camera.Primary ? IM_COL32(230, 140, 50, 220)
+                                                         : IM_COL32(150, 170, 200, 200);
+                    DrawCameraFrustum(drawList, transform, camera, viewProj, min, max, width / height, color,
+                                      selected ? 2.0f : 1.4f);
+                }
+            }
+
+            if (!m_UiState->ShowViewportHud)
+            {
+                drawList->PopClipRect();
+                return;
+            }
 
             for (auto [entity, transform, metadata] :
                  scene.Registry().view<const TransformComponent, const MetadataComponent>().each())

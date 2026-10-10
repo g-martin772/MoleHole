@@ -118,6 +118,7 @@ export namespace MoleHole
         bool ShowSceneWindow = true;
         bool ShowDebugWindow = false;
         bool ShowViewportHud = false;
+        bool ShowCameraGizmos = true;
         bool ShowSettingsWindow = false;
         bool ShowGeneralRelativityWindow = false;
         bool ShowScienceWindow = false;
