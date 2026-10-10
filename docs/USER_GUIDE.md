@@ -36,6 +36,9 @@ Open from sidebar or View menu.
 | Hold RMB + move | look |
 | W A S D | move |
 | E / Q | up / down |
+| F | focus selected object (auto distance) |
+| Scroll | zoom in/out while focused |
+| Alt + hold RMB + move | orbit focused object |
 | 1 or T | translate gizmo |
 | 2 or R | rotate gizmo |
 | 3 or S | scale gizmo |

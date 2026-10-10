@@ -178,6 +178,7 @@ runner.EnqueueCommand(cmd, CommandOptions{.Undoable = runner.IsPaused(), .Label 
 ## Add a Luau script component
 - Drop `scripts/foo.luau` → returns `{properties, OnStart, OnTick}`
 - Dir list: `config.json` `GPP.Assets.Scripts`
+- Annotate: `OnTick = function(self: ScriptSelf, dt: number)`
 - Bindings (add Luau API): `gpp/src/scripting/luau_bindings.cpp` (`vm.Register("scene", "name", fn)`)
 
 ## Add an asset directory kind

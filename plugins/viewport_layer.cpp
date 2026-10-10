@@ -603,6 +603,8 @@ namespace
             m_CameraMouseHover.store(false, std::memory_order_relaxed);
             if (viewportFocused)
             {
+                if (ImGui::IsKeyPressed(ImGuiKey_F, false) && !ImGui::GetIO().WantTextInput)
+                    m_FocusRequest.store(true, std::memory_order_relaxed);
                 if (const auto sim = m_Sim.Load(); sim->Runner) HandleSceneUndoShortcuts(*sim->Runner);
             }
             m_Renderer->SetBufferTargetVisible(m_LayerTarget.Id, viewportOpen || m_UiState->ExportActive);
@@ -628,6 +630,7 @@ namespace
                 ImGui::Image(reinterpret_cast<ImTextureID>(target->ImGuiTexture), avail);
                 const bool imageHovered = ImGui::IsItemHovered();
                 m_CameraMouseHover.store(imageHovered, std::memory_order_relaxed);
+                if (imageHovered) m_PendingScroll.fetch_add(ImGui::GetIO().MouseWheel, std::memory_order_relaxed);
                 const ImVec2 min = ImGui::GetItemRectMin();
                 const ImVec2 max = ImGui::GetItemRectMax();
                 m_UiState->ViewportScreenMin = {min.x, min.y};
@@ -1732,6 +1735,9 @@ namespace
             m_Camera.SetFov(m_UiState->CameraFov);
             m_Camera.SetClipPlanes(0.1f, 10000.0f);
 
+            if (m_FocusRequest.exchange(false, std::memory_order_relaxed)) BeginFocus();
+            const float scroll = m_PendingScroll.exchange(0.0f, std::memory_order_relaxed);
+
             const bool keysEnabled = m_CameraKeysEnabled.load(std::memory_order_relaxed);
             float forward = 0.0f, right = 0.0f, up = 0.0f;
             if (keysEnabled)
@@ -1742,6 +1748,11 @@ namespace
                 if (m_Input->IsKeyDown(KeyCode::A)) right -= 1.0f;
                 if (m_Input->IsKeyDown(KeyCode::E)) up += 1.0f;
                 if (m_Input->IsKeyDown(KeyCode::Q)) up -= 1.0f;
+            }
+            if (m_FocusGuid != 0 && (forward != 0.0f || right != 0.0f || up != 0.0f)) m_FocusGuid = 0;
+            if (m_FocusGuid != 0 && scroll != 0.0f)
+            {
+                m_FocusDistance = std::clamp(m_FocusDistance * std::pow(0.9f, scroll), m_FocusMinDistance, 20000.0f);
             }
             if (forward != 0.0f || right != 0.0f || up != 0.0f)
             {
@@ -1755,6 +1766,9 @@ namespace
             else if (!m_MouseLookActive && m_CameraMouseHover.load(std::memory_order_relaxed)) m_MouseLookActive = true;
             if (m_MouseLookActive)
             {
+                const bool orbit = m_FocusGuid != 0 && keysEnabled &&
+                                   (m_Input->IsKeyDown(KeyCode::LeftAlt) || m_Input->IsKeyDown(KeyCode::RightAlt));
+                if (m_FocusGuid != 0 && !orbit) m_FocusGuid = 0;
                 if (m_HasLastMouse)
                 {
                     const float dx = mouseX - m_LastMouseX;
@@ -1770,10 +1784,56 @@ namespace
             m_LastMouseX = mouseX;
             m_LastMouseY = mouseY;
 
+            if (m_FocusGuid != 0) UpdateFocus();
+
             m_UiState->CameraPosition = m_Camera.GetPosition();
             m_UiState->CameraYaw = m_Camera.GetYaw();
             m_UiState->CameraPitch = m_Camera.GetPitch();
             PublishView();
+        }
+
+        std::optional<std::pair<glm::vec3, float>> FindFocusTarget(std::uint64_t guid)
+        {
+            const auto sim = m_Sim.Load();
+            if (!sim->Runner || guid == 0) return std::nullopt;
+            const auto sceneLock = sim->Runner->AcquireSnapshot();
+            const Scene& scene = *sceneLock;
+            const auto entity = scene.FindByGuid(guid);
+            if (!scene.IsValid(entity)) return std::nullopt;
+            const auto* transform = scene.Registry().try_get<const TransformComponent>(entity);
+            if (!transform) return std::nullopt;
+
+            const float scale = std::max({transform->Scale.x, transform->Scale.y, transform->Scale.z});
+            float radius = scale;
+            if (const auto* sphere = scene.Registry().try_get<const SphereComponent>(entity))
+                radius = sphere->Radius * scale;
+            else if (const auto* mesh = scene.Registry().try_get<const MeshComponent>(entity);
+                     mesh && !mesh->AssetPath.empty())
+                radius = m_Meshes->BoundingRadius(mesh->AssetPath) * scale;
+            else if (const auto* hole = scene.Registry().try_get<const BlackHoleComponent>(entity))
+                radius = std::max(scale, 2.0f * hole->Mass);
+            return std::pair{transform->Position, std::max(radius, 0.01f)};
+        }
+
+        void BeginFocus()
+        {
+            const auto target = FindFocusTarget(m_UiState->SelectedEntityGuid);
+            if (!target) return;
+            m_FocusGuid = m_UiState->SelectedEntityGuid;
+            const float halfFov = glm::radians(m_Camera.GetFov()) * 0.5f;
+            m_FocusDistance = target->second / std::sin(halfFov) * 1.5f;
+            m_FocusMinDistance = target->second * 0.5f;
+        }
+
+        void UpdateFocus()
+        {
+            const auto target = FindFocusTarget(m_FocusGuid);
+            if (!target)
+            {
+                m_FocusGuid = 0;
+                return;
+            }
+            m_Camera.SetPosition(target->first - m_Camera.GetFront() * m_FocusDistance);
         }
 
         bool UpdateSceneCamera()
@@ -1879,6 +1939,11 @@ namespace
         Camera m_Camera;
         bool m_HasLastMouse{false};
         bool m_MouseLookActive{false};
+        std::uint64_t m_FocusGuid{0};
+        float m_FocusDistance{10.0f};
+        float m_FocusMinDistance{0.1f};
+        std::atomic<bool> m_FocusRequest{false};
+        std::atomic<float> m_PendingScroll{0.0f};
         std::atomic<bool> m_CameraKeysEnabled{false};
         std::atomic<bool> m_CameraMouseHover{false};
         float m_LastMouseX{0.0f};
