@@ -12,6 +12,34 @@ using namespace GPP;
 
 namespace MoleHole
 {
+    namespace
+    {
+        template <typename Fn>
+        void ForEachRenderToggle(RenderToggles& render, Fn&& fn)
+        {
+            fn("GravitationalLensing", render.GravitationalLensing);
+            fn("GravitationalRedshift", render.GravitationalRedshift);
+            fn("AccretionDisk", render.AccretionDisk);
+            fn("AccretionDiskVolumetric", render.AccretionDiskVolumetric);
+            fn("DopplerBeaming", render.DopplerBeaming);
+            fn("RenderBlackHoles", render.RenderBlackHoles);
+            fn("RenderSpheres", render.RenderSpheres);
+            fn("PhysicallyAccurate", render.PhysicallyAccurate);
+            fn("ShowGravityGrid", render.ShowGravityGrid);
+            fn("ShowPhysicsDebug", render.ShowPhysicsDebug);
+            fn("ShowObjectPaths", render.ShowObjectPaths);
+            fn("DebugMode", render.DebugMode);
+            fn("MetricType", render.MetricType);
+            fn("AccDiskHeight", render.AccDiskHeight);
+            fn("AccDiskSpeed", render.AccDiskSpeed);
+            fn("AccDiskNoiseScale", render.AccDiskNoiseScale);
+            fn("AccDiskNoiseLOD", render.AccDiskNoiseLOD);
+            fn("RayStepSize", render.RayStepSize);
+            fn("MaxRaySteps", render.MaxRaySteps);
+            fn("AdaptiveStepRate", render.AdaptiveStepRate);
+        }
+    }
+
     AppStateService::AppStateService(std::shared_ptr<UiState> uiState, std::shared_ptr<UiPreferences> preferences,
                                       std::shared_ptr<IFileSystem> fileSystem, std::shared_ptr<Logger> logger)
         : m_UiState(std::move(uiState)), m_Preferences(std::move(preferences)),
@@ -93,8 +121,11 @@ namespace MoleHole
             }
             if (const auto render = node["Render"])
             {
-                if (const auto v = render["DebugMode"]) m_UiState->Render.DebugMode = v.as<int>();
-                if (const auto v = render["PhysicallyAccurate"]) m_UiState->Render.PhysicallyAccurate = v.as<bool>();
+                ForEachRenderToggle(m_UiState->Render, [&](const char* name, auto& value)
+                {
+                    if (const auto v = render[name]) value = v.template as<std::remove_cvref_t<decltype(value)>>();
+                });
+                if (const auto v = render["ShowCameraGizmos"]) m_UiState->ShowCameraGizmos = v.as<bool>();
             }
             if (const auto simulation = node["Simulation"])
             {
@@ -167,8 +198,8 @@ namespace MoleHole
             root["UI"]["ShowScienceWindow"] = m_UiState->ShowScienceWindow;
             root["UI"]["ShowAnimationGraphWindow"] = m_UiState->ShowAnimationGraphWindow;
 
-            root["Render"]["DebugMode"] = m_UiState->Render.DebugMode;
-            root["Render"]["PhysicallyAccurate"] = m_UiState->Render.PhysicallyAccurate;
+            ForEachRenderToggle(m_UiState->Render, [&](const char* name, auto& value) { root["Render"][name] = value; });
+            root["Render"]["ShowCameraGizmos"] = m_UiState->ShowCameraGizmos;
 
             root["Simulation"]["TickRate"] = m_UiState->SimulationTickRate;
 
