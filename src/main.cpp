@@ -14,6 +14,15 @@ namespace
         std::string ScenePath;
     };
 
+    void EnsureRuntimeDirectories()
+    {
+        for (const char* directory : {".gpp/exports", ".gpp/hot-reload-cache", ".gpp/shader-cache"})
+        {
+            std::error_code error;
+            std::filesystem::create_directories(directory, error);
+        }
+    }
+
     std::optional<CliExportArgs> ParseExportArgs(int argc, char* argv[])
     {
         CliExportArgs args;
@@ -51,6 +60,7 @@ namespace
 
 int main(int argc, char* argv[])
 {
+    EnsureRuntimeDirectories();
     MoleHole::RegisterComponents();
 
     const auto exportArgs = ParseExportArgs(argc, argv);
