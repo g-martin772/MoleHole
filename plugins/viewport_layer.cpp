@@ -599,7 +599,11 @@ namespace
             ImGuizmo::BeginFrame();
             const bool viewportOpen = ImGui::Begin("Viewport");
             m_UiState->ViewportVisible = viewportOpen;
-            if (viewportOpen && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+            const bool viewportFocused =
+                viewportOpen && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+            m_CameraKeysEnabled.store(viewportFocused && !ImGui::GetIO().WantTextInput, std::memory_order_relaxed);
+            m_CameraMouseHover.store(false, std::memory_order_relaxed);
+            if (viewportFocused)
             {
                 if (const auto sim = m_Sim.Load(); sim->Runner) HandleSceneUndoShortcuts(*sim->Runner);
             }
@@ -625,6 +629,7 @@ namespace
             {
                 ImGui::Image(reinterpret_cast<ImTextureID>(target->ImGuiTexture), avail);
                 const bool imageHovered = ImGui::IsItemHovered();
+                m_CameraMouseHover.store(imageHovered, std::memory_order_relaxed);
                 const ImVec2 min = ImGui::GetItemRectMin();
                 const ImVec2 max = ImGui::GetItemRectMax();
                 m_UiState->ViewportScreenMin = {min.x, min.y};
@@ -1729,13 +1734,17 @@ namespace
             m_Camera.SetFov(m_UiState->CameraFov);
             m_Camera.SetClipPlanes(0.1f, 10000.0f);
 
+            const bool keysEnabled = m_CameraKeysEnabled.load(std::memory_order_relaxed);
             float forward = 0.0f, right = 0.0f, up = 0.0f;
-            if (m_Input->IsKeyDown(KeyCode::W)) forward += 1.0f;
-            if (m_Input->IsKeyDown(KeyCode::S)) forward -= 1.0f;
-            if (m_Input->IsKeyDown(KeyCode::D)) right += 1.0f;
-            if (m_Input->IsKeyDown(KeyCode::A)) right -= 1.0f;
-            if (m_Input->IsKeyDown(KeyCode::E)) up += 1.0f;
-            if (m_Input->IsKeyDown(KeyCode::Q)) up -= 1.0f;
+            if (keysEnabled)
+            {
+                if (m_Input->IsKeyDown(KeyCode::W)) forward += 1.0f;
+                if (m_Input->IsKeyDown(KeyCode::S)) forward -= 1.0f;
+                if (m_Input->IsKeyDown(KeyCode::D)) right += 1.0f;
+                if (m_Input->IsKeyDown(KeyCode::A)) right -= 1.0f;
+                if (m_Input->IsKeyDown(KeyCode::E)) up += 1.0f;
+                if (m_Input->IsKeyDown(KeyCode::Q)) up -= 1.0f;
+            }
             if (forward != 0.0f || right != 0.0f || up != 0.0f)
             {
                 m_Camera.ProcessKeyboard(forward, right, up, deltaTime, m_UiState->CameraSpeed);
@@ -1743,7 +1752,10 @@ namespace
 
             const float mouseX = m_Input->MouseX();
             const float mouseY = m_Input->MouseY();
-            if (m_Input->IsMouseButtonDown(MouseButton::Right))
+            const bool rightDown = m_Input->IsMouseButtonDown(MouseButton::Right);
+            if (!rightDown) m_MouseLookActive = false;
+            else if (!m_MouseLookActive && m_CameraMouseHover.load(std::memory_order_relaxed)) m_MouseLookActive = true;
+            if (m_MouseLookActive)
             {
                 if (m_HasLastMouse)
                 {
@@ -1865,6 +1877,9 @@ namespace
         int m_SceneCounter{0};
         Camera m_Camera;
         bool m_HasLastMouse{false};
+        bool m_MouseLookActive{false};
+        std::atomic<bool> m_CameraKeysEnabled{false};
+        std::atomic<bool> m_CameraMouseHover{false};
         float m_LastMouseX{0.0f};
         float m_LastMouseY{0.0f};
 

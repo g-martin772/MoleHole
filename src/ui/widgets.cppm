@@ -14,6 +14,12 @@ export namespace MoleHole::UiDetail
         return ImGui::ColorConvertFloat4ToU32(ImVec4(c.r, c.g, c.b, c.a));
     }
 
+    inline void RestoreCursor(const ImVec2& after)
+    {
+        ImGui::SetCursorScreenPos(ImVec2(after.x, after.y - ImGui::GetStyle().ItemSpacing.y));
+        ImGui::Dummy(ImVec2(0.0f, 0.0f));
+    }
+
     inline ImVec4 ToVec4(const glm::vec4& c) { return ImVec4(c.r, c.g, c.b, c.a); }
 
     inline glm::vec4 FromVec4(const ImVec4& c) { return {c.x, c.y, c.z, c.w}; }
@@ -205,7 +211,7 @@ export namespace MoleHole
             const ImVec2 after = ImGui::GetCursorScreenPos();
             ImGui::SetCursorScreenPos(ImVec2(pos.x + w - h, pos.y));
             if (IconButton(icons, Icon::Trash, "x", "Remove component", h, true)) *removeClicked = true;
-            ImGui::SetCursorScreenPos(after);
+            RestoreCursor(after);
         }
 
         const float contentHeight = storage->GetFloat(heightKey, 0.0f);
@@ -317,30 +323,26 @@ export namespace MoleHole
             ImGui::PushID(i);
             const ImVec2 pos = ImGui::GetCursorScreenPos();
             const float h = ImGui::GetFrameHeight();
-            ImGui::SetNextItemAllowOverlap();
-            ImGui::SetNextItemWidth(each);
-            changed |= DragFloatValue("##v", &v[i], speed, min, max, format);
-            const ImVec2 after = ImGui::GetCursorScreenPos();
+            bool chipClicked = false;
+            if (defaults) chipClicked = ImGui::InvisibleButton("##axis", ImVec2(chip, h));
+            else ImGui::Dummy(ImVec2(chip, h));
+            const bool hoverChip = defaults && ImGui::IsItemHovered();
+            if (defaults) Tooltip("Reset axis");
             auto* list = ImGui::GetWindowDrawList();
-            const bool hoverChip = ImGui::IsMouseHoveringRect(pos, ImVec2(pos.x + chip, pos.y + h)) &&
-                ImGui::IsWindowHovered();
             list->AddRectFilled(pos, ImVec2(pos.x + chip, pos.y + h),
                                 ToU32(hoverChip ? Lighten(colors[i], 0.25f) : colors[i]), 3.0f,
                                 ImDrawFlags_RoundCornersLeft);
             const ImVec2 ts = ImGui::CalcTextSize(names[i]);
             list->AddText(ImVec2(pos.x + (chip - ts.x) * 0.5f, pos.y + (h - ts.y) * 0.5f),
                           ToU32(HexColor(0xffffff)), names[i]);
-            if (defaults)
+            if (chipClicked && v[i] != defaults[i])
             {
-                ImGui::SetCursorScreenPos(pos);
-                if (ImGui::InvisibleButton("##axis", ImVec2(chip, h)) && v[i] != defaults[i])
-                {
-                    v[i] = defaults[i];
-                    changed = true;
-                }
-                Tooltip("Reset axis");
-                ImGui::SetCursorScreenPos(after);
+                v[i] = defaults[i];
+                changed = true;
             }
+            ImGui::SameLine(0.0f, 0.0f);
+            ImGui::SetNextItemWidth(std::max(16.0f, each - chip));
+            changed |= DragFloatValue("##v", &v[i], speed, min, max, format);
             ImGui::PopID();
         }
         ImGui::PopID();
@@ -488,7 +490,7 @@ export namespace MoleHole
                 text.clear();
                 changed = true;
             }
-            ImGui::SetCursorScreenPos(after);
+            RestoreCursor(after);
         }
         ImGui::PopID();
         return changed;
