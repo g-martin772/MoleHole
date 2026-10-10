@@ -60,14 +60,13 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
 
         // SDF
         float spinPlaneDistance = dot(diskPos, normalize(blackHoleSpinAxis));
-        float d = abs(spinPlaneDistance) - 0.4f * u_accDiskHeight;
+        float d = abs(spinPlaneDistance) - 0.5f * u_accDiskHeight;
 
         // FBM
         float sdf = sdFbm(animatedPos, d);
 
         // final density
         density = max(0.0, -sdf);
-        density *= 0.3;
     } else {
         vec3 posCart = toCartesian(posSph.yzw);
         density = max(0.0, 1.0 - length(posCart / vec3(outerRadius, u_accDiskHeight, outerRadius)));
@@ -98,8 +97,8 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
             noise *= 0.5 * worley(noiseCoord, 1.0f) + 0.3;
         }
     } else {
-        vec3 detailCoord = toCartesian(posSph.yzw) * u_accDiskNoiseScale * 5.0;
-        noise = 0.7 + 0.3 * worley(detailCoord, 5.0f);
+        vec3 detailCoord = toCartesian(posSph.yzw) * u_accDiskNoiseScale;
+        noise = worley(detailCoord, 5.0f);
     }
 
     vec3 posCart = toCartesian(posSph.yzw);
@@ -110,29 +109,26 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
         grFactor = max(grFactor, 1e-6);
     }
 
+    vec3 bbColor;
     float doppler = 1.0;
     if (u_dopplerBeamingEnabled > 0.5) {
         vec3 viewDir = normalize(rayOrigin - (posCart + u_cameraPos));
         doppler = calculateDopplerEffect(posCart / max(1e-6, eventHorizonRadius), viewDir);
+
+        float dopplerRedshift = 1.0 / mix(1.0, 2.0f * doppler * grFactor, float(u_dopplerBeamingEnabled > 0.5));
+        float temp = getAccretionDiskTemperature(blackHoleMass, r_sph, iscoRadius);
+        bbColor = getBlackbodyColorLUT(temp, dopplerRedshift);
     }
-
-    float dopplerRedshift = 1.0 / mix(1.0, doppler * grFactor, float(u_dopplerBeamingEnabled > 0.5));
-
-    float temp = getAccretionDiskTemperature(blackHoleMass, r_sph, iscoRadius);
-    vec3 bbColor = getBlackbodyColorLUT(temp, dopplerRedshift);
-
-    float beamingFactor = 1.0;
-    if (u_dopplerBeamingEnabled > 0.5) {
-        beamingFactor = pow(max(0.1, doppler), 3.0);
+    else {
+        float dopplerRedshift = 0.5f;
+        float temp = getAccretionDiskTemperature(blackHoleMass, r_sph, iscoRadius);
+        bbColor = getBlackbodyColorLUT(temp, dopplerRedshift);
     }
-
-    //bbColor = vec3(1.0, 0.5, 0.2);
-    //bColor = pow(bbColor, vec3(1.0 / 2.2));
 
     // Increase contrast to make darker parts darker and brighter parts brighter
     float contrastNoise = pow(noise, 3.0) * 3.5;
 
-    vec3 emission = 0.01f * bbColor * contrastNoise * beamingFactor;
+    vec3 emission = 0.1f * bbColor * contrastNoise;
     color += emission * alpha;
     return density;
 }

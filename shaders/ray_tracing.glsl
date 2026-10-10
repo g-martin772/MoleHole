@@ -303,10 +303,16 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
         float dist = relativePosSph.y;
 
         if (u_accretionDiskEnabled == 1) {
-            float dAlpha = adiskColorVariant(relativePosSph, colorValue, alpha, r_s, rayOrigin, u_blackHoles[0].mass, u_blackHoles[0].spinAxis);
-            alpha *= (1.0f - clamp(dAlpha, 0.0f, 1.0f));
-            if (alpha < 0.01f) {
-                return colorValue;
+            // Get optical depth from the accretion disk at this position
+            float opticalDepth = adiskColor(relativePosSph, colorValue, alpha, r_s, rayOrigin, u_blackHoles[0].mass, u_blackHoles[0].spinAxis);
+
+            // Apply volumetric absorption using Beer-Lambert law
+            if (opticalDepth > 0.0) {
+                float transmittance = beerLambert(opticalDepth, stepSize);
+                alpha *= transmittance;
+                if (alpha < 0.01) {
+                    return colorValue;
+                }
             }
         }
 
