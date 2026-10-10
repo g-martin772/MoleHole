@@ -1,0 +1,25 @@
+{
+  "name": "molehole",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "fmt",
+    "spdlog",
+    "catch2",
+    "glm",
+    "nlohmann-json",
+    {
+      "name": "sdl3",
+      "features": [ "vulkan" ]
+    },
+    "vulkan-memory-allocator",
+    "vulkan-headers",
+    "imgui",
+    "stb",
+    "yaml-cpp",
+    "tinygltf",
+    "physx",
+    "entt",
+    "nativefiledialog-extended",
+    "luau"
+  ]
+}

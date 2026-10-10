@@ -1,0 +1,120 @@
+module MoleHole;
+
+import :Simulation.Gravity;
+import std;
+import GPP;
+import glm;
+
+namespace MoleHole
+{
+    GravitySimulationModule::GravitySimulationModule(
+        std::shared_ptr<GPP::PhysicsSimulationModule> physics,
+        const std::shared_ptr<GPP::EventDispatcher>& dispatcher,
+        std::shared_ptr<GPP::Logger> logger)
+        : m_Physics(std::move(physics)), m_Logger(std::move(logger))
+    {
+        m_TriggerSubscription = dispatcher->Subscribe<GPP::PhysicsTriggerEvent>(
+            [this](const GPP::PhysicsTriggerEvent& event) { HandleTrigger(event); });
+    }
+
+    void GravitySimulationModule::OnInit(GPP::Scene& scene)
+    {
+        for (auto [entity, blackHole] : scene.Registry().view<const BlackHoleComponent>().each())
+        {
+            if (!scene.Registry().all_of<GPP::RigidBodyComponent>(entity))
+            {
+                scene.Registry().emplace<GPP::RigidBodyComponent>(entity, GPP::RigidBodyComponent{
+                    .Type = GPP::RigidBodyType::Static,
+                    .EnableGravity = false
+                });
+            }
+            if (!scene.Registry().all_of<GPP::ColliderComponent>(entity))
+            {
+                const float schwarzschildRadius = std::max(0.01f, 2.0f * blackHole.Mass);
+                scene.Registry().emplace<GPP::ColliderComponent>(entity, GPP::ColliderComponent{
+                    .Shape = GPP::ColliderShape::Sphere,
+                    .Radius = schwarzschildRadius,
+                    .IsTrigger = true
+                });
+            }
+        }
+    }
+
+    void GravitySimulationModule::OnTick(GPP::Scene& scene, const float deltaTime)
+    {
+        m_CurrentScene = &scene;
+
+        struct Source
+        {
+            glm::vec3 Position;
+            float MassKg;
+        };
+        std::vector<Source> sources;
+
+        for (auto [entity, blackHole, transform] :
+             scene.Registry().view<const BlackHoleComponent, const GPP::TransformComponent>().each())
+        {
+            sources.push_back({transform.Position, blackHole.Mass * kGravitySolarMassKg});
+        }
+        for (auto [entity, body, transform] :
+             scene.Registry().view<const GPP::RigidBodyComponent, const GPP::TransformComponent>().each())
+        {
+            if (body.Type != GPP::RigidBodyType::Dynamic) continue;
+            sources.push_back({transform.Position, body.Mass});
+        }
+
+        for (auto [entity, body, transform] :
+             scene.Registry().view<const GPP::RigidBodyComponent, const GPP::TransformComponent>().each())
+        {
+            if (body.Type != GPP::RigidBodyType::Dynamic || !body.EnableGravity) continue;
+
+            auto* actor = m_Physics->FindActor(entity);
+            auto* dynamic = actor ? actor->is<physx::PxRigidDynamic>() : nullptr;
+            if (!dynamic) continue;
+
+            const float strength = kBaseGravityStrength * m_GravityMultiplier.load(std::memory_order_relaxed);
+            glm::vec3 acceleration{0.0f};
+            for (const auto& source : sources)
+            {
+                const glm::vec3 delta = source.Position - transform.Position;
+                const float distSq = glm::dot(delta, delta);
+                if (distSq < 1e-6f) continue;
+                acceleration += strength * source.MassKg / distSq * glm::normalize(delta);
+            }
+
+            const glm::vec3 force = acceleration * body.Mass;
+            const bool finite = std::isfinite(force.x) && std::isfinite(force.y) && std::isfinite(force.z);
+            if (!finite)
+            {
+                if (m_Logger)
+                {
+                    m_Logger->Warn("GravitySimulationModule: skipping a non-finite gravity force "
+                                   "(check mass/distance values are reasonable)");
+                }
+                continue;
+            }
+            dynamic->addForce(physx::PxVec3(force.x, force.y, force.z), physx::PxForceMode::eFORCE);
+        }
+    }
+
+    void GravitySimulationModule::HandleTrigger(const GPP::PhysicsTriggerEvent& event)
+    {
+        if (!event.Entered || !m_CurrentScene) return;
+
+        const auto blackHoleEntity = m_CurrentScene->FindByGuid(event.TriggerGuid);
+        if (!m_CurrentScene->IsValid(blackHoleEntity)
+            || !m_CurrentScene->Registry().all_of<BlackHoleComponent>(blackHoleEntity))
+        {
+            return;
+        }
+
+        const auto otherEntity = m_CurrentScene->FindByGuid(event.OtherGuid);
+        if (!m_CurrentScene->IsValid(otherEntity)) return;
+
+        if (m_Logger) m_Logger->Info("GravitySimulationModule: entity absorbed by black hole.");
+        // Scene::DestroyEntity, not Registry().destroy() -- the latter leaves the entity's guid
+        // dangling in Scene's GuidIndex pointing at a now-invalid entity handle, which later crashes
+        // Scene::SyncInto (e.g. a Play->Stop snapshot restore) when it resolves that stale guid.
+        m_CurrentScene->DestroyEntity(otherEntity);
+    }
+}

@@ -1,0 +1,41 @@
+#version 460 core
+
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(rgba32f, binding = 0) readonly uniform image2D u_inputImage;
+layout(rgba32f, binding = 1) writeonly uniform image2D u_outputImage;
+
+uniform int u_horizontal = 1;
+
+// Gaussian blur weights for different tap counts
+// 5-tap weights (radius 2)
+const float weights5[5] = float[](0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
+// 9-tap weights (radius 4) 
+const float weights9[9] = float[](0.147761, 0.118318, 0.0947416, 0.0606531, 0.0323831, 0.0143369, 0.00523599, 0.00157829, 0.000402204);
+
+void main() {
+    ivec2 texCoords = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imageSize = imageSize(u_inputImage);
+    
+    if (texCoords.x >= imageSize.x || texCoords.y >= imageSize.y) {
+        return;
+    }
+    
+    ivec2 offset = u_horizontal == 1 ? ivec2(1, 0) : ivec2(0, 1);
+    
+    // Use 9-tap filter for better quality
+    vec3 result = imageLoad(u_inputImage, texCoords).rgb * weights9[0];
+    
+    for (int i = 1; i < 9; i++) {
+        ivec2 sampleCoords1 = texCoords + offset * i;
+        ivec2 sampleCoords2 = texCoords - offset * i;
+        
+        // Clamp to image bounds
+        sampleCoords1 = clamp(sampleCoords1, ivec2(0), imageSize - ivec2(1));
+        sampleCoords2 = clamp(sampleCoords2, ivec2(0), imageSize - ivec2(1));
+        
+        result += imageLoad(u_inputImage, sampleCoords1).rgb * weights9[i];
+        result += imageLoad(u_inputImage, sampleCoords2).rgb * weights9[i];
+    }
+    
+    imageStore(u_outputImage, texCoords, vec4(result, 1.0));
+}

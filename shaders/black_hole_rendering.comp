@@ -1,29 +1,71 @@
-#version 460 core
+#version 450
 
 layout(local_size_x = 16, local_size_y = 16) in;
-layout(rgba32f, binding = 0) uniform image2D l_outputImage;
 
-// accuracy
-uniform int u_isPhysicallyAccurate = 0;
-
-// debug
-uniform int u_debugMode = 0;
-
-// constants
 const float EPSILON = 0.00005f;
 
-// camera
-uniform vec3 u_cameraPos;
-uniform vec3 u_cameraFront;
-uniform vec3 u_cameraUp;
-uniform vec3 u_cameraRight;
-uniform float u_fov;
-uniform float u_aspect;
+#include "scene_data.glsl"
 
-// third person
-uniform int u_enableThirdPerson = 0;
-uniform float u_thirdPersonDistance = 5.0;
-uniform float u_thirdPersonHeight = 2.0;
+layout(set = 0, binding = 0, rgba32f) uniform image2D l_outputImage;
+
+layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
+{
+    vec3 u_cameraPos; float u_fov;
+    vec3 u_cameraFront; float u_aspect;
+    vec3 u_cameraUp; float u_time;
+    vec3 u_cameraRight; float u_cameraRightPad;
+
+    int u_enableThirdPerson;
+    float u_thirdPersonDistance;
+    float u_thirdPersonHeight;
+    float u_cubeSize;
+
+    int u_isPhysicallyAccurate;
+    int u_debugMode;
+    int u_metric_type;
+    int u_gravitationalLensingEnabled;
+
+    int u_accretionDiskEnabled;
+    int u_accretionDiskVolumetric;
+    int u_renderBlackHoles;
+    int u_renderSpheres;
+
+    int u_gravitationalRedshiftEnabled;
+    float u_accDiskHeight;
+    float u_accDiskNoiseScale;
+    float u_accDiskNoiseLOD;
+
+    float u_accDiskSpeed;
+    float u_dopplerBeamingEnabled;
+    float u_lutTempMin;
+    float u_lutTempMax;
+
+    float u_lutRedshiftMin;
+    float u_lutRedshiftMax;
+    float u_rayStepSize;
+    int u_maxRaySteps;
+
+    float u_adaptiveStepRate;
+    int u_numBlackHoles;
+    int u_numSpheres;
+    float _pad0;
+
+    BlackHoleData u_blackHoles[8];
+    SphereData u_spheres[16];
+
+    mat4 u_viewProjection;
+};
+
+layout(set = 0, binding = 2) uniform sampler2D u_skyboxTexture;
+layout(set = 0, binding = 3) uniform sampler2D u_blackbodyLUT;
+layout(set = 0, binding = 4) uniform sampler2D u_accelerationLUT;
+layout(set = 0, binding = 5) uniform sampler2D u_hrDiagramLUT;
+
+layout(push_constant) uniform SlicePushBlock
+{
+    uint u_firstWorkgroup;
+    uint u_workgroupsPerRow;
+};
 
 #include "kerr.glsl"
 #include "doppler.glsl"
@@ -37,44 +79,39 @@ uniform float u_thirdPersonHeight = 2.0;
 #include "ray_tracing.glsl"
 
 void main() {
-    // Get the pixel coordinates and imageSize
-    ivec2 texCoords = ivec2(gl_GlobalInvocationID.xy);
+    uint workgroup = u_firstWorkgroup + gl_WorkGroupID.x;
+    uvec2 workgroupCoords = uvec2(workgroup % u_workgroupsPerRow, workgroup / u_workgroupsPerRow);
+    ivec2 texCoords = ivec2(workgroupCoords * 16u + gl_LocalInvocationID.xy);
     ivec2 imageSize = imageSize(l_outputImage);
-    
-    // if image is smaller than the viewport, return
+
     if (texCoords.x >= imageSize.x || texCoords.y >= imageSize.y) {
         return;
     }
-    
+
     vec2 uv = (vec2(texCoords) + 0.5f) / vec2(imageSize);
     uv = uv * 2.0f - 1.0f;
     uv.x *= u_aspect;
-    
-    // Calculate ray direction and origin
+    uv.y = -uv.y;
+
     vec3 rayOrigin;
     vec3 cameraFront;
     vec3 cameraUp;
     vec3 cameraRight;
 
     if (u_enableThirdPerson == 1) {
-
-        // Third-person camera: position behind and above the cube
         vec3 cubeRight = normalize(cross(u_cameraFront, u_cameraUp));
         vec3 actualCubeUp = normalize(cross(cubeRight, u_cameraFront));
 
-        // Calculate camera position: behind the cube by u_thirdPersonDistance, above by u_thirdPersonHeight
         vec3 offsetBack = -u_cameraFront * u_thirdPersonDistance;
         vec3 offsetUp = actualCubeUp * u_thirdPersonHeight;
         rayOrigin = u_cameraPos + offsetBack + offsetUp;
 
-        // Camera looks at the cube (slightly ahead of cube center)
         vec3 lookAtPoint = u_cameraPos + u_cameraFront * 1.0;
         cameraFront = normalize(lookAtPoint - rayOrigin);
         cameraUp = actualCubeUp;
         cameraRight = normalize(cross(cameraFront, cameraUp));
         cameraUp = normalize(cross(cameraRight, cameraFront)); // Recalculate to ensure orthogonality
     } else {
-        // First-person camera: use provided camera vectors
         rayOrigin = u_cameraPos;
         cameraFront = u_cameraFront;
         cameraUp = u_cameraUp;
@@ -85,15 +122,21 @@ void main() {
     vec3 rayDir = normalize(cameraFront + cameraRight * uv.x * tanHalfFov + cameraUp * uv.y * tanHalfFov);
 
     vec3 color;
+    vec3 hitPoint = vec3(0.0f);
+    bool hitSolid = false;
 
-    // Perform hybrid raytracing/raymarching to get the color
     if (u_isPhysicallyAccurate == 1) {
         color = rk4RayMarching(rayOrigin, rayDir);
     }
     else {
-        color = hybridRayTrace(rayOrigin, rayDir);
+        color = hybridRayTrace(rayOrigin, rayDir, hitPoint, hitSolid);
     }
-    
-    // Generate Output Image
-    imageStore(l_outputImage, texCoords, vec4(color, 1.0f));
+
+    float depth = 0.999999f;
+    if (hitSolid) {
+        vec4 clipPos = u_viewProjection * vec4(hitPoint, 1.0f);
+        depth = clipPos.z / clipPos.w;
+    }
+
+    imageStore(l_outputImage, texCoords, vec4(color, depth));
 }

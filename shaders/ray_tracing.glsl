@@ -1,21 +1,3 @@
-uniform sampler2D u_skyboxTexture;
-
-const int MAX_BLACK_HOLES = 8;
-uniform int u_numBlackHoles;
-uniform vec3 u_blackHolePositions[MAX_BLACK_HOLES];
-uniform float u_blackHoleMasses[MAX_BLACK_HOLES];
-uniform float u_blackHoleSpins[MAX_BLACK_HOLES];
-uniform vec3 u_blackHoleSpinAxes[MAX_BLACK_HOLES];
-uniform float u_blackHoleCharges[MAX_BLACK_HOLES];
-
-uniform int u_renderBlackHoles = 1;
-uniform int u_renderSpheres = 1;
-uniform int u_accretionDiskEnabled = 1;
-uniform int u_gravitationalLensingEnabled = 1;
-
-uniform float u_cubeSize = 1.0;
-
-
 struct HitRecord {
     bool hit;
     float t;
@@ -24,9 +6,6 @@ struct HitRecord {
     int objectIndex;
 };
 
-// ------------------------------------------------------------------------------------------------------------
-// Section Influence Zone
-// ------------------------------------------------------------------------------------------------------------
 bool isInInfluenceZone(vec3 pos, out int closestBHIndex, out float distanceToBH, out float influenceRadius) {
     closestBHIndex = -1;
     distanceToBH = 1e10;
@@ -35,9 +14,9 @@ bool isInInfluenceZone(vec3 pos, out int closestBHIndex, out float distanceToBH,
     if (u_renderBlackHoles == 0) return false;
 
     for (int j = 0; j < u_numBlackHoles; j++) {
-        vec3 relativePos = pos - u_blackHolePositions[j];
+        vec3 relativePos = pos - u_blackHoles[j].position;
         float dist = length(relativePos);
-        float r_s = calculateEventHorizonRadius(u_blackHoleMasses[j]);
+        float r_s = calculateEventHorizonRadius(u_blackHoles[j].mass);
         float r_i = calculateInfluenceRadius(r_s);
 
         if (dist < r_i && dist < distanceToBH) {
@@ -49,9 +28,6 @@ bool isInInfluenceZone(vec3 pos, out int closestBHIndex, out float distanceToBH,
     return closestBHIndex >= 0;
 }
 
-// ------------------------------------------------------------------------------------------------------------
-// Section Ray Tracing
-// ------------------------------------------------------------------------------------------------------------
 HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
     HitRecord record;
     record.hit = false;
@@ -63,7 +39,7 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
     if (u_renderSpheres == 1) {
         for (int i = 0; i < u_numSpheres; i++) {
             float t;
-            if (intersectSphere(rayOrigin, rayDir, u_spherePositions[i], u_sphereRadii[i], t)) {
+            if (intersectSphere(rayOrigin, rayDir, u_spheres[i].position, u_spheres[i].radius, t)) {
                 if (t < record.t) {
                     record.hit = true;
                     record.t = t;
@@ -96,16 +72,11 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
     return record;
 }
 
-// ------------------------------------------------------------------------------------------------------------
-// Section Ray Marching
-// ------------------------------------------------------------------------------------------------------------
-uniform float u_rayStepSize = 0.01f;
-uniform int u_maxRaySteps = 100000;
-uniform float u_adaptiveStepRate = 0.8f;
-
-vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection) {
+vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection, out vec3 hitPoint, out bool hitSolid) {
     hitEventHorizon = false;
     exitedZone = false;
+    hitSolid = false;
+    hitPoint = vec3(0.0);
     vec3 color = vec3(0.0);
     float alpha = 1.0;
 
@@ -117,7 +88,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
     float adaptiveStepRate = u_adaptiveStepRate;
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
 
-    float mass = u_blackHoleMasses[closestHole];
+    float mass = u_blackHoles[closestHole].mass;
     /*stepSize *= 1.0f * mass;
     maxSteps *= 1.0f * mass;
     adaptiveStepRate *= 1.0f * mass;*/
@@ -137,19 +108,19 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
             return color;
         }
 
-        vec3 relativePos = newOrigin - u_blackHolePositions[closestBH];
+        vec3 relativePos = newOrigin - u_blackHoles[closestBH].position;
 
         // Calculate orbital angular momentum
         vec3 orbitalAngMomentum = cross(relativePos, newDirection);
         vec3 bhAngMomentum = calculateAngularMomentumFromSpin(
-            u_blackHoleSpins[closestBH],
-            u_blackHoleSpinAxes[closestBH],
-            u_blackHoleMasses[closestBH]
+            u_blackHoles[closestBH].spin,
+            u_blackHoles[closestBH].spinAxis,
+            u_blackHoles[closestBH].mass
         );
         vec3 totalAngMomentum = orbitalAngMomentum + bhAngMomentum * 0.1;
         float angMomSqrd = dot(totalAngMomentum, totalAngMomentum);
 
-        float r_s = calculateEventHorizonRadius(u_blackHoleMasses[closestBH]);
+        float r_s = calculateEventHorizonRadius(u_blackHoles[closestBH].mass);
 
         // Adaptive step size
         float currentStepSize = stepSize * min(adaptiveStepRate, distToBH / r_s);
@@ -162,7 +133,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
 
         if (u_accretionDiskEnabled == 1) {
             // Get optical depth from the accretion disk at this position
-            float opticalDepth = adiskColor(vec4(0.0, toSpherical(relativePos)), color, alpha, r_s, newOrigin, u_blackHoleMasses[closestBH], u_blackHoleSpinAxes[closestBH]);
+            float opticalDepth = adiskColor(vec4(0.0, toSpherical(relativePos)), color, alpha, r_s, newOrigin, u_blackHoles[closestBH].mass, u_blackHoles[closestBH].spinAxis);
 
             // Apply volumetric absorption using Beer-Lambert law
             if (opticalDepth > 0.0) {
@@ -177,6 +148,10 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         // Check object intersections within marching step
         HitRecord hit = rayTraceNormalSpace(newOrigin, newDirection, currentStepSize);
         if (hit.hit) {
+            if (hit.type == 1) {
+                hitSolid = true;
+                hitPoint = newOrigin + newDirection * hit.t;
+            }
             return color + hit.color;
         }
 
@@ -190,13 +165,12 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
     return color;
 }
 
-// ------------------------------------------------------------------------------------------------------------
-// Section Hybrid Ray Marching + Tracing
-// ------------------------------------------------------------------------------------------------------------
-vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
+vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bool hitSolid) {
     vec3 color = vec3(0.0);
     vec3 currentOrigin = rayOrigin;
     vec3 currentDir = rayDirection;
+    hitSolid = false;
+    hitPoint = vec3(0.0);
 
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
     int maxOuterIterations = max(50, u_maxRaySteps / 200);
@@ -210,8 +184,13 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
         if (inZone) {
             bool hitHorizon, exited;
             vec3 newOrigin, newDir;
-            vec3 marchColor = rayMarchInfluenceZone(closestBH, currentOrigin, currentDir, hitHorizon, exited, newOrigin, newDir);
+            vec3 zoneHitPoint; bool zoneHitSolid;
+            vec3 marchColor = rayMarchInfluenceZone(closestBH, currentOrigin, currentDir, hitHorizon, exited, newOrigin, newDir, zoneHitPoint, zoneHitSolid);
             color += marchColor;
+            if (zoneHitSolid) {
+                hitSolid = true;
+                hitPoint = zoneHitPoint;
+            }
 
             if (hitHorizon) {
                 return color;
@@ -229,9 +208,9 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
 
             if (u_renderBlackHoles == 1) {
                 for (int j = 0; j < u_numBlackHoles; j++) {
-                    vec3 toCenter = u_blackHolePositions[j] - currentOrigin;
+                    vec3 toCenter = u_blackHoles[j].position - currentOrigin;
                     float distToCenter = length(toCenter);
-                    float r_s = calculateEventHorizonRadius(u_blackHoleMasses[j]);
+                    float r_s = calculateEventHorizonRadius(u_blackHoles[j].mass);
                     float r_i = calculateInfluenceRadius(r_s);
 
                     float distToInfluence = abs(distToCenter - r_i);
@@ -244,6 +223,10 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
             if (hit.hit) {
                 if (hit.t < minDistToInfluence) {
                     color += hit.color;
+                    if (hit.type == 1) {
+                        hitSolid = true;
+                        hitPoint = currentOrigin + currentDir * hit.t;
+                    }
                     return color;
                 } else {
                     currentOrigin += currentDir * (minDistToInfluence + EPSILON);
@@ -264,10 +247,6 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection) {
     color += texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
     return color;
 }
-
-// ------------------------------------------------------------------------------------------------------------
-// Full Physics Implementation with RK4
-// ------------------------------------------------------------------------------------------------------------
 
 // Helper to normalize 4-velocity for light-like geodesics (g_uv v^u v^v = 0)
 // For Schwarzschild: -(1-rs/r)*v_t^2 + (1-rs/r)^-1*v_r^2 + r^2*(v_theta^2 + sin^2(theta)*v_phi^2) = 0
@@ -296,7 +275,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
     vec3 colorValue = vec3(0.0f);
     float alpha = 1.0f;
 
-    if (u_blackHoleMasses[0] == 0.0f)
+    if (u_blackHoles[0].mass == 0.0f)
     return texture(u_skyboxTexture, directionToSpherical(rayDirection)).rgb;
 
     // ray position and direction (Cartesian)
@@ -309,14 +288,14 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
     float adaptiveStepRate = u_adaptiveStepRate;
 
     // position relative to black hole
-    vec3 relativePosCart = pos - u_blackHolePositions[0];
+    vec3 relativePosCart = pos - u_blackHoles[0].position;
 
     // convert to spherical coordinates
     vec4 relativePosSph = vec4(0.0f, toSpherical(relativePosCart));
     vec4 relativeDirSph = vec4(1.0f, vel_cartesian_to_spherical(relativePosCart, dir));
 
     // compute event horizon radius
-    float r_s = calculateEventHorizonRadius(u_blackHoleMasses[0]);
+    float r_s = calculateEventHorizonRadius(u_blackHoles[0].mass);
 
     // main loop
     for (int i = 0; i < maxSteps; i++) {
@@ -324,7 +303,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
         float dist = relativePosSph.y;
 
         if (u_accretionDiskEnabled == 1) {
-            float opticalDepth = adiskColor(relativePosSph, colorValue, alpha, r_s, rayOrigin, u_blackHoleMasses[0], u_blackHoleSpinAxes[0]);
+            float opticalDepth = adiskColor(relativePosSph, colorValue, alpha, r_s, rayOrigin, u_blackHoles[0].mass, u_blackHoles[0].spinAxis);
 
             // Apply volumetric absorption using Beer-Lambert law
             if (opticalDepth > 0.0) {
@@ -356,15 +335,15 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
         }
 
         // calculate specific angular momentum from spin parameter
-        float a = u_blackHoleSpins[0] * calculateEventHorizonRadius(u_blackHoleMasses[0]) / 2.0f;
+        float a = u_blackHoles[0].spin * calculateEventHorizonRadius(u_blackHoles[0].mass) / 2.0f;
 
         // set charge
-        float Q = u_blackHoleCharges[0];
+        float Q = u_blackHoles[0].charge;
 
         // geodesic integration (RK4)
-        relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, u_blackHoleMasses[0]);
-        rk4_step(relativePosSph, relativeDirSph, stepSize, u_blackHoleMasses[0], a, Q);
-        relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, u_blackHoleMasses[0]);
+        relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, u_blackHoles[0].mass);
+        rk4_step(relativePosSph, relativeDirSph, stepSize, u_blackHoles[0].mass, a, Q);
+        relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, u_blackHoles[0].mass);
     }
 
     dir = vel_spherical_to_cartesian(relativePosSph.yzw, relativeDirSph.yzw);

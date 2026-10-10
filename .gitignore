@@ -7,3 +7,7 @@ cmake-build-debug-mingw/
 *.mhdr
 out/
 .shader_cache/
+.gpp/
+molehole_state.yaml
+molehole_state.yaml.backup
+/NodeEditor.json

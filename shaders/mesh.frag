@@ -1,18 +1,30 @@
-#version 460 core
+#version 450
 
-in vec3 FragPos;
-in vec3 Normal;
-in vec2 TexCoord;
+layout(location = 0) in vec3 FragPos;
+layout(location = 1) in vec3 Normal;
+layout(location = 2) in vec2 TexCoord;
 
-out vec4 FragColor;
+layout(location = 0) out vec4 FragColor;
 
-uniform vec4 uBaseColorFactor;
-uniform float uMetallicFactor;
-uniform float uRoughnessFactor;
-uniform sampler2D uBaseColorTexture;
-uniform int uHasBaseColorTexture;
-uniform vec3 uCameraPos;
-uniform vec3 uLightDir;
+layout(set = 0, binding = 0, std140) uniform MeshCameraBlock
+{
+    mat4 u_view;
+    mat4 u_projection;
+    vec3 u_cameraPos; float _pad0;
+    vec3 u_lightDir; float _pad1;
+};
+
+layout(set = 0, binding = 1) uniform sampler2D u_baseColorTexture;
+
+layout(push_constant) uniform PushConstants
+{
+    mat4 u_model;
+    vec4 u_baseColorFactor;
+    float u_metallicFactor;
+    float u_roughnessFactor;
+    int u_hasBaseColorTexture;
+    float _pad2;
+};
 
 const float PI = 3.14159265359;
 
@@ -48,22 +60,22 @@ vec3 FresnelSchlick(float cosTheta, vec3 F0) {
 }
 
 void main() {
-    vec4 baseColor = uBaseColorFactor;
-    if (uHasBaseColorTexture == 1) {
-        baseColor *= texture(uBaseColorTexture, TexCoord);
+    vec4 baseColor = u_baseColorFactor;
+    if (u_hasBaseColorTexture == 1) {
+        baseColor *= texture(u_baseColorTexture, TexCoord);
     }
 
     vec3 N = normalize(Normal);
-    vec3 V = normalize(uCameraPos - FragPos);
-    vec3 L = normalize(uLightDir);
+    vec3 V = normalize(u_cameraPos - FragPos);
+    vec3 L = normalize(u_lightDir);
     vec3 H = normalize(V + L);
 
     vec3 F0 = vec3(0.04);
-    F0 = mix(F0, baseColor.rgb, uMetallicFactor);
+    F0 = mix(F0, baseColor.rgb, u_metallicFactor);
 
     vec3 F = FresnelSchlick(max(dot(H, V), 0.0), F0);
-    float NDF = DistributionGGX(N, H, uRoughnessFactor);
-    float G = GeometrySmith(N, V, L, uRoughnessFactor);
+    float NDF = DistributionGGX(N, H, u_roughnessFactor);
+    float G = GeometrySmith(N, V, L, u_roughnessFactor);
 
     vec3 numerator = NDF * G * F;
     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
@@ -71,7 +83,7 @@ void main() {
 
     vec3 kS = F;
     vec3 kD = vec3(1.0) - kS;
-    kD *= 1.0 - uMetallicFactor;
+    kD *= 1.0 - u_metallicFactor;
 
     float NdotL = max(dot(N, L), 0.0);
     vec3 radiance = vec3(1.0);
@@ -82,7 +94,7 @@ void main() {
     vec3 color = ambient + Lo;
 
     color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0/2.2));
+    color = pow(color, vec3(1.0 / 2.2));
 
     FragColor = vec4(color, baseColor.a);
 }

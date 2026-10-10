@@ -1,13 +1,8 @@
-uniform int u_metric_type = 1; // 0 -> schwarschild; 1 -> kerr; 2 -> reissner-nordström; 3 ->  kerr-newman
-
 const float G = 1.0f;
 const float c = 1.0f;
 const float EPSILON0 = 8.854187817e-12f;
 const float PI = 3.1415926535;
 
-// ------------------------------------------------------------------------------------------------------------
-// Metric computation
-// ------------------------------------------------------------------------------------------------------------
 mat4 compute_schwarzschild_metric(float t, float r, float theta, float phi, float M) {
     float rs = 2.0f * G * M / pow(c, 2);
     float r2 = pow(r, 2);
@@ -70,7 +65,6 @@ mat4 compute_kerr_newman_metric(float t, float r, float theta, float phi, float 
     return g;
 }
 
-// spherical coordinates are used for all metrics
 mat4 compute_metric(float t, float r, float theta, float phi, float M, float a, float Q) {
     if (u_metric_type == 0) { // non-rotating, uncharged
         return compute_schwarzschild_metric(t, r, theta, phi, M);
@@ -103,10 +97,6 @@ mat4[4] compute_d_metric(float t, float r, float theta, float phi, float M, floa
     return d_g;
 }
 
-// ------------------------------------------------------------------------------------------------------------
-// Section Geodesic Equation
-// ------------------------------------------------------------------------------------------------------------
-// general geodesic equation for the schwarzschild case
 void geodesic_equation_schwarzschild(vec4 pos, vec4 vel, out vec4 accel, float M) {
     mat4 g = compute_metric(pos[0], pos[1], pos[2], pos[3], M, 0.0f, 0.0f);
     mat4 g_inv = compute_inv_metric(g);
@@ -129,7 +119,6 @@ void geodesic_equation_schwarzschild(vec4 pos, vec4 vel, out vec4 accel, float M
     }
 }
 
-// general geodesic equation for the kerr case
 void geodesic_equation_kerr(vec4 pos, vec4 vel, out vec4 accel, float M, float a) {
     mat4 g = compute_metric(pos[0], pos[1], pos[2], pos[3], M, a, 0.0f);
     mat4 g_inv = compute_inv_metric(g);
@@ -152,7 +141,6 @@ void geodesic_equation_kerr(vec4 pos, vec4 vel, out vec4 accel, float M, float a
     }
 }
 
-// general geodesic equation for the reissner-nordström case
 void geodesic_equation_reissner_nordstrom(vec4 pos, vec4 vel, out vec4 accel, float M, float Q) {
     mat4 g = compute_metric(pos[0], pos[1], pos[2], pos[3], M, 0.0f, Q);
     mat4 g_inv = compute_inv_metric(g);
@@ -175,7 +163,6 @@ void geodesic_equation_reissner_nordstrom(vec4 pos, vec4 vel, out vec4 accel, fl
     }
 }
 
-// general geodesic equation for the kerr-newman case
 void geodesic_equation_kerr_newman(vec4 pos, vec4 vel, out vec4 accel, float M, float a, float Q) {
     mat4 g = compute_metric(pos[0], pos[1], pos[2], pos[3], M, a, Q);
     mat4 g_inv = compute_inv_metric(g);
@@ -198,9 +185,6 @@ void geodesic_equation_kerr_newman(vec4 pos, vec4 vel, out vec4 accel, float M, 
     }
 }
 
-// ------------------------------------------------------------------------------------------------------------
-// Section Numerical Integration
-// ------------------------------------------------------------------------------------------------------------
 void rk4_step(inout vec4 p, inout vec4 vel, float dt, float M, float a, float Q) {
     vec4 k1_v, k2_v, k3_v, k4_v;
     vec4 k1_p, k2_p, k3_p, k4_p;

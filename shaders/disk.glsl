@@ -1,12 +1,3 @@
-uniform int u_accretionDiskVolumetric = 0;
-uniform float u_accDiskHeight = 0.2;
-uniform float u_accDiskNoiseScale = 1.0;
-uniform float u_accDiskNoiseLOD = 5.0;
-uniform float u_accDiskSpeed = 0.5;
-uniform int u_gravitationalRedshiftEnabled = 1;
-uniform float u_dopplerBeamingEnabled = 1.0;
-uniform float u_time;
-
 float adiskColorVariant(vec4 posSph, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin, float blackHoleMass, vec3 blackHoleSpinAxis) {
     float iscoRadius = 2.4f * eventHorizonRadius;
     float outerRadius = 6.7f * eventHorizonRadius;
@@ -41,9 +32,6 @@ float adiskColorVariant(vec4 posSph, inout vec3 color, inout float alpha, float 
 }
 
 
-// ------------------------------------------------------------------------------------------------------------
-// Section Disk Colour
-// ------------------------------------------------------------------------------------------------------------
 // Returns the optical depth (density) at this position for volumetric rendering
 float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin, float blackHoleMass, vec3 blackHoleSpinAxis) {
     float iscoRadius = 2.4f * eventHorizonRadius;
@@ -54,7 +42,6 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
 
     if (r_sph < iscoRadius || r_sph > outerRadius) return 0.0;
 
-    // Base density calculation
     float density;
 
     if (u_accretionDiskVolumetric == 1) {
@@ -62,7 +49,7 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
         // Normalize position to disk space
         vec3 diskPos = toCartesian(posSph.yzw);
 
-        // Add rotation animation
+        // rotation animation
         float animatedTheta = phi_sph + u_time * u_accDiskSpeed;
         float r_cyl = length(diskPos.xz);
         vec3 animatedPos = vec3(
@@ -75,10 +62,10 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
         float spinPlaneDistance = dot(diskPos, normalize(blackHoleSpinAxis));
         float d = abs(spinPlaneDistance) - 0.5f * u_accDiskHeight;
 
-        // Apply FBM to get volumetric density
+        // FBM
         float sdf = sdFbm(animatedPos, d);
 
-        // Convert SDF to density (negative = inside volume)
+        // final density
         density = max(0.0, -sdf);
         density *= 0.3;
     } else {
@@ -92,7 +79,7 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
 
     float noise = 1.0;
 
-    // Apply additional noise layers if not using volumetric (to maintain compatibility)
+    // additional noise layers if not using volumetric
     if (u_accretionDiskVolumetric == 0) {
         for (int i = 0; i < int(u_accDiskNoiseLOD); i++) {
             float animatedTheta = phi_sph;
@@ -111,7 +98,6 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
             noise *= 0.5 * worley(noiseCoord, 1.0f) + 0.3;
         }
     } else {
-        // For volumetric, add subtle detail noise
         vec3 detailCoord = toCartesian(posSph.yzw) * u_accDiskNoiseScale * 5.0;
         noise = 0.7 + 0.3 * worley(detailCoord, 5.0f);
     }

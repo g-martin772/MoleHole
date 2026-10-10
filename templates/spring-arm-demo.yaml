@@ -1,0 +1,59 @@
+Scene: Spring Arm Demo
+Entities:
+  - Guid: 4101000000000000001
+    Components:
+      Metadata:
+        Guid: 4101000000000000001
+        Name: BlackHole
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      BlackHole:
+        Mass: 1
+        Spin: 0.4
+        Charge: 0
+        SpinAxis: [0, 1, 0]
+  - Guid: 4101000000000000002
+    Components:
+      Metadata:
+        Guid: 4101000000000000002
+        Name: Star
+        TypeTag: Sphere
+      Transform:
+        Position: [22, 3, -8]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Sphere:
+        Radius: 2
+        Spin: 0
+        Color: [1, 0.85, 0.5]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+  - Guid: 4101000000000000003
+    Components:
+      Metadata:
+        Guid: 4101000000000000003
+        Name: Orbit Camera
+        TypeTag: Camera
+      Transform:
+        Position: [0, 4, 14]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 60
+        NearPlane: 0.1
+        FarPlane: 1000
+        Primary: true
+      Scripts:
+        - Name: spring_arm_camera
+          Props:
+            Target: 4101000000000000001
+            ArmLength: 14
+            Yaw: 0
+            Pitch: 18
+            OrbitSpeed: 12
+            HeightOffset: 0
+            Smoothing: 0.4
+            LookAtTarget: true

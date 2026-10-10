@@ -1,14 +1,3 @@
-name: ""
-black_holes:
+Scene: BH Orbit 01
+Entities:
   []
-meshes:
-  []
-spheres:
-  []
-animation_graph:
-  variables:
-    []
-  nodes:
-    []
-  links:
-    []

@@ -1,13 +1,16 @@
-#version 460 core
+#version 450
 
-out vec3 v_Color;
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec3 aColor;
 
-uniform mat4 u_ViewProjection;
+layout(location = 0) out vec3 vColor;
 
-layout (location = 1) in vec3 a_Color;
-layout (location = 0) in vec3 a_Position;
+layout(push_constant) uniform PushConstants
+{
+    mat4 u_ViewProjection;
+};
 
 void main() {
-    gl_Position = u_ViewProjection * vec4(a_Position, 1.0);
-    v_Color = a_Color;
+    gl_Position = u_ViewProjection * vec4(aPosition, 1.0);
+    vColor = aColor;
 }

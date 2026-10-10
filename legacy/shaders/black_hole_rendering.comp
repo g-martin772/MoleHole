@@ -1,0 +1,99 @@
+#version 460 core
+
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(rgba32f, binding = 0) uniform image2D l_outputImage;
+
+// accuracy
+uniform int u_isPhysicallyAccurate = 0;
+
+// debug
+uniform int u_debugMode = 0;
+
+// constants
+const float EPSILON = 0.00005f;
+
+// camera
+uniform vec3 u_cameraPos;
+uniform vec3 u_cameraFront;
+uniform vec3 u_cameraUp;
+uniform vec3 u_cameraRight;
+uniform float u_fov;
+uniform float u_aspect;
+
+// third person
+uniform int u_enableThirdPerson = 0;
+uniform float u_thirdPersonDistance = 5.0;
+uniform float u_thirdPersonHeight = 2.0;
+
+#include "kerr.glsl"
+#include "doppler.glsl"
+#include "noise.glsl"
+#include "sdf.glsl"
+#include "physics.glsl"
+#include "crosshair.glsl"
+#include "lut_loader.glsl"
+#include "sphere.glsl"
+#include "disk.glsl"
+#include "ray_tracing.glsl"
+
+void main() {
+    // Get the pixel coordinates and imageSize
+    ivec2 texCoords = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imageSize = imageSize(l_outputImage);
+    
+    // if image is smaller than the viewport, return
+    if (texCoords.x >= imageSize.x || texCoords.y >= imageSize.y) {
+        return;
+    }
+    
+    vec2 uv = (vec2(texCoords) + 0.5f) / vec2(imageSize);
+    uv = uv * 2.0f - 1.0f;
+    uv.x *= u_aspect;
+    
+    // Calculate ray direction and origin
+    vec3 rayOrigin;
+    vec3 cameraFront;
+    vec3 cameraUp;
+    vec3 cameraRight;
+
+    if (u_enableThirdPerson == 1) {
+
+        // Third-person camera: position behind and above the cube
+        vec3 cubeRight = normalize(cross(u_cameraFront, u_cameraUp));
+        vec3 actualCubeUp = normalize(cross(cubeRight, u_cameraFront));
+
+        // Calculate camera position: behind the cube by u_thirdPersonDistance, above by u_thirdPersonHeight
+        vec3 offsetBack = -u_cameraFront * u_thirdPersonDistance;
+        vec3 offsetUp = actualCubeUp * u_thirdPersonHeight;
+        rayOrigin = u_cameraPos + offsetBack + offsetUp;
+
+        // Camera looks at the cube (slightly ahead of cube center)
+        vec3 lookAtPoint = u_cameraPos + u_cameraFront * 1.0;
+        cameraFront = normalize(lookAtPoint - rayOrigin);
+        cameraUp = actualCubeUp;
+        cameraRight = normalize(cross(cameraFront, cameraUp));
+        cameraUp = normalize(cross(cameraRight, cameraFront)); // Recalculate to ensure orthogonality
+    } else {
+        // First-person camera: use provided camera vectors
+        rayOrigin = u_cameraPos;
+        cameraFront = u_cameraFront;
+        cameraUp = u_cameraUp;
+        cameraRight = u_cameraRight;
+    }
+
+    float tanHalfFov = tan(radians(u_fov) * 0.5);
+    vec3 rayDir = normalize(cameraFront + cameraRight * uv.x * tanHalfFov + cameraUp * uv.y * tanHalfFov);
+
+    vec3 color;
+
+    // Perform hybrid raytracing/raymarching to get the color
+    if (u_isPhysicallyAccurate == 1) {
+        color = rk4RayMarching(rayOrigin, rayDir);
+    }
+    else {
+        color = hybridRayTrace(rayOrigin, rayDir);
+    }
+    
+    // Generate Output Image
+    imageStore(l_outputImage, texCoords, vec4(color, 1.0f));
+}

@@ -1,17 +1,70 @@
-name: Gravitation Showcase
-objects:
-  - classes:
-      - Entity
-      - Sphere
-      - Physics
-    parameters:
-      Entity.Rotation: Entity.Position
-      [0, 0, -5]: Entity.Name
-      Sphere
-animation_graph:
-  variables:
-    []
-  nodes:
-    []
-  links:
-    []
+Scene: Gravitation Showcase
+Entities:
+  - Guid: 2342928790908094099
+    Components:
+      Metadata:
+        Guid: 2342928790908094099
+        Name: Sphere
+        TypeTag: Sphere
+      Transform:
+        Position: [-6, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Velocity:
+        Linear: [0, 0, 6]
+        Angular: [0, 0, 0]
+      RigidBody:
+        Type: Dynamic
+        Mass: 5e+14
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: true
+      Collider:
+        Shape: Sphere
+        HalfExtents: [0.5, 0.5, 0.5]
+        Radius: 3
+        HalfHeight: 0.5
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: false
+      Sphere:
+        Radius: 3
+        Spin: 0
+        Color: [0, 0.5, 1]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+  - Guid: 9437375052710036216
+    Components:
+      Metadata:
+        Guid: 9437375052710036216
+        Name: Sphere
+        TypeTag: Sphere
+      Transform:
+        Position: [6, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Velocity:
+        Linear: [0, 0, -6]
+        Angular: [0, 0, 0]
+      RigidBody:
+        Type: Dynamic
+        Mass: 5e+14
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: true
+      Collider:
+        Shape: Sphere
+        HalfExtents: [0.5, 0.5, 0.5]
+        Radius: 3
+        HalfHeight: 0.5
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: false
+      Sphere:
+        Radius: 3
+        Spin: 0
+        Color: [1, 0.5, 0]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
