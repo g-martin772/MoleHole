@@ -7,7 +7,7 @@
       "displayName": "Vcpkg - DEBUG",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_TOOLCHAIN_FILE": "/home/leo/04_REPOS/vcpkg/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_MANIFEST_MODE": "ON",
         "VCPKG_OVERLAY_PORTS": "${sourceDir}/dependencies/gpp/vcpkg-overlays",
         "CMAKE_BUILD_TYPE": "Debug"
