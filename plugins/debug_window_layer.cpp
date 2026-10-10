@@ -60,6 +60,13 @@ namespace
             ImGui::SliderFloat("Noise Scale", &render.AccDiskNoiseScale, 0.0f, 5.0f);
             ImGui::SliderFloat("Noise LOD", &render.AccDiskNoiseLOD, 0.0f, 10.0f);
 
+            SectionHeader("BLOOM");
+            ImGui::Checkbox("Bloom", &render.BloomEnabled);
+            ImGui::SliderFloat("Threshold", &render.BloomThreshold, 0.0f, 5.0f);
+            ImGui::SliderInt("Blur Passes", &render.BloomBlurPasses, 1, 20);
+            ImGui::SliderFloat("Intensity", &render.BloomIntensity, 0.0f, 100.0f);
+            ImGui::Checkbox("Bloom Debug", &render.BloomDebug);
+
             SectionHeader("DEBUG VISUALIZATION");
             const char* debugModeItems[] = {"Normal Rendering", "Gravity Grid", "Object Paths"};
             ImGui::Combo("Debug Mode", &render.DebugMode, debugModeItems, IM_ARRAYSIZE(debugModeItems));

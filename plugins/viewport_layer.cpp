@@ -11,9 +11,6 @@ using namespace MoleHole;
 
 namespace
 {
-    constexpr int kBlurPasses = 5;
-    constexpr float kBloomThreshold = 0.6f;
-    constexpr float kBloomIntensity = 5.0f;
     constexpr float kLensFlareIntensity = 0.3f;
     constexpr float kLensFlareThreshold = 2.0f;
 
@@ -369,14 +366,14 @@ namespace
                         .WriteStorageImage(set, 1, m_BloomBrightImage->GetImageView())
                         .Update();
                     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline->GetLayout(), 0, set, {});
-                    const float threshold = kBloomThreshold;
+                    const float threshold = m_RenderToggles.BloomThreshold;
                     cmd.pushConstants(pipeline->GetLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(float), &threshold);
                     cmd.dispatch(groupsX, groupsY, 1);
                 });
 
             int finalBlurIndex = 0;
             VulkanImage* src = m_BloomBrightImage.get();
-            for (int i = 0; i < kBlurPasses * 2; ++i)
+            for (int i = 0; i < std::clamp(m_RenderToggles.BloomBlurPasses, 1, 20) * 2; ++i)
             {
                 const int horizontal = (i % 2 == 0) ? 1 : 0;
                 const int dstIndex = horizontal ? 0 : 1;
@@ -464,7 +461,8 @@ namespace
                             float LensFlareIntensity;
                             float RtWidth;
                             float RtHeight;
-                        } push{1, 1, kBloomIntensity, 0, 1, kLensFlareIntensity,
+                        } push{1, m_RenderToggles.BloomEnabled ? 1 : 0, m_RenderToggles.BloomIntensity,
+                               m_RenderToggles.BloomDebug ? 1 : 0, 1, kLensFlareIntensity,
                                static_cast<float>(extent.width), static_cast<float>(extent.height)};
                         cmd.pushConstants(pipeline->GetLayout(),
                                           vk::ShaderStageFlagBits::eFragment, 0, sizeof(push), &push);

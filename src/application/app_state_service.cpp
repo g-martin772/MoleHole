@@ -37,6 +37,11 @@ namespace MoleHole
             fn("RayStepSize", render.RayStepSize);
             fn("MaxRaySteps", render.MaxRaySteps);
             fn("AdaptiveStepRate", render.AdaptiveStepRate);
+            fn("BloomEnabled", render.BloomEnabled);
+            fn("BloomThreshold", render.BloomThreshold);
+            fn("BloomBlurPasses", render.BloomBlurPasses);
+            fn("BloomIntensity", render.BloomIntensity);
+            fn("BloomDebug", render.BloomDebug);
         }
     }
 

@@ -33,6 +33,11 @@ export namespace MoleHole
         float RayStepSize = 0.01f;
         int MaxRaySteps = 100000;
         float AdaptiveStepRate = 0.8f;
+        bool BloomEnabled = true;
+        float BloomThreshold = 0.6f;
+        int BloomBlurPasses = 5;
+        float BloomIntensity = 5.0f;
+        bool BloomDebug = false;
     };
 
     enum class GizmoOperation { Translate, Rotate, Scale };
