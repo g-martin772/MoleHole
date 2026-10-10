@@ -1,12 +1,12 @@
 -- Orbits the entity it is attached to around Target at a fixed arm length, like a spring-arm camera boom.
 -- Attach it to a camera entity and turn on "possess scene camera" to look through it while playing.
 
-local function armDirection(yawDegrees, pitchDegrees)
+local function armDirection(yawDegrees: number, pitchDegrees: number): vector
     local yaw, pitch = math.rad(yawDegrees), math.rad(pitchDegrees)
     return vector.create(math.cos(pitch) * math.sin(yaw), math.sin(pitch), math.cos(pitch) * math.cos(yaw))
 end
 
-return {
+local module: ScriptModule = {
     properties = {
         { name = "Target", type = "entity" },
         { name = "ArmLength", type = "float", default = 12, min = 0.5, max = 500 },
@@ -18,11 +18,11 @@ return {
         { name = "LookAtTarget", type = "bool", default = true },
     },
 
-    OnStart = function(self)
+    OnStart = function(self: ScriptSelf)
         self.yaw = self.props.Yaw
     end,
 
-    OnTick = function(self, dt)
+    OnTick = function(self: ScriptSelf, dt: number)
         local props = self.props
         local target = props.Target
         if target == nil or not scene.exists(target) then
@@ -43,3 +43,5 @@ return {
         end
     end,
 }
+
+return module
