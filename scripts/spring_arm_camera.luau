@@ -1,8 +1,5 @@
 -- Orbits the entity it is attached to around Target at a fixed arm length, like a spring-arm camera boom.
 -- Attach it to a camera entity and turn on "possess scene camera" to look through it while playing.
---
--- Script contract: return a table with optional `properties` (shown in the inspector), `OnStart(self)` and
--- `OnTick(self, dt)`. `self.entity` is the owning entity, `self.props` the current property values.
 
 local function armDirection(yawDegrees, pitchDegrees)
     local yaw, pitch = math.rad(yawDegrees), math.rad(pitchDegrees)
@@ -25,8 +22,6 @@ return {
         self.yaw = self.props.Yaw
     end,
 
-    -- Yaw is the starting angle in degrees, OrbitSpeed is degrees per second, and Smoothing is the half-life in
-    -- seconds of the camera's approach to its goal (0 snaps), so the motion looks the same at any frame rate.
     OnTick = function(self, dt)
         local props = self.props
         local target = props.Target

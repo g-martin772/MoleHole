@@ -1,0 +1,146 @@
+Scene: Test
+Entities:
+  - Guid: 4380484363935821836
+    Components:
+      Metadata:
+        Guid: 4380484363935821836
+        Name: BlackHole
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 17, 60]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      RigidBody:
+        Type: Static
+        Mass: 1
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: false
+      Collider:
+        Shape: Sphere
+        HalfExtents: [0.5, 0.5, 0.5]
+        Radius: 2
+        HalfHeight: 0.5
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: true
+      BlackHole:
+        Mass: 1
+        Spin: 0.65
+        Charge: 0
+        SpinAxis: [0.5, 1, 0.1]
+  - Guid: 16017086654788356877
+    Components:
+      Metadata:
+        Guid: 16017086654788356877
+        Name: Sphere
+        TypeTag: Sphere
+      Transform:
+        Position: [4.9999995, 1.9180768e-06, 6.7687088e-06]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      RigidBody:
+        Type: Dynamic
+        Mass: 5.972e+24
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: true
+      Collider:
+        Shape: Sphere
+        HalfExtents: [0.5, 0.5, 0.5]
+        Radius: 0.5
+        HalfHeight: 0.5
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: false
+      Sphere:
+        Radius: 0.5
+        Spin: 0
+        Color: [0.8, 0.8, 0.9]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+  - Guid: 8940108931251162906
+    Components:
+      Metadata:
+        Guid: 8940108931251162906
+        Name: Sphere
+        TypeTag: Sphere
+      Transform:
+        Position: [44.91294, -4.917491, 31.415022]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      RigidBody:
+        Type: Dynamic
+        Mass: 5.972e+24
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: true
+      Collider:
+        Shape: Sphere
+        HalfExtents: [0.5, 0.5, 0.5]
+        Radius: 0.5
+        HalfHeight: 0.5
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: false
+      Sphere:
+        Radius: 0.5
+        Spin: 0
+        Color: [0.8, 0.8, 0.9]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+  - Guid: 16517151201453543067
+    Components:
+      Metadata:
+        Guid: 16517151201453543067
+        Name: Mesh
+        TypeTag: Mesh
+      Transform:
+        Position: [-26.746088, 31.006155, 5.1414022]
+        Rotation: [0.032389656, 0.17262217, -0.1752161, 0.96873724]
+        Scale: [0.9999993, 0.9999988, 0.9999991]
+      RigidBody:
+        Type: Static
+        Mass: 1e+20
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: true
+      Collider:
+        Shape: ConvexMesh
+        HalfExtents: [0.5, 0.5, 0.5]
+        Radius: 0.5
+        HalfHeight: 0.5
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: false
+      Mesh:
+        AssetPath: /home/gabriel/Repos/MoleHole/assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+  - Guid: 14745305380211402418
+    Components:
+      Metadata:
+        Guid: 14745305380211402418
+        Name: Camera
+        TypeTag: Camera
+      Transform:
+        Position: [-45.52147, 44.78979, 69.01485]
+        Rotation: [-0.16883112, -0.2522404, -0.044743963, 0.9517714]
+        Scale: [1.0000001, 0.99999976, 1.0000001]
+      Camera:
+        Fov: 54
+        NearPlane: 0.1
+        FarPlane: 1000
+        Primary: true
+      Scripts:
+        - Name: spring_arm_camera
+          Props:
+            ArmLength: 100
+            Target: 4380484363935821836
+Graphs:
+  Version: 3
+  Items:
+    []

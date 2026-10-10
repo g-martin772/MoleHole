@@ -85,8 +85,6 @@ int main(int argc, char* argv[])
         builder.Services.AddSingleton<UiState>([](ServiceProvider&) -> std::shared_ptr<IService>
         {
             auto state = std::make_shared<UiState>();
-            // Only a normal interactive launch gets the startup intro -- never a headless/export
-            // run (matches legacy's ShouldShowIntro()/headless-skip logic).
             state->IntroActive = true;
             return state;
         });
@@ -113,9 +111,6 @@ int main(int argc, char* argv[])
         builder.AddHotReloadableLayer("science-window", "molehole_science_window_layer.so").SetWindowTarget("main");
         builder.AddHotReloadableLayer("animation-graph-window", "molehole_animation_graph_window_layer.so")
                .SetWindowTarget("main");
-        // Registered last so every other panel layer's OnUiRender already ran this frame before
-        // this one -- minimizes the one-frame lag between forcing a step's target Show*Window
-        // flag true and that panel actually appearing in ImGui's window list to highlight.
         builder.AddHotReloadableLayer("tutorial-overlay", "molehole_tutorial_overlay_layer.so")
                .SetWindowTarget("main");
     }
