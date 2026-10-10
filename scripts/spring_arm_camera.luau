@@ -6,7 +6,7 @@ local function armDirection(yawDegrees: number, pitchDegrees: number): vector
     return vector.create(math.cos(pitch) * math.sin(yaw), math.sin(pitch), math.cos(pitch) * math.cos(yaw))
 end
 
-local module: ScriptModule = {
+return {
     properties = {
         { name = "Target", type = "entity" },
         { name = "ArmLength", type = "float", default = 12, min = 0.5, max = 500 },
@@ -43,5 +43,3 @@ local module: ScriptModule = {
         end
     end,
 }
-
-return module
