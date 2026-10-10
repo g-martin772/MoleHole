@@ -334,7 +334,7 @@ namespace
 
         GraphHistory& History()
         {
-            m_Histories.resize(std::max(m_Histories.size(), m_Graphs.Items.size()));
+            m_Histories.resize(std::max({m_Histories.size(), m_Graphs.Items.size(), m_Current + 1}));
             auto& history = m_Histories[m_Current];
             if (history.Size() == 0) history.Reset(CurrentGraph());
             return history;
@@ -471,6 +471,7 @@ namespace
                 if (m_Current < m_Histories.size()) m_Histories.erase(m_Histories.begin() + static_cast<std::ptrdiff_t>(m_Current));
                 SelectGraph(m_Current > 0 ? m_Current - 1 : 0);
                 StructureChanged();
+                return;
             }
 
             if (ImGui::BeginPopupModal("RenameAnimationGraph", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
@@ -1264,6 +1265,14 @@ namespace
             if (ImGui::IsKeyPressed(ImGuiKey_F9, false))
             {
                 for (const int id : SelectedNodeIds()) if (CurrentGraph().FindNode(id)) m_Trace.ToggleBreakpoint(GraphName(), id);
+            }
+            const bool canvasHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
+            if (ImGui::IsKeyPressed(ImGuiKey_Backspace, false) || (!canvasHovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false)))
+            {
+                for (const int id : SelectedNodeIds()) ed::DeleteNode(ed::NodeId(id));
+                std::vector<ed::LinkId> links(CurrentGraph().Links.size() + 1);
+                const int linkCount = ed::GetSelectedLinks(links.data(), static_cast<int>(links.size()));
+                for (int i = 0; i < linkCount; ++i) ed::DeleteLink(links[static_cast<std::size_t>(i)]);
             }
             if (!io.KeyCtrl)
             {
