@@ -61,11 +61,11 @@ namespace MoleHole
 
     Task<void> AppStateService::StartAsync(std::stop_token)
     {
-        m_StatePath = m_FileSystem->ResolvePath("molehole_state.yaml");
+        m_StatePath = m_FileSystem->ResolvePath(".gpp/molehole_state.yaml", PathAnchor::WorkingDir);
         m_Persist = !m_UiState->ExitWhenExportDone;
+        Load();
         if (m_Persist)
         {
-            Load();
             if (!m_UiState->IntroEnabled) m_UiState->IntroActive = false;
             if (!m_TutorialCompleted)
             {

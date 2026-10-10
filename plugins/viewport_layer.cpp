@@ -1485,12 +1485,32 @@ namespace
 
             if (!m_UiState->ExportActive)
             {
-                if (auto request = m_UiState->PendingExport.Take()) StartExport(*request);
+                const bool sceneReady = !m_UiState->ExitWhenExportDone || m_Sim.Load()->Runner;
+                if (sceneReady)
+                {
+                    if (auto request = m_UiState->PendingExport.Take()) StartExport(*request);
+                }
             }
 
             if (m_UiState->ExportActive)
             {
                 m_Renderer->ResizeBufferTarget(m_LayerTarget.Id, m_UiState->ExportResolution);
+
+                if (m_ExportAwaitPlay)
+                {
+                    const auto sim = m_Sim.Load();
+                    if (!sim->Runner || !sim->Runner->IsPaused())
+                    {
+                        m_ExportAwaitPlay = false;
+                        m_ExportStepping = sim->Runner != nullptr;
+                        m_UiState->ExportStepDelta = 1.0f / static_cast<float>(std::max(1, m_ExportRequest.Framerate));
+                    }
+                    else
+                    {
+                        m_UiState->ExportStatus = "Starting simulation...";
+                        return;
+                    }
+                }
 
                 if (m_ExportAllCaptured)
                 {
@@ -1529,6 +1549,8 @@ namespace
                                       : 1;
             m_ExportAllCaptured = false;
             m_ExportEncodeStarted = false;
+            m_ExportStartTime = std::chrono::steady_clock::now();
+            m_ExportLastLog = m_ExportStartTime;
             m_ExportJob = std::make_shared<ExportJob>();
 
             m_SavedRenderToggles = m_UiState->Render;
@@ -1539,12 +1561,17 @@ namespace
             m_ExportMinSerial = (stats ? stats->FramesRendered : 0) + 3;
 
             m_ExportStepping = false;
+            m_ExportStartedPlay = false;
             m_ExportTickDebt = 0.0;
-            if (const auto sim = m_Sim.Load();
-                request.RequestKind == ExportRequest::Kind::Video && sim->Runner && !sim->Runner->IsPaused())
+            if (const auto sim = m_Sim.Load(); request.RequestKind == ExportRequest::Kind::Video && sim->Runner)
             {
                 sim->Runner->SetManualStepping(true);
-                m_ExportStepping = true;
+                if (sim->Runner->IsPaused())
+                {
+                    m_ExportStartedPlay = true;
+                    m_UiState->PendingSnapshotForPlay = true;
+                }
+                m_ExportAwaitPlay = true;
             }
 
             if (request.RequestKind == ExportRequest::Kind::Video)
@@ -1556,6 +1583,28 @@ namespace
             }
 
             m_Logger->Info("Export started: {}x{} -> {}", request.Width, request.Height, request.OutputPath);
+        }
+
+        static std::string FormatDuration(const double seconds)
+        {
+            const auto total = static_cast<long long>(seconds + 0.5);
+            if (total >= 3600) return std::format("{}h {:02}m {:02}s", total / 3600, total / 60 % 60, total % 60);
+            if (total >= 60) return std::format("{}m {:02}s", total / 60, total % 60);
+            return std::format("{}s", total);
+        }
+
+        void LogExportProgress()
+        {
+            if (!m_UiState->ExitWhenExportDone || m_ExportRequest.RequestKind != ExportRequest::Kind::Video) return;
+            const auto now = std::chrono::steady_clock::now();
+            const bool last = m_ExportFrameIndex >= m_ExportTotalFrames;
+            if (!last && now - m_ExportLastLog < std::chrono::seconds(1)) return;
+            m_ExportLastLog = now;
+            const double elapsed = std::chrono::duration<double>(now - m_ExportStartTime).count();
+            const double remaining = elapsed / m_ExportFrameIndex * (m_ExportTotalFrames - m_ExportFrameIndex);
+            m_Logger->Info("Export {}/{} frames ({:.1f}%) | elapsed {} | remaining {}", m_ExportFrameIndex,
+                           m_ExportTotalFrames, 100.0 * m_ExportFrameIndex / m_ExportTotalFrames,
+                           FormatDuration(elapsed), FormatDuration(remaining));
         }
 
         void CaptureExportFrame()
@@ -1582,6 +1631,7 @@ namespace
                     const auto ticks = static_cast<std::uint64_t>(m_ExportTickDebt);
                     m_ExportTickDebt -= static_cast<double>(ticks);
                     sim->Runner->StepAndWait(ticks);
+                    ++m_UiState->ExportStepSerial;
                     m_ExportMinSerial = readback.Serial + 3; // frames already in flight still show the old snapshot
                 }
             }
@@ -1626,10 +1676,13 @@ namespace
                 m_ExportJob->WriteFailed = true;
             }
 
+            m_UiState->ExportProgress = static_cast<float>(m_ExportFrameIndex) / static_cast<float>(m_ExportTotalFrames);
             m_UiState->ExportStatus =
                 m_ExportRequest.RequestKind == ExportRequest::Kind::Video
                     ? std::format("Rendering frame {}/{}", m_ExportFrameIndex, m_ExportTotalFrames)
                     : "Rendering...";
+
+            LogExportProgress();
 
             if (m_ExportFrameIndex >= m_ExportTotalFrames)
             {
@@ -1703,6 +1756,8 @@ namespace
             {
                 m_ExportStepping = false;
                 if (const auto sim = m_Sim.Load(); sim->Runner) sim->Runner->SetManualStepping(false);
+                m_UiState->ExportStepDelta = 0.0f;
+                if (m_ExportStartedPlay) m_UiState->PendingStopSimulation = true;
             }
             m_UiState->ExportActive = false;
             m_UiState->ExportProgress = 1.0f;
@@ -1842,7 +1897,8 @@ namespace
             const auto sim = m_Sim.Load();
             if (!sim->Runner) return false;
             const bool playing = !sim->Runner->IsPaused();
-            if (!m_UiState->PreviewSceneCamera && !(playing && m_UiState->PossessSceneCamera)) return false;
+            const bool possess = m_UiState->PossessSceneCamera || m_UiState->ExportActive;
+            if (!m_UiState->PreviewSceneCamera && !(playing && possess)) return false;
 
             const auto snapshot = sim->Runner->AcquireSnapshot();
             if (!snapshot) return false;
@@ -1930,6 +1986,10 @@ namespace
         bool m_ExportEncodeStarted{false};
         std::uint64_t m_ExportMinSerial{0};
         bool m_ExportStepping{false};
+        bool m_ExportAwaitPlay{false};
+        std::chrono::steady_clock::time_point m_ExportStartTime;
+        std::chrono::steady_clock::time_point m_ExportLastLog;
+        bool m_ExportStartedPlay{false};
         double m_ExportTickDebt{0.0};
         std::shared_ptr<ExportJob> m_ExportJob = std::make_shared<ExportJob>();
         std::filesystem::path m_ExportTempDir;

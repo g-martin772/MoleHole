@@ -176,11 +176,20 @@ namespace
                 m_Trace.Continue();
             }
 
-            if (!paused && m_Executor && m_Trace.ShouldRunTick())
+            float tickDelta = deltaTime;
+            bool tickDue = true;
+            if (m_UiState->ExportStepDelta > 0.0f)
+            {
+                tickDelta = m_UiState->ExportStepDelta;
+                tickDue = m_UiState->ExportStepSerial != m_LastExportStepSerial;
+                m_LastExportStepSerial = m_UiState->ExportStepSerial;
+            }
+
+            if (!paused && m_Executor && tickDue && m_Trace.ShouldRunTick())
             {
                 ForwardEvents();
                 auto sceneLock = runner->LockRenderScene();
-                ApplyWrites(*runner, m_Executor->ExecuteTickEvent(*sceneLock, deltaTime));
+                ApplyWrites(*runner, m_Executor->ExecuteTickEvent(*sceneLock, tickDelta));
             }
             else
             {
@@ -2494,6 +2503,7 @@ namespace
         bool m_TraceOnlyProblems = false;
 
         std::string m_LastSceneName;
+        std::uint64_t m_LastExportStepSerial{0};
         bool m_WasPaused = true;
         std::unique_ptr<IGraphRuntime> m_Executor;
         ScriptCache m_ScriptCache;

@@ -186,11 +186,11 @@ export namespace MoleHole
         float ExportProgress = 0.0f;
         std::string ExportStatus;
         bool ExitWhenExportDone = false;
+        float ExportStepDelta = 0.0f;
+        std::uint64_t ExportStepSerial = 0;
 
         RenderToggles Render;
         float GravityMultiplier = 1.0f;
-        // Simulation ticks per second. Independent of the UI and viewport frame rates: the simulation
-        // thread runs at this rate however slowly the viewport renders (or the UI draws).
         float SimulationTickRate = 60.0f;
     };
 }

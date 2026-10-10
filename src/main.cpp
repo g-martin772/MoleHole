@@ -125,6 +125,12 @@ int main(int argc, char* argv[])
                .SetWindowTarget("main");
     }
 
+    if (exportArgs)
+    {
+        builder.AddHotReloadableLayer("animation-graph-window", "molehole_animation_graph_window_layer.so")
+               .SetBufferTarget(kViewportBufferId);
+    }
+
     builder.AddHotReloadableLayer("viewport", "molehole_viewport_layer.so")
            .SetBufferTarget(kViewportBufferId);
 
