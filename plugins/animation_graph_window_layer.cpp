@@ -565,7 +565,7 @@ namespace
                 }
                 for (const auto& entity : entities)
                 {
-                    if (ImGui::Selectable(entity.Label.c_str(), entity.Guid == named.EntityGuid))
+                    if (ImGui::Selectable((entity.Label + "##" + std::to_string(entity.Guid)).c_str(), entity.Guid == named.EntityGuid))
                     {
                         named.EntityGuid = entity.Guid;
                         StructureChanged();
@@ -1599,7 +1599,7 @@ namespace
                         if (ImGui::Selectable("(Graph's entity)", guid == 0)) value = std::uint64_t{0};
                         for (const auto& entity : entities)
                         {
-                            if (ImGui::Selectable(entity.Label.c_str(), entity.Guid == guid)) value = entity.Guid;
+                            if (ImGui::Selectable((entity.Label + "##" + std::to_string(entity.Guid)).c_str(), entity.Guid == guid)) value = entity.Guid;
                         }
                         ImGui::EndCombo();
                     }
@@ -2392,7 +2392,7 @@ namespace
                     if (!EntityMatchesCategory(entity, node)) continue;
                     any = true;
                     const bool selected = entity.Guid == node.TargetGuid;
-                    if (ImGui::Selectable(entity.Label.c_str(), selected))
+                    if (ImGui::Selectable((entity.Label + "##" + std::to_string(entity.Guid)).c_str(), selected))
                     {
                         node.TargetGuid = entity.Guid;
                         MarkDirty();
