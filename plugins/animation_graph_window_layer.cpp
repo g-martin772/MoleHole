@@ -1794,7 +1794,7 @@ namespace
 
         void DrawInlineContent(Node& node, const float nodeWidth, const std::vector<EntityOption>& entities)
         {
-            if (IsLuauOnly(node))
+            if (IsLuauOnly(node) && !m_UseLuau)
             {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.85f, 0.85f, 1.0f));
                 ImGui::TextUnformatted("Luau runtime only");
