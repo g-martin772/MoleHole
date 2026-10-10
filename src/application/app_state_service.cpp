@@ -137,6 +137,10 @@ namespace MoleHole
                 if (const auto v = simulation["TickRate"])
                     m_UiState->SimulationTickRate = std::clamp(v.as<float>(), 1.0f, 2000.0f);
             }
+            if (const auto v = node["DefaultExportDirectory"]; v && v.IsScalar() && !v.as<std::string>().empty())
+            {
+                m_DefaultExportDirectory = v.as<std::string>();
+            }
             if (const auto v = node["LastExportDirectory"]; v && v.IsScalar())
             {
                 m_LastExportDirectory = v.as<std::string>();
@@ -209,6 +213,7 @@ namespace MoleHole
             root["Simulation"]["TickRate"] = m_UiState->SimulationTickRate;
 
             root["LastExportDirectory"] = GetLastExportDirectory();
+            root["DefaultExportDirectory"] = GetDefaultExportDirectory();
             root["TutorialCompleted"] = GetTutorialCompleted();
 
             YAML::Node scanDirsNode;
@@ -272,6 +277,37 @@ namespace MoleHole
         {
             m_RecentScenes.resize(kMaxRecent);
         }
+    }
+
+    std::filesystem::path NextNumberedPath(const std::filesystem::path& directory, const std::string_view stem,
+                                           const std::string_view extension)
+    {
+        for (int index = 1;; ++index)
+        {
+            auto candidate = directory / std::format("{}_{:03d}.{}", stem, index, extension);
+            if (!std::filesystem::exists(candidate)) return candidate;
+        }
+    }
+
+    std::string AppStateService::GetDefaultExportDirectory() const
+    {
+        std::scoped_lock lock(m_Mutex);
+        return m_DefaultExportDirectory;
+    }
+
+    void AppStateService::SetDefaultExportDirectory(std::string directory)
+    {
+        std::scoped_lock lock(m_Mutex);
+        m_DefaultExportDirectory = std::move(directory);
+    }
+
+    std::filesystem::path AppStateService::NextExportPath(const ExportRequest::Kind kind) const
+    {
+        auto directory = m_FileSystem->ResolvePath(GetDefaultExportDirectory());
+        std::error_code error;
+        std::filesystem::create_directories(directory, error);
+        const bool image = kind == ExportRequest::Kind::Image;
+        return NextNumberedPath(directory, image ? "render" : "video", image ? "png" : "mp4");
     }
 
     std::string AppStateService::GetLastExportDirectory() const

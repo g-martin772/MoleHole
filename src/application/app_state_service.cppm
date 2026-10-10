@@ -6,6 +6,9 @@ import :UI.State;
 
 export namespace MoleHole
 {
+    [[nodiscard]] std::filesystem::path NextNumberedPath(const std::filesystem::path& directory, std::string_view stem,
+                                                         std::string_view extension);
+
     class AppStateService final : public GPP::IHostedService
     {
     public:
@@ -23,6 +26,9 @@ export namespace MoleHole
 
         void NotifyExported(const std::string& outputPath);
         [[nodiscard]] std::string GetLastExportDirectory() const;
+        [[nodiscard]] std::string GetDefaultExportDirectory() const;
+        void SetDefaultExportDirectory(std::string directory);
+        [[nodiscard]] std::filesystem::path NextExportPath(ExportRequest::Kind kind) const;
 
         [[nodiscard]] bool GetTutorialCompleted() const;
         void SetTutorialCompleted(bool completed);
@@ -46,6 +52,7 @@ export namespace MoleHole
         std::string m_LastScenePath;
         std::vector<std::string> m_RecentScenes;
         std::string m_LastExportDirectory;
+        std::string m_DefaultExportDirectory{".gpp/exports"};
         std::vector<std::string> m_MeshScanDirectories;
         bool m_TutorialCompleted = false;
     };

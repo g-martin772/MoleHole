@@ -197,11 +197,6 @@ namespace
             {
                 if (ImGui::MenuItem("Export Render..."))
                 {
-                    if (m_ExportPathBuffer[0] == '\0')
-                    {
-                        const auto defaultName = m_ExportKind == 0 ? "render.png" : "render.mp4";
-                        std::ranges::copy(std::string_view(defaultName), m_ExportPathBuffer.begin());
-                    }
                     m_ShowExportDialog = true;
                 }
                 ImGui::EndMenu();
@@ -233,7 +228,7 @@ namespace
 
             const ImGuiViewport* viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowSize(ImVec2(480, 360), ImGuiCond_Appearing);
+            ImGui::SetNextWindowSize(ImVec2(480, 450), ImGuiCond_Appearing);
 
             if (ImGui::BeginPopupModal("Settings", &m_UiState->ShowSettingsWindow, ImGuiWindowFlags_NoResize))
             {
@@ -270,6 +265,27 @@ namespace
                 if (ImGui::SliderFloat("Font Size", &fontSize, 10.0f, 32.0f, "%.0f"))
                 {
                     m_UiPreferences->SetFont(currentFont, fontSize);
+                }
+
+                SectionHeader("EXPORT");
+                {
+                    std::array<char, 512> exportDir{};
+                    const auto current = m_AppState->GetDefaultExportDirectory();
+                    std::ranges::copy(current.substr(0, exportDir.size() - 1), exportDir.begin());
+                    if (ImGui::InputText("Default Folder", exportDir.data(), exportDir.size()))
+                    {
+                        m_AppState->SetDefaultExportDirectory(exportDir.data());
+                    }
+                    if (ImGui::Button("Browse...##ExportFolder"))
+                    {
+                        if (const auto folder = m_FileDialog->PickFolder(m_FileSystem->ResolvePath(current)))
+                        {
+                            m_AppState->SetDefaultExportDirectory(folder->string());
+                        }
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Reset##ExportFolder")) m_AppState->SetDefaultExportDirectory(".gpp/exports");
+                    ImGui::TextDisabled("Relative paths start at the working directory");
                 }
 
                 ImGui::Spacing();
@@ -339,7 +355,8 @@ namespace
             }
 
             SectionHeader("OUTPUT");
-            ImGui::InputText("##ExportPath", m_ExportPathBuffer.data(), m_ExportPathBuffer.size());
+            ImGui::InputTextWithHint("##ExportPath", "Auto-named in the default export folder", m_ExportPathBuffer.data(),
+                                     m_ExportPathBuffer.size());
             ImGui::SameLine();
             if (ImGui::Button("Browse..."))
             {
@@ -355,6 +372,13 @@ namespace
                 }
             }
 
+            if (m_ExportPathBuffer[0] == '\0')
+            {
+                const auto next = m_AppState->NextExportPath(m_ExportKind == 0 ? ExportRequest::Kind::Image
+                                                                                : ExportRequest::Kind::Video);
+                ImGui::TextDisabled("Saves to %s", next.string().c_str());
+            }
+
             ImGui::EndDisabled();
 
             ImGui::Spacing();
@@ -368,14 +392,13 @@ namespace
             }
             else
             {
-                const bool canStart = m_ExportPathBuffer[0] != '\0';
-                ImGui::BeginDisabled(!canStart);
                 if (ImGui::Button("Start Export", ImVec2(120, 0)))
                 {
                     ExportRequest request;
                     request.RequestKind =
                         m_ExportKind == 0 ? ExportRequest::Kind::Image : ExportRequest::Kind::Video;
-                    request.OutputPath = m_ExportPathBuffer.data();
+                    request.OutputPath = m_ExportPathBuffer[0] != '\0' ? std::string(m_ExportPathBuffer.data())
+                                                                       : m_AppState->NextExportPath(request.RequestKind).string();
                     request.Width = static_cast<std::uint32_t>(m_ExportWidth);
                     request.Height = static_cast<std::uint32_t>(m_ExportHeight);
                     request.DurationSeconds = m_ExportDuration;
@@ -389,7 +412,6 @@ namespace
                     m_ShowExportDialog = false;
                     ImGui::CloseCurrentPopup();
                 }
-                ImGui::EndDisabled();
                 ImGui::SameLine();
                 if (ImGui::Button("Close", ImVec2(120, 0)))
                 {
