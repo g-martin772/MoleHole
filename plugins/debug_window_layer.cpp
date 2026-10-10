@@ -60,6 +60,23 @@ namespace
             ImGui::SliderFloat("Noise Scale", &render.AccDiskNoiseScale, 0.0f, 5.0f);
             ImGui::SliderFloat("Noise LOD", &render.AccDiskNoiseLOD, 0.0f, 10.0f);
 
+            SectionHeader("RAY MARCHING");
+            ImGui::SliderFloat("Step Size", &render.RayStepSize, 0.001f, 1.0f, "%.4f", ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderInt("Max Steps", &render.MaxRaySteps, 100, 200000);
+            ImGui::SliderFloat("Adaptive Step Rate", &render.AdaptiveStepRate, 0.01f, 10.0f, "%.2f",
+                               ImGuiSliderFlags_Logarithmic);
+
+            SectionHeader("POST PROCESSING");
+            ImGui::Checkbox("Anti-Aliasing (FXAA)", &render.AntiAliasing);
+            ImGui::Checkbox("Lens Flare", &render.LensFlare);
+            ImGui::SliderFloat("Flare Intensity", &render.LensFlareIntensity, 0.0f, 100.0f);
+            ImGui::SliderFloat("Flare Threshold", &render.LensFlareThreshold, 0.0f, 5.0f);
+
+            SectionHeader("THIRD PERSON");
+            ImGui::Checkbox("Third Person Crosshair", &render.ThirdPerson);
+            ImGui::SliderFloat("Distance", &render.ThirdPersonDistance, 1.0f, 100.0f);
+            ImGui::SliderFloat("Height", &render.ThirdPersonHeight, 0.0f, 50.0f);
+
             SectionHeader("BLOOM");
             ImGui::Checkbox("Bloom", &render.BloomEnabled);
             ImGui::SliderFloat("Threshold", &render.BloomThreshold, 0.0f, 5.0f);

@@ -38,6 +38,13 @@ export namespace MoleHole
         int BloomBlurPasses = 5;
         float BloomIntensity = 5.0f;
         bool BloomDebug = false;
+        bool AntiAliasing = true;
+        bool LensFlare = true;
+        float LensFlareIntensity = 0.3f;
+        float LensFlareThreshold = 2.0f;
+        bool ThirdPerson = false;
+        float ThirdPersonDistance = 10.0f;
+        float ThirdPersonHeight = 3.0f;
     };
 
     enum class GizmoOperation { Translate, Rotate, Scale };

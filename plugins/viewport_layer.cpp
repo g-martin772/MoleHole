@@ -11,8 +11,6 @@ using namespace MoleHole;
 
 namespace
 {
-    constexpr float kLensFlareIntensity = 0.3f;
-    constexpr float kLensFlareThreshold = 2.0f;
 
     constexpr float kGravityGridPlaneY = -5.0f;
     constexpr float kGravityGridPlaneSize = 200.0f;
@@ -413,7 +411,8 @@ namespace
                         .Update();
                     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline->GetLayout(), 0, set, {});
                     struct { float Intensity; float Threshold; std::int32_t Enabled; } push{
-                        kLensFlareIntensity, kLensFlareThreshold, 1
+                        m_RenderToggles.LensFlareIntensity, m_RenderToggles.LensFlareThreshold,
+                        m_RenderToggles.LensFlare ? 1 : 0
                     };
                     cmd.pushConstants(pipeline->GetLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(push), &push);
                     cmd.dispatch(groupsX, groupsY, 1);
@@ -461,8 +460,9 @@ namespace
                             float LensFlareIntensity;
                             float RtWidth;
                             float RtHeight;
-                        } push{1, m_RenderToggles.BloomEnabled ? 1 : 0, m_RenderToggles.BloomIntensity,
-                               m_RenderToggles.BloomDebug ? 1 : 0, 1, kLensFlareIntensity,
+                        } push{m_RenderToggles.AntiAliasing ? 1 : 0, m_RenderToggles.BloomEnabled ? 1 : 0, m_RenderToggles.BloomIntensity,
+                               m_RenderToggles.BloomDebug ? 1 : 0, m_RenderToggles.LensFlare ? 1 : 0,
+                               m_RenderToggles.LensFlareIntensity,
                                static_cast<float>(extent.width), static_cast<float>(extent.height)};
                         cmd.pushConstants(pipeline->GetLayout(),
                                           vk::ShaderStageFlagBits::eFragment, 0, sizeof(push), &push);
@@ -1837,6 +1837,9 @@ namespace
             params.RayStepSize = render.RayStepSize;
             params.MaxRaySteps = render.MaxRaySteps;
             params.AdaptiveStepRate = render.AdaptiveStepRate;
+            params.EnableThirdPerson = render.ThirdPerson ? 1 : 0;
+            params.ThirdPersonDistance = render.ThirdPersonDistance;
+            params.ThirdPersonHeight = render.ThirdPersonHeight;
 
             m_ParamsBuffer->Upload(&params, sizeof(params));
         }

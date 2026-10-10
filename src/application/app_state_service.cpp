@@ -42,6 +42,13 @@ namespace MoleHole
             fn("BloomBlurPasses", render.BloomBlurPasses);
             fn("BloomIntensity", render.BloomIntensity);
             fn("BloomDebug", render.BloomDebug);
+            fn("AntiAliasing", render.AntiAliasing);
+            fn("LensFlare", render.LensFlare);
+            fn("LensFlareIntensity", render.LensFlareIntensity);
+            fn("LensFlareThreshold", render.LensFlareThreshold);
+            fn("ThirdPerson", render.ThirdPerson);
+            fn("ThirdPersonDistance", render.ThirdPersonDistance);
+            fn("ThirdPersonHeight", render.ThirdPersonHeight);
         }
     }
 
