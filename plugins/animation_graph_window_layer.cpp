@@ -846,7 +846,10 @@ namespace
             std::vector<Command> commands;
             const auto flush = [&]
             {
-                if (!commands.empty()) runner.EnqueueCommands(std::exchange(commands, {}));
+                if (commands.empty()) return;
+                CommandOptions options;
+                options.OnlyWhilePlaying = true;
+                runner.EnqueueCommands(std::exchange(commands, {}), std::move(options));
             };
             for (auto& write : writes)
             {
@@ -856,7 +859,13 @@ namespace
                     continue;
                 }
                 flush();
-                if (write.AsClosure()) runner.EnqueueEdit([fn = write.AsClosure()](Scene& scene) { fn(scene); });
+                if (write.AsClosure())
+                {
+                    runner.EnqueueEdit([fn = write.AsClosure(), r = &runner](Scene& scene)
+                    {
+                        if (!r->IsPaused()) fn(scene);
+                    });
+                }
             }
             flush();
         }
