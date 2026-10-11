@@ -1,7 +1,10 @@
-#!/bin/bash
-mkdir -p out
-pdflatex -interaction=nonstopmode -output-directory=out main.tex
-biber --input-directory=out --output-directory=out main
-makeglossaries -d out main
-pdflatex -interaction=nonstopmode -output-directory=out main.tex
-pdflatex -interaction=nonstopmode -output-directory=out main.tex
+#!/bin/env sh
+
+OUTDIR="build"
+
+mkdir -p $OUTDIR
+pdflatex -interaction=nonstopmode -output-directory=$OUTDIR main.tex
+biber --input-directory=$OUTDIR --output-directory=$OUTDIR main
+makeglossaries -d $OUTDIR main
+pdflatex -interaction=nonstopmode -output-directory=$OUTDIR main.tex
+pdflatex -interaction=nonstopmode -output-directory=$OUTDIR main.tex

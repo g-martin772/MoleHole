@@ -1,0 +1,122 @@
+\subsection{Radiometry and Surface Reflectance}\label{subsec:radiometry-surface-reflectance}
+
+ TODO
+\subsubsection{Radiometry and Photometry}\label{subsubsec:radiometry-photometry}
+
+It is important to understand the difference between radiometry (physical measurement of \gls{em} radiation)
+and photometry (light as it is perceived by the human eye).
+Both systems define their own set of units.
+The conversion between the two is defined by the spectral luminous efficiency function $V(\lambda)$,
+which peaks at approximately $555\,\mathrm{nm}$ (green).
+This is why colors like green and yellow appear brighter to the human eye compared to colors like blue.
+
+\Cref{tab:radiometric-quantities} shows the key radiometric quantities,
+and \Cref{tab:photometric-quantities} lists their photometric equivalents.
+Note that while rendering calculations are performed using radiometric units (specifically Radiance),
+output devices (displays) and human perception operate in the photometric domain (Luminance).~\cite{tuwien_rendering_2020}.
+
+\begin{table*}
+    \centering
+    \caption{Radiometric Quantities (Physical)~\cite{tuwien_rendering_2020}}
+    \label{tab:radiometric-quantities}
+    \begin{tabular}{lccl}
+        \toprule
+        \textbf{Quantity} & \textbf{Symbol} & \textbf{Unit} & \textbf{Description} \\
+        \midrule
+        Radiant Energy & $Q_e$ & Joule [$\mathrm{J}$] & Total energy of radiation \\
+        Radiant Flux (Power) & $\Phi_e$ & Watt [$\mathrm{W}$] & Energy per unit time ($\mathrm{J/s}$) \\
+        Radiant Intensity & $I_e$ & Watt/sr [$\mathrm{W/sr}$] & Flux per unit solid angle \\
+        Irradiance & $E_e$ & Watt/$\mathrm{m}^2$ [$\mathrm{W/m^2}$] & Incident flux per unit area \\
+        Radiance & $L_e$ & Watt/($\mathrm{sr} \cdot \mathrm{m}^2$) & Flux per unit projected area per unit solid angle \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+\begin{table*}
+    \centering
+    \caption{Photometric Quantities (Perceptual)~\cite{tuwien_rendering_2020}}
+    \label{tab:photometric-quantities}
+    \begin{tabular}{lccl}
+        \toprule
+        \textbf{Quantity} & \textbf{Symbol} & \textbf{Unit} & \textbf{Description} \\
+        \midrule
+        Luminous Energy & $Q_v$ & Talbot [$\mathrm{T}$] & Perceived energy of light \\
+        Luminous Flux & $\Phi_v$ & Lumen [$\mathrm{lm}$] & Perceived power \\
+        Luminous Intensity & $I_v$ & Candela [$\mathrm{cd}$] & Flux per unit solid angle ($\mathrm{lm/sr}$) \\
+        Illuminance & $E_v$ & Lux [$\mathrm{lx}$] & Incident flux per unit area ($\mathrm{lm/m^2}$) \\
+        Luminance & $L_v$ & Nit [$\mathrm{cd/m^2}$] & Perceived brightness of a surface \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+\subsubsection{Bidirectional Reflectance Distribution Function (BRDF)}\label{subsubsec:brdf}
+
+The \gls{brdf} defines how a material scatters incoming light from direction $\omega_i$ 
+into outgoing direction $\omega_o$ at a given surface point $x$~\cite{136913.136929}.
+Formally the \gls{brdf} is the differential ratio of reflected radiance $\mathrm{d}L_r$ 
+to incident irradiance $\mathrm{d}E_i$:
+
+\begin{align}
+    f_r(x, \omega_i, \omega_o) &= \frac{\mathrm{d} L_r(x, \omega_o)}{\mathrm{d} E_i(\omega_i)} \\
+    &= \frac{\mathrm{d} L_r(x, \omega_o)}{L_o(y_i, -\omega_i) \, |\cos\theta_i| \, \mathrm{d}\omega_i}
+\end{align}
+
+The unit of the \gls{brdf} is radiance divided by irradiance, which is $\mathrm{sr^{-1}}$ (inverse steradians).
+
+In terms of fundamental flux quantities, the \gls{brdf} can also be expressed as:
+
+\begin{align}
+    f_r(x, \omega_i, \omega_o) = \frac{\mathrm{d}^3 \Phi_r}{\mathrm{d}^2 \Phi_i \, \mathrm{d}\omega_o \, |\cos\theta_o|}
+\end{align}
+
+The \gls{brdf} must also satisfy the following requirements:
+\begin{itemize}
+    \item \textbf{Positivity}: Light cannot be negative, so it must satisfy $f_r(x, \omega_i, \omega_o) \geq 0$ for all $\omega_i, \omega_o$
+    \item \textbf{Helmholtz Reciprocity}: States that a ray and its reverse ray must follow the same optical path 
+        (e.g.\ reflections, refractions) $f_r(x, \omega_i, \omega_o) = f_r(x, \omega_o, \omega_i)$
+    \item \textbf{Energy Conservation}: The cosine weighted integral of the \gls{brdf} over the hemisphere must be
+            1 or less for all $\omega_o$:
+    \[
+        \int_{\Omega} f_r(x, \omega_i, \omega_o) |\cos\theta_o| \mathrm{d}\omega_o \leq 1
+    \]
+\end{itemize}
+
+\subsubsection{Bidirectional Transmittance Distribution Function (BTDF)}\label{subsubsec:btdf}
+
+While the \gls{brdf} covers reflection, the \gls{btdf} handles light that passes through a surface (transmission).
+The lower hemisphere $\Omega^-$ is used for incoming light (\gls{brdf}), 
+and the upper hemisphere $\Omega^+$ is used for outgoing light (\gls{btdf}).
+Unlike reflection, the \gls{btdf} is not symmetric, as light can be transmitted in one direction but not the other,
+and when light transmits across an interface between two media, with different refractive indices $n_1$ and $n_2$,
+the \gls{btdf} is scaled by the ratio of the squared indices of refraction ${({n_2}/{n_1})}^2$ 
+according to Snell's law.~\cite{136913.136929,Born_Wolf_Bhatia_Clemmow_Gabor_Stokes_Taylor_Wayman_Wilcock_1999}
+
+\[
+    f_t(\omega_i, \omega_t) = \frac{d L_t(\omega_t)}{d E_i(\omega_i)} = \frac{d L_t(\omega_t)}{L_i(\omega_i) |\cos\theta_i| d\omega_i}
+\]
+
+
+\subsubsection{Bidirectional Scattering Distribution Function (BSDF)}\label{subsubsec:bsdf}
+
+The \gls{bsdf} unifies reflection and transmission into a single function
+over the entire sphere of directions $4\pi$ steradians,
+logically representing the sum of $f_r$ and $f_t$.~\cite{Bartell1980BSDF}
+
+\[
+    f_s(\omega_i, \omega_o) = f_r(\omega_i, \omega_o) + f_t(\omega_i, \omega_t)
+\]
+
+Depending on whether the incident and outgoing directions are on the same side 
+of the surface (reflection) or opposite sides (transmission), 
+the BSDF decomposes into two distinct components,
+because light cannot simultaneously reflect and transmit 
+along the exact same outgoing vector $\omega_o$ at a sharp boundary point.
+Therefore, the general BSDF is defined piecewise as:
+
+\begin{align}
+    f_s(x, \omega_i, \omega_o) = 
+    \begin{cases} 
+      f_r(x, \omega_i, \omega_o), & \text{reflection} \\ 
+      f_t(x, \omega_i, \omega_o), & \text{transmission}
+    \end{cases}
+\end{align}

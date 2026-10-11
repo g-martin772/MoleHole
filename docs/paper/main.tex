@@ -18,7 +18,8 @@
 \usepackage{booktabs}
 
 \usepackage[hidelinks]{hyperref}
-\usepackage[style=ieee, backend=biber]{biblatex}
+\usepackage{cleveref}
+\usepackage[style=numeric-comp, backend=biber]{biblatex}
 \addbibresource{references.bib}
 
 \usepackage[acronym,toc]{glossaries}
@@ -51,10 +52,8 @@
 
 \input{chapters/intro}
 \input{chapters/math_theory}
-\input{chapters/rendering_theory}
+\input{chapters/rendering_theory/chapter}
 \input{chapters/physical_theory}
-
-
 
 \printglossary[type=\acronymtype, title=Acronyms]
 

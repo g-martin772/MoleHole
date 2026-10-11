@@ -1,0 +1,94 @@
+
+\subsection{The Rendering Equation}\label{subsec:rendering-equation}
+
+The fundamental mathematical model for simulating light in physically-based rendering is the Rendering Equation,
+introduced by Kajiya in 1986\cite{10.1145/15886.15902}.
+It describes the equilibrium distribution of radiance in a scene.
+
+\subsubsection{The Equation}\label{subsubsec:the-equation}
+
+The Rendering Equation expresses the total spectral radiance $L_o$
+leaving a point $x$ in direction $\omega_o$ as the sum
+of emitted radiance $L_e$ and reflected radiance:
+
+\begin{align}
+    L_o(x, \omega_o) &= L_e(x, \omega_o) + \notag \\
+    & \int_{\Omega} f_r(x, \omega_i, \omega_o) L_i(x, \omega_i) (\omega_i \cdot n) d\omega_i
+    \label{eq:rendering-equation}
+\end{align}
+
+where:
+\begin{itemize}
+    \item $L_o(x, \omega_o)$ is the total outgoing radiance.
+    \item $L_e(x, \omega_o)$ is the emitted radiance (for light sources).
+    \item $\Omega$ is the unit hemisphere centered at normal $n$ containing all incoming directions $\omega_i$.
+    \item $f_r(x, \omega_i, \omega_o)$ is the \gls{brdf}, defining how light is scattered.
+    \item $L_i(x, \omega_i)$ is the incoming radiance from direction $\omega_i$.
+    \item $(\omega_i \cdot n)$ is the geometry term (Lambert's cosine law),
+        accounting for the spreading of light over the surface area (often written as $\cos\theta_i$).
+\end{itemize}
+
+\paragraph{Usage of Radiance ($L$)}
+
+Radiance ($L$) is the central quantity in rendering for several reasons:
+\begin{enumerate}
+    \item \textbf{Invariance}: Radiance is constant along a ray in a vacuum.
+    This implies $L_i(x, \omega) = L_o(y, -\omega)$ where $y$ is the visible surface point.
+    This property enables ray tracing: to find the radiance reaching the camera,
+    we simply trace a ray into the scene and calculate the radiance leaving the intersected surface.
+    \item \textbf{Sensor Response}: Camera sensors and the human eye respond to radiance
+    (integrated over the pixel area and solid angle).
+    \item \textbf{Light Transport}: It describes the flow of light energy through space.
+\end{enumerate}
+
+The recursive nature of $L_i$ (which is the $L_o$ from another point)
+makes this integral equation difficult to solve analytically.
+Therefore, most implementations use numerical methods like Monte Carlo integration (see ~\ref{subsubsec:monte-carlo}).
+
+\subsubsection{Spherical Integration}
+
+To solve the integral numerically, we often parameterize the hemisphere $\Omega$
+using spherical coordinates $(\theta, \phi)$.
+The differential solid angle $d\omega_i$ changes variables as follows:
+\begin{equation}
+    d\omega = \sin\theta d\theta d\phi\label{eq:omega-cov}
+\end{equation}
+
+Substituting this into the rendering equation gives the explicit double integral form:
+
+\begin{align}
+    \int_{\Omega} (\dots) d\omega_i &= \int_{0}^{2\pi} \int_{0}^{\frac{\pi}{2}} L_i(x, \theta, \phi) \cdot \notag \\
+    & f_r(x, \theta, \phi, \omega_o) \cos\theta \sin\theta d\theta d\phi
+\end{align}
+
+Here, $\theta$ is the polar angle (from the normal $n$, range $[0, \pi/2]$)
+and $\phi$ is the azimuth angle (range $[0, 2\pi]$).
+The term $\cos\theta$ comes from the geometry term $(\omega_i \cdot n)$,
+and $\sin\theta$ comes from the differential solid angle measure.
+
+\subsubsection{Color Spectrum}
+
+Radiance $L$ varies with wavelength ($L(\lambda)$).
+In computer graphics, strictly accurate rendering would require integrating over the entire visible spectrum.
+However, for efficiency, we typically sample this spectrum at three discrete wavelengths corresponding to Red, Green,
+and Blue (RGB).
+This mimics the tristimulus response of the human eye.
+While sufficient for most purposes, this approximation can fail for phenomena like
+dispersion, fluorescence or metamerism resulting in inaccurate results.
+
+\subsubsection{Energy Conservation (White Furnace Test)}
+
+A physically-based material must conserve energy: it cannot reflect more light than it receives.
+The ``White Furnace Test'' is a thought experiment (or unit-test) used to verify this.
+If a non-absorbing object is placed in an environment with uniform radiance $L_i = 1$ everywhere,
+the outgoing radiance $L_o$ must also be exactly $1$ (as long as no other form of light is emitted).
+For a perfectly diffuse (Lambertian) surface with albedo $\rho$, the \gls{brdf} is constant $f_r = c$.
+Integrating the cosine term over the hemisphere yields $\pi$:
+\[
+    \int_{\Omega} \cos\theta d\omega = \pi
+\]
+Therefore, to ensure $L_o = \rho L_i$, we must normalize the \gls{brdf}:
+\[
+f_{r, \text{diffuse}} = \frac{\rho}{\pi}
+\]
+The factor of $1/\pi$ is essential for energy conservation.
