@@ -207,6 +207,9 @@ when e.g. the cone of causality is introduced.
 \subsection{Galilean Transformation}
 \label{subsec:galilean}
 
+
+
+
 \subsection{Lorentz Transformation}
 \label{subsec:lorentz}
 
@@ -278,6 +281,26 @@ methods will be elaborated.
 
 \subsection{Runge Kutta fourth order}
 \label{subsec:runge-kutta}
+
+
+The Runge-Kutta method is a widely used algorithm for approximating the 
+evolution of function of higher degrees. One particular famous example, as presented
+in this paper, is the classical fourth-order method. It is composed of four different 
+contributing terms, hence the name fourth-order. First,
+\begin{equation}
+	y_{n+1} = y_n + \frac h6 (k_1 + 2k_2 + 2k_3 + k_4)
+\end{equation}
+is the general equation where
+\begin{equation}
+	\begin{gathered}
+		k_1 = f(x_n, y_n) \\
+		k_2 = f(x_n + \frac h2, y_n + \frac h2 k_1) \\
+		k_3 = f(x_n + \frac h2, y_n + \frac h2 k_2) \\
+		k_4 = f(x_n + h, y_n + hk_3)
+	\end{gathered}
+\end{equation}
+are the representations of the four contributing terms~\cite{Book:numerical_analysis_01_suli}. 
+
 
 \subsection{Runge Kutta Fehlberg fourth order}
 \label{subsec:runge-kutta-fehlberg}
