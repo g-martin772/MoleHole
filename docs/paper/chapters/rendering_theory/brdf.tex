@@ -1,4 +1,4 @@
-\subsection{Radiometry and Surface Reflectance}\label{subsec:radiometry-surface-reflectance}
+\subsection{Radiometry and Surface Scattering}\label{subsec:radiometry-surface-reflectance}
 
  TODO
 \subsubsection{Radiometry and Photometry}\label{subsubsec:radiometry-photometry}
@@ -100,7 +100,7 @@ according to Snell's law.~\cite{136913.136929,Born_Wolf_Bhatia_Clemmow_Gabor_Sto
 
 The \gls{bsdf} unifies reflection and transmission into a single function
 over the entire sphere of directions $4\pi$ steradians,
-logically representing the sum of $f_r$ and $f_t$.~\cite{Bartell1980BSDF}
+logically representing the sum of $f_r$ and $f_t$.~\cite{Bartell1980BSDF,Pharr2016PBR}
 
 \[
     f_s(\omega_i, \omega_o) = f_r(\omega_i, \omega_o) + f_t(\omega_i, \omega_t)
@@ -120,3 +120,35 @@ Therefore, the general BSDF is defined piecewise as:
       f_t(x, \omega_i, \omega_o), & \text{transmission}
     \end{cases}
 \end{align}
+
+\subsubsection{Isotropic vs Anisotropic Scattering}\label{subsubsec:isotropic-anisotropic-scattering}
+
+Scattering at a point depends on 4 angular dimensions: 
+the incident direction $(\theta_i, \phi_i)$ and the outgoing direction $(\theta_o, \phi_o)$.
+~\cite{Pharr2016PBR,10.1145/133994.134078}
+
+\paragraph{Isotropic Scattering:}
+
+A surface is isotropic if its scattering properties are invariant under rotation about the surface normal $n$.
+Spinning the object around its normal does not change the appearance of the surface.
+Therefore the scattering function no longer depends on the azimuthal angles $\phi_i$ and $\phi_o$,
+and the \gls{bsdf} reduces to a function of only the polar angles $\theta_i$ and $\theta_o$: 
+$f_s(\theta_i, \theta_o, \Delta\phi)$
+Examples of isotropic materials include Lambertian surfaces, metals, dielectrics, glass, and some plastics.
+
+\paragraph{Anisotropic Scattering:}
+
+Anisotropic surfaces have scattering properties that vary with rotation about the surface normal.
+This leaves the \gls{bsdf} as a 4D function of both the polar and azimuthal angles:
+$f_s(\theta_i,\phi_i,\theta_o,\phi_o)$.
+Anisotropy commonly results from an oriented microscopic structure.
+For example mie scattering from aligned fibers, water droplets, brushed metals, or dust.
+
+In practice, anisotropic models often use a tangent direction $t$ in addition to the surface normal
+$n$ to describe this orientation. The tangent and bitangent define a local frame in which the
+microfacets or scattering lobes can have different roughness values along different axes. When the
+roughness is equal in both tangent directions, the model reduces to the isotropic case.
+
+
+
+
