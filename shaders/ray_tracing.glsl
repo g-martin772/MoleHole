@@ -294,8 +294,14 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
     vec4 relativePosSph = vec4(0.0f, toSpherical(relativePosCart));
     vec4 relativeDirSph = vec4(1.0f, vel_cartesian_to_spherical(relativePosCart, dir));
 
+    // calculate specific angular momentum from spin parameter
+    float a = u_blackHoles[0].spin * calculateEventHorizonRadius(u_blackHoles[0].mass) / 2.0f;
+
+    // set charge
+    float Q = u_blackHoles[0].charge;
+
     // compute event horizon radius
-    float r_s = calculateEventHorizonRadius(u_blackHoles[0].mass);
+    float r_s = calculateEventHorizonRadius(u_blackHoles[0].mass, a);
 
     // main loop
     for (int i = 0; i < maxSteps; i++) {
@@ -333,12 +339,6 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
         } else {
             stepSize = u_rayStepSize;
         }
-
-        // calculate specific angular momentum from spin parameter
-        float a = u_blackHoles[0].spin * calculateEventHorizonRadius(u_blackHoles[0].mass) / 2.0f;
-
-        // set charge
-        float Q = u_blackHoles[0].charge;
 
         // geodesic integration (RK4)
         relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, u_blackHoles[0].mass);
