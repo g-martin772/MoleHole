@@ -128,7 +128,7 @@ float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHo
     // Increase contrast to make darker parts darker and brighter parts brighter
     float contrastNoise = pow(noise, 3.0) * 3.5;
 
-    vec3 emission = 0.01f * bbColor * contrastNoise;
+    vec3 emission = 0.05f * bbColor * contrastNoise;
     color += emission * alpha;
     return 10.0f * density;
 }
