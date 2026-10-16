@@ -16,6 +16,16 @@ export namespace MoleHole
         return nullptr;
     }
 
+    [[nodiscard]] inline const Node* FindPinOwner(const AnimationGraphData& graph, const int pinId)
+    {
+        for (const auto& node : graph.Nodes)
+        {
+            for (const auto& pin : node.Inputs) if (pin.Id == pinId) return &node;
+            for (const auto& pin : node.Outputs) if (pin.Id == pinId) return &node;
+        }
+        return nullptr;
+    }
+
     // Math nodes declare Float pins but operate on any numeric type, so they accept and produce all numeric pins.
     [[nodiscard]] inline bool IsGenericMathNode(const Node& node)
     {

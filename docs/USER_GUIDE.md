@@ -104,7 +104,12 @@ Open from sidebar or View menu.
 - Drag: logarithmic (1 %/px, Shift ×5, Alt/Ctrl ×0.1), passes through zero. Click: type `1.5 AU`, `3 Msun`, `10 km`,
   `2 Lj`, `4.3e6 Msun`, `1 Mearth`, `0.1 c`. A number without a unit is read in the unit currently shown
 - Hover a field to see the SI value and a few other units
-- Black holes: spin is a* = cJ/(GM²), charge is q*
+- Right-click a field to force one display unit for it (all axes of a vector share it). Debug → Display units picks a preset:
+  Auto (by magnitude), Human (m, km, kg, t), Stellar (Rsun, AU, Msun), Galactic (AU, ly, pc, Msun, yr…)
+- Scene YAML accepts `Mass: {value: 10, unit: Msun}`, `Radius: "3 km"` and `Position: {value: [1, 2, 0.5], unit: AU}`;
+  saving writes plain SI
+- Black holes: spin is a* = cJ/(GM²), charge is q*. With a*² + q*² > 1 there is no horizon: Status shows
+  "Naked singularity" and the horizon read-out is n/a
 - Precision: CPU simulation f32/f64/f128, GPU render f32/f64
 
 ## Components

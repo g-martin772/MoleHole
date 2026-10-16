@@ -134,6 +134,10 @@ namespace MoleHole
                 if (const auto v = ui["ShowGeneralRelativityWindow"])
                     m_UiState->ShowGeneralRelativityWindow = v.as<bool>();
                 if (const auto v = ui["ShowScienceWindow"]) m_UiState->ShowScienceWindow = v.as<bool>();
+                if (const auto v = ui["DisplayUnits"])
+                {
+                    if (const auto preset = Units::DisplayPresetFromName(v.as<std::string>())) Units::SetDisplayPreset(*preset);
+                }
                 if (const auto v = ui["ShowAnimationGraphWindow"])
                     m_UiState->ShowAnimationGraphWindow = v.as<bool>();
             }
@@ -228,6 +232,7 @@ namespace MoleHole
             root["UI"]["ShowDebugWindow"] = m_UiState->ShowDebugWindow;
             root["UI"]["ShowGeneralRelativityWindow"] = m_UiState->ShowGeneralRelativityWindow;
             root["UI"]["ShowScienceWindow"] = m_UiState->ShowScienceWindow;
+            root["UI"]["DisplayUnits"] = std::string(Units::DisplayPresetName(Units::GetDisplayPreset()));
             root["UI"]["ShowAnimationGraphWindow"] = m_UiState->ShowAnimationGraphWindow;
 
             ForEachRenderToggle(m_UiState->Render, [&](const char* name, auto& value) { root["Render"][name] = value; });

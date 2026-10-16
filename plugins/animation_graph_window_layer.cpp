@@ -1090,6 +1090,10 @@ namespace
                     ImGui::TextDisabled("%s%s", pin->IsInput ? "input" : "output",
                                         m_LinkedPins.contains(pin->Id) ? ", connected" : "");
                     if (!pin->Name.empty()) ImGui::TextUnformatted(pin->Name.c_str());
+                    if (const Node* owner = FindPinOwner(CurrentGraph(), pin->Id))
+                    {
+                        if (const std::string unit = PinUnitText(*owner, *pin); !unit.empty()) ImGui::TextDisabled("%s", unit.c_str());
+                    }
                     if (pin->Type != PinType::Flow)
                     {
                         if (const std::string live = PinValueText(GraphName(), *pin); !live.empty())

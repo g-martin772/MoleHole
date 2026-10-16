@@ -53,9 +53,17 @@ namespace MoleHole
                     GPP::Field("Spin", &BlackHoleComponent::Spin,
                                {.Label = "Spin a*", .Min = 0.0, .Max = 0.998, .Speed = 0.01}),
                     GPP::Field("Charge", &BlackHoleComponent::Charge,
-                               {.Label = "Charge q* (exotic)", .Min = 0.0, .Max = 1.0, .Speed = 0.01}),
+                               {.Label = "Charge q*", .Min = 0.0, .Max = 1.0, .Speed = 0.01}),
                     GPP::Field("SpinAxis", &BlackHoleComponent::SpinAxis,
                                {.Label = "Spin Axis", .Speed = 0.01, .Kind = GPP::FieldKind::Direction}),
+                    GPP::Computed<BlackHoleComponent, std::string>(
+                        "Status",
+                        [](const BlackHoleComponent& c) -> std::string
+                        {
+                            return GPP::Units::HasHorizon(c.Spin, c.Charge) ? "Black hole"
+                                                                            : "Naked singularity";
+                        },
+                        nullptr, {.Label = "Status"}),
                     GPP::Computed<BlackHoleComponent, double>(
                         "GravitationalRadius",
                         [](const BlackHoleComponent& c) { return GPP::Units::GravitationalRadius(c.Mass); }, nullptr,

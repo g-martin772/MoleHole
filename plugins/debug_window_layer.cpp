@@ -77,6 +77,29 @@ namespace
             ImGui::Checkbox("Doppler Beaming", &render.DopplerBeaming);
             ImGui::Checkbox("Physically Accurate", &render.PhysicallyAccurate);
 
+            SectionHeader("DISPLAY UNITS");
+            {
+                const auto current = Units::GetDisplayPreset();
+                ImGui::SetNextItemWidth(ImGui::CalcItemWidth());
+                if (ImGui::BeginCombo("##displayunits", std::string(Units::DisplayPresetName(current)).c_str()))
+                {
+                    for (const auto preset : Units::kDisplayPresets)
+                    {
+                        if (ImGui::Selectable(std::string(Units::DisplayPresetName(preset)).c_str(), preset == current))
+                        {
+                            Units::SetDisplayPreset(preset);
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Which units the inspector prefers for lengths, masses and times.\n"
+                                       "Auto picks by magnitude; Human = m/km/kg, Stellar = Rsun/AU/Msun, Galactic = pc/Msun/yr.\n"
+                                       "Right-click a value to force one unit for that field.");
+                }
+            }
+
             SectionHeader("PRECISION");
             Units::Precision cpuPrecision = m_UiState->SimulationPrecision;
             ImGui::TextUnformatted("CPU simulation");

@@ -298,23 +298,84 @@ export namespace MoleHole
         return declaredSpeedSi > 0.0 ? declaredSpeedSi : 1.0;
     }
 
-    [[nodiscard]] inline std::string QuantityLabel(const double valueSi, const GPP::Units::Dimension dimension)
+    [[nodiscard]] inline const GPP::Units::UnitDef* ChooseDisplayUnit(const GPP::Units::Dimension dimension,
+                                                                      const double valueSi,
+                                                                      const GPP::Units::UnitDef* forced)
     {
-        return GPP::Units::FormatQuantity(valueSi, dimension, 5);
+        return forced ? forced : GPP::Units::PickDisplayUnit(dimension, valueSi);
     }
 
-    [[nodiscard]] inline std::string QuantityEditText(const double valueSi, const GPP::Units::Dimension dimension)
+    [[nodiscard]] inline std::string FormatQuantityAs(const double valueSi, const GPP::Units::Dimension dimension,
+                                                      const GPP::Units::UnitDef* forced, const int digits)
     {
-        return GPP::Units::FormatQuantity(valueSi, dimension, 12);
+        return forced ? GPP::Units::FormatIn(valueSi, *forced, digits)
+                      : GPP::Units::FormatQuantity(valueSi, dimension, digits);
     }
 
-    [[nodiscard]] inline std::string QuantityTooltip(const double valueSi, const GPP::Units::Dimension dimension)
+    [[nodiscard]] inline std::string QuantityLabel(const double valueSi, const GPP::Units::Dimension dimension,
+                                                   const GPP::Units::UnitDef* forced = nullptr)
+    {
+        if (std::isnan(valueSi)) return "n/a";
+        return FormatQuantityAs(valueSi, dimension, forced, 5);
+    }
+
+    // Longest label that fits: fewer digits first, then the number without its unit (the tooltip keeps the unit).
+    template <typename Measure>
+    [[nodiscard]] std::string FitQuantityLabel(const double valueSi, const GPP::Units::Dimension dimension,
+                                               const float maxWidth, Measure&& measure,
+                                               const GPP::Units::UnitDef* forced = nullptr)
+    {
+        if (std::isnan(valueSi)) return "n/a";
+        using namespace GPP::Units;
+        const UnitDef* unit = ChooseDisplayUnit(dimension, valueSi, forced);
+        for (int digits = 5; digits >= 1; --digits)
+        {
+            auto text = FormatQuantityAs(valueSi, dimension, forced, digits);
+            if (measure(text) <= maxWidth) return text;
+        }
+        if (unit)
+        {
+            for (int digits = 5; digits >= 1; --digits)
+            {
+                auto text = FormatNumber(FromSi(valueSi, *unit), digits);
+                if (measure(text) <= maxWidth) return text;
+            }
+        }
+        return FormatNumber(unit ? FromSi(valueSi, *unit) : valueSi, 1);
+    }
+
+    // "%.3f"-style format with the fewest decimals that still fit; other formats are returned unchanged.
+    template <typename Measure>
+    [[nodiscard]] std::string FitFloatFormat(const double value, const std::string_view format, const float maxWidth,
+                                             Measure&& measure)
+    {
+        const auto dot = format.find(".");
+        if (dot == std::string_view::npos || format.back() != 'f' || dot + 2 >= format.size()) return std::string(format);
+        int decimals = 0;
+        const auto digits = format.substr(dot + 1, format.size() - dot - 2);
+        const auto [end, ec] = std::from_chars(digits.data(), digits.data() + digits.size(), decimals);
+        if (ec != std::errc{} || end != digits.data() + digits.size()) return std::string(format);
+        for (; decimals > 0; --decimals)
+        {
+            if (measure(std::format("{:.{}f}", value, decimals)) <= maxWidth) break;
+        }
+        return std::string(format.substr(0, dot + 1)) + std::to_string(decimals) + "f";
+    }
+
+    [[nodiscard]] inline std::string QuantityEditText(const double valueSi, const GPP::Units::Dimension dimension,
+                                                      const GPP::Units::UnitDef* forced = nullptr)
+    {
+        return FormatQuantityAs(valueSi, dimension, forced, 12);
+    }
+
+    [[nodiscard]] inline std::string QuantityTooltip(const double valueSi, const GPP::Units::Dimension dimension,
+                                                     const GPP::Units::UnitDef* forced = nullptr)
     {
         using namespace GPP::Units;
         const UnitDef* base = BaseUnit(dimension);
         std::string text = base ? FormatIn(valueSi, *base, 12) : FormatNumber(valueSi, 12);
         if (valueSi == 0.0 || !std::isfinite(valueSi)) return text;
-        const UnitDef* shown = PickDisplayUnit(dimension, valueSi);
+        const UnitDef* shown = ChooseDisplayUnit(dimension, valueSi, forced);
         int extra = 0;
         for (const auto* unit : UnitsOf(dimension))
         {
@@ -328,9 +389,10 @@ export namespace MoleHole
     }
 
     [[nodiscard]] inline std::optional<double> ParseQuantityEdit(const std::string& text, const double oldSi,
-                                                                 const GPP::Units::Dimension dimension)
+                                                                 const GPP::Units::Dimension dimension,
+                                                                 const GPP::Units::UnitDef* forced = nullptr)
     {
-        const auto* shown = GPP::Units::PickDisplayUnit(dimension, oldSi);
+        const auto* shown = ChooseDisplayUnit(dimension, oldSi, forced);
         const auto parsed = GPP::Units::ParseQuantity(text, dimension, shown);
         if (!parsed) return std::nullopt;
         return parsed->ValueSi;

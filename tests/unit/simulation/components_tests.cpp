@@ -44,3 +44,20 @@ TEST_CASE("BlackHoleComponent and SphereComponent round-trip through scene YAML"
     CHECK(sph.Color.z == Catch::Approx(1.0f));
     CHECK(sph.TexturePath == "moon.png");
 }
+
+TEST_CASE("Component node pins report the unit of their field", "[simulation][graph][units]")
+{
+    RegisterComponents();
+    const Node setter = CreateSetterNode(1, "RigidBody");
+    const auto mass = std::ranges::find(setter.Inputs, "Mass", &Pin::Name);
+    REQUIRE(mass != setter.Inputs.end());
+    CHECK(PinUnitText(setter, *mass).find("(kg)") != std::string::npos);
+    const auto damping = std::ranges::find(setter.Inputs, "LinearDamping", &Pin::Name);
+    REQUIRE(damping != setter.Inputs.end());
+    CHECK(PinUnitText(setter, *damping).empty());
+
+    const Node blackHole = CreateSetterNode(2, "BlackHole");
+    const auto horizon = std::ranges::find(blackHole.Inputs, "HorizonRadius", &Pin::Name);
+    REQUIRE(horizon != blackHole.Inputs.end());
+    CHECK(PinUnitText(blackHole, *horizon).find("(m)") != std::string::npos);
+}

@@ -11,6 +11,7 @@ export namespace MoleHole
     {
         std::string Label;
         PinType Type{PinType::Float};
+        GPP::Units::Dimension Dim{GPP::Units::Dimension::None};
         std::function<Value(const GPP::Scene&, entt::entity)> Get; // returns std::monostate if the component is missing
         std::function<void(GPP::Scene&, entt::entity, const Value&)> Set; // no-op if component missing or Value holds the wrong alternative
     };
@@ -24,4 +25,6 @@ export namespace MoleHole
 
     [[nodiscard]] std::vector<const PropertyCategory*> GetPropertyCategories();
     [[nodiscard]] const PropertyCategory* FindPropertyCategory(const std::string& componentName);
+    // "length, metres (m)" for a component node pin whose field has a physical dimension, else empty.
+    [[nodiscard]] std::string PinUnitText(const Node& node, const Pin& pin);
 }

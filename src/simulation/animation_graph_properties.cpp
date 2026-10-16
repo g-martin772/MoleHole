@@ -38,6 +38,7 @@ namespace MoleHole
                 category.Properties.push_back(PropertyEntry{
                     .Label = field.Name,
                     .Type = PinTypeOf(field.Type),
+                    .Dim = field.Meta.Dim,
                     .Get = [field](const GPP::Scene& scene, const entt::entity entity) -> Value
                     {
                         return GPP::NarrowToSingle(field.Get(scene.Registry(), entity));
@@ -91,5 +92,20 @@ namespace MoleHole
     {
         const auto* info = GPP::ComponentRegistry::Instance().FindByName(componentName);
         return info ? Resolve(*info) : nullptr;
+    }
+}
+
+namespace MoleHole
+{
+    std::string PinUnitText(const Node& node, const Pin& pin)
+    {
+        if (node.Component.empty()) return {};
+        const auto* category = FindPropertyCategory(node.Component);
+        if (!category) return {};
+        const auto it = std::ranges::find(category->Properties, pin.Name, &PropertyEntry::Label);
+        if (it == category->Properties.end() || it->Dim == GPP::Units::Dimension::None) return {};
+        const auto* base = GPP::Units::BaseUnit(it->Dim);
+        if (!base) return {};
+        return std::format("{}, {} ({}), SI", GPP::Units::DimensionName(it->Dim), base->Name, base->Symbol);
     }
 }

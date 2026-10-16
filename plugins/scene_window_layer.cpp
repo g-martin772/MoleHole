@@ -80,7 +80,12 @@ namespace
             case FieldType::Float:
             {
                 float v = std::get<float>(current);
-                if (DragFloatValue("##v", &v, speed, meta.Min, meta.Max, format)) edited = v;
+                if (meta.Dim != Units::Dimension::None)
+                {
+                    double d = v;
+                    if (QuantityValue("##v", &d, meta.Dim, meta.Speed, meta.Min, upperBound)) edited = static_cast<float>(d);
+                }
+                else if (DragFloatValue("##v", &v, speed, meta.Min, meta.Max, format)) edited = v;
                 break;
             }
             case FieldType::Double:

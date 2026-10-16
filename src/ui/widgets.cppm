@@ -294,7 +294,9 @@ export namespace MoleHole
     inline bool DragFloatValue(const char* id, float* v, float speed, float min, float max, const char* format)
     {
         const bool bounded = max > min;
-        return ImGui::DragFloat(id, v, speed, bounded ? min : 0.0f, bounded ? max : 0.0f, format,
+        const std::string fitted = FitFloatFormat(*v, format, ImGui::CalcItemWidth() - ImGui::GetStyle().FramePadding.x * 2.0f,
+                                                  [](const std::string& text) { return ImGui::CalcTextSize(text.c_str()).x; });
+        return ImGui::DragFloat(id, v, speed, bounded ? min : 0.0f, bounded ? max : 0.0f, fitted.c_str(),
                                 bounded ? ImGuiSliderFlags_AlwaysClamp : ImGuiSliderFlags_None);
     }
 
@@ -313,13 +315,15 @@ export namespace MoleHole
         const glm::vec4 colors[] = {Palette::AxisX, Palette::AxisY, Palette::AxisZ, Palette::AxisW};
         const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
         const float total = ImGui::CalcItemWidth();
-        const float each = std::max(24.0f, (total - spacing * static_cast<float>(count - 1)) / static_cast<float>(count));
         const float chip = ImGui::GetFrameHeight() * 0.8f;
+        const float inline_each = (total - spacing * static_cast<float>(count - 1)) / static_cast<float>(count);
+        const bool stacked = inline_each - chip < ImGui::CalcTextSize("-0.000").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        const float each = stacked ? total : std::max(24.0f, inline_each);
         bool changed = false;
         ImGui::PushID(id);
         for (int i = 0; i < count; ++i)
         {
-            if (i > 0) ImGui::SameLine(0.0f, spacing);
+            if (i > 0 && !stacked) ImGui::SameLine(0.0f, spacing);
             ImGui::PushID(i);
             const ImVec2 pos = ImGui::GetCursorScreenPos();
             const float h = ImGui::GetFrameHeight();
@@ -433,12 +437,18 @@ export namespace MoleHole
         return buffers;
     }
 
+    // Right-click picks a display unit; vector components pass a shared `unitScope` so they agree.
     inline bool QuantityValue(const char* id, double* valueSi, GPP::Units::Dimension dimension, double floorSi = 0.0,
-                              double min = 0.0, double max = 0.0)
+                              double min = 0.0, double max = 0.0, ImGuiID unitScope = 0)
     {
         ImGui::PushID(id);
         const ImGuiID widgetId = ImGui::GetID("##quantity");
         auto* storage = ImGui::GetStateStorage();
+        const ImGuiID unitKey = unitScope ? unitScope : widgetId + 3;
+        const auto choices = GPP::Units::UnitsOf(dimension);
+        const int forcedIndex = storage->GetInt(unitKey, 0) - 1;
+        const GPP::Units::UnitDef* forced =
+            forcedIndex >= 0 && forcedIndex < static_cast<int>(choices.size()) ? choices[static_cast<std::size_t>(forcedIndex)] : nullptr;
         const ImVec2 size(ImGui::CalcItemWidth(), ImGui::GetFrameHeight());
         bool changed = false;
         const bool editing = storage->GetInt(widgetId, 0) != 0;
@@ -449,7 +459,7 @@ export namespace MoleHole
             const bool first = storage->GetInt(widgetId + 1, 0) == 0;
             if (first)
             {
-                buffer = QuantityEditText(*valueSi, dimension);
+                buffer = QuantityEditText(*valueSi, dimension, forced);
                 storage->SetInt(widgetId + 1, 1);
                 ImGui::SetKeyboardFocusHere();
             }
@@ -463,7 +473,7 @@ export namespace MoleHole
             {
                 if (submit && !cancel)
                 {
-                    if (const auto parsed = ParseQuantityEdit(buffer, *valueSi, dimension))
+                    if (const auto parsed = ParseQuantityEdit(buffer, *valueSi, dimension, forced))
                     {
                         double value = *parsed;
                         if (max > min) value = std::clamp(value, min, max);
@@ -483,6 +493,19 @@ export namespace MoleHole
             const bool hovered = ImGui::IsItemHovered();
             const bool active = ImGui::IsItemActive();
             if (hovered || active) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+            if (ImGui::BeginPopupContextItem("##units"))
+            {
+                if (ImGui::MenuItem("Auto", nullptr, forced == nullptr)) storage->SetInt(unitKey, 0);
+                for (std::size_t i = 0; i < choices.size(); ++i)
+                {
+                    const std::string entry = std::format("{} ({})", choices[i]->Symbol, choices[i]->Name);
+                    if (ImGui::MenuItem(entry.c_str(), nullptr, choices[i] == forced))
+                    {
+                        storage->SetInt(unitKey, static_cast<int>(i) + 1);
+                    }
+                }
+                ImGui::EndPopup();
+            }
 
             if (active)
             {
@@ -509,13 +532,16 @@ export namespace MoleHole
             const ImU32 background = ImGui::GetColorU32(active ? ImGuiCol_FrameBgActive
                                                         : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg);
             list->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), background, ImGui::GetStyle().FrameRounding);
-            const std::string label = QuantityLabel(*valueSi, dimension);
+            const std::string label = FitQuantityLabel(*valueSi, dimension, size.x - 8.0f, [](const std::string& text)
+            {
+                return ImGui::CalcTextSize(text.c_str()).x;
+            }, forced);
             const ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
             list->PushClipRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), true);
             list->AddText(ImVec2(pos.x + std::max(4.0f, (size.x - textSize.x) * 0.5f), pos.y + (size.y - textSize.y) * 0.5f),
                           ImGui::GetColorU32(ImGuiCol_Text), label.c_str());
             list->PopClipRect();
-            if (hovered && !active) Tooltip(QuantityTooltip(*valueSi, dimension).c_str());
+            if (hovered && !active) Tooltip(QuantityTooltip(*valueSi, dimension, forced).c_str());
         }
         ImGui::PopID();
         return changed;
@@ -529,13 +555,16 @@ export namespace MoleHole
         const glm::vec4 colors[] = {Palette::AxisX, Palette::AxisY, Palette::AxisZ, Palette::AxisW};
         const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
         const float total = ImGui::CalcItemWidth();
-        const float each = std::max(24.0f, (total - spacing * static_cast<float>(count - 1)) / static_cast<float>(count));
         const float chip = ImGui::GetFrameHeight() * 0.8f;
+        const float inline_each = (total - spacing * static_cast<float>(count - 1)) / static_cast<float>(count);
+        const bool stacked = inline_each - chip < ImGui::CalcTextSize("-0.00 km").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        const float each = stacked ? total : std::max(24.0f, inline_each);
         bool changed = false;
         ImGui::PushID(id);
+        const ImGuiID unitScope = ImGui::GetID("##unit");
         for (int i = 0; i < count; ++i)
         {
-            if (i > 0) ImGui::SameLine(0.0f, spacing);
+            if (i > 0 && !stacked) ImGui::SameLine(0.0f, spacing);
             ImGui::PushID(i);
             const ImVec2 pos = ImGui::GetCursorScreenPos();
             const float h = ImGui::GetFrameHeight();
@@ -558,7 +587,7 @@ export namespace MoleHole
             }
             ImGui::SameLine(0.0f, 0.0f);
             ImGui::SetNextItemWidth(std::max(16.0f, each - chip));
-            changed |= QuantityValue("##v", &v[i], dimension, floorSi, min, max);
+            changed |= QuantityValue("##v", &v[i], dimension, floorSi, min, max, unitScope);
             ImGui::PopID();
         }
         ImGui::PopID();
@@ -568,8 +597,10 @@ export namespace MoleHole
     inline bool DragDoubleValue(const char* id, double* v, double speed, double min, double max, const char* format)
     {
         const bool bounded = max > min;
+        const std::string fitted = FitFloatFormat(*v, format, ImGui::CalcItemWidth() - ImGui::GetStyle().FramePadding.x * 2.0f,
+                                                  [](const std::string& text) { return ImGui::CalcTextSize(text.c_str()).x; });
         return ImGui::DragScalar(id, ImGuiDataType_Double, v, static_cast<float>(speed), bounded ? &min : nullptr,
-                                 bounded ? &max : nullptr, format, bounded ? ImGuiSliderFlags_AlwaysClamp : 0);
+                                 bounded ? &max : nullptr, fitted.c_str(), bounded ? ImGuiSliderFlags_AlwaysClamp : 0);
     }
 
     struct EntityChoice

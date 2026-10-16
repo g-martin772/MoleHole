@@ -43,7 +43,7 @@ TEST_CASE("Quantity labels pick the unit and keep the user's number readable", "
 {
     CHECK(QuantityLabel(1.5 * kAstronomicalUnit, Dimension::Length) == "1.5 AU");
     CHECK(QuantityLabel(0.0, Dimension::Length) == "0 m");
-    CHECK(QuantityLabel(10.0 * kSolarMass, Dimension::Mass) == "10 M\xE2\x98\x89");
+    CHECK(QuantityLabel(10.0 * kSolarMass, Dimension::Mass) == "10 Msun");
     CHECK(QuantityLabel(5972.2e21, Dimension::Mass) == "5.9722e+24 kg");
     CHECK(QuantityLabel(1.0, Dimension::None) == "1");
 }
@@ -75,6 +75,30 @@ TEST_CASE("The tooltip lists SI and neighbouring units", "[ui][units]")
 {
     const auto text = QuantityTooltip(1.5 * kAstronomicalUnit, Dimension::Length);
     CHECK(text.find("224396806050 m") != std::string::npos);
-    CHECK(text.find("R\xE2\x98\x89") != std::string::npos);
+    CHECK(text.find("Rsun") != std::string::npos);
     CHECK(QuantityTooltip(0.0, Dimension::Length) == "0 m");
+}
+
+TEST_CASE("FitQuantityLabel drops digits then the unit as the width shrinks", "[ui][units]")
+{
+    const auto width = [](const std::string& text) { return static_cast<float>(text.size()); };
+    const double value = 25.123456 * kAstronomicalUnit;
+    const auto wide = FitQuantityLabel(value, Dimension::Length, 100.0f, width);
+    CHECK(wide == QuantityLabel(value, Dimension::Length));
+    const auto narrow = FitQuantityLabel(value, Dimension::Length, 7.0f, width);
+    CHECK(narrow.size() <= 7);
+    CHECK(narrow.find("AU") != std::string::npos);
+    const auto tiny = FitQuantityLabel(value, Dimension::Length, 3.0f, width);
+    CHECK(tiny.find("AU") == std::string::npos);
+    CHECK(FitQuantityLabel(std::numeric_limits<double>::quiet_NaN(), Dimension::Length, 1.0f, width) == "n/a");
+}
+
+TEST_CASE("FitFloatFormat reduces decimals only for fixed formats", "[ui]")
+{
+    const auto width = [](const std::string& text) { return static_cast<float>(text.size()); };
+    CHECK(FitFloatFormat(-0.27, "%.3f", 10.0f, width) == "%.3f");
+    CHECK(FitFloatFormat(-0.27, "%.3f", 4.0f, width) == "%.1f");
+    CHECK(FitFloatFormat(-0.27, "%.3f", 1.0f, width) == "%.0f");
+    CHECK(FitFloatFormat(1.0, "%.2fx", 1.0f, width) == "%.2fx");
+    CHECK(FitFloatFormat(1.0, "%d", 1.0f, width) == "%d");
 }

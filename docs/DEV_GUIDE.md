@@ -112,8 +112,14 @@ Auto-generated: YAML load/save, inspector, Add Component menu, graph Get / Decom
 - One source: `gpp/src/core/units/units.cppm`. Constants are binary128 (`kNameW`) with double views (`kName`)
 - SI everywhere. Other systems only through named boundaries
 - Name unit-carrying locals: `radiusM`, `massKg`, `periodS`, `rGeo`, `spinStar`
-- Display units: widget logic in `src/ui/widget_logic.cppm`,
-- Shaders get constants as defines: `Units::ShaderDefines()`
+- Display units: widget logic in `src/ui/widget_logic.cppm`, preset (Auto/Human/Stellar/Galactic) in `Units::SetDisplayPreset`,
+  per-widget override via right-click in `QuantityValue`. UI symbols stay ASCII (`Msun`, `Rsun`): the font has no ☉
+- Shaders get constants as defines: `Units::ShaderDefines()`; shader interfaces stay dimensionless (a lint test rejects
+  uniform/struct members named `*M`, `*Kg`, `*Meters`, `*Seconds`)
+- YAML: `FieldMeta::Dim` fields also accept `{value, unit}` and `"3 km"` (`Reflect::ResolveTagged`)
+- Luau: `units.convert(1, "Msun", "kg")`, `units.const("G")`; script property `{name = "ArmLength", type = "float", unit = "m"}`
+  gets a unit-aware inspector widget (still float32). For double precision use `scene.get_xyz` / `scene.set_xyz`
+  (numbers, not a float32 vector). Graph pin tooltips show the field's SI unit
 - Precision: `Units::Precision` (f32/f64/f128)
 
 ## Add a UI layer

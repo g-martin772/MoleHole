@@ -1,16 +1,16 @@
-local function armDirection(yawDegrees: number, pitchDegrees: number): vector
+local function armDirection(yawDegrees: number, pitchDegrees: number): (number, number, number)
     local yaw, pitch = math.rad(yawDegrees), math.rad(pitchDegrees)
-    return vector.create(math.cos(pitch) * math.sin(yaw), math.sin(pitch), math.cos(pitch) * math.cos(yaw))
+    return math.cos(pitch) * math.sin(yaw), math.sin(pitch), math.cos(pitch) * math.cos(yaw)
 end
 
 return {
     properties = {
         { name = "Target", type = "entity" },
-        { name = "ArmLength", type = "float", default = 20000, min = 0.5, max = 1e12 },
+        { name = "ArmLength", type = "float", unit = "m", default = 20000, min = 0.5, max = 1e12 },
         { name = "Yaw", type = "float", default = 0 },
         { name = "Pitch", type = "float", default = 20, min = -89, max = 89 },
         { name = "OrbitSpeed", type = "float", default = 15 },
-        { name = "HeightOffset", type = "float", default = 0 },
+        { name = "HeightOffset", type = "float", unit = "m", default = 0 },
         { name = "Smoothing", type = "float", default = 0.3, min = 0, max = 5 },
         { name = "LookAtTarget", type = "bool", default = true },
     },
@@ -27,16 +27,18 @@ return {
         end
 
         self.yaw += props.OrbitSpeed * dt
-        local pivot = scene.get(target, "Transform", "Position") + vector.create(0, props.HeightOffset, 0)
-        local goal = pivot + armDirection(self.yaw, props.Pitch) * props.ArmLength
+        local tx, ty, tz = scene.get_xyz(target, "Transform", "Position")
+        ty += props.HeightOffset
+        local dx, dy, dz = armDirection(self.yaw, props.Pitch)
+        local gx, gy, gz = tx + dx * props.ArmLength, ty + dy * props.ArmLength, tz + dz * props.ArmLength
 
-        local current = scene.get(self.entity, "Transform", "Position")
+        local cx, cy, cz = scene.get_xyz(self.entity, "Transform", "Position")
         local blend = props.Smoothing > 0 and 1 - 2 ^ (-dt / props.Smoothing) or 1
-        local position = current + (goal - current) * blend
-        scene.set(self.entity, "Transform", "Position", position)
+        local px, py, pz = cx + (gx - cx) * blend, cy + (gy - cy) * blend, cz + (gz - cz) * blend
+        scene.set_xyz(self.entity, "Transform", "Position", px, py, pz)
 
         if props.LookAtTarget then
-            scene.set(self.entity, "Transform", "Rotation", scene.look_at(position, pivot))
+            scene.set(self.entity, "Transform", "Rotation", scene.look_at(vector.create(px - tx, py - ty, pz - tz), vector.zero))
         end
     end,
 }
