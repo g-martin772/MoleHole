@@ -1,4 +1,6 @@
 Scene: BH Test 01
+SchemaVersion: 2
+TimeScale: 4.911927171628457e-05
 Entities:
   - Guid: 13791585153914435479
     Components:
@@ -11,7 +13,7 @@ Entities:
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       BlackHole:
-        Mass: 1
+        Mass: 1.9884098706980507e+30
         Spin: 0
         Charge: 0
         SpinAxis: [0, 1, 0]
@@ -22,11 +24,11 @@ Entities:
         Name: BlackHole
         TypeTag: BlackHole
       Transform:
-        Position: [0, 0, -20]
+        Position: [0, 0, -29532.50076100249]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       BlackHole:
-        Mass: 1
+        Mass: 1.9884098706980507e+30
         Spin: 0
         Charge: 0
         SpinAxis: [0, 1, 0]
@@ -37,11 +39,11 @@ Entities:
         Name: BlackHole
         TypeTag: BlackHole
       Transform:
-        Position: [0, 0, -40]
+        Position: [0, 0, -59065.00152200498]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       BlackHole:
-        Mass: 1
+        Mass: 1.9884098706980507e+30
         Spin: 0
         Charge: 0
         SpinAxis: [0, 1, 0]
@@ -52,11 +54,11 @@ Entities:
         Name: BlackHole
         TypeTag: BlackHole
       Transform:
-        Position: [0, 0, -60]
+        Position: [0, 0, -88597.50228300747]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       BlackHole:
-        Mass: 1
+        Mass: 1.9884098706980507e+30
         Spin: 0
         Charge: 0
         SpinAxis: [0, 1, 0]
@@ -67,11 +69,11 @@ Entities:
         Name: BlackHole
         TypeTag: BlackHole
       Transform:
-        Position: [0, 100, -1000]
+        Position: [0, 147662.50380501247, -1476625.0380501247]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       BlackHole:
-        Mass: 5
+        Mass: 9.942049353490253e+30
         Spin: 0.5
         Charge: 0
         SpinAxis: [0, 1, 0]
@@ -82,11 +84,11 @@ Entities:
         Name: BlackHole
         TypeTag: BlackHole
       Transform:
-        Position: [-1000, 700, -1000]
+        Position: [-1476625.0380501247, 1033637.5266350872, -1476625.0380501247]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       BlackHole:
-        Mass: 7
+        Mass: 1.3918869094886356e+31
         Spin: 0.5
         Charge: 0
         SpinAxis: [0, 1, 0]
@@ -97,7 +99,7 @@ Entities:
         Name: New Sphere
         TypeTag: Sphere
       Transform:
-        Position: [-54, 56.9, -1131.1]
+        Position: [-79737.75205470673, 84019.96466505209, -1670210.580538496]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       RigidBody:
@@ -108,15 +110,15 @@ Entities:
         EnableGravity: true
       Collider:
         Shape: Sphere
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 6.3
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 9302.737739715785
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
         IsTrigger: false
       Sphere:
-        Radius: 6.3
+        Radius: 9302.737739715785
         Spin: 0
         Color: [0, 0.5, 1]
         SpinAxis: [0, 1, 0]

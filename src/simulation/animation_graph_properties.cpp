@@ -22,7 +22,9 @@ namespace MoleHole
             case GPP::FieldType::Vec4: return PinType::Vec4;
             case GPP::FieldType::String: return PinType::String;
             case GPP::FieldType::Entity: return PinType::Object;
+            case GPP::FieldType::Double:
             case GPP::FieldType::Float: default: return PinType::Float;
+            case GPP::FieldType::DVec3: return PinType::Vec3;
             }
         }
 
@@ -38,7 +40,7 @@ namespace MoleHole
                     .Type = PinTypeOf(field.Type),
                     .Get = [field](const GPP::Scene& scene, const entt::entity entity) -> Value
                     {
-                        return field.Get(scene.Registry(), entity);
+                        return GPP::NarrowToSingle(field.Get(scene.Registry(), entity));
                     },
                     .Set = [field](GPP::Scene& scene, const entt::entity entity, const Value& value)
                     {

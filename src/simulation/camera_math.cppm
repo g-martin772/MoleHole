@@ -6,18 +6,19 @@ export module MoleHole:Simulation.CameraMath;
 
 import std;
 import GPP;
+import :Rendering.Frame;
 
 export namespace MoleHole
 {
     struct SceneCameraView
     {
-        glm::vec3 Position{0.0f};
+        glm::dvec3 PositionM{0.0};
         glm::vec3 Front{0.0f, 0.0f, -1.0f};
         glm::vec3 Up{0.0f, 1.0f, 0.0f};
         glm::vec3 Right{1.0f, 0.0f, 0.0f};
         float Fov{60.0f};
-        float NearPlane{0.1f};
-        float FarPlane{1000.0f};
+        double NearPlaneM{0.1};
+        double FarPlaneM{1000.0};
     };
 
     [[nodiscard]] inline SceneCameraView MakeSceneCameraView(const GPP::TransformComponent& transform,
@@ -25,19 +26,20 @@ export namespace MoleHole
     {
         const glm::quat rotation = glm::normalize(transform.Rotation);
         SceneCameraView view;
-        view.Position = transform.Position;
+        view.PositionM = transform.Position;
         view.Front = rotation * glm::vec3(0.0f, 0.0f, -1.0f);
         view.Up = rotation * glm::vec3(0.0f, 1.0f, 0.0f);
         view.Right = rotation * glm::vec3(1.0f, 0.0f, 0.0f);
         view.Fov = camera.Fov;
-        view.NearPlane = camera.NearPlane;
-        view.FarPlane = camera.FarPlane;
+        view.NearPlaneM = camera.NearPlane;
+        view.FarPlaneM = camera.FarPlane;
         return view;
     }
 
-    [[nodiscard]] inline glm::mat4 SceneCameraViewMatrix(const SceneCameraView& view)
+    [[nodiscard]] inline glm::mat4 SceneCameraViewMatrix(const SceneCameraView& view, const RenderFrame& frame)
     {
-        return glm::lookAt(view.Position, view.Position + view.Front, view.Up);
+        const glm::vec3 position = frame.ToRender(view.PositionM);
+        return glm::lookAt(position, position + view.Front, view.Up);
     }
 
     [[nodiscard]] inline std::optional<SceneCameraView> FindPrimarySceneCamera(const GPP::Scene& scene)

@@ -7,7 +7,12 @@ import glm;
 
 namespace MoleHole
 {
-    float BoundingRadiusOf(const GPP::Scene& scene, const entt::entity entity,
+    namespace
+    {
+        constexpr double kDefaultPickRadiusM = 0.5 * GPP::Units::kSolarGravitationalRadius;
+    }
+
+    double BoundingRadiusOf(const GPP::Scene& scene, const entt::entity entity,
                            const BoundingRadiusOverride& radiusOverride)
     {
         if (radiusOverride)
@@ -37,15 +42,15 @@ namespace MoleHole
                 return collider.Radius;
             }
         }
-        if (registry.all_of<BlackHoleComponent>(entity))
+        if (const auto* blackHole = registry.try_get<BlackHoleComponent>(entity))
         {
-            return 1.0f;
+            return GPP::Units::SchwarzschildRadius(blackHole->Mass);
         }
-        return 0.5f;
+        return kDefaultPickRadiusM;
     }
 
     std::optional<PickHit> PickClosestEntity(
-        const GPP::Scene& scene, const glm::vec3& rayOrigin, const glm::vec3& rayDirection,
+        const GPP::Scene& scene, const glm::dvec3& rayOriginM, const glm::dvec3& rayDirection,
         const BoundingRadiusOverride& radiusOverride)
     {
         const auto direction = glm::normalize(rayDirection);
@@ -53,22 +58,22 @@ namespace MoleHole
 
         for (auto [entity, transform] : scene.Registry().view<GPP::TransformComponent>().each())
         {
-            const float radius = BoundingRadiusOf(scene, entity, radiusOverride);
-            const glm::vec3 toCenter = rayOrigin - transform.Position;
-            const float b = glm::dot(toCenter, direction);
-            const float c = glm::dot(toCenter, toCenter) - radius * radius;
-            const float discriminant = b * b - c;
-            if (discriminant < 0.0f)
+            const double radius = BoundingRadiusOf(scene, entity, radiusOverride);
+            const glm::dvec3 toCenter = rayOriginM - transform.Position;
+            const double b = glm::dot(toCenter, direction);
+            const double c = glm::dot(toCenter, toCenter) - radius * radius;
+            const double discriminant = b * b - c;
+            if (discriminant < 0.0)
             {
                 continue;
             }
-            const float sqrtDiscriminant = std::sqrt(discriminant);
-            float t = -b - sqrtDiscriminant;
-            if (t < 0.0f)
+            const double sqrtDiscriminant = std::sqrt(discriminant);
+            double t = -b - sqrtDiscriminant;
+            if (t < 0.0)
             {
                 t = -b + sqrtDiscriminant;
             }
-            if (t < 0.0f)
+            if (t < 0.0)
             {
                 continue;
             }
@@ -82,7 +87,8 @@ namespace MoleHole
     }
 
     Ray ScreenPointToRay(const glm::vec2& mousePos, const glm::vec2& viewportMin, const glm::vec2& viewportSize,
-                         const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPosition)
+                         const glm::mat4& view, const glm::mat4& projection, const glm::dvec3& cameraPositionM,
+                         const RenderFrame& frame)
     {
         const glm::vec2 local = mousePos - viewportMin;
         const float ndcX = (2.0f * local.x / viewportSize.x) - 1.0f;
@@ -92,6 +98,7 @@ namespace MoleHole
         glm::vec4 farPoint = inverseViewProjection * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
         farPoint /= farPoint.w;
 
-        return Ray{cameraPosition, glm::normalize(glm::vec3(farPoint) - cameraPosition)};
+        const glm::dvec3 farPointM = frame.ToWorld(glm::vec3(farPoint));
+        return Ray{cameraPositionM, glm::normalize(farPointM - cameraPositionM)};
     }
 }

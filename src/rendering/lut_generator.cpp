@@ -57,9 +57,10 @@ namespace MoleHole
         constexpr int kBlackbodyWidth = 256;
         constexpr int kBlackbodyHeight = 128;
 
-        constexpr float kLightSpeed = 2.99792458e8f;
-        constexpr float kBoltzmannConstant = 1.3806504e-23f;
-        constexpr float kPlanckConstant = 6.62607015e-34f;
+        // Boundary SI double -> float32 LUT arithmetic.
+        constexpr float kLightSpeed = static_cast<float>(GPP::Units::kSpeedOfLight);
+        constexpr float kBoltzmannConstant = static_cast<float>(GPP::Units::kBoltzmannConstant);
+        constexpr float kPlanckConstant = static_cast<float>(GPP::Units::kPlanckConstant);
         constexpr float kMinCy = 3931191.541677483f;
         constexpr float kMaxCy = 9.15738182436502e16f;
 

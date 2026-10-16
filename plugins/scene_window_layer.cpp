@@ -54,7 +54,8 @@ namespace
     {
         const auto& meta = field.Meta;
         const std::string label = meta.Label.empty() ? SpacedName(field.Name) : meta.Label;
-        const float speed = meta.Speed > 0.0f ? meta.Speed : 0.1f;
+        const float speed = meta.Speed > 0.0 ? static_cast<float>(meta.Speed) : 0.1f;
+        const double upperBound = meta.Max > meta.Min ? meta.Max : (meta.Min > 0.0 ? 1.0e300 : 0.0);
         const char* format = meta.Format.empty() ? "%.3f" : meta.Format.c_str();
         const bool modified = fallback && !field.ReadOnly() && !(*fallback == current);
 
@@ -80,6 +81,26 @@ namespace
             {
                 float v = std::get<float>(current);
                 if (DragFloatValue("##v", &v, speed, meta.Min, meta.Max, format)) edited = v;
+                break;
+            }
+            case FieldType::Double:
+            {
+                double v = std::get<double>(current);
+                const bool changed = meta.Dim != Units::Dimension::None
+                                         ? QuantityValue("##v", &v, meta.Dim, meta.Speed, meta.Min, upperBound)
+                                         : DragDoubleValue("##v", &v, speed, meta.Min, meta.Max, format);
+                if (changed) edited = v;
+                break;
+            }
+            case FieldType::DVec3:
+            {
+                glm::dvec3 v = std::get<glm::dvec3>(current);
+                const glm::dvec3 d = fallback ? std::get<glm::dvec3>(*fallback) : v;
+                if (QuantityVecValue("##v", &v.x, 3, fallback ? &d.x : nullptr, meta.Dim, meta.Speed, meta.Min,
+                                     upperBound))
+                {
+                    edited = v;
+                }
                 break;
             }
             case FieldType::Vec2:
@@ -216,6 +237,18 @@ namespace
                     gravity = 1.0f;
                 }
                 m_UiState->GravityMultiplier = gravity;
+
+                double timeScale = runner->Metadata().TimeScale;
+                if (PropertyRow(icons, "Time Scale", timeScale != 1.0, [&]
+                {
+                    if (QuantityValue("##timescale", &timeScale, Units::Dimension::None, 1.0e-6, 1.0e-12, 1.0e12))
+                    {
+                        runner->EnqueueEdit([timeScale](Scene& scene) { scene.SetTimeScale(timeScale); });
+                    }
+                }, "Physical (SI) seconds per second of simulation clock. 1 = real time."))
+                {
+                    runner->EnqueueEdit([](Scene& scene) { scene.SetTimeScale(1.0); });
+                }
                 EndSection();
             }
 
@@ -239,7 +272,7 @@ namespace
 
         void RenderToolbar(SimulationRunner& runner, const Scene& scene)
         {
-            const auto spawn = [&](const char* label, const std::string_view preset, const glm::vec3& position,
+            const auto spawn = [&](const char* label, const std::string_view preset, const glm::dvec3& position,
                                    const std::optional<glm::quat>& rotation = std::nullopt)
             {
                 if (const auto command = MakeSpawnPresetCommand(scene, GPP::GenerateGuid(), preset, position, rotation))
@@ -247,15 +280,16 @@ namespace
                     runner.EnqueueCommand(*command, UndoStep(runner, std::string("Add ") + label));
                 }
             };
-            if (ImGui::Button("Black Hole")) spawn("Black Hole", "BlackHole", {0.0f, 0.0f, -10.0f});
+            constexpr double kSpawnUnitM = Units::kSolarGravitationalRadius;
+            if (ImGui::Button("Black Hole")) spawn("Black Hole", "BlackHole", glm::dvec3(0.0, 0.0, -10.0) * kSpawnUnitM);
             ImGui::SameLine();
-            if (ImGui::Button("Sphere")) spawn("Sphere", "Sphere", {5.0f, 0.0f, 0.0f});
+            if (ImGui::Button("Sphere")) spawn("Sphere", "Sphere", glm::dvec3(5.0, 0.0, 0.0) * kSpawnUnitM);
             ImGui::SameLine();
             if (ImGui::Button("Camera"))
             {
-                const glm::vec3 position = m_UiState->ViewPosition;
+                const glm::dvec3 position = m_UiState->ViewPositionM;
                 spawn("Camera", "Camera", position,
-                      GPP::LookAtRotation(position, position + m_UiState->ViewFront, m_UiState->ViewUp));
+                      GPP::LookAtRotation(glm::vec3(0.0f), m_UiState->ViewFront, m_UiState->ViewUp));
             }
             ImGui::SameLine();
             if (ImGui::Button("Empty")) SpawnEmpty(runner, 0);

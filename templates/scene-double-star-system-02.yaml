@@ -1,4 +1,6 @@
 Scene: Double Star System 02
+SchemaVersion: 2
+TimeScale: 4.911927171628457e-05
 Entities:
   - Guid: 2633712327297270731
     Components:
@@ -7,11 +9,11 @@ Entities:
         Name: BlackHole
         TypeTag: BlackHole
       Transform:
-        Position: [0, 0, -5]
+        Position: [0, 0, -7383.125190250623]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       BlackHole:
-        Mass: 2
+        Mass: 3.9768197413961014e+30
         Spin: 0
         Charge: 0
         SpinAxis: [0, 1, 0]

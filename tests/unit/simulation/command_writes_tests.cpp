@@ -28,7 +28,7 @@ TEST_CASE("Pending writes carry commands where they exist and closures otherwise
 
     for (const auto& write : writes) write(scene);
     const auto& transform = scene.Registry().get<TransformComponent>(entity);
-    CHECK(transform.Position == glm::vec3(1, 2, 3));
+    CHECK(transform.Position == glm::dvec3(1, 2, 3));
     CHECK(transform.Scale == glm::vec3(5.0f));
 }
 
@@ -43,7 +43,7 @@ TEST_CASE("Spawn preset command round-trips through destroy and undo", "[command
     REQUIRE(ApplyCommand(scene, *command, &inverse));
     const auto entity = scene.FindByGuid(555);
     REQUIRE(scene.IsValid(entity));
-    CHECK(scene.Registry().get<TransformComponent>(entity).Position == glm::vec3(5, 0, 0));
+    CHECK(scene.Registry().get<TransformComponent>(entity).Position == glm::dvec3(5, 0, 0));
     CHECK(scene.Registry().all_of<SphereComponent>(entity));
     CHECK(scene.Registry().all_of<RigidBodyComponent>(entity));
 

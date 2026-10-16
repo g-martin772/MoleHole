@@ -248,26 +248,50 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     return color;
 }
 
-// Helper to normalize 4-velocity for light-like geodesics (g_uv v^u v^v = 0)
-// For Schwarzschild: -(1-rs/r)*v_t^2 + (1-rs/r)^-1*v_r^2 + r^2*(v_theta^2 + sin^2(theta)*v_phi^2) = 0
-vec4 normalize4Velocity(vec4 pos, vec4 vel, float M) {
-    float r = pos.y;
-    float theta = pos.z;
-    float rs = 2.0f * G * M / (c * c);
+// ?
+rvec4 normalize4Velocity(rvec4 pos, rvec4 vel, real M) {
+    real r = pos.y;
+    real theta = pos.z;
+    real rs = 2.0 * G * M / (c * c);
 
-    float r_s_factor = 1.0f - rs / r;
-    if (r_s_factor < 0.001f) r_s_factor = 0.001f;  // Avoid singularity
+    real r_s_factor = 1.0 - rs / r;
+    if (r_s_factor < 0.001) r_s_factor = 0.001;  // Avoid singularity
 
-    // For light rays: g_uv v^u v^v = 0
-    // Compute spatial magnitude and adjust temporal component
-    float v_spatial_sq = (vel.y * vel.y) / r_s_factor +
+    real sinTheta = rsin(theta);
+    real v_spatial_sq = (vel.y * vel.y) / r_s_factor +
     vel.z * vel.z * r * r +
-    vel.w * vel.w * r * r * sin(theta) * sin(theta);
+    vel.w * vel.w * r * r * sinTheta * sinTheta;
 
-    // Adjust temporal component to maintain null geodesic
-    vel.x = sqrt(max(v_spatial_sq / r_s_factor, 0.0f));
+    vel.x = sqrt(max(v_spatial_sq / r_s_factor, 0.0));
 
     return vel;
+}
+
+rvec3 toSphericalReal(rvec3 pos) {
+    real r = max(length(pos), real(EPSILON));
+    real theta = clamp(racos(pos.y / r), real(EPSILON), real(R_PI) - real(EPSILON));
+    real phi = ratan2(pos.z, pos.x);
+    return rvec3(r, theta, phi);
+}
+
+rvec3 velCartesianToSphericalReal(rvec3 p, rvec3 v) {
+    real r = max(length(p), real(EPSILON));
+    real rho = max(sqrt(p.x * p.x + p.z * p.z), real(EPSILON));
+    real vr = dot(p, v) / r;
+    real vtheta = (p.y * (p.x * v.x + p.z * v.z) - rho * rho * v.y) / max(r * r * rho, real(EPSILON));
+    real vphi = (p.x * v.z - p.z * v.x) / max(rho * rho, real(EPSILON * EPSILON));
+    return clamp(rvec3(vr, vtheta, vphi), rvec3(-1e6), rvec3(1e6));
+}
+
+rvec3 velSphericalToCartesianReal(rvec3 p, rvec3 v) {
+    real st, ct, sp, cp;
+    rsincos_pair(p.y, st, ct);
+    rsincos_pair(p.z, sp, cp);
+    real r = p.x;
+    real vx = v.x * st * cp + r * v.y * ct * cp - r * st * v.z * sp;
+    real vy = v.x * ct - r * v.y * st;
+    real vz = v.x * st * sp + r * v.y * ct * sp + r * st * v.z * cp;
+    return clamp(rvec3(vx, vy, vz), rvec3(-1e6), rvec3(1e6));
 }
 
 vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
@@ -278,32 +302,30 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
     if (u_blackHoles[0].mass == 0.0f)
     return texture(u_skyboxTexture, directionToSpherical(rayDirection)).rgb;
 
-    // ray position and direction (Cartesian)
-    vec3 pos = rayOrigin;
     vec3 dir = normalize(rayDirection);
 
-    // loop variables
     float stepSize = u_rayStepSize;
     float maxSteps = u_maxRaySteps;
     float adaptiveStepRate = u_adaptiveStepRate;
 
-    // position relative to black hole
-    vec3 relativePosCart = pos - u_blackHoles[0].position;
+    real M = real(u_blackHoles[0].mass);
+    real a = real(u_blackHoles[0].spin) * M;
+    real Q = real(u_blackHoles[0].charge);
 
-    // convert to spherical coordinates
-    vec4 relativePosSph = vec4(0.0f, toSpherical(relativePosCart));
-    vec4 relativeDirSph = vec4(1.0f, vel_cartesian_to_spherical(relativePosCart, dir));
+    rvec3 relativePosCart = rvec3(rayOrigin - u_blackHoles[0].position);
 
-    // compute event horizon radius
+    rvec4 relativePosSph = rvec4(0.0, toSphericalReal(relativePosCart));
+    rvec4 relativeDirSph = rvec4(1.0, velCartesianToSphericalReal(relativePosCart, rvec3(dir)));
+
     float r_s = calculateEventHorizonRadius(u_blackHoles[0].mass);
 
     // main loop
     for (int i = 0; i < maxSteps; i++) {
 
-        float dist = relativePosSph.y;
+        float dist = float(relativePosSph.y);
 
         if (u_accretionDiskEnabled == 1) {
-            float opticalDepth = adiskColor(relativePosSph, colorValue, alpha, r_s, rayOrigin, u_blackHoles[0].mass, u_blackHoles[0].spinAxis);
+            float opticalDepth = adiskColor(vec4(relativePosSph), colorValue, alpha, r_s, rayOrigin, u_blackHoles[0].mass, u_blackHoles[0].spinAxis);
 
             // Apply volumetric absorption using Beer-Lambert law
             if (opticalDepth > 0.0) {
@@ -334,21 +356,13 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
             stepSize = u_rayStepSize;
         }
 
-        // calculate specific angular momentum from spin parameter
-        float a = u_blackHoles[0].spin * calculateEventHorizonRadius(u_blackHoles[0].mass) / 2.0f;
-
-        // set charge
-        float Q = u_blackHoles[0].charge;
-
-        // geodesic integration (RK4)
-        relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, u_blackHoles[0].mass);
-        rk4_step(relativePosSph, relativeDirSph, stepSize, u_blackHoles[0].mass, a, Q);
-        relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, u_blackHoles[0].mass);
+        relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, M);
+        rk4_step(relativePosSph, relativeDirSph, real(stepSize), M, a, Q);
+        relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, M);
     }
 
-    dir = vel_spherical_to_cartesian(relativePosSph.yzw, relativeDirSph.yzw);
+    dir = vec3(velSphericalToCartesianReal(relativePosSph.yzw, relativeDirSph.yzw));
 
-    // map skybox color from final ray direction
     vec3 color = texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
     return color;
 }

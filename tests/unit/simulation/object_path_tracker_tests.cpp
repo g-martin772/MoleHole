@@ -48,8 +48,8 @@ TEST_CASE("ObjectPathTracker records mesh and sphere positions into separate per
     REQUIRE(tracker.SphereHistories().contains(sphereGuid));
     CHECK(tracker.MeshHistories().at(meshGuid).size() == 2);
     CHECK(tracker.SphereHistories().at(sphereGuid).size() == 2);
-    CHECK(tracker.MeshHistories().at(meshGuid).front() == glm::vec3(0.0f, 0.0f, 0.0f));
-    CHECK(tracker.MeshHistories().at(meshGuid).back() == glm::vec3(1.0f, 0.0f, 0.0f));
+    CHECK(tracker.MeshHistories().at(meshGuid).front() == glm::dvec3(0.0f, 0.0f, 0.0f));
+    CHECK(tracker.MeshHistories().at(meshGuid).back() == glm::dvec3(1.0f, 0.0f, 0.0f));
     // Each category only holds its own entities.
     CHECK_FALSE(tracker.MeshHistories().contains(sphereGuid));
     CHECK_FALSE(tracker.SphereHistories().contains(meshGuid));
@@ -76,9 +76,9 @@ TEST_CASE("ObjectPathTracker evicts the oldest position once MaxHistorySize is e
     const auto& history = tracker.MeshHistories().at(meshGuid);
     REQUIRE(history.size() == 3);
     // The two oldest points (x=0, x=1) should have been popped from the front, leaving x=2,3,4.
-    CHECK(history[0] == glm::vec3(2.0f, 0.0f, 0.0f));
-    CHECK(history[1] == glm::vec3(3.0f, 0.0f, 0.0f));
-    CHECK(history[2] == glm::vec3(4.0f, 0.0f, 0.0f));
+    CHECK(history[0] == glm::dvec3(2.0f, 0.0f, 0.0f));
+    CHECK(history[1] == glm::dvec3(3.0f, 0.0f, 0.0f));
+    CHECK(history[2] == glm::dvec3(4.0f, 0.0f, 0.0f));
 }
 
 TEST_CASE("ObjectPathTracker::Clear empties both histories", "[simulation][object-paths]")

@@ -720,7 +720,7 @@ TEST_CASE("Spawn Entity creates the preset with the pre-allocated guid and its O
 
     const auto spawned = scene.FindByGuid(777);
     REQUIRE(scene.IsValid(spawned));
-    CHECK(scene.Registry().get<TransformComponent>(spawned).Position == glm::vec3(1.0f, 2.0f, 3.0f));
+    CHECK(scene.Registry().get<TransformComponent>(spawned).Position == glm::dvec3(1.0f, 2.0f, 3.0f));
     CHECK(scene.Registry().get<BlackHoleComponent>(spawned).Mass == 7.0f);
 }
 
@@ -787,7 +787,7 @@ TEST_CASE("Clone Entity copies components under the new guid and applies the pos
     const auto copy = scene.FindByGuid(777);
     REQUIRE(scene.IsValid(copy));
     CHECK(scene.Registry().get<SphereComponent>(copy).Radius == 3.0f);
-    CHECK(scene.Registry().get<TransformComponent>(copy).Position == glm::vec3(0.0f, 9.0f, 0.0f));
+    CHECK(scene.Registry().get<TransformComponent>(copy).Position == glm::dvec3(0.0f, 9.0f, 0.0f));
     CHECK(scene.Registry().get<MetadataComponent>(copy).Guid == 777);
     CHECK(scene.Registry().view<SphereComponent>().size() == 2);
 }

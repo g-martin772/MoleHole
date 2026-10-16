@@ -427,6 +427,151 @@ export namespace MoleHole
                                         &text);
     }
 
+    inline std::unordered_map<ImGuiID, std::string>& QuantityEditBuffers()
+    {
+        static thread_local std::unordered_map<ImGuiID, std::string> buffers;
+        return buffers;
+    }
+
+    inline bool QuantityValue(const char* id, double* valueSi, GPP::Units::Dimension dimension, double floorSi = 0.0,
+                              double min = 0.0, double max = 0.0)
+    {
+        ImGui::PushID(id);
+        const ImGuiID widgetId = ImGui::GetID("##quantity");
+        auto* storage = ImGui::GetStateStorage();
+        const ImVec2 size(ImGui::CalcItemWidth(), ImGui::GetFrameHeight());
+        bool changed = false;
+        const bool editing = storage->GetInt(widgetId, 0) != 0;
+
+        if (editing)
+        {
+            auto& buffer = QuantityEditBuffers()[widgetId];
+            const bool first = storage->GetInt(widgetId + 1, 0) == 0;
+            if (first)
+            {
+                buffer = QuantityEditText(*valueSi, dimension);
+                storage->SetInt(widgetId + 1, 1);
+                ImGui::SetKeyboardFocusHere();
+            }
+            ImGui::SetNextItemWidth(size.x);
+            const bool accepted = TextValue("##edit", buffer, "", false);
+            (void)accepted;
+            const bool submit = ImGui::IsItemDeactivatedAfterEdit() || ImGui::IsKeyPressed(ImGuiKey_Enter)
+                                || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter);
+            const bool cancel = ImGui::IsKeyPressed(ImGuiKey_Escape) || (!first && ImGui::IsItemDeactivated() && !submit);
+            if (submit || cancel || (!first && !ImGui::IsItemActive()))
+            {
+                if (submit && !cancel)
+                {
+                    if (const auto parsed = ParseQuantityEdit(buffer, *valueSi, dimension))
+                    {
+                        double value = *parsed;
+                        if (max > min) value = std::clamp(value, min, max);
+                        changed = value != *valueSi;
+                        *valueSi = value;
+                    }
+                }
+                storage->SetInt(widgetId, 0);
+                storage->SetInt(widgetId + 1, 0);
+                QuantityEditBuffers().erase(widgetId);
+            }
+        }
+        else
+        {
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+            ImGui::InvisibleButton("##drag", size);
+            const bool hovered = ImGui::IsItemHovered();
+            const bool active = ImGui::IsItemActive();
+            if (hovered || active) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+
+            if (active)
+            {
+                const ImGuiIO& io = ImGui::GetIO();
+                const ImVec2 total = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0.0f);
+                if (std::fabs(total.x) + std::fabs(total.y) > 3.0f) storage->SetInt(widgetId + 2, 1);
+                if (storage->GetInt(widgetId + 2, 0) != 0 && io.MouseDelta.x != 0.0f)
+                {
+                    double sensitivity = 0.01;
+                    if (io.KeyShift) sensitivity *= 5.0;
+                    if (io.KeyAlt || io.KeyCtrl) sensitivity *= 0.1;
+                    const double value = SymlogDrag(*valueSi, DragFloor(floorSi), io.MouseDelta.x, sensitivity, min, max);
+                    changed = value != *valueSi;
+                    *valueSi = value;
+                }
+            }
+            if (ImGui::IsItemDeactivated())
+            {
+                if (storage->GetInt(widgetId + 2, 0) == 0 && hovered) storage->SetInt(widgetId, 1);
+                storage->SetInt(widgetId + 2, 0);
+            }
+
+            auto* list = ImGui::GetWindowDrawList();
+            const ImU32 background = ImGui::GetColorU32(active ? ImGuiCol_FrameBgActive
+                                                        : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg);
+            list->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), background, ImGui::GetStyle().FrameRounding);
+            const std::string label = QuantityLabel(*valueSi, dimension);
+            const ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
+            list->PushClipRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), true);
+            list->AddText(ImVec2(pos.x + std::max(4.0f, (size.x - textSize.x) * 0.5f), pos.y + (size.y - textSize.y) * 0.5f),
+                          ImGui::GetColorU32(ImGuiCol_Text), label.c_str());
+            list->PopClipRect();
+            if (hovered && !active) Tooltip(QuantityTooltip(*valueSi, dimension).c_str());
+        }
+        ImGui::PopID();
+        return changed;
+    }
+
+    inline bool QuantityVecValue(const char* id, double* v, int count, const double* defaults,
+                                 GPP::Units::Dimension dimension, double floorSi = 0.0, double min = 0.0,
+                                 double max = 0.0)
+    {
+        static const char* names[] = {"X", "Y", "Z", "W"};
+        const glm::vec4 colors[] = {Palette::AxisX, Palette::AxisY, Palette::AxisZ, Palette::AxisW};
+        const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+        const float total = ImGui::CalcItemWidth();
+        const float each = std::max(24.0f, (total - spacing * static_cast<float>(count - 1)) / static_cast<float>(count));
+        const float chip = ImGui::GetFrameHeight() * 0.8f;
+        bool changed = false;
+        ImGui::PushID(id);
+        for (int i = 0; i < count; ++i)
+        {
+            if (i > 0) ImGui::SameLine(0.0f, spacing);
+            ImGui::PushID(i);
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+            const float h = ImGui::GetFrameHeight();
+            bool chipClicked = false;
+            if (defaults) chipClicked = ImGui::InvisibleButton("##axis", ImVec2(chip, h));
+            else ImGui::Dummy(ImVec2(chip, h));
+            const bool hoverChip = defaults && ImGui::IsItemHovered();
+            if (defaults) Tooltip("Reset axis");
+            auto* list = ImGui::GetWindowDrawList();
+            list->AddRectFilled(pos, ImVec2(pos.x + chip, pos.y + h),
+                                ToU32(hoverChip ? Lighten(colors[i], 0.25f) : colors[i]), 3.0f,
+                                ImDrawFlags_RoundCornersLeft);
+            const ImVec2 ts = ImGui::CalcTextSize(names[i]);
+            list->AddText(ImVec2(pos.x + (chip - ts.x) * 0.5f, pos.y + (h - ts.y) * 0.5f),
+                          ToU32(HexColor(0xffffff)), names[i]);
+            if (chipClicked && v[i] != defaults[i])
+            {
+                v[i] = defaults[i];
+                changed = true;
+            }
+            ImGui::SameLine(0.0f, 0.0f);
+            ImGui::SetNextItemWidth(std::max(16.0f, each - chip));
+            changed |= QuantityValue("##v", &v[i], dimension, floorSi, min, max);
+            ImGui::PopID();
+        }
+        ImGui::PopID();
+        return changed;
+    }
+
+    inline bool DragDoubleValue(const char* id, double* v, double speed, double min, double max, const char* format)
+    {
+        const bool bounded = max > min;
+        return ImGui::DragScalar(id, ImGuiDataType_Double, v, static_cast<float>(speed), bounded ? &min : nullptr,
+                                 bounded ? &max : nullptr, format, bounded ? ImGuiSliderFlags_AlwaysClamp : 0);
+    }
+
     struct EntityChoice
     {
         std::uint64_t Guid = 0;
@@ -496,7 +641,7 @@ export namespace MoleHole
         return changed;
     }
 
-    // Small rounded tag; returns 1 when clicked, 2 when its close button was clicked.
+    // Small rounded tag; returns 1 when clicked, 2 when its close button was clicked
     inline int Chip(const char* label, const glm::vec4& color, bool closable = false)
     {
         ImGui::PushID(label);

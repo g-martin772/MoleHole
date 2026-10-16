@@ -23,6 +23,7 @@ export import :Simulation.AnimationGraphExecutor;
 export import :Simulation.GraphIr;
 export import :Simulation.GraphTranspiler;
 export import :Simulation.ScriptRuntime;
+export import :Rendering.Frame;
 export import :Rendering.Data;
 export import :Rendering.Camera;
 export import :Rendering.Lut;

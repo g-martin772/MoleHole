@@ -81,6 +81,14 @@ namespace
             const auto& y = std::get<glm::vec3>(b);
             return Near(x->x, y.x) && Near(x->y, y.y) && Near(x->z, y.z);
         }
+        // SI doubles pass through float32 vectors in Luau, so compare with a relative tolerance.
+        const auto close = [](double p, double q) { return std::fabs(p - q) <= 1e-5 * std::max({1.0, std::fabs(p), std::fabs(q)}); };
+        if (const auto* x = std::get_if<double>(&a)) return close(*x, std::get<double>(b));
+        if (const auto* x = std::get_if<glm::dvec3>(&a))
+        {
+            const auto& y = std::get<glm::dvec3>(b);
+            return close(x->x, y.x) && close(x->y, y.y) && close(x->z, y.z);
+        }
         if (const auto* x = std::get_if<glm::vec4>(&a))
         {
             const auto& y = std::get<glm::vec4>(b);

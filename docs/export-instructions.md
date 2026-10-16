@@ -32,3 +32,8 @@
 | `--scene <path>` | both | `templates/test-scene.yaml` | Scene file to load before rendering |
 | `--ray-step-size <f>` | both | scene default | Overrides the raymarcher's step size |
 | `--max-ray-steps <n>` | both | scene default | Overrides the raymarcher's max step count |
+| `--gpu-precision <f32\|f64>` | both | f32 | Precision of the geodesic integration |
+| `--physically-accurate` | both | off | Use the RK4 geodesic renderer instead of the hybrid one |
+| `--metric <0-3>` | both | 1 | 0 Schwarzschild, 1 Kerr, 2 Reissner–Nordström, 3 Kerr–Newman |
+
+Step size is in units of the render frame's gravitational radius (see the Debug window).

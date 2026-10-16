@@ -6,6 +6,7 @@ import std;
 import glm;
 import GPP;
 import :Simulation.Components;
+import :Rendering.Frame;
 
 export namespace MoleHole
 {
@@ -27,7 +28,6 @@ export namespace MoleHole
 
     constexpr int kMaxBlackHoles = 8;
     constexpr int kMaxSpheres = 16;
-    constexpr float kSolarMassKg = 1.989e30f;
 
     struct RaytraceParamsGpu
     {
@@ -81,7 +81,7 @@ export namespace MoleHole
     static_assert(offsetof(RaytraceParamsGpu, Spheres) == 560);
     static_assert(offsetof(RaytraceParamsGpu, ViewProjection) == 1328);
 
-    inline void FillSceneData(RaytraceParamsGpu& params, const GPP::Scene& scene)
+    inline void FillSceneData(RaytraceParamsGpu& params, const GPP::Scene& scene, const RenderFrame& frame)
     {
         params.NumBlackHoles = 0;
         for (auto [entity, blackHole, transform] :
@@ -89,13 +89,13 @@ export namespace MoleHole
         {
             if (params.NumBlackHoles >= kMaxBlackHoles) break;
             auto& gpu = params.BlackHoles[static_cast<std::size_t>(params.NumBlackHoles)];
-            gpu.Position = transform.Position;
-            gpu.Mass = blackHole.Mass;
+            gpu.Position = frame.ToRender(transform.Position);
+            gpu.Mass = frame.GeometricMass(blackHole.Mass);
             gpu.SpinAxis = glm::length(blackHole.SpinAxis) > 0.0f
                                ? glm::normalize(blackHole.SpinAxis)
                                : glm::vec3(0.0f, 1.0f, 0.0f);
-            gpu.Spin = blackHole.Spin;
-            gpu.Charge = blackHole.Charge;
+            gpu.Spin = static_cast<float>(blackHole.Spin);
+            gpu.Charge = static_cast<float>(blackHole.Charge);
             ++params.NumBlackHoles;
         }
 
@@ -105,13 +105,13 @@ export namespace MoleHole
         {
             if (params.NumSpheres >= kMaxSpheres) break;
             auto& gpu = params.Spheres[static_cast<std::size_t>(params.NumSpheres)];
-            gpu.Position = transform.Position;
-            gpu.Radius = sphere.Radius;
+            gpu.Position = frame.ToRender(transform.Position);
+            gpu.Radius = frame.ToRenderLength(sphere.Radius);
             gpu.Color = glm::vec4(sphere.Color, 1.0f);
             gpu.Mass = 0.0f;
             if (const auto* rigidBody = scene.Registry().try_get<const GPP::RigidBodyComponent>(entity))
             {
-                gpu.Mass = rigidBody->Mass / kSolarMassKg;
+                gpu.Mass = static_cast<float>(rigidBody->Mass / GPP::Units::kSolarMass);
             }
             ++params.NumSpheres;
         }
@@ -151,7 +151,7 @@ export namespace MoleHole
     static_assert(offsetof(GravityGridParamsGpu, Spheres) == 240);
     static_assert(offsetof(GravityGridParamsGpu, Meshes) == 496);
 
-    inline void FillGravityGridData(GravityGridParamsGpu& params, const GPP::Scene& scene)
+    inline void FillGravityGridData(GravityGridParamsGpu& params, const GPP::Scene& scene, const RenderFrame& frame)
     {
         params.NumBlackHoles = 0;
         for (auto [entity, blackHole, transform] :
@@ -159,7 +159,7 @@ export namespace MoleHole
         {
             if (params.NumBlackHoles >= kMaxBlackHoles) break;
             params.BlackHoles[static_cast<std::size_t>(params.NumBlackHoles)] =
-                GravityGridPointGpu{.Position = transform.Position, .Mass = blackHole.Mass};
+                GravityGridPointGpu{.Position = frame.ToRender(transform.Position), .Mass = frame.GeometricMass(blackHole.Mass)};
             ++params.NumBlackHoles;
         }
 
@@ -171,10 +171,10 @@ export namespace MoleHole
             float mass = 0.0f;
             if (const auto* rigidBody = scene.Registry().try_get<const GPP::RigidBodyComponent>(entity))
             {
-                mass = rigidBody->Mass / kSolarMassKg;
+                mass = frame.GeometricMass(rigidBody->Mass);
             }
             params.Spheres[static_cast<std::size_t>(params.NumSpheres)] =
-                GravityGridPointGpu{.Position = transform.Position, .Mass = mass};
+                GravityGridPointGpu{.Position = frame.ToRender(transform.Position), .Mass = mass};
             ++params.NumSpheres;
         }
 
@@ -186,10 +186,10 @@ export namespace MoleHole
             float mass = 0.0f;
             if (const auto* rigidBody = scene.Registry().try_get<const GPP::RigidBodyComponent>(entity))
             {
-                mass = rigidBody->Mass / kSolarMassKg;
+                mass = frame.GeometricMass(rigidBody->Mass);
             }
             params.Meshes[static_cast<std::size_t>(params.NumMeshes)] =
-                GravityGridPointGpu{.Position = transform.Position, .Mass = mass};
+                GravityGridPointGpu{.Position = frame.ToRender(transform.Position), .Mass = mass};
             ++params.NumMeshes;
         }
     }

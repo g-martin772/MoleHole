@@ -98,13 +98,22 @@ Open from sidebar or View menu.
 - Script dirs: `GPP.Assets.Scripts.Directories`
 - Combo dirs: `GPP.Assets.Combos.Directories`
 
+## Units
+- Everything is stored and computed in SI: metres, kilograms, seconds, kelvin. Scene files hold SI numbers only
+- Numeric fields show the unit that fits the value
+- Drag: logarithmic (1 %/px, Shift ×5, Alt/Ctrl ×0.1), passes through zero. Click: type `1.5 AU`, `3 Msun`, `10 km`,
+  `2 Lj`, `4.3e6 Msun`, `1 Mearth`, `0.1 c`. A number without a unit is read in the unit currently shown
+- Hover a field to see the SI value and a few other units
+- Black holes: spin is a* = cJ/(GM²), charge is q*
+- Precision: CPU simulation f32/f64/f128, GPU render f32/f64
+
 ## Components
 | Component | Fields |
 |---|---|
 | Transform | position, rotation, scale |
-| BlackHole | mass, spin, charge, spin axis |
-| Sphere | radius, spin, color, spin axis, texture |
-| Mesh | mesh asset |
+| BlackHole | mass (kg), spin a*, charge q*, spin axis; derived r_g, horizon, ISCO |
+| Sphere | radius (m), spin, color, spin axis, texture |
+| Mesh | mesh asset, metres per model unit |
 | Camera | FOV, near, far, primary |
 | RigidBody / Collider / Velocity | physics |
 | Scripts | list of script components + props |
@@ -181,18 +190,20 @@ CLI, headless. Output PNG / MP4 (needs ffmpeg).
 ./build/MoleHole --export-video out.mp4 --duration 10 --fps 60
 ```
 - GUI: Export → Export Render…
-- Flags: `--width --height --duration --fps --scene --ray-step-size --max-ray-steps`
+- Flags: `--width --height --duration --fps --scene --ray-step-size --max-ray-steps --gpu-precision --physically-accurate --metric`
 - Full table: `docs/export-instructions.md`
 
 ## Scene file
 ```yaml
 Scene: Name
+SchemaVersion: 2
+TimeScale: 1
 Entities:
   - Guid: 1
     Components:
       Metadata: {Guid: 1, Name: BH, TypeTag: BlackHole}
-      Transform: {Position: [0,0,0], Rotation: [0,0,0,1], Scale: [1,1,1]}
-      BlackHole: {Mass: 1, Spin: 0.4, Charge: 0, SpinAxis: [0,1,0]}
+      Transform: {Position: [0,0,0], Rotation: [0,0,0,1], Scale: [1,1,1]}   # metres
+      BlackHole: {Mass: 1.98841e+30, Spin: 0.4, Charge: 0, SpinAxis: [0,1,0]}   # kg, a*, q*
 Graphs: ... 
 ```
 - Templates in `templates/`

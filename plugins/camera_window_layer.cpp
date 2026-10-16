@@ -43,7 +43,16 @@ namespace
 
             if (BeginSection(icons, "Movement"))
             {
-                slider("Speed", m_UiState->CameraSpeed, 5.0f, 0.5f, 100.0f, "%.1f");
+                double speed = m_UiState->CameraSpeedMs;
+                constexpr double kDefaultSpeedMs = 5.0 * Units::kSolarGravitationalRadius;
+                if (PropertyRow(icons, "Speed", speed != kDefaultSpeedMs, [&]
+                {
+                    QuantityValue("##v", &speed, Units::Dimension::Velocity, 1.0e3, 1.0e-3, Units::kSpeedOfLight * 1.0e3);
+                }))
+                {
+                    speed = kDefaultSpeedMs;
+                }
+                m_UiState->CameraSpeedMs = speed;
                 slider("Mouse Sensitivity", m_UiState->CameraMouseSensitivity, 0.1f, 0.01f, 1.0f, "%.2f");
                 EndSection();
             }
@@ -59,8 +68,12 @@ namespace
 
             if (BeginSection(icons, "Position"))
             {
-                ImGui::Text("Pos: (%.1f, %.1f, %.1f)", m_UiState->CameraPosition.x,
-                            m_UiState->CameraPosition.y, m_UiState->CameraPosition.z);
+                glm::dvec3 position = m_UiState->CameraPositionM;
+                PropertyRow(icons, "Position", false, [&]
+                {
+                    QuantityVecValue("##v", &position.x, 3, nullptr, Units::Dimension::Length, 1.0e3);
+                });
+                m_UiState->CameraPositionM = position;
                 ImGui::Text("Yaw: %.1f  Pitch: %.1f", m_UiState->CameraYaw, m_UiState->CameraPitch);
                 slider("FOV", m_UiState->CameraFov, 60.0f, 20.0f, 120.0f, "%.0f");
                 EndSection();
@@ -69,7 +82,7 @@ namespace
             ImGui::Spacing();
             if (ImGui::Button("Reset Camera", ImVec2(-1, 0)))
             {
-                m_UiState->CameraPosition = glm::vec3(0.0f, 20.0f, 100.0f);
+                m_UiState->CameraPositionM = glm::dvec3(0.0, 20.0, 100.0) * Units::kSolarGravitationalRadius;
                 m_UiState->CameraYaw = -90.0f;
                 m_UiState->CameraPitch = 0.0f;
                 m_UiState->CameraFov = 60.0f;

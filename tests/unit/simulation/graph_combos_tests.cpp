@@ -212,7 +212,7 @@ TEST_CASE("Orbit Camera Around keeps the camera on a circle around the target", 
     for (int i = 0; i < 5; ++i)
     {
         Tick(executor, world.scene, 0.25f);
-        const glm::vec3 offset = world.Transform(world.Camera).Position - glm::vec3(1.0f, 2.0f, 3.0f);
+        const glm::vec3 offset = world.Transform(world.Camera).Position - glm::dvec3(1.0, 2.0, 3.0);
         CHECK(glm::length(glm::vec2(offset.x, offset.z)) == Approx(10.0f).margin(0.001f));
         CHECK(offset.y == Approx(0.0f).margin(0.001f));
     }
@@ -272,7 +272,7 @@ TEST_CASE("Spawn Prefab At spawns when its flow input fires", "[graph][combo][ex
         if (metadata.Name == "Pebble")
         {
             found = true;
-            CHECK(world.scene.Registry().get<GPP::TransformComponent>(entity).Position == glm::vec3(4, 5, 6));
+            CHECK(world.scene.Registry().get<GPP::TransformComponent>(entity).Position == glm::dvec3(4, 5, 6));
         }
     }
     CHECK(found);

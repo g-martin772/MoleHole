@@ -26,7 +26,7 @@ export namespace MoleHole
 
     // Returns entt::null when the preset is unknown or the guid is taken.
     inline entt::entity SpawnPreset(GPP::Scene& scene, const std::uint64_t guid, const std::string_view preset,
-                                    const glm::vec3& position, std::string name = {})
+                                    const glm::dvec3& position, std::string name = {})
     {
         const auto canonical = FindEntityPreset(preset);
         if (!canonical) return entt::entity{entt::null};
@@ -43,23 +43,27 @@ export namespace MoleHole
         registry.emplace<GPP::TransformComponent>(entity, GPP::TransformComponent{.Position = position});
         if (*canonical == "BlackHole")
         {
-            registry.emplace<BlackHoleComponent>(entity, BlackHoleComponent{.Mass = 1.0f, .Spin = 0.3f});
+            registry.emplace<BlackHoleComponent>(entity, BlackHoleComponent{.Mass = GPP::Units::kSolarMass, .Spin = 0.3});
         }
         else if (*canonical == "Sphere")
         {
-            registry.emplace<SphereComponent>(entity, SphereComponent{.Radius = 0.5f, .Color = {0.8f, 0.8f, 0.9f}});
+            registry.emplace<SphereComponent>(entity, SphereComponent{.Radius = 0.5 * GPP::Units::kSolarGravitationalRadius, .Color = {0.8f, 0.8f, 0.9f}});
             registry.emplace<GPP::RigidBodyComponent>(
-                entity, GPP::RigidBodyComponent{.Type = GPP::RigidBodyType::Dynamic, .Mass = 5.972e24f,
+                entity, GPP::RigidBodyComponent{.Type = GPP::RigidBodyType::Dynamic, .Mass = GPP::Units::kEarthMass,
                                                 .EnableGravity = true});
             registry.emplace<GPP::ColliderComponent>(
-                entity, GPP::ColliderComponent{.Shape = GPP::ColliderShape::Sphere, .Radius = 0.5f});
+                entity, GPP::ColliderComponent{.Shape = GPP::ColliderShape::Sphere,
+                                       .Radius = 0.5 * GPP::Units::kSolarGravitationalRadius});
         }
         else if (*canonical == "Camera")
         {
             const bool hasPrimary = std::ranges::any_of(
                 registry.view<const GPP::CameraComponent>().each(),
                 [](const auto& row) { return std::get<1>(row).Primary; });
-            registry.emplace<GPP::CameraComponent>(entity, GPP::CameraComponent{.Primary = !hasPrimary});
+            registry.emplace<GPP::CameraComponent>(
+                entity, GPP::CameraComponent{.NearPlane = 0.1 * GPP::Units::kSolarGravitationalRadius,
+                                             .FarPlane = 1000.0 * GPP::Units::kSolarGravitationalRadius,
+                                             .Primary = !hasPrimary});
         }
         return entity;
     }
@@ -67,7 +71,7 @@ export namespace MoleHole
     // The spawn as a replayable command; `reference` decides whether a new camera becomes the primary one.
     inline std::optional<GPP::SpawnEntityCommand> MakeSpawnPresetCommand(
         const GPP::Scene& reference, const std::uint64_t guid, const std::string_view preset,
-        const glm::vec3& position, const std::optional<glm::quat>& rotation = std::nullopt)
+        const glm::dvec3& position, const std::optional<glm::quat>& rotation = std::nullopt)
     {
         GPP::Scene scratch;
         const auto entity = SpawnPreset(scratch, guid, preset, position);

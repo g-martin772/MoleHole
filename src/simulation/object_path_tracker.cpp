@@ -9,8 +9,8 @@ namespace MoleHole
 {
     namespace
     {
-        void AppendPosition(std::unordered_map<std::uint64_t, std::deque<glm::vec3>>& histories,
-                            std::uint64_t guid, const glm::vec3& position, std::size_t maxHistorySize)
+        void AppendPosition(std::unordered_map<std::uint64_t, std::deque<glm::dvec3>>& histories,
+                            std::uint64_t guid, const glm::dvec3& position, std::size_t maxHistorySize)
         {
             if (guid == 0) return;
             auto& history = histories[guid];

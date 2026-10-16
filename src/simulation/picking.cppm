@@ -4,33 +4,36 @@ import std;
 import GPP;
 import glm;
 import :Simulation.Components;
+import :Rendering.Frame;
 
 export namespace MoleHole
 {
     struct PickHit
     {
         entt::entity Entity{entt::null};
-        float Distance{0.0f};
+        double Distance{0.0}; // m
     };
 
-    using BoundingRadiusOverride = std::function<std::optional<float>(const GPP::Scene&, entt::entity)>;
+    using BoundingRadiusOverride = std::function<std::optional<double>(const GPP::Scene&, entt::entity)>;
 
-    [[nodiscard]] float BoundingRadiusOf(const GPP::Scene& scene, entt::entity entity,
+    // Metres.
+    [[nodiscard]] double BoundingRadiusOf(const GPP::Scene& scene, entt::entity entity,
                                           const BoundingRadiusOverride& radiusOverride = {});
 
     [[nodiscard]] std::optional<PickHit> PickClosestEntity(
-        const GPP::Scene& scene, const glm::vec3& rayOrigin, const glm::vec3& rayDirection,
+        const GPP::Scene& scene, const glm::dvec3& rayOriginM, const glm::dvec3& rayDirection,
         const BoundingRadiusOverride& radiusOverride = {});
 
     struct Ray
     {
-        glm::vec3 Origin{0.0f};
-        glm::vec3 Direction{0.0f, 0.0f, -1.0f};
+        glm::dvec3 OriginM{0.0};
+        glm::dvec3 Direction{0.0, 0.0, -1.0};
     };
 
     // unprojects a mouse position (in window/screen coordinates) through the given viewport
-    // rect and camera matrices into a world-space ray
+    // rect and render-space camera matrices into a world-space (SI) ray
     [[nodiscard]] Ray ScreenPointToRay(const glm::vec2& mousePos, const glm::vec2& viewportMin,
                                         const glm::vec2& viewportSize, const glm::mat4& view,
-                                        const glm::mat4& projection, const glm::vec3& cameraPosition);
+                                        const glm::mat4& projection, const glm::dvec3& cameraPositionM,
+                                        const RenderFrame& frame);
 }

@@ -1,4 +1,6 @@
 Scene: Spring Arm Demo
+SchemaVersion: 2
+TimeScale: 4.911927171628457e-05
 Entities:
   - Guid: 4101000000000000001
     Components:
@@ -11,7 +13,7 @@ Entities:
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       BlackHole:
-        Mass: 1
+        Mass: 1.9884098706980507e+30
         Spin: 0.4
         Charge: 0
         SpinAxis: [0, 1, 0]
@@ -22,11 +24,11 @@ Entities:
         Name: Star
         TypeTag: Sphere
       Transform:
-        Position: [22, 3, -8]
+        Position: [32485.750837102743, 4429.875114150374, -11813.000304400997]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Sphere:
-        Radius: 2
+        Radius: 2953.2500761002493
         Spin: 0
         Color: [1, 0.85, 0.5]
         SpinAxis: [0, 1, 0]
@@ -38,22 +40,22 @@ Entities:
         Name: Orbit Camera
         TypeTag: Camera
       Transform:
-        Position: [0, 4, 14]
+        Position: [0, 5906.500152200499, 20672.750532701746]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Camera:
         Fov: 60
-        NearPlane: 0.1
-        FarPlane: 1000
+        NearPlane: 147.66250380501248
+        FarPlane: 1476625.0380501247
         Primary: true
       Scripts:
         - Name: spring_arm_camera
           Props:
-            Target: 4101000000000000001
-            ArmLength: 14
-            Yaw: 0
-            Pitch: 18
-            OrbitSpeed: 12
+            ArmLength: 20672.75
             HeightOffset: 0
-            Smoothing: 0.4
             LookAtTarget: true
+            OrbitSpeed: 12
+            Pitch: 18
+            Smoothing: 0.4
+            Target: 4101000000000000001
+            Yaw: 0

@@ -12,16 +12,17 @@ using namespace MoleHole;
 
 namespace
 {
-    glm::mat4 BuildViewProjection(const UiState& state, float aspect)
+    glm::mat4 BuildViewProjection(const UiState& state, float aspect, const RenderFrame& frame)
     {
         glm::mat4 projection = glm::perspective(glm::radians(state.ViewFov), aspect, 0.1f, 10000.0f);
-        return projection * glm::lookAt(state.ViewPosition, state.ViewPosition + state.ViewFront, state.ViewUp);
+        const glm::vec3 position = frame.ToRender(state.ViewPositionM);
+        return projection * glm::lookAt(position, position + state.ViewFront, state.ViewUp);
     }
 
-    bool WorldToScreen(const glm::vec3& worldPos, const glm::mat4& viewProj, const glm::vec2& min,
+    bool WorldToScreen(const glm::vec3& renderPos, const glm::mat4& viewProj, const glm::vec2& min,
                        const glm::vec2& max, ImVec2& screenPos)
     {
-        const glm::vec4 clip = viewProj * glm::vec4(worldPos, 1.0f);
+        const glm::vec4 clip = viewProj * glm::vec4(renderPos, 1.0f);
         if (clip.w <= 0.0f) return false;
         const glm::vec3 ndc = glm::vec3(clip) / clip.w;
         if (ndc.x < -1.0f || ndc.x > 1.0f || ndc.y < -1.0f || ndc.y > 1.0f || ndc.z < -1.0f || ndc.z > 1.0f)
@@ -51,7 +52,7 @@ namespace
     }
 
     void DrawCameraFrustum(ImDrawList* list, const TransformComponent& transform, const CameraComponent& camera,
-                           const glm::mat4& viewProj, const glm::vec2& min, const glm::vec2& max, float aspect,
+                           const RenderFrame& frame, const glm::mat4& viewProj, const glm::vec2& min, const glm::vec2& max, float aspect,
                            ImU32 color, float thickness)
     {
         const glm::quat rotation = glm::normalize(transform.Rotation);
@@ -61,10 +62,10 @@ namespace
         constexpr float kDepth = 2.0f;
         const float halfH = std::tan(glm::radians(camera.Fov) * 0.5f) * kDepth;
         const float halfW = halfH * aspect;
-        const glm::vec3 center = transform.Position + front * kDepth;
+        const glm::vec3 apex = frame.ToRender(transform.Position);
+        const glm::vec3 center = apex + front * kDepth;
         const glm::vec3 corners[4] = {center + right * halfW + up * halfH, center - right * halfW + up * halfH,
                                       center - right * halfW - up * halfH, center + right * halfW - up * halfH};
-        const glm::vec3 apex = transform.Position;
         const glm::vec3 tip = center + up * (halfH * 1.35f);
 
         const auto line = [&](const glm::vec3& a, const glm::vec3& b)
@@ -106,7 +107,11 @@ namespace
             const float height = max.y - min.y;
             if (width <= 1.0f || height <= 1.0f) return;
 
-            const glm::mat4 viewProj = BuildViewProjection(*m_UiState, width / height);
+            auto sceneLock = runner->LockRenderScene();
+            const Scene& scene = *sceneLock;
+            const RenderFrame frame = RenderFrame::ForScene(scene, static_cast<FrameMode>(m_UiState->Render.FrameMode),
+                                                            m_UiState->ViewPositionM);
+            const glm::mat4 viewProj = BuildViewProjection(*m_UiState, width / height, frame);
 
             ImDrawList* drawList = ImGui::GetForegroundDrawList();
             drawList->PushClipRect(ImVec2(min.x, min.y), ImVec2(max.x, max.y));
@@ -118,9 +123,6 @@ namespace
             constexpr float padding = 6.0f;
             constexpr float lineHeight = 16.0f;
 
-            auto sceneLock = runner->LockRenderScene();
-            const Scene& scene = *sceneLock;
-
             if (m_UiState->ShowCameraGizmos)
             {
                 for (auto [entity, transform, camera, metadata] :
@@ -131,7 +133,7 @@ namespace
                     const ImU32 color = selected ? IM_COL32(255, 190, 90, 255)
                                         : camera.Primary ? IM_COL32(230, 140, 50, 220)
                                                          : IM_COL32(150, 170, 200, 200);
-                    DrawCameraFrustum(drawList, transform, camera, viewProj, min, max, width / height, color,
+                    DrawCameraFrustum(drawList, transform, camera, frame, viewProj, min, max, width / height, color,
                                       selected ? 2.0f : 1.4f);
                 }
             }
@@ -146,23 +148,21 @@ namespace
                  scene.Registry().view<const TransformComponent, const MetadataComponent>().each())
             {
                 ImVec2 screenPos;
-                if (!WorldToScreen(transform.Position, viewProj, min, max, screenPos)) continue;
+                if (!WorldToScreen(frame.ToRender(transform.Position), viewProj, min, max, screenPos)) continue;
 
                 std::vector<std::string> lines;
-                char buf[64];
-                std::snprintf(buf, sizeof(buf), "(%.1f, %.1f, %.1f)", transform.Position.x,
-                             transform.Position.y, transform.Position.z);
-                lines.emplace_back(buf);
+                const auto length = [](const double metres) { return Units::FormatQuantity(metres, Units::Dimension::Length, 4); };
+                lines.emplace_back("(" + length(transform.Position.x) + ", " + length(transform.Position.y) + ", "
+                                   + length(transform.Position.z) + ")");
 
                 if (const auto* blackHole = scene.Registry().try_get<const BlackHoleComponent>(entity))
                 {
-                    std::snprintf(buf, sizeof(buf), "mass %.2f  spin %.2f", blackHole->Mass, blackHole->Spin);
-                    lines.emplace_back(buf);
+                    lines.emplace_back("mass " + Units::FormatQuantity(blackHole->Mass, Units::Dimension::Mass, 4)
+                                       + "  a* " + Units::FormatNumber(blackHole->Spin, 3));
                 }
                 if (const auto* body = scene.Registry().try_get<const RigidBodyComponent>(entity))
                 {
-                    std::snprintf(buf, sizeof(buf), "mass %.2e kg", body->Mass);
-                    lines.emplace_back(buf);
+                    lines.emplace_back("mass " + Units::FormatQuantity(body->Mass, Units::Dimension::Mass, 4));
                 }
 
                 const std::string& name = metadata.Name.empty() ? metadata.TypeTag : metadata.Name;

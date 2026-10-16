@@ -101,11 +101,20 @@ GPP::RegisterComponent<FooComponent>("Foo", GPP::ComponentDescription<FooCompone
 ```
 Auto-generated: YAML load/save, inspector, Add Component menu, graph Get / Decompose / Set nodes, Luau `scene.get/set`.
 - `FieldKind`: Plain, Color, Direction, Angle, AssetPath, EntityRef, Multiline
-- `FieldMeta`: Label, Category, Min, Max, Speed, ReadOnly, Options, Format, VisibleField
+- `FieldMeta`: Label, Category, Min, Max, Speed, ReadOnly, Options, Format, VisibleField, `Dim`, `LegacyScale`, `LegacyDefault`
+- SI fields: `double`/`glm::dvec3` member + `.Dim = Units::Dimension::Length|Mass|Time|Velocity|AngularRate` the inspector uses the unit-aware widget
 - Description flags: `DisplayName`, `Inspectable`, `GraphExposed`
 - New field = one `GPP::Field(...)` line
 - Test: `gpp/tests/unit/simulation/component_reflection_tests.cpp`
 - Base components (Transform, Camera, RigidBody…): `gpp/src/simulation/components.cppm`
+
+## Units, constants, precision
+- One source: `gpp/src/core/units/units.cppm`. Constants are binary128 (`kNameW`) with double views (`kName`)
+- SI everywhere. Other systems only through named boundaries
+- Name unit-carrying locals: `radiusM`, `massKg`, `periodS`, `rGeo`, `spinStar`
+- Display units: widget logic in `src/ui/widget_logic.cppm`,
+- Shaders get constants as defines: `Units::ShaderDefines()`
+- Precision: `Units::Precision` (f32/f64/f128)
 
 ## Add a UI layer
 1. Create `plugins/foo_layer.cpp`
@@ -135,7 +144,7 @@ GPP_DEFINE_HOT_RELOAD_LAYER(FooLayer)
 4. `src/ui/ui_state.cppm`: add `bool ShowFooWindow = false;`
 5. Toggle: `plugins/sidebar_layer.cpp` button list + `plugins/topbar_layer.cpp` View menu
 - Hooks: `OnAttach`, `OnDetach`, `OnUpdate(dt)`, `OnUiRender`
-- Widgets: `src/ui/widgets.cppm` (SectionHeader, PropertyRow, SearchBox, DragFloatValue…)
+- Widgets: `src/ui/widgets.cppm` (SectionHeader, PropertyRow, SearchBox, DragFloatValue, QuantityValue)
 - Theme: `plugins/theme.cpp`
 - Cross-thread state: `UiState` (atomics, `OneShot`, `LatestValue`)
 

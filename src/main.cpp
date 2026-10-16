@@ -53,6 +53,9 @@ namespace
             else if (arg == "--scene") args.ScenePath = next();
             else if (arg == "--ray-step-size") args.Request.RayStepSize = std::stof(next());
             else if (arg == "--max-ray-steps") args.Request.MaxRaySteps = std::stoi(next());
+            else if (arg == "--gpu-precision") args.Request.GpuPrecision = Units::PrecisionFromName(next());
+            else if (arg == "--physically-accurate") args.Request.PhysicallyAccurate = true;
+            else if (arg == "--metric") args.Request.MetricType = std::stoi(next());
         }
         return args.Requested ? std::optional(args) : std::nullopt;
     }
@@ -61,6 +64,7 @@ namespace
 int main(int argc, char* argv[])
 {
     EnsureRuntimeDirectories();
+    SetGlobalShaderDefines(Units::ShaderDefines());
     MoleHole::RegisterComponents();
 
     const auto exportArgs = ParseExportArgs(argc, argv);

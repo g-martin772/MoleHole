@@ -290,6 +290,10 @@ namespace MoleHole
                     else if constexpr (std::is_same_v<T, bool>) return v ? "true" : "false";
                     else if constexpr (std::is_same_v<T, int>) return std::to_string(v);
                     else if constexpr (std::is_same_v<T, float>) return Number(v);
+                    else if constexpr (std::is_same_v<T, double>) return Number(static_cast<float>(v));
+                    else if constexpr (std::is_same_v<T, glm::dvec3>)
+                        return Rt("V3") + "(" + Number(static_cast<float>(v.x)) + ", " + Number(static_cast<float>(v.y))
+                               + ", " + Number(static_cast<float>(v.z)) + ")";
                     else if constexpr (std::is_same_v<T, std::string>) return Quote(v);
                     else if constexpr (std::is_same_v<T, std::uint64_t>) return Host("ent") + "(\"" + std::to_string(v) + "\")";
                     else if constexpr (std::is_same_v<T, glm::vec2>) return Rt("V2") + "(" + Number(v.x) + ", " + Number(v.y) + ")";

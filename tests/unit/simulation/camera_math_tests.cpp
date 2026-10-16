@@ -49,7 +49,7 @@ TEST_CASE("Scene camera view and matrix follow the transform", "[simulation][cam
     CHECK(view.Front.x == Approx(-1.0f).margin(1e-5));
     CHECK(view.Fov == 45.0f);
 
-    const glm::vec4 origin = SceneCameraViewMatrix(view) * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    const glm::vec4 origin = SceneCameraViewMatrix(view, RenderFrame{.OriginM = {}, .LengthUnitM = 1.0}) * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
     CHECK(origin.x == Approx(0.0f).margin(1e-4));
     CHECK(origin.z == Approx(-5.0f).margin(1e-4));
 }
@@ -70,7 +70,7 @@ TEST_CASE("FindPrimarySceneCamera picks only primary cameras", "[simulation][cam
     scene.Registry().emplace<CameraComponent>(primary, CameraComponent{.Fov = 30.0f});
     const auto found = FindPrimarySceneCamera(scene);
     REQUIRE(found.has_value());
-    CHECK(found->Position.z == 9.0f);
+    CHECK(found->PositionM.z == 9.0);
     CHECK(found->Fov == 30.0f);
 }
 

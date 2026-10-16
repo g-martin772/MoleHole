@@ -30,6 +30,7 @@ namespace MoleHole
             fn("ShowObjectPaths", render.ShowObjectPaths);
             fn("DebugMode", render.DebugMode);
             fn("MetricType", render.MetricType);
+            fn("FrameMode", render.FrameMode);
             fn("AccDiskHeight", render.AccDiskHeight);
             fn("AccDiskSpeed", render.AccDiskSpeed);
             fn("AccDiskNoiseScale", render.AccDiskNoiseScale);
@@ -105,10 +106,15 @@ namespace MoleHole
             }
             if (const auto camera = node["Camera"])
             {
-                if (const auto v = camera["Position"]) m_UiState->CameraPosition = v.as<glm::vec3>();
+                if (const auto v = camera["Position"])
+                {
+                    m_UiState->CameraPositionM = glm::dvec3(v.as<glm::vec3>()) * GPP::Units::Legacy::kLengthM;
+                }
+                if (const auto v = camera["Speed"]) m_UiState->CameraSpeedMs = v.as<double>() * GPP::Units::Legacy::kLengthM;
+                if (const auto v = camera["PositionM"]) m_UiState->CameraPositionM = v.as<glm::dvec3>();
                 if (const auto v = camera["Yaw"]) m_UiState->CameraYaw = v.as<float>();
                 if (const auto v = camera["Pitch"]) m_UiState->CameraPitch = v.as<float>();
-                if (const auto v = camera["Speed"]) m_UiState->CameraSpeed = v.as<float>();
+                if (const auto v = camera["SpeedMs"]) m_UiState->CameraSpeedMs = v.as<double>();
                 if (const auto v = camera["MouseSensitivity"]) m_UiState->CameraMouseSensitivity = v.as<float>();
             }
             if (const auto ui = node["UI"])
@@ -138,9 +144,19 @@ namespace MoleHole
                     if (const auto v = render[name]) value = v.template as<std::remove_cvref_t<decltype(value)>>();
                 });
                 if (const auto v = render["ShowCameraGizmos"]) m_UiState->ShowCameraGizmos = v.as<bool>();
+                if (const auto v = render["GpuPrecision"])
+                {
+                    if (const auto p = Units::PrecisionFromName(v.as<std::string>()); p && *p != Units::Precision::F128)
+                        m_UiState->Render.GpuPrecision = *p;
+                }
             }
             if (const auto simulation = node["Simulation"])
             {
+                if (const auto v = simulation["Precision"])
+                {
+                    if (const auto p = Units::PrecisionFromName(v.as<std::string>()); p && Units::CpuSupports(*p))
+                        m_UiState->SimulationPrecision = *p;
+                }
                 if (const auto v = simulation["TickRate"])
                     m_UiState->SimulationTickRate = std::clamp(v.as<float>(), 1.0f, 2000.0f);
             }
@@ -195,10 +211,10 @@ namespace MoleHole
             }
             root["RecentScenes"] = recentNode;
 
-            root["Camera"]["Position"] = m_UiState->CameraPosition;
+            root["Camera"]["PositionM"] = m_UiState->CameraPositionM;
             root["Camera"]["Yaw"] = m_UiState->CameraYaw;
             root["Camera"]["Pitch"] = m_UiState->CameraPitch;
-            root["Camera"]["Speed"] = m_UiState->CameraSpeed;
+            root["Camera"]["SpeedMs"] = m_UiState->CameraSpeedMs;
             root["Camera"]["MouseSensitivity"] = m_UiState->CameraMouseSensitivity;
 
             root["UI"]["Font"] = m_Preferences->GetFontName();
@@ -218,6 +234,8 @@ namespace MoleHole
             root["Render"]["ShowCameraGizmos"] = m_UiState->ShowCameraGizmos;
 
             root["Simulation"]["TickRate"] = m_UiState->SimulationTickRate;
+            root["Simulation"]["Precision"] = std::string(Units::PrecisionName(m_UiState->SimulationPrecision));
+            root["Render"]["GpuPrecision"] = std::string(Units::PrecisionName(m_UiState->Render.GpuPrecision));
 
             root["LastExportDirectory"] = GetLastExportDirectory();
             root["DefaultExportDirectory"] = GetDefaultExportDirectory();

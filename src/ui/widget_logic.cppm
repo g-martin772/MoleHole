@@ -2,6 +2,7 @@ export module MoleHole:UI.WidgetLogic;
 
 import std;
 import glm;
+import GPP;
 
 export namespace MoleHole
 {
@@ -280,5 +281,58 @@ export namespace MoleHole
             if (!removed.contains(entry.Guid) && removed.contains(entry.Parent)) result.push_back(entry.Guid);
         }
         return result;
+    }
+
+    // Drag in asinh space
+    [[nodiscard]] inline double SymlogDrag(const double valueSi, const double floorSi, const double pixels,
+                                           const double sensitivity, const double min = 0.0, const double max = 0.0)
+    {
+        const double floor = floorSi > 0.0 ? floorSi : 1.0;
+        const double u = std::clamp(std::asinh(valueSi / floor) + pixels * sensitivity, -700.0, 700.0);
+        const double result = floor * std::sinh(u);
+        return max > min ? std::clamp(result, min, max) : result;
+    }
+
+    [[nodiscard]] inline double DragFloor(const double declaredSpeedSi)
+    {
+        return declaredSpeedSi > 0.0 ? declaredSpeedSi : 1.0;
+    }
+
+    [[nodiscard]] inline std::string QuantityLabel(const double valueSi, const GPP::Units::Dimension dimension)
+    {
+        return GPP::Units::FormatQuantity(valueSi, dimension, 5);
+    }
+
+    [[nodiscard]] inline std::string QuantityEditText(const double valueSi, const GPP::Units::Dimension dimension)
+    {
+        return GPP::Units::FormatQuantity(valueSi, dimension, 12);
+    }
+
+    [[nodiscard]] inline std::string QuantityTooltip(const double valueSi, const GPP::Units::Dimension dimension)
+    {
+        using namespace GPP::Units;
+        const UnitDef* base = BaseUnit(dimension);
+        std::string text = base ? FormatIn(valueSi, *base, 12) : FormatNumber(valueSi, 12);
+        if (valueSi == 0.0 || !std::isfinite(valueSi)) return text;
+        const UnitDef* shown = PickDisplayUnit(dimension, valueSi);
+        int extra = 0;
+        for (const auto* unit : UnitsOf(dimension))
+        {
+            if (unit == shown || unit == base || extra >= 4) continue;
+            const double magnitude = std::fabs(valueSi) / unit->Scale;
+            if (magnitude < 1e-3 || magnitude >= 1e6) continue;
+            text += "\n= " + FormatIn(valueSi, *unit, 6);
+            ++extra;
+        }
+        return text;
+    }
+
+    [[nodiscard]] inline std::optional<double> ParseQuantityEdit(const std::string& text, const double oldSi,
+                                                                 const GPP::Units::Dimension dimension)
+    {
+        const auto* shown = GPP::Units::PickDisplayUnit(dimension, oldSi);
+        const auto parsed = GPP::Units::ParseQuantity(text, dimension, shown);
+        if (!parsed) return std::nullopt;
+        return parsed->ValueSi;
     }
 }

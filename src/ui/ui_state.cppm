@@ -4,6 +4,7 @@ import std;
 import glm;
 import GPP;
 import imgui;
+import :Rendering.Frame;
 
 export namespace MoleHole
 {
@@ -45,6 +46,8 @@ export namespace MoleHole
         bool ThirdPerson = false;
         float ThirdPersonDistance = 10.0f;
         float ThirdPersonHeight = 3.0f;
+        int FrameMode = static_cast<int>(MoleHole::FrameMode::PrimaryBlackHole);
+        GPP::Units::Precision GpuPrecision = GPP::Units::Precision::F32;
     };
 
     enum class GizmoOperation { Translate, Rotate, Scale };
@@ -60,6 +63,9 @@ export namespace MoleHole
         int Framerate = 60;
         std::optional<float> RayStepSize;
         std::optional<int> MaxRaySteps;
+        std::optional<GPP::Units::Precision> GpuPrecision;
+        std::optional<bool> PhysicallyAccurate;
+        std::optional<int> MetricType;
     };
 
     template <typename T>
@@ -125,6 +131,7 @@ export namespace MoleHole
     {
     public:
         ScriptStatusBoard ScriptStatuses;
+        std::atomic<bool> GpuFloat64Supported{false};
         bool ShowCameraWindow = false;
         bool ShowSystemWindow = false;
         bool ShowSceneWindow = true;
@@ -146,7 +153,7 @@ export namespace MoleHole
         GizmoOperation ActiveGizmoOperation = GizmoOperation::Translate;
         GizmoMode ActiveGizmoMode = GizmoMode::World;
         bool GizmoSnapEnabled = false;
-        glm::vec3 GizmoTranslateSnap{1.0f, 1.0f, 1.0f};
+        glm::dvec3 GizmoTranslateSnapM{1.0e3, 1.0e3, 1.0e3};
         float GizmoRotateSnapDegrees = 15.0f;
         float GizmoScaleSnap = 0.1f;
 
@@ -160,17 +167,19 @@ export namespace MoleHole
         // CLI --scene override
         std::optional<std::string> StartupScenePath;
 
-        glm::vec3 CameraPosition{0.0f, 20.0f, 100.0f};
+        glm::dvec3 CameraPositionM{0.0, 20.0 * GPP::Units::kSolarGravitationalRadius,
+                                   100.0 * GPP::Units::kSolarGravitationalRadius};
         float CameraYaw = -90.0f;
         float CameraPitch = 0.0f;
         float CameraFov = 60.0f;
-        float CameraSpeed = 5.0f;
+        double CameraSpeedMs = 5.0 * GPP::Units::kSolarGravitationalRadius;
         float CameraMouseSensitivity = 0.1f;
         bool PossessSceneCamera = true;
         bool PreviewSceneCamera = false;
         bool SceneCameraActive = false;
 
-        glm::vec3 ViewPosition{0.0f, 20.0f, 100.0f};
+        glm::dvec3 ViewPositionM{0.0, 20.0 * GPP::Units::kSolarGravitationalRadius,
+                                 100.0 * GPP::Units::kSolarGravitationalRadius};
         glm::vec3 ViewFront{0.0f, 0.0f, -1.0f};
         glm::vec3 ViewUp{0.0f, 1.0f, 0.0f};
         float ViewFov = 60.0f;
@@ -190,6 +199,7 @@ export namespace MoleHole
         std::uint64_t ExportStepSerial = 0;
 
         RenderToggles Render;
+        GPP::Units::Precision SimulationPrecision = GPP::Units::Precision::F64;
         float GravityMultiplier = 1.0f;
         float SimulationTickRate = 60.0f;
     };

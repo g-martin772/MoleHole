@@ -1,4 +1,4 @@
-const float BOLTZMANN = 5.670374419e-8;
+const float STEFAN_BOLTZMANN = GPP_STEFAN_BOLTZMANN;
 
 float calculateEventHorizonRadius(float mass) {
     return 2.0f * mass * G / pow(c, 2);
@@ -14,7 +14,7 @@ vec3 calculateAngularMomentumFromSpin(float spin, vec3 spinAxis, float mass) {
 }
 
 float getAccretionDiskTemperature(float mass, float radius, float inner_radius) {
-    float constant = (3.0f * mass) / (8 * PI * BOLTZMANN);
+    float constant = (3.0f * mass) / (8 * PI * STEFAN_BOLTZMANN);
     float innerTerm = constant * pow(radius, -3.0f) * (1.0f - sqrt(inner_radius / radius));
     return pow(innerTerm, 0.25f);
 }

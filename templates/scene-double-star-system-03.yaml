@@ -1,4 +1,6 @@
 Scene: Double Star System 03
+SchemaVersion: 2
+TimeScale: 4.911927171628457e-05
 Entities:
   - Guid: 12985280943029100768
     Components:
@@ -7,29 +9,29 @@ Entities:
         Name: Sphere
         TypeTag: Sphere
       Transform:
-        Position: [0, 0, 38]
+        Position: [0, 0, 56111.75144590474]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Velocity:
-        Linear: [12, 0, 0]
+        Linear: [360744364.4309353, 0, 0]
         Angular: [0, 0, 0]
       RigidBody:
         Type: Dynamic
-        Mass: 1e+14
+        Mass: 100000000000000
         LinearDamping: 0
         AngularDamping: 0.05
         EnableGravity: true
       Collider:
         Shape: Sphere
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 1
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 1476.6250380501247
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
         IsTrigger: false
       Sphere:
-        Radius: 1
+        Radius: 1476.6250380501247
         Spin: 0
         Color: [1, 1, 1]
         SpinAxis: [0, 1, 0]
@@ -52,15 +54,15 @@ Entities:
         EnableGravity: true
       Collider:
         Shape: Sphere
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 1
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 1476.6250380501247
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
         IsTrigger: false
       Sphere:
-        Radius: 1
+        Radius: 1476.6250380501247
         Spin: 0
         Color: [1, 1, 1]
         SpinAxis: [0, 1, 0]
@@ -72,7 +74,7 @@ Entities:
         Name: BlackHole
         TypeTag: BlackHole
       Transform:
-        Position: [0, 0, -5]
+        Position: [0, 0, -7383.125190250623]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       BlackHole:

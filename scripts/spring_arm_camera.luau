@@ -1,6 +1,3 @@
--- Orbits the entity it is attached to around Target at a fixed arm length, like a spring-arm camera boom.
--- Attach it to a camera entity and turn on "possess scene camera" to look through it while playing.
-
 local function armDirection(yawDegrees: number, pitchDegrees: number): vector
     local yaw, pitch = math.rad(yawDegrees), math.rad(pitchDegrees)
     return vector.create(math.cos(pitch) * math.sin(yaw), math.sin(pitch), math.cos(pitch) * math.cos(yaw))
@@ -9,7 +6,7 @@ end
 return {
     properties = {
         { name = "Target", type = "entity" },
-        { name = "ArmLength", type = "float", default = 12, min = 0.5, max = 500 },
+        { name = "ArmLength", type = "float", default = 20000, min = 0.5, max = 1e12 },
         { name = "Yaw", type = "float", default = 0 },
         { name = "Pitch", type = "float", default = 20, min = -89, max = 89 },
         { name = "OrbitSpeed", type = "float", default = 15 },

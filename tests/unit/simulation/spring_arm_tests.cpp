@@ -181,8 +181,8 @@ TEST_CASE("The spring arm demo template wires the script to the black hole", "[s
     for (auto [entity, camera, transform] : scene.Registry().view<const GPP::CameraComponent, const GPP::TransformComponent>().each())
     {
         const auto hole = scene.FindByGuid(blackHole);
-        const float distance = glm::distance(transform.Position, scene.Registry().get<GPP::TransformComponent>(hole).Position);
-        CHECK(distance < 15.0f);
-        CHECK(distance > 12.0f);
+        const double distance = glm::distance(transform.Position, scene.Registry().get<GPP::TransformComponent>(hole).Position);
+        CHECK(distance < 15.0 * GPP::Units::kSolarGravitationalRadius);
+        CHECK(distance > 12.0 * GPP::Units::kSolarGravitationalRadius);
     }
 }

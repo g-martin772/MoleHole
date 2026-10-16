@@ -10,15 +10,15 @@ export namespace MoleHole
 {
     struct BlackHoleComponent
     {
-        float Mass{1.0f};
-        float Spin{0.0f};
-        float Charge{0.0f};
+        double Mass{GPP::Units::kSolarMass}; // kg
+        double Spin{0.0};                    // a* = cJ/(GM^2), dimensionless
+        double Charge{0.0};                  // q*: charge in geometrized units over r_g, dimensionless
         glm::vec3 SpinAxis{0.0f, 1.0f, 0.0f};
     };
 
     struct SphereComponent
     {
-        float Radius{1.0f};
+        double Radius{1.0}; // m
         float Spin{0.0f};
         glm::vec3 Color{1.0f, 1.0f, 1.0f};
         glm::vec3 SpinAxis{0.0f, 1.0f, 0.0f};
@@ -48,20 +48,43 @@ namespace MoleHole
                 .DisplayName = "Black Hole",
                 .Fields = {
                     GPP::Field("Mass", &BlackHoleComponent::Mass,
-                               {.Label = "Mass (solar)", .Min = 0.0f, .Max = 1000.0f, .Speed = 0.01f}),
-                    GPP::Field("Spin", &BlackHoleComponent::Spin, {.Min = 0.0f, .Max = 1.0f, .Speed = 0.01f}),
-                    GPP::Field("Charge", &BlackHoleComponent::Charge, {.Min = 0.0f, .Max = 1.0f, .Speed = 0.01f}),
+                               {.Label = "Mass", .Min = 1.0, .Speed = 1.0e27, .Dim = GPP::Units::Dimension::Mass,
+                                .LegacyScale = GPP::Units::Legacy::kBlackHoleMassKg}),
+                    GPP::Field("Spin", &BlackHoleComponent::Spin,
+                               {.Label = "Spin a*", .Min = 0.0, .Max = 0.998, .Speed = 0.01}),
+                    GPP::Field("Charge", &BlackHoleComponent::Charge,
+                               {.Label = "Charge q* (exotic)", .Min = 0.0, .Max = 1.0, .Speed = 0.01}),
                     GPP::Field("SpinAxis", &BlackHoleComponent::SpinAxis,
-                               {.Label = "Spin Axis", .Speed = 0.01f, .Kind = GPP::FieldKind::Direction}),
+                               {.Label = "Spin Axis", .Speed = 0.01, .Kind = GPP::FieldKind::Direction}),
+                    GPP::Computed<BlackHoleComponent, double>(
+                        "GravitationalRadius",
+                        [](const BlackHoleComponent& c) { return GPP::Units::GravitationalRadius(c.Mass); }, nullptr,
+                        {.Label = "r_g = GM/c\xC2\xB2", .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Computed<BlackHoleComponent, double>(
+                        "HorizonRadius",
+                        [](const BlackHoleComponent& c)
+                        {
+                            return GPP::Units::GravitationalRadius(c.Mass)
+                                   * GPP::Units::HorizonRadiusInGravitationalRadii(c.Spin, c.Charge);
+                        },
+                        nullptr, {.Label = "Horizon r+", .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Computed<BlackHoleComponent, double>(
+                        "IscoRadius",
+                        [](const BlackHoleComponent& c)
+                        {
+                            return GPP::Units::GravitationalRadius(c.Mass) * GPP::Units::IscoInGravitationalRadii(c.Spin);
+                        },
+                        nullptr, {.Label = "ISCO (prograde)", .Dim = GPP::Units::Dimension::Length}),
                 }});
 
             GPP::RegisterComponent<SphereComponent>("Sphere", GPP::ComponentDescription<SphereComponent>{
                 .Fields = {
-                    GPP::Field("Radius", &SphereComponent::Radius, {.Min = 0.01f, .Max = 100.0f, .Speed = 0.01f}),
-                    GPP::Field("Spin", &SphereComponent::Spin, {.Min = 0.0f, .Max = 1.0f, .Speed = 0.01f}),
+                    GPP::Field("Radius", &SphereComponent::Radius, {.Min = 1e-3, .Speed = 0.1, .Dim = GPP::Units::Dimension::Length,
+                                .LegacyScale = GPP::Units::Legacy::kLengthM}),
+                    GPP::Field("Spin", &SphereComponent::Spin, {.Min = 0.0, .Max = 1.0, .Speed = 0.01}),
                     GPP::Field("Color", &SphereComponent::Color, {.Kind = GPP::FieldKind::Color}),
                     GPP::Field("SpinAxis", &SphereComponent::SpinAxis,
-                               {.Label = "Spin Axis", .Speed = 0.01f, .Kind = GPP::FieldKind::Direction}),
+                               {.Label = "Spin Axis", .Speed = 0.01, .Kind = GPP::FieldKind::Direction}),
                     GPP::Field("TexturePath", &SphereComponent::TexturePath,
                                {.Label = "Texture", .Kind = GPP::FieldKind::AssetPath}),
                 }});

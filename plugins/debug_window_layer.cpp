@@ -24,6 +24,31 @@ namespace
         ImGui::SetTooltip("%s", tooltip);
     }
 
+    // Combo over f32/f64/f128
+    bool PrecisionCombo(const char* id, Units::Precision* value,
+                        const std::function<const char*(Units::Precision)>& unavailableReason)
+    {
+        bool changed = false;
+        ImGui::SetNextItemWidth(ImGui::CalcItemWidth());
+        if (ImGui::BeginCombo(id, std::string(Units::PrecisionName(*value)).c_str()))
+        {
+            for (const auto precision : Units::kPrecisions)
+            {
+                const char* reason = unavailableReason(precision);
+                std::string label(Units::PrecisionName(precision));
+                if (reason) label += " (unavailable)";
+                if (ImGui::Selectable(label.c_str(), precision == *value, reason ? ImGuiSelectableFlags_Disabled : 0))
+                {
+                    *value = precision;
+                    changed = true;
+                }
+                if (reason && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", reason);
+            }
+            ImGui::EndCombo();
+        }
+        return changed;
+    }
+
     struct DebugWindowLayer final : public HotReloadableLayer
     {
         using Dependencies = std::tuple<Logger, UiState>;
@@ -51,6 +76,45 @@ namespace
             ImGui::Checkbox("Gravitational Redshift", &render.GravitationalRedshift);
             ImGui::Checkbox("Doppler Beaming", &render.DopplerBeaming);
             ImGui::Checkbox("Physically Accurate", &render.PhysicallyAccurate);
+
+            SectionHeader("PRECISION");
+            Units::Precision cpuPrecision = m_UiState->SimulationPrecision;
+            ImGui::TextUnformatted("CPU simulation");
+            if (PrecisionCombo("##cpuprecision", &cpuPrecision, [](Units::Precision p) -> const char*
+                {
+                    return Units::CpuSupports(p) ? nullptr : "This compiler has no std::float128_t";
+                }))
+            {
+                m_UiState->SimulationPrecision = cpuPrecision;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Arithmetic type of MoleHole's gravity evaluation. Positions are stored in\n"
+                                   "double either way; with f32 they are cast before subtraction.\n"
+                                   "PhysX integration stays float32 (local origin).");
+            }
+            ImGui::TextUnformatted("GPU render");
+            const bool gpuFloat64 = m_UiState->GpuFloat64Supported.load(std::memory_order_relaxed);
+            PrecisionCombo("##gpuprecision", &render.GpuPrecision, [gpuFloat64](Units::Precision p) -> const char*
+            {
+                if (p == Units::Precision::F128) return "GPUs have no 128-bit floats";
+                if (p == Units::Precision::F64 && !gpuFloat64) return "Device lacks shaderFloat64";
+                return nullptr;
+            });
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Precision of the geodesic integration (physically accurate mode).\n"
+                                   "f64 runs at 1/32-1/64 rate on consumer GPUs.");
+            }
+            const char* frameItems[] = {"Solar r_g (legacy numbers)", "Heaviest black hole r_g (scale invariant)"};
+            ImGui::TextUnformatted("Render length unit");
+            ImGui::SetNextItemWidth(ImGui::CalcItemWidth());
+            ImGui::Combo("##frame", &render.FrameMode, frameItems, IM_ARRAYSIZE(frameItems));
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Unit of the geometrized render space (G = c = 1). Ray step size and the third-person\n"
+                                   "offsets below are in these units.");
+            }
 
             SectionHeader("ACCRETION DISK");
             ImGui::Checkbox("Enabled", &render.AccretionDisk);

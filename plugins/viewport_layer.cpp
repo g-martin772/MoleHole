@@ -236,7 +236,14 @@ namespace
             m_UploadPool = std::make_unique<VulkanCommandPool>(device, m_Logger, device->GetQueueIndices().Graphics);
             const auto queue = device->GetBackgroundQueue();
 
-            m_RaytracePipeline = MakeComputePipeline(device, "black_hole_rendering.comp");
+            std::unordered_map<std::string, std::string> raytraceDefines;
+            m_RaytracePipeline = MakeComputePipeline(device, "black_hole_rendering.comp", raytraceDefines);
+            m_UiState->GpuFloat64Supported.store(device->SupportsShaderFloat64(), std::memory_order_relaxed);
+            if (device->SupportsShaderFloat64())
+            {
+                raytraceDefines["GPP_PRECISION_F64"] = "1";
+                m_RaytracePipelineF64 = MakeComputePipeline(device, "black_hole_rendering.comp", raytraceDefines);
+            }
             m_BloomExtractPipeline = MakeComputePipeline(device, "bloom_extract.comp");
             m_BloomBlurPipeline = MakeComputePipeline(device, "bloom_blur.comp");
             m_LensFlarePipeline = MakeComputePipeline(device, "lens_flare.comp");
@@ -278,7 +285,10 @@ namespace
             if (const auto sim = m_Sim.Load(); sim->Runner)
             {
                 if (const auto gravity = sim->Runner->GetModule<GravitySimulationModule>())
+                {
                     gravity->SetGravityMultiplier(m_UiState->GravityMultiplier);
+                    gravity->SetPrecision(m_UiState->SimulationPrecision);
+                }
                 // Tick rate is a UI setting; the runner is told whenever it differs (also covers a
                 // freshly started simulation).
                 if (sim->Runner->GetTickRate() != m_UiState->SimulationTickRate)
@@ -310,6 +320,8 @@ namespace
 
             const auto sceneLock = sim->Runner->AcquireSnapshot();
             const Scene& scene = *sceneLock;
+            m_Frame = RenderFrame::ForScene(scene, static_cast<FrameMode>(m_RenderToggles.FrameMode),
+                                            m_RenderCamera.GetPosition());
 
             const auto depthTarget = graph.GetPrimaryDepthTarget();
             const auto depthFormat = depthTarget != kInvalidRenderGraphHandle
@@ -321,15 +333,18 @@ namespace
             UploadParams(extent, scene);
 
             const auto device = m_Renderer->GetDevice();
+            const bool useF64 = m_RenderToggles.GpuPrecision == Units::Precision::F64 && m_RaytracePipelineF64
+                                && m_RaytracePipelineF64->GetPipeline();
+            const std::shared_ptr<ShaderPipeline> raytracePipeline = useF64 ? m_RaytracePipelineF64 : m_RaytracePipeline;
             const std::uint32_t groupsX = (extent.width + 15u) / 16u;
             const std::uint32_t groupsY = (extent.height + 15u) / 16u;
 
             graph.AddBudgetedComputePass(
                 "ViewportLayer.Raytrace", {}, {}, groupsX * groupsY,
-                [this, device, groupsX, set = vk::DescriptorSet{}](const vk::CommandBuffer cmd, RenderGraph& g,
-                                                                  const RenderGraphWorkSlice& slice) mutable
+                [this, device, groupsX, raytracePipeline, set = vk::DescriptorSet{}](
+                    const vk::CommandBuffer cmd, RenderGraph& g, const RenderGraphWorkSlice& slice) mutable
                 {
-                    const auto pipeline = m_RaytracePipeline->GetPipeline();
+                    const auto pipeline = raytracePipeline->GetPipeline();
                     if (!pipeline) return;
                     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->GetPipeline());
                     if (!set)
@@ -503,7 +518,7 @@ namespace
                 EnsurePhysicsDebugPipeline(graph.GetImageFormat(colorTarget));
                 if (m_PhysicsDebugPipeline)
                 {
-                    const glm::mat4 viewProjection = m_RenderCamera.GetViewProjectionMatrix();
+                    const glm::mat4 viewProjection = m_RenderCamera.GetViewProjectionMatrix(m_Frame);
                     graph.AddGraphicsPass(
                         "ViewportLayer.PhysicsDebug", {}, {},
                         {RenderGraphAttachment{.Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
@@ -527,7 +542,7 @@ namespace
                 EnsurePhysicsDebugPipeline(graph.GetImageFormat(colorTarget));
                 if (m_PhysicsDebugPipeline)
                 {
-                    const glm::mat4 viewProjection = m_RenderCamera.GetViewProjectionMatrix();
+                    const glm::mat4 viewProjection = m_RenderCamera.GetViewProjectionMatrix(m_Frame);
                     graph.AddGraphicsPass(
                         "ViewportLayer.ObjectPaths", {}, {},
                         {RenderGraphAttachment{.Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
@@ -760,13 +775,18 @@ namespace
         {
             glm::mat4 model(1.0f);
             bool hasTransform = false;
+            RenderFrame frame;
             {
                 const auto sceneLock = sim.Runner->AcquireSnapshot();
                 const Scene& scene = *sceneLock;
+                frame = RenderFrame::ForScene(scene, static_cast<FrameMode>(m_UiState->Render.FrameMode),
+                                              m_Camera.GetPosition());
                 const auto entity = scene.FindByGuid(m_UiState->SelectedEntityGuid);
                 if (scene.IsValid(entity) && scene.Registry().all_of<TransformComponent>(entity))
                 {
-                    model = scene.Registry().get<TransformComponent>(entity).GetMatrix();
+                    // Gizmo matrix: render-space translation and rotation, the entity's own Scale (dimensionless).
+                    const auto& transform = scene.Registry().get<TransformComponent>(entity);
+                    model = transform.GetRenderMatrix(frame.OriginM, frame.LengthUnitM, frame.LengthUnitM);
                     hasTransform = true;
                 }
             }
@@ -776,7 +796,7 @@ namespace
                 return false;
             }
 
-            const glm::mat4 view = m_Camera.GetViewMatrix();
+            const glm::mat4 view = m_Camera.GetViewMatrix(frame);
             glm::mat4 projection = m_Camera.GetProjectionMatrix();
             projection[1][1] *= -1.0f;
             const auto operation = ToImGuizmoOperation(m_UiState->ActiveGizmoOperation);
@@ -789,9 +809,10 @@ namespace
                 switch (m_UiState->ActiveGizmoOperation)
                 {
                 case GizmoOperation::Translate:
-                    snapValues[0] = m_UiState->GizmoTranslateSnap.x;
-                    snapValues[1] = m_UiState->GizmoTranslateSnap.y;
-                    snapValues[2] = m_UiState->GizmoTranslateSnap.z;
+                    // Boundary SI -> render space: the gizmo works in render units.
+                    snapValues[0] = static_cast<float>(m_UiState->GizmoTranslateSnapM.x / frame.LengthUnitM);
+                    snapValues[1] = static_cast<float>(m_UiState->GizmoTranslateSnapM.y / frame.LengthUnitM);
+                    snapValues[2] = static_cast<float>(m_UiState->GizmoTranslateSnapM.z / frame.LengthUnitM);
                     break;
                 case GizmoOperation::Rotate:
                     snapValues[0] = snapValues[1] = snapValues[2] = m_UiState->GizmoRotateSnapDegrees;
@@ -809,7 +830,7 @@ namespace
             {
                 float t[3], r[3], s[3];
                 ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), t, r, s);
-                const glm::vec3 position(t[0], t[1], t[2]);
+                const glm::dvec3 position = frame.ToWorld(glm::vec3(t[0], t[1], t[2]));
                 const glm::vec3 scale(s[0], s[1], s[2]);
                 const auto guid = m_UiState->SelectedEntityGuid;
                 CommandOptions options;
@@ -832,25 +853,16 @@ namespace
             const glm::vec2 viewportSize{max.x - min.x, max.y - min.y};
             if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f) return;
 
-            const auto mousePos = ImGui::GetMousePos();
-            const auto ray = ScreenPointToRay({mousePos.x, mousePos.y}, viewportMin, viewportSize,
-                                              m_Camera.GetViewMatrix(), m_Camera.GetProjectionMatrix(),
-                                              m_Camera.GetPosition());
-
             const auto sceneLock = sim.Runner->AcquireSnapshot();
             const Scene& scene = *sceneLock;
-            const auto radiusOverride = [this](const Scene& s, entt::entity entity) -> std::optional<float>
-            {
-                const auto* mesh = s.Registry().try_get<const MeshComponent>(entity);
-                if (!mesh || mesh->AssetPath.empty()) return std::nullopt;
-                const float localRadius = m_Meshes->BoundingRadius(mesh->AssetPath);
-                if (const auto* transform = s.Registry().try_get<const TransformComponent>(entity))
-                {
-                    return localRadius * std::max({transform->Scale.x, transform->Scale.y, transform->Scale.z});
-                }
-                return localRadius;
-            };
-            if (const auto hit = PickClosestEntity(scene, ray.Origin, ray.Direction, radiusOverride))
+            const RenderFrame frame = RenderFrame::ForScene(scene, static_cast<FrameMode>(m_UiState->Render.FrameMode),
+                                                            m_Camera.GetPosition());
+            const auto mousePos = ImGui::GetMousePos();
+            const auto ray = ScreenPointToRay({mousePos.x, mousePos.y}, viewportMin, viewportSize,
+                                              m_Camera.GetViewMatrix(frame), m_Camera.GetProjectionMatrix(),
+                                              m_Camera.GetPosition(), frame);
+            const auto radiusOverride = MeshRadiusOverride();
+            if (const auto hit = PickClosestEntity(scene, ray.OriginM, ray.Direction, radiusOverride))
             {
                 m_UiState->SelectedEntityGuid = scene.Registry().get<MetadataComponent>(hit->Entity).Guid;
             }
@@ -860,8 +872,24 @@ namespace
             }
         }
 
+        [[nodiscard]] BoundingRadiusOverride MeshRadiusOverride() const
+        {
+            return [this](const Scene& s, entt::entity entity) -> std::optional<double>
+            {
+                const auto* mesh = s.Registry().try_get<const MeshComponent>(entity);
+                if (!mesh || mesh->AssetPath.empty()) return std::nullopt;
+                const double localRadius = static_cast<double>(m_Meshes->BoundingRadius(mesh->AssetPath)) * mesh->MetresPerUnit;
+                if (const auto* transform = s.Registry().try_get<const TransformComponent>(entity))
+                {
+                    return localRadius * static_cast<double>(std::max({transform->Scale.x, transform->Scale.y, transform->Scale.z}));
+                }
+                return localRadius;
+            };
+        }
+
         std::shared_ptr<ShaderPipeline> MakeComputePipeline(const std::shared_ptr<VulkanDevice>& device,
-                                                             std::string fileName)
+                                                             std::string fileName,
+                                                             std::unordered_map<std::string, std::string> defines = {})
         {
             auto pipeline = std::make_shared<ShaderPipeline>(
                 device,
@@ -869,7 +897,8 @@ namespace
                 ShaderPipelineDescription{
                     .compute = ShaderSource{
                         .path = m_FileSystem->ResolveAssetPath("shaders", fileName),
-                        .stage = ShaderStage::Compute
+                        .stage = ShaderStage::Compute,
+                        .defines = std::move(defines)
                     },
                     .enableHotReload = true
                 },
@@ -1022,7 +1051,7 @@ namespace
             }
         }
 
-        void AppendPhysicsDebugVertex(std::vector<float>& out, const physx::PxVec3& position, physx::PxU32 color)
+        void AppendPhysicsDebugVertex(std::vector<float>& out, const glm::vec3& position, physx::PxU32 color)
         {
             out.push_back(position.x);
             out.push_back(position.y);
@@ -1046,10 +1075,16 @@ namespace
 
             std::vector<float> vertices;
             vertices.reserve(lines.size() * 2 * 6);
+
+            const glm::dvec3 physicsOrigin = m_RenderPhysics->Origin();
+            const auto toRender = [&](const physx::PxVec3& p)
+            {
+                return m_Frame.ToRender(physicsOrigin + glm::dvec3(p.x, p.y, p.z));
+            };
             for (const auto& line : lines)
             {
-                AppendPhysicsDebugVertex(vertices, line.pos0, line.color0);
-                AppendPhysicsDebugVertex(vertices, line.pos1, line.color1);
+                AppendPhysicsDebugVertex(vertices, toRender(line.pos0), line.color0);
+                AppendPhysicsDebugVertex(vertices, toRender(line.pos1), line.color1);
             }
 
             const auto device = m_Renderer->GetDevice();
@@ -1095,14 +1130,16 @@ namespace
             {
                 for (std::size_t i = 1; i < history.size(); ++i)
                 {
-                    AppendObjectPathSegment(vertices, history[i - 1], history[i], kMeshColor);
+                    AppendObjectPathSegment(vertices, m_Frame.ToRender(history[i - 1]), m_Frame.ToRender(history[i]),
+                                            kMeshColor);
                 }
             }
             for (const auto& [guid, history] : m_ObjectPathTracker.SphereHistories())
             {
                 for (std::size_t i = 1; i < history.size(); ++i)
                 {
-                    AppendObjectPathSegment(vertices, history[i - 1], history[i], kSphereColor);
+                    AppendObjectPathSegment(vertices, m_Frame.ToRender(history[i - 1]), m_Frame.ToRender(history[i]),
+                                            kSphereColor);
                 }
             }
             if (vertices.empty()) return;
@@ -1208,7 +1245,7 @@ namespace
                 if (meshComponent.AssetPath.empty()) continue;
                 const auto gltfScene = m_Meshes->GetOrLoad(meshComponent.AssetPath);
                 if (!gltfScene) continue;
-                const glm::mat4 model = transform.GetMatrix();
+                const glm::mat4 model = transform.GetRenderMatrix(m_Frame.OriginM, m_Frame.LengthUnitM, meshComponent.MetresPerUnit);
                 for (const auto& mesh : gltfScene->Meshes)
                 {
                     for (const auto& primitive : mesh.Primitives)
@@ -1235,9 +1272,9 @@ namespace
         void UploadMeshCamera()
         {
             MeshCameraParamsGpu params{};
-            params.View = m_RenderCamera.GetViewMatrix();
+            params.View = m_RenderCamera.GetViewMatrix(m_Frame);
             params.Projection = m_RenderCamera.GetProjectionMatrix();
-            params.CameraPos = m_RenderCamera.GetPosition();
+            params.CameraPos = m_Frame.ToRender(m_RenderCamera.GetPosition());
             params.LightDir = glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f));
             m_MeshCameraBuffer->Upload(&params, sizeof(params));
         }
@@ -1245,13 +1282,14 @@ namespace
         void UploadGravityGridParams(const GPP::Scene& scene)
         {
             GravityGridParamsGpu params{};
-            params.ViewProjection = m_RenderCamera.GetViewProjectionMatrix();
+            params.ViewProjection = m_RenderCamera.GetViewProjectionMatrix(m_Frame)
+                                    * glm::translate(glm::mat4(1.0f), m_Frame.ToRender(glm::dvec3(0.0)));
             params.PlaneY = kGravityGridPlaneY;
             params.CellSize = kGravityGridCellSize;
             params.LineThickness = kGravityGridLineThickness;
             params.Opacity = kGravityGridOpacity;
             params.Color = kGravityGridColor;
-            FillGravityGridData(params, scene);
+            FillGravityGridData(params, scene, m_Frame);
             m_GravityGridParamsBuffer->Upload(&params, sizeof(params));
         }
 
@@ -1530,6 +1568,7 @@ namespace
         [[nodiscard]] bool AllExportPipelinesReady() const
         {
             return m_RaytracePipeline && m_RaytracePipeline->GetPipeline() &&
+                   (!m_RaytracePipelineF64 || m_RaytracePipelineF64->GetPipeline()) &&
                    m_BloomExtractPipeline && m_BloomExtractPipeline->GetPipeline() &&
                    m_BloomBlurPipeline && m_BloomBlurPipeline->GetPipeline() &&
                    m_LensFlarePipeline && m_LensFlarePipeline->GetPipeline() &&
@@ -1556,6 +1595,9 @@ namespace
             m_SavedRenderToggles = m_UiState->Render;
             if (request.RayStepSize) m_UiState->Render.RayStepSize = *request.RayStepSize;
             if (request.MaxRaySteps) m_UiState->Render.MaxRaySteps = *request.MaxRaySteps;
+            if (request.GpuPrecision) m_UiState->Render.GpuPrecision = *request.GpuPrecision;
+            if (request.PhysicallyAccurate) m_UiState->Render.PhysicallyAccurate = *request.PhysicallyAccurate;
+            if (request.MetricType) m_UiState->Render.MetricType = *request.MetricType;
 
             const auto stats = m_Renderer->GetBufferTargetStats(m_LayerTarget.Id);
             m_ExportMinSerial = (stats ? stats->FramesRendered : 0) + 3;
@@ -1785,7 +1827,7 @@ namespace
 
             if (UpdateSceneCamera()) return;
 
-            m_Camera.SetPosition(m_UiState->CameraPosition);
+            m_Camera.SetPosition(m_UiState->CameraPositionM);
             m_Camera.SetYawPitch(m_UiState->CameraYaw, m_UiState->CameraPitch);
             m_Camera.SetFov(m_UiState->CameraFov);
             m_Camera.SetClipPlanes(0.1f, 10000.0f);
@@ -1807,11 +1849,11 @@ namespace
             if (m_FocusGuid != 0 && (forward != 0.0f || right != 0.0f || up != 0.0f)) m_FocusGuid = 0;
             if (m_FocusGuid != 0 && scroll != 0.0f)
             {
-                m_FocusDistance = std::clamp(m_FocusDistance * std::pow(0.9f, scroll), m_FocusMinDistance, 20000.0f);
+                m_FocusDistance = std::clamp(m_FocusDistance * std::pow(0.9, static_cast<double>(scroll)), m_FocusMinDistance, 1.0e30);
             }
             if (forward != 0.0f || right != 0.0f || up != 0.0f)
             {
-                m_Camera.ProcessKeyboard(forward, right, up, deltaTime, m_UiState->CameraSpeed);
+                m_Camera.ProcessKeyboard(forward, right, up, deltaTime, m_UiState->CameraSpeedMs);
             }
 
             const float mouseX = m_Input->MouseX();
@@ -1841,13 +1883,13 @@ namespace
 
             if (m_FocusGuid != 0) UpdateFocus();
 
-            m_UiState->CameraPosition = m_Camera.GetPosition();
+            m_UiState->CameraPositionM = m_Camera.GetPosition();
             m_UiState->CameraYaw = m_Camera.GetYaw();
             m_UiState->CameraPitch = m_Camera.GetPitch();
             PublishView();
         }
 
-        std::optional<std::pair<glm::vec3, float>> FindFocusTarget(std::uint64_t guid)
+        std::optional<std::pair<glm::dvec3, double>> FindFocusTarget(std::uint64_t guid)
         {
             const auto sim = m_Sim.Load();
             if (!sim->Runner || guid == 0) return std::nullopt;
@@ -1858,16 +1900,8 @@ namespace
             const auto* transform = scene.Registry().try_get<const TransformComponent>(entity);
             if (!transform) return std::nullopt;
 
-            const float scale = std::max({transform->Scale.x, transform->Scale.y, transform->Scale.z});
-            float radius = scale;
-            if (const auto* sphere = scene.Registry().try_get<const SphereComponent>(entity))
-                radius = sphere->Radius * scale;
-            else if (const auto* mesh = scene.Registry().try_get<const MeshComponent>(entity);
-                     mesh && !mesh->AssetPath.empty())
-                radius = m_Meshes->BoundingRadius(mesh->AssetPath) * scale;
-            else if (const auto* hole = scene.Registry().try_get<const BlackHoleComponent>(entity))
-                radius = std::max(scale, 2.0f * hole->Mass);
-            return std::pair{transform->Position, std::max(radius, 0.01f)};
+            const double radius = BoundingRadiusOf(scene, entity, MeshRadiusOverride());
+            return std::pair{transform->Position, std::max(radius, 0.01)};
         }
 
         void BeginFocus()
@@ -1875,9 +1909,9 @@ namespace
             const auto target = FindFocusTarget(m_UiState->SelectedEntityGuid);
             if (!target) return;
             m_FocusGuid = m_UiState->SelectedEntityGuid;
-            const float halfFov = glm::radians(m_Camera.GetFov()) * 0.5f;
-            m_FocusDistance = target->second / std::sin(halfFov) * 1.5f;
-            m_FocusMinDistance = target->second * 0.5f;
+            const double halfFov = static_cast<double>(glm::radians(m_Camera.GetFov())) * 0.5;
+            m_FocusDistance = target->second / std::sin(halfFov) * 1.5;
+            m_FocusMinDistance = target->second * 0.5;
         }
 
         void UpdateFocus()
@@ -1888,7 +1922,7 @@ namespace
                 m_FocusGuid = 0;
                 return;
             }
-            m_Camera.SetPosition(target->first - m_Camera.GetFront() * m_FocusDistance);
+            m_Camera.SetPosition(target->first - glm::dvec3(m_Camera.GetFront()) * m_FocusDistance);
         }
 
         bool UpdateSceneCamera()
@@ -1905,9 +1939,11 @@ namespace
             const auto view = FindPrimarySceneCamera(*snapshot);
             if (!view) return false;
 
-            m_Camera.SetView(view->Position, view->Front, view->Up);
+            const RenderFrame frame = RenderFrame::ForScene(*snapshot, static_cast<FrameMode>(m_UiState->Render.FrameMode),
+                                                            view->PositionM);
+            m_Camera.SetView(view->PositionM, view->Front, view->Up);
             m_Camera.SetFov(view->Fov);
-            m_Camera.SetClipPlanes(view->NearPlane, view->FarPlane);
+            m_Camera.SetClipPlanes(frame.ToRenderLength(view->NearPlaneM), frame.ToRenderLength(view->FarPlaneM));
             m_HasLastMouse = false;
             m_UiState->SceneCameraActive = true;
             PublishView();
@@ -1916,7 +1952,7 @@ namespace
 
         void PublishView()
         {
-            m_UiState->ViewPosition = m_Camera.GetPosition();
+            m_UiState->ViewPositionM = m_Camera.GetPosition();
             m_UiState->ViewFront = m_Camera.GetFront();
             m_UiState->ViewUp = m_Camera.GetUp();
             m_UiState->ViewFov = m_Camera.GetFov();
@@ -1925,15 +1961,15 @@ namespace
         void UploadParams(vk::Extent3D extent, const GPP::Scene& scene)
         {
             RaytraceParamsGpu params{};
-            params.CameraPos = m_RenderCamera.GetPosition();
+            params.CameraPos = m_Frame.ToRender(m_RenderCamera.GetPosition());
             params.CameraFront = m_RenderCamera.GetFront();
             params.CameraUp = m_RenderCamera.GetUp();
             params.CameraRight = m_RenderCamera.GetRight();
             params.Fov = m_RenderCamera.GetFov();
             params.Aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
             params.Time = std::chrono::duration<float>(std::chrono::steady_clock::now() - m_StartTime).count();
-            params.ViewProjection = m_RenderCamera.GetViewProjectionMatrix();
-            FillSceneData(params, scene);
+            params.ViewProjection = m_RenderCamera.GetViewProjectionMatrix(m_Frame);
+            FillSceneData(params, scene, m_Frame);
 
             const auto& render = m_RenderToggles;
             params.DebugMode = render.DebugMode;
@@ -2000,8 +2036,8 @@ namespace
         bool m_HasLastMouse{false};
         bool m_MouseLookActive{false};
         std::uint64_t m_FocusGuid{0};
-        float m_FocusDistance{10.0f};
-        float m_FocusMinDistance{0.1f};
+        double m_FocusDistance{10.0};
+        double m_FocusMinDistance{0.1};
         std::atomic<bool> m_FocusRequest{false};
         std::atomic<float> m_PendingScroll{0.0f};
         std::atomic<bool> m_CameraKeysEnabled{false};
@@ -2011,6 +2047,7 @@ namespace
 
         // viewport thread only
         Camera m_RenderCamera;
+        RenderFrame m_Frame;
         RenderToggles m_RenderToggles;
         std::shared_ptr<PhysicsSimulationModule> m_RenderPhysics;
         std::chrono::steady_clock::time_point m_StartTime;
@@ -2019,6 +2056,7 @@ namespace
         std::unique_ptr<VulkanBuffer> m_ParamsBuffer;
 
         std::shared_ptr<ShaderPipeline> m_RaytracePipeline;
+        std::shared_ptr<ShaderPipeline> m_RaytracePipelineF64;
         std::shared_ptr<ShaderPipeline> m_BloomExtractPipeline;
         std::shared_ptr<ShaderPipeline> m_BloomBlurPipeline;
         std::shared_ptr<ShaderPipeline> m_LensFlarePipeline;

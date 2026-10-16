@@ -57,7 +57,7 @@ TEST_CASE("Restoring a play snapshot resets the live PhysX actor, not just the E
         if (auto* dynamic = actor->is<physx::PxRigidDynamic>())
         {
             const auto* velocity = scene.Registry().try_get<const VelocityComponent>(entity);
-            const auto linear = velocity ? velocity->Linear : glm::vec3(0.0f);
+            const auto linear = velocity ? velocity->Linear : glm::dvec3(0.0);
             dynamic->setLinearVelocity(physx::PxVec3(linear.x, linear.y, linear.z));
             dynamic->setAngularVelocity(physx::PxVec3(0.0f));
         }

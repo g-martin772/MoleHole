@@ -1,4 +1,6 @@
 Scene: Gravitation
+SchemaVersion: 2
+TimeScale: 4.911927171628457e-05
 Entities:
   - Guid: 5722234711065844434
     Components:
@@ -7,29 +9,29 @@ Entities:
         Name: Sphere
         TypeTag: Sphere
       Transform:
-        Position: [0, 0, 20]
+        Position: [0, 0, 29532.50076100249]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Velocity:
-        Linear: [8, 0, 0]
+        Linear: [240496242.95395687, 0, 0]
         Angular: [0, 0, 0]
       RigidBody:
         Type: Dynamic
-        Mass: 1.989e+14
+        Mass: 198900000000000
         LinearDamping: 0
         AngularDamping: 0.05
         EnableGravity: true
       Collider:
         Shape: Sphere
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 5
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 7383.125190250623
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
         IsTrigger: false
       Sphere:
-        Radius: 5
+        Radius: 7383.125190250623
         Spin: 0
         Color: [1, 1, 1]
         SpinAxis: [0, 1, 0]
@@ -41,29 +43,29 @@ Entities:
         Name: Sphere
         TypeTag: Sphere
       Transform:
-        Position: [0, 0, -20]
+        Position: [0, 0, -29532.50076100249]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Velocity:
-        Linear: [-7, 0, 0]
+        Linear: [-210434212.58471227, 0, 0]
         Angular: [0, 0, 0]
       RigidBody:
         Type: Dynamic
-        Mass: 1.989e+14
+        Mass: 198900000000000
         LinearDamping: 0
         AngularDamping: 0.05
         EnableGravity: true
       Collider:
         Shape: Sphere
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 4
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 5906.500152200499
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
         IsTrigger: false
       Sphere:
-        Radius: 4
+        Radius: 5906.500152200499
         Spin: 0
         Color: [1, 1, 1]
         SpinAxis: [0, 1, 0]
@@ -75,11 +77,11 @@ Entities:
         Name: Sphere
         TypeTag: Sphere
       Transform:
-        Position: [200, 0, -5]
+        Position: [295325.00761002494, 0, -7383.125190250623]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Velocity:
-        Linear: [4, 0.1, 0]
+        Linear: [120248121.47697844, 3006203.036924461, 0]
         Angular: [0, 0, 0]
       RigidBody:
         Type: Dynamic
@@ -89,15 +91,15 @@ Entities:
         EnableGravity: true
       Collider:
         Shape: Sphere
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 2
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 2953.2500761002493
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
         IsTrigger: false
       Sphere:
-        Radius: 2
+        Radius: 2953.2500761002493
         Spin: 0
         Color: [1, 1, 1]
         SpinAxis: [0, 1, 0]
@@ -109,11 +111,11 @@ Entities:
         Name: Mesh
         TypeTag: Mesh
       Transform:
-        Position: [0, 65, -5]
+        Position: [0, 95980.62747325811, -7383.125190250623]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Velocity:
-        Linear: [0, 0, -8]
+        Linear: [0, 0, -240496242.95395687]
         Angular: [0, 0, 0]
       RigidBody:
         Type: Dynamic
@@ -123,4 +125,5 @@ Entities:
         EnableGravity: true
       Mesh:
         AssetPath: assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
-        CenterOfMassOffset: [0, 0, -8]
+        CenterOfMassOffset: [0, 0, -11813.000304400997]
+        MetresPerUnit: 1476.6250380501247

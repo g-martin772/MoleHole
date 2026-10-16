@@ -1,4 +1,6 @@
 Scene: Test
+SchemaVersion: 2
+TimeScale: 4.911927171628457e-05
 Entities:
   - Guid: 4380484363935821836
     Components:
@@ -7,7 +9,7 @@ Entities:
         Name: BlackHole
         TypeTag: BlackHole
       Transform:
-        Position: [0, 17, 70]
+        Position: [0, 25102.62564685212, 103363.75266350873]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       RigidBody:
@@ -18,15 +20,15 @@ Entities:
         EnableGravity: false
       Collider:
         Shape: Sphere
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 2
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 2953.2500761002493
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
         IsTrigger: true
       BlackHole:
-        Mass: 1
+        Mass: 1.9884098706980507e+30
         Spin: 0.65
         Charge: 0
         SpinAxis: [0.5, 1, 0.1]
@@ -37,7 +39,7 @@ Entities:
         Name: Sphere
         TypeTag: Sphere
       Transform:
-        Position: [4.9999995, 1.9180768e-06, 6.7687088e-06]
+        Position: [7383.124451938105, 0.0028322802277830615, 0.009994844889350213]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       RigidBody:
@@ -48,15 +50,15 @@ Entities:
         EnableGravity: true
       Collider:
         Shape: Sphere
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 0.5
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 738.3125190250623
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
         IsTrigger: false
       Sphere:
-        Radius: 0.5
+        Radius: 738.3125190250623
         Spin: 0
         Color: [0.8, 0.8, 0.9]
         SpinAxis: [0, 1, 0]
@@ -68,7 +70,7 @@ Entities:
         Name: Sphere
         TypeTag: Sphere
       Transform:
-        Position: [14.118757, 6.3622904, -8.096643]
+        Position: [20848.110092345465, 9394.717303985943, -11955.705777953275]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       RigidBody:
@@ -79,15 +81,15 @@ Entities:
         EnableGravity: true
       Collider:
         Shape: Sphere
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 0.5
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 738.3125190250623
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
         IsTrigger: false
       Sphere:
-        Radius: 0.5
+        Radius: 738.3125190250623
         Spin: 0
         Color: [0.8, 0.8, 0.9]
         SpinAxis: [0, 1, 0]
@@ -99,7 +101,7 @@ Entities:
         Name: Mesh
         TypeTag: Mesh
       Transform:
-        Position: [-26.746088, 31.006155, 5.1414022]
+        Position: [-39493.943210691985, 45784.46480666306, 7591.923219205994]
         Rotation: [0.032389656, 0.17262217, -0.1752161, 0.96873724]
         Scale: [0.9999993, 0.9999988, 0.9999991]
       RigidBody:
@@ -110,9 +112,9 @@ Entities:
         EnableGravity: true
       Collider:
         Shape: ConvexMesh
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 0.5
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 738.3125190250623
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
@@ -120,51 +122,52 @@ Entities:
       Mesh:
         AssetPath: /home/gabriel/Repos/MoleHole/assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
         CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 1476.6250380501247
 Graphs:
   Version: 1
   Items:
-  - Name: Main
-    Enabled: true
-    Entity: 0
-    Graph:
-      NextId: 6
-      Variables: []
-      Nodes:
-      - Id: 1
-        Name: Start
-        Type: Event
-        SubType: Start
-        VariableName: ''
-        TargetGuid: 0
-        ConstantValue: {T: None}
-        Position: [-140, 438]
-        Inputs: []
-        Outputs:
-        - {Id: 1500, Name: Out, Type: Flow, IsInput: false}
-      - Id: 2
-        Name: Print
-        Type: Print
-        SubType: None
-        VariableName: ''
-        TargetGuid: 0
-        ConstantValue: {T: None}
-        Position: [110, 438]
-        Inputs:
-        - {Id: 2001, Name: In, Type: Flow, IsInput: true}
-        - {Id: 2002, Name: Value, Type: String, IsInput: true}
-        Outputs:
-        - {Id: 2500, Name: Out, Type: Flow, IsInput: false}
-      - Id: 3
-        Name: Constant String
-        Type: Constant
-        SubType: None
-        VariableName: ''
-        TargetGuid: 0
-        ConstantValue: {T: String, V: Test}
-        Position: [-213, 518]
-        Inputs: []
-        Outputs:
-        - {Id: 3500, Name: Value, Type: String, IsInput: false}
-      Links:
-      - {Id: 4, StartPinId: 3500, EndPinId: 2002}
-      - {Id: 5, StartPinId: 1500, EndPinId: 2001}
+    - Name: Main
+      Enabled: true
+      Entity: 0
+      Graph:
+        NextId: 6
+        Variables: []
+        Nodes:
+          - Id: 1
+            Name: Start
+            Type: Event
+            SubType: Start
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue: {T: None}
+            Position: [-140, 438]
+            Inputs: []
+            Outputs:
+              - {Id: 1500, Name: Out, Type: Flow, IsInput: false}
+          - Id: 2
+            Name: Print
+            Type: Print
+            SubType: None
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue: {T: None}
+            Position: [110, 438]
+            Inputs:
+              - {Id: 2001, Name: In, Type: Flow, IsInput: true}
+              - {Id: 2002, Name: Value, Type: String, IsInput: true}
+            Outputs:
+              - {Id: 2500, Name: Out, Type: Flow, IsInput: false}
+          - Id: 3
+            Name: Constant String
+            Type: Constant
+            SubType: None
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue: {T: String, V: Test}
+            Position: [-213, 518]
+            Inputs: []
+            Outputs:
+              - {Id: 3500, Name: Value, Type: String, IsInput: false}
+        Links:
+          - {Id: 4, StartPinId: 3500, EndPinId: 2002}
+          - {Id: 5, StartPinId: 1500, EndPinId: 2001}

@@ -3,6 +3,7 @@ export module MoleHole:Rendering.Camera;
 import std;
 import glm;
 import GPP;
+import :Rendering.Frame;
 
 export namespace MoleHole
 {
@@ -15,7 +16,7 @@ export namespace MoleHole
             UpdateCameraVectors();
         }
 
-        void SetPosition(const glm::vec3& position) { m_Position = position; }
+        void SetPosition(const glm::dvec3& positionM) { m_Position = positionM; }
         void SetYawPitch(float yaw, float pitch)
         {
             m_Yaw = yaw;
@@ -23,9 +24,9 @@ export namespace MoleHole
             UpdateCameraVectors();
         }
 
-        void SetView(const glm::vec3& position, const glm::vec3& front, const glm::vec3& up)
+        void SetView(const glm::dvec3& positionM, const glm::vec3& front, const glm::vec3& up)
         {
-            m_Position = position;
+            m_Position = positionM;
             m_Front = glm::normalize(front);
             m_Right = glm::normalize(glm::cross(m_Front, up));
             m_Up = glm::normalize(glm::cross(m_Right, m_Front));
@@ -37,12 +38,12 @@ export namespace MoleHole
             m_FarPlane = farPlane;
         }
 
-        void ProcessKeyboard(float forward, float right, float up, float deltaTime, float speed = 5.0f)
+        void ProcessKeyboard(float forward, float right, float up, float deltaTime, double speedMs)
         {
-            const float velocity = speed * deltaTime;
-            m_Position += m_Front * forward * velocity;
-            m_Position += m_Right * right * velocity;
-            m_Position += m_Up * up * velocity;
+            const double distance = speedMs * static_cast<double>(deltaTime);
+            m_Position += glm::dvec3(m_Front) * (static_cast<double>(forward) * distance);
+            m_Position += glm::dvec3(m_Right) * (static_cast<double>(right) * distance);
+            m_Position += glm::dvec3(m_Up) * (static_cast<double>(up) * distance);
         }
 
         void ProcessMouse(float xOffset, float yOffset, float sensitivity = 0.1f, bool constrainPitch = true)
@@ -56,9 +57,10 @@ export namespace MoleHole
             UpdateCameraVectors();
         }
 
-        [[nodiscard]] glm::mat4 GetViewMatrix() const
+        [[nodiscard]] glm::mat4 GetViewMatrix(const RenderFrame& frame) const
         {
-            return glm::lookAt(m_Position, m_Position + m_Front, m_Up);
+            const glm::vec3 position = frame.ToRender(m_Position);
+            return glm::lookAt(position, position + m_Front, m_Up);
         }
 
         [[nodiscard]] glm::mat4 GetProjectionMatrix() const
@@ -69,12 +71,13 @@ export namespace MoleHole
             return projection;
         }
 
-        [[nodiscard]] glm::mat4 GetViewProjectionMatrix() const
+        [[nodiscard]] glm::mat4 GetViewProjectionMatrix(const RenderFrame& frame) const
         {
-            return GetProjectionMatrix() * GetViewMatrix();
+            return GetProjectionMatrix() * GetViewMatrix(frame);
         }
 
-        [[nodiscard]] const glm::vec3& GetPosition() const noexcept { return m_Position; }
+        // World position in metres (SI, double).
+        [[nodiscard]] const glm::dvec3& GetPosition() const noexcept { return m_Position; }
         [[nodiscard]] const glm::vec3& GetFront() const noexcept { return m_Front; }
         [[nodiscard]] const glm::vec3& GetUp() const noexcept { return m_Up; }
         [[nodiscard]] const glm::vec3& GetRight() const noexcept { return m_Right; }
@@ -97,7 +100,7 @@ export namespace MoleHole
             m_Up = glm::normalize(glm::cross(m_Right, m_Front));
         }
 
-        glm::vec3 m_Position{0.0f, 20.0f, 100.0f};
+        glm::dvec3 m_Position{0.0, 20.0 * GPP::Units::kSolarGravitationalRadius, 100.0 * GPP::Units::kSolarGravitationalRadius};
         glm::vec3 m_WorldUp{0.0f, 1.0f, 0.0f};
         glm::vec3 m_Front{0.0f, 0.0f, -1.0f};
         glm::vec3 m_Up{0.0f, 1.0f, 0.0f};
