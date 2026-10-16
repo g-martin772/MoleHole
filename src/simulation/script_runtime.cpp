@@ -87,6 +87,7 @@ namespace MoleHole
         ITraceSink* Sink{nullptr};
         std::function<void(std::string)> OnPrint;
         std::function<std::uint64_t()> GuidSource{&GPP::GenerateGuid};
+        RenderBridge Render;
         std::shared_ptr<GPP::SimulationRandom> Random;
         const GPP::Scene* Scene{nullptr};
         PendingWrites* Writes{nullptr};
@@ -112,6 +113,36 @@ namespace MoleHole
         void RegisterNatives()
         {
             auto& vm = Vm;
+            vm.Register("render", "set", [this](GPP::LuauNativeCall& call)
+            {
+                const auto key = call.String(1);
+                if (!Render.Set) throw std::runtime_error("render.set: no renderer is attached");
+                const auto value = call.ToValueAuto(2);
+                std::string text;
+                if (const auto* flag = std::get_if<bool>(&value)) text = *flag ? "true" : "false";
+                else if (const auto* number = std::get_if<float>(&value)) text = std::format("{}", *number);
+                else if (const auto* word = std::get_if<std::string>(&value)) text = *word;
+                else throw std::runtime_error("render.set: '" + key + "' needs a boolean, number or string");
+                if (const auto error = Render.Set(key, text); !error.empty()) throw std::runtime_error("render.set: " + error);
+                return 0;
+            });
+            vm.Register("render", "get", [this](GPP::LuauNativeCall& call)
+            {
+                const auto key = call.String(1);
+                if (!Render.Get) throw std::runtime_error("render.get: no renderer is attached");
+                const auto text = Render.Get(key);
+                if (!text) throw std::runtime_error("render.get: unknown setting '" + key + "'");
+                if (*text == "true" || *text == "false")
+                {
+                    call.PushBoolean(*text == "true");
+                    return 1;
+                }
+                double number = 0.0;
+                const auto result = std::from_chars(text->data(), text->data() + text->size(), number);
+                if (result.ec == std::errc{} && result.ptr == text->data() + text->size()) call.PushNumber(number);
+                else call.PushString(*text);
+                return 1;
+            });
             vm.Register("host", "enter", [this](GPP::LuauNativeCall& call)
             {
                 const int id = static_cast<int>(call.Number(1));
@@ -615,6 +646,7 @@ namespace MoleHole
     const std::string& ScriptRuntime::Error() const { return m_Impl->Error; }
     const std::string& ScriptRuntime::LastRuntimeError() const { return m_Impl->LastRuntimeError; }
 
+    void ScriptRuntime::SetRenderBridge(RenderBridge bridge) { m_Impl->Render = std::move(bridge); }
     void ScriptRuntime::SetGuidSource(const std::function<std::uint64_t()>& source) { m_Impl->GuidSource = source; }
     void ScriptRuntime::SetTraceSink(ITraceSink* sink) { m_Impl->Sink = sink; }
 

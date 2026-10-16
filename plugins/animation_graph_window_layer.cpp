@@ -129,13 +129,16 @@ namespace
 
     struct AnimationGraphWindowLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, SceneManager, UiState, AssetDirectories, AssetOptions, EventDispatcher>;
+        using Dependencies = std::tuple<Logger, SceneManager, UiState, AssetDirectories, AssetOptions, EventDispatcher,
+                                        RenderSettingsService>;
 
         AnimationGraphWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<SceneManager> scenes,
                                   std::shared_ptr<UiState> uiState, std::shared_ptr<AssetDirectories> assets,
-                                  std::shared_ptr<AssetOptions> assetOptions, std::shared_ptr<EventDispatcher> dispatcher)
+                                  std::shared_ptr<AssetOptions> assetOptions, std::shared_ptr<EventDispatcher> dispatcher,
+                                  std::shared_ptr<RenderSettingsService> renderSettings)
             : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState)),
-              m_Assets(std::move(assets)), m_AssetOptions(std::move(assetOptions)), m_Dispatcher(std::move(dispatcher))
+              m_Assets(std::move(assets)), m_AssetOptions(std::move(assetOptions)), m_Dispatcher(std::move(dispatcher)),
+              m_RenderSettings(std::move(renderSettings))
         {
         }
 
@@ -410,6 +413,17 @@ namespace
                                                               m_Assets.get());
                 if (script->Ok())
                 {
+                    script->SetRenderBridge(RenderBridge{
+                        .Set = [settings = m_RenderSettings](const std::string& key, const std::string& value)
+                        {
+                            auto error = RenderSettingsService::ValidateSetting(key, value);
+                            if (error.empty() && settings) settings->PostOverride(key, value);
+                            return error;
+                        },
+                        .Get = [settings = m_RenderSettings](const std::string& key)
+                        {
+                            return settings ? settings->ReadSetting(key) : std::nullopt;
+                        }});
                     m_Executor = std::move(script);
                 }
                 else
@@ -2582,6 +2596,7 @@ namespace
         std::array<char, 128> m_NewVariableBuffer{};
 
         std::shared_ptr<EventDispatcher> m_Dispatcher;
+        std::shared_ptr<RenderSettingsService> m_RenderSettings;
         EventSubscription m_KeySubscription;
         EventSubscription m_TriggerSubscription;
         std::mutex m_EventMutex;

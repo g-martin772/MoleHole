@@ -61,7 +61,8 @@ namespace
             Assets = std::make_shared<GPP::AssetDirectories>(Options);
             State->CurrentSceneName = "CanvasScene";
             State->ShowAnimationGraphWindow = true;
-            Layer = std::make_unique<AnimationGraphWindowLayer>(Log, Scenes, State, Assets, Options, Dispatcher);
+            Layer = std::make_unique<AnimationGraphWindowLayer>(Log, Scenes, State, Assets, Options, Dispatcher,
+                                                                std::make_shared<RenderSettingsService>());
             Layer->OnAttach();
             Layer->OnUpdate(0.016f);
         }

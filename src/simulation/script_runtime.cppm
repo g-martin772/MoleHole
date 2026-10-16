@@ -12,6 +12,15 @@ import :Simulation.AnimationGraphExecutor;
 export namespace MoleHole
 {
     // Drives the transpiled Luau of every enabled event graph with the interpreter's lifecycle and semantics.
+    // How `render.set(key, value)` and `render.get(key)` reach the renderer; scripts see them as unavailable without it
+    struct RenderBridge
+    {
+        // Error text, empty when the value was accepted
+        std::function<std::string(const std::string& key, const std::string& text)> Set;
+        // Setting as text, nullopt for an unknown key
+        std::function<std::optional<std::string>(const std::string& key)> Get;
+    };
+
     class ScriptRuntime final : public IGraphRuntime
     {
     public:
@@ -28,6 +37,7 @@ export namespace MoleHole
         [[nodiscard]] const std::string& Error() const;
         [[nodiscard]] const std::string& LastRuntimeError() const;
 
+        void SetRenderBridge(RenderBridge bridge);
         void SetGuidSource(const std::function<std::uint64_t()>& source) override;
         void SetTraceSink(ITraceSink* sink) override;
         void SetRandom(std::shared_ptr<GPP::SimulationRandom> random) override;

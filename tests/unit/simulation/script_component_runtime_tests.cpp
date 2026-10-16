@@ -194,3 +194,77 @@ TEST_CASE("Keys map to the names On Key nodes use", "[latent][events]")
     CHECK(KeyEventName(GPP::KeyCode::Return) == "Enter");
     CHECK_FALSE(KeyEventName(GPP::KeyCode::Unknown).has_value());
 }
+
+TEST_CASE("Scripts adjust render settings for the running simulation without editing the profile", "[scripts][runtime][render]")
+{
+    ScriptDir dir("render");
+    dir.Write("director", R"(return {
+        properties = {},
+        OnTick = function(self, dt)
+            render.set("post.bloom", false)
+            render.set("sampling.resolution_scale", 60)
+            render.set("transport.mode", "Integrated")
+            seen = render.get("camera.length_unit")
+            self.mode = render.get("transport.mode")
+            self.bloom = render.get("post.bloom")
+            self.scale = render.get("sampling.resolution_scale")
+            if render.get("post.bloom") == false and render.get("sampling.resolution_scale") == 60 then
+                scene.set(self.entity, "Transform", "Position", vector.create(1, 2, 3))
+            end
+        end })");
+    GPP::AssetDirectories assets(dir.Options);
+    World world;
+    const auto director = world.Spawn("Director", {GPP::ScriptEntry{"director", {}}});
+
+    RenderSettingsService service;
+    service.SetActiveContext(RenderContext::Play);
+    SceneGraphs graphs;
+    ScriptCache cache;
+    ScriptRuntime runtime(graphs, cache, nullptr, {}, {}, &assets);
+    runtime.SetRenderBridge(RenderBridge{
+        .Set = [&](const std::string& key, const std::string& value)
+        {
+            auto error = RenderSettingsService::ValidateSetting(key, value);
+            if (error.empty()) service.PostOverride(key, value);
+            return error;
+        },
+        .Get = [&](const std::string& key) { return service.ReadSetting(key); }});
+    REQUIRE(runtime.Ok());
+    Apply(world.Level, runtime.ExecuteStartEvent(world.Level));
+    Apply(world.Level, runtime.ExecuteTickEvent(world.Level, 0.1f));
+
+    // Posted, not applied yet: the script still reads the profile's values
+    CHECK(world.Position(director) == glm::vec3(0.0f));
+    CHECK(service.Effective().Bloom);
+    CHECK(service.DrainPosted());
+    CHECK_FALSE(service.Effective().Bloom);
+    CHECK(service.Effective().ResolutionScale == 60.0f);
+    CHECK(service.Effective().TransportMode == Transport::Integrated);
+    CHECK_FALSE(service.SceneWritePending());
+
+    // Next tick sees the applied values through render.get
+    Apply(world.Level, runtime.ExecuteTickEvent(world.Level, 0.1f));
+    CHECK(world.Position(director) == glm::vec3(1.0f, 2.0f, 3.0f));
+}
+
+TEST_CASE("render.set rejects unknown keys and bad values as script errors", "[scripts][runtime][render]")
+{
+    ScriptDir dir("renderbad");
+    dir.Write("typo", R"(return { properties = {}, OnTick = function(self, dt) render.set("post.blom", true) end })");
+    GPP::AssetDirectories assets(dir.Options);
+    World world;
+    world.Spawn("Typo", {GPP::ScriptEntry{"typo", {}}});
+
+    SceneGraphs graphs;
+    ScriptCache cache;
+    ScriptRuntime runtime(graphs, cache, nullptr, {}, {}, &assets);
+    runtime.SetRenderBridge(RenderBridge{
+        .Set = [](const std::string& key, const std::string& value) { return RenderSettingsService::ValidateSetting(key, value); },
+        .Get = [](const std::string&) { return std::optional<std::string>(); }});
+    REQUIRE(runtime.Ok());
+    Apply(world.Level, runtime.ExecuteStartEvent(world.Level));
+    Apply(world.Level, runtime.ExecuteTickEvent(world.Level, 0.1f));
+    const auto errors = runtime.TakeScriptErrors();
+    REQUIRE_FALSE(errors.empty());
+    CHECK(errors.front().Message.find("unknown setting") != std::string::npos);
+}
