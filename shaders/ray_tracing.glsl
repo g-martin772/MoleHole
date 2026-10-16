@@ -1,3 +1,14 @@
+// Diagnostics for the debug views (u_debugMode): steps taken and why the ray ended
+const int TERM_SKY = 0;
+const int TERM_HORIZON = 1;
+const int TERM_OBJECT = 2;
+const int TERM_DISK = 3;
+const int TERM_STEPS = 4;
+const int TERM_CROSSHAIR = 5;
+int g_stepCount = 0;
+int g_maxStepCount = 1; // budget the step count is shown against
+int g_termination = TERM_SKY;
+
 struct HitRecord {
     bool hit;
     float t;
@@ -98,6 +109,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
     float volumeDepth = 0.0f;
 
     for (int i = 0; i < maxSteps; i++) {
+        g_stepCount++;
         int closestBH;
         float distToBH;
         float influenceR;
@@ -140,6 +152,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
                 float transmittance = beerLambert(opticalDepth, currentStepSize);
                 alpha *= transmittance;
                 if (alpha < 0.01) {
+                    g_termination = TERM_DISK;
                     return color;
                 }
             }
@@ -152,16 +165,19 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
                 hitSolid = true;
                 hitPoint = newOrigin + newDirection * hit.t;
             }
+            g_termination = hit.type == 3 ? TERM_CROSSHAIR : TERM_OBJECT;
             return color + hit.color;
         }
 
         // Check event horizon
         if (distToBH < r_s) {
             hitEventHorizon = true;
+            g_termination = TERM_HORIZON;
             return color;
         }
         newOrigin += newDirection * currentStepSize;
     }
+    g_termination = TERM_STEPS;
     return color;
 }
 
@@ -175,7 +191,9 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
     int maxOuterIterations = max(50, u_maxRaySteps / 200);
 
+    g_maxStepCount = maxOuterIterations + u_maxRaySteps / 50;
     for (int iter = 0; iter < maxOuterIterations; iter++) {
+        g_stepCount++;
         int closestBH;
         float distToBH;
         float influenceR;
@@ -191,6 +209,7 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
                 hitSolid = true;
                 hitPoint = zoneHitPoint;
             }
+            if (exited) g_termination = TERM_SKY;
 
             if (hitHorizon) {
                 return color;
@@ -227,6 +246,7 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
                         hitSolid = true;
                         hitPoint = currentOrigin + currentDir * hit.t;
                     }
+                    g_termination = hit.type == 3 ? TERM_CROSSHAIR : TERM_OBJECT;
                     return color;
                 } else {
                     currentOrigin += currentDir * (minDistToInfluence + EPSILON);
@@ -244,6 +264,7 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         }
     }
 
+    g_termination = TERM_STEPS;
     color += texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
     return color;
 }
@@ -335,7 +356,10 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
     float r_s = calculateEventHorizonRadius(u_blackHoles[0].mass);
 
     // main loop
+    g_maxStepCount = int(maxSteps);
+    g_termination = TERM_STEPS;
     for (int i = 0; i < maxSteps; i++) {
+        g_stepCount++;
 
         float dist = float(relativePosSph.y);
 
@@ -347,6 +371,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
                 float transmittance = beerLambert(opticalDepth, stepSize);
                 alpha *= transmittance;
                 if (alpha < 0.01) {
+                    g_termination = TERM_DISK;
                     return colorValue;
                 }
             }
@@ -354,11 +379,13 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
 
         // check if we've hit the event horizon
         if (dist < r_s + 100.0f * EPSILON) {
+            g_termination = TERM_HORIZON;
             return vec3(0.0f);
         }
 
         // check if we've escaped the influence zone
         if (dist > r_s * 25.0f) {
+            g_termination = TERM_SKY;
             break;
         }
 
@@ -380,4 +407,26 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
 
     vec3 color = texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
     return color;
+}
+
+// Debug views: colours that do not depend on the scene's own lighting
+vec3 debugHeat(float t) {
+    t = clamp(t, 0.0, 1.0);
+    return clamp(vec3(1.5 * t - 0.25, 1.5 - abs(3.0 * t - 1.5), 1.25 - 1.5 * t), 0.0, 1.0);
+}
+
+vec3 debugViewColor(vec3 shaded) {
+    if (u_debugMode == 1) {
+        // square root keeps both cheap and expensive pixels readable
+        return debugHeat(sqrt(float(g_stepCount) / float(max(g_maxStepCount, 1))));
+    }
+    if (u_debugMode == 2) {
+        if (g_termination == TERM_SKY) return vec3(0.04, 0.08, 0.22);
+        if (g_termination == TERM_HORIZON) return vec3(0.9, 0.05, 0.05);
+        if (g_termination == TERM_OBJECT) return vec3(0.1, 0.8, 0.2);
+        if (g_termination == TERM_DISK) return vec3(1.0, 0.6, 0.0);
+        if (g_termination == TERM_STEPS) return vec3(1.0, 1.0, 1.0);
+        return vec3(0.0, 0.9, 0.9);
+    }
+    return shaded;
 }

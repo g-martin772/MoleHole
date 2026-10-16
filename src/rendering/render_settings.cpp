@@ -1,0 +1,528 @@
+module;
+#include <yaml-cpp/yaml.h>
+module MoleHole;
+
+import :Rendering.Settings;
+import std;
+import GPP;
+
+using namespace GPP;
+
+namespace MoleHole
+{
+    namespace
+    {
+        constexpr const char* kDoc = "USER_GUIDE.md#render-profiles-and-settings";
+
+        SettingRegistry<RenderSettings> BuildRegistry()
+        {
+            using R = RenderSettings;
+            SettingRegistry<R> registry;
+
+            registry.Add(Setting("spacetime.solution", &R::Solution, {
+                .Label = "Solution", .Group = "Spacetime",
+                .Tooltip = "Metric of every black hole. Spin a* and charge q* come from each hole's inspector.\n"
+                           "Only the integrated transport evaluates the full metric.",
+                .Doc = kDoc,
+                .Options = {"Schwarzschild", "Kerr", "ReissnerNordstrom", "KerrNewman"},
+                .OptionLabels = {"Schwarzschild", "Kerr", "Reissner-Nordstrom", "Kerr-Newman"}}));
+
+            registry.Add(Setting("transport.mode", &R::TransportMode, {
+                .Label = "Ray transport", .Group = "Transport",
+                .Tooltip = "How camera rays travel through curved space.\n"
+                           "Straight: no bending, black holes are plain shadows.\n"
+                           "Analytic lens: precomputed deflection, fast and good-looking.\n"
+                           "Integrated: geodesic integration of the selected metric, physically accurate.",
+                .Doc = kDoc,
+                .Options = {"Straight", "AnalyticLens", "Integrated"},
+                .OptionLabels = {"Straight", "Analytic lens", "Integrated (geodesics)"},
+                .OptionCosts = {0, 1, 4}}));
+            registry.Add(Setting("transport.step_size", &R::RayStepSize, {
+                .Label = "Step size", .Group = "Transport",
+                .Tooltip = "Ray march step in render units (r_g of the render length unit). Smaller is more accurate and slower.",
+                .Doc = kDoc, .Min = 0.001, .Max = 1.0, .Scale = SettingScale::Log, .Cost = 3,
+                .Format = "%.4f", .VisibleWhen = "transport.mode>=1"}));
+            registry.Add(Setting("transport.max_steps", &R::MaxRaySteps, {
+                .Label = "Max steps", .Group = "Transport",
+                .Tooltip = "Upper bound of ray march steps per pixel. Rays that run out are drawn as the sky.",
+                .Doc = kDoc, .Min = 100, .Max = 200000, .Cost = 3, .VisibleWhen = "transport.mode>=1"}));
+            registry.Add(Setting("transport.adaptive_rate", &R::AdaptiveStepRate, {
+                .Label = "Adaptive step rate", .Group = "Transport",
+                .Tooltip = "How strongly the step shrinks close to a black hole.",
+                .Doc = kDoc, .Min = 0.01, .Max = 10.0, .Scale = SettingScale::Log, .Format = "%.2f",
+                .VisibleWhen = "transport.mode>=1"}));
+            registry.Add(Setting("transport.gpu_precision", &R::GpuPrecision, {
+                .Label = "GPU precision", .Group = "Transport",
+                .Tooltip = "Arithmetic of the geodesic integration. f64 runs at 1/32-1/64 rate on consumer GPUs.",
+                .Doc = kDoc,
+                .Options = {"f32", "f64", "f128"},
+                .OptionRequires = {"", std::string(GpuCapability::kShaderFloat64), std::string(GpuCapability::kNever)},
+                .OptionCosts = {0, 4, 5},
+                .VisibleWhen = "transport.mode=2"}));
+
+            registry.Add(Setting("radiometry.redshift", &R::GravitationalRedshift, {
+                .Label = "Gravitational redshift", .Group = "Radiometry",
+                .Tooltip = "Shift disk colour with the gravitational potential.", .Doc = kDoc}));
+            registry.Add(Setting("radiometry.doppler", &R::DopplerBeaming, {
+                .Label = "Doppler beaming", .Group = "Radiometry",
+                .Tooltip = "Brighten the approaching side of the disk and dim the receding side.", .Doc = kDoc}));
+
+            registry.Add(Setting("disk.enabled", &R::AccretionDisk, {
+                .Label = "Accretion disk", .Group = "Disk", .Doc = kDoc, .Cost = 1}));
+            registry.Add(Setting("disk.volumetric", &R::AccretionDiskVolumetric, {
+                .Label = "Volumetric", .Group = "Disk",
+                .Tooltip = "Absorb light inside a noisy 3D disk instead of a thin emitting surface.",
+                .Doc = kDoc, .Cost = 3, .VisibleWhen = "disk.enabled"}));
+            registry.Add(Setting("disk.height", &R::AccDiskHeight, {
+                .Label = "Height", .Group = "Disk", .Doc = kDoc, .Min = 0.0, .Max = 2.0,
+                .VisibleWhen = "disk.enabled"}));
+            registry.Add(Setting("disk.speed", &R::AccDiskSpeed, {
+                .Label = "Speed", .Group = "Disk", .Doc = kDoc, .Min = 0.0, .Max = 5.0,
+                .VisibleWhen = "disk.enabled"}));
+            registry.Add(Setting("disk.noise_scale", &R::AccDiskNoiseScale, {
+                .Label = "Noise scale", .Group = "Disk", .Doc = kDoc, .Min = 0.0, .Max = 5.0,
+                .VisibleWhen = "disk.enabled"}));
+            registry.Add(Setting("disk.noise_lod", &R::AccDiskNoiseLOD, {
+                .Label = "Noise detail", .Group = "Disk", .Doc = kDoc, .Min = 0.0, .Max = 10.0,
+                .VisibleWhen = "disk.enabled"}));
+
+            registry.Add(Setting("objects.black_holes", &R::RenderBlackHoles, {
+                .Label = "Black holes", .Group = "Objects", .Doc = kDoc}));
+            registry.Add(Setting("objects.spheres", &R::RenderSpheres, {
+                .Label = "Spheres", .Group = "Objects", .Doc = kDoc}));
+            registry.Add(Setting("objects.meshes", &R::RenderMeshes, {
+                .Label = "Meshes", .Group = "Objects",
+                .Tooltip = "Mesh objects are rasterised over the traced image, they are not lensed.",
+                .Doc = kDoc, .Cost = 1}));
+
+            registry.Add(Setting("camera.third_person", &R::ThirdPerson, {
+                .Label = "Third person crosshair", .Group = "Camera", .Doc = kDoc}));
+            registry.Add(Setting("camera.third_person_distance", &R::ThirdPersonDistance, {
+                .Label = "Distance", .Group = "Camera", .Doc = kDoc, .Min = 1.0, .Max = 100.0,
+                .VisibleWhen = "camera.third_person"}));
+            registry.Add(Setting("camera.third_person_height", &R::ThirdPersonHeight, {
+                .Label = "Height", .Group = "Camera", .Doc = kDoc, .Min = 0.0, .Max = 50.0,
+                .VisibleWhen = "camera.third_person"}));
+            registry.Add(Setting("camera.length_unit", &R::LengthUnit, {
+                .Label = "Render length unit", .Group = "Camera",
+                .Tooltip = "Unit of the geometrized render space (G = c = 1). Ray step size and the third-person\n"
+                           "offsets are in these units.",
+                .Doc = kDoc,
+                .Options = {"SolarMass", "PrimaryBlackHole"},
+                .OptionLabels = {"Solar r_g (legacy numbers)", "Heaviest black hole r_g (scale invariant)"}}));
+
+            registry.Add(Setting("sampling.resolution_scale", &R::ResolutionScale, {
+                .Label = "Resolution scale", .Group = "Sampling",
+                .Tooltip = "Share of the viewport resolution the tracer renders at. The result is scaled to fit.",
+                .Doc = kDoc, .Min = 25.0, .Max = 200.0, .Cost = 4, .Format = "%.0f%%"}));
+
+            registry.Add(Setting("post.fxaa", &R::Fxaa, {
+                .Label = "Anti-aliasing (FXAA)", .Group = "Post", .Doc = kDoc, .Cost = 1}));
+            registry.Add(Setting("post.bloom", &R::Bloom, {
+                .Label = "Bloom", .Group = "Post", .Doc = kDoc, .Cost = 2}));
+            registry.Add(Setting("post.bloom_threshold", &R::BloomThreshold, {
+                .Label = "Threshold", .Group = "Post", .Doc = kDoc, .Min = 0.0, .Max = 5.0,
+                .VisibleWhen = "post.bloom"}));
+            registry.Add(Setting("post.bloom_passes", &R::BloomBlurPasses, {
+                .Label = "Blur passes", .Group = "Post", .Doc = kDoc, .Min = 1, .Max = 20, .Cost = 2,
+                .VisibleWhen = "post.bloom"}));
+            registry.Add(Setting("post.bloom_intensity", &R::BloomIntensity, {
+                .Label = "Intensity", .Group = "Post", .Doc = kDoc, .Min = 0.0, .Max = 100.0,
+                .VisibleWhen = "post.bloom"}));
+            registry.Add(Setting("post.bloom_debug", &R::BloomDebug, {
+                .Label = "Show bloom only", .Group = "Post", .Doc = kDoc, .VisibleWhen = "post.bloom"}));
+            registry.Add(Setting("post.lens_flare", &R::LensFlare, {
+                .Label = "Lens flare", .Group = "Post", .Doc = kDoc, .Cost = 1}));
+            registry.Add(Setting("post.flare_intensity", &R::LensFlareIntensity, {
+                .Label = "Flare intensity", .Group = "Post", .Doc = kDoc, .Min = 0.0, .Max = 100.0,
+                .VisibleWhen = "post.lens_flare"}));
+            registry.Add(Setting("post.flare_threshold", &R::LensFlareThreshold, {
+                .Label = "Flare threshold", .Group = "Post", .Doc = kDoc, .Min = 0.0, .Max = 5.0,
+                .VisibleWhen = "post.lens_flare"}));
+
+            registry.Add(Setting("overlay.gravity_grid", &R::ShowGravityGrid, {
+                .Label = "Gravity grid", .Group = "Overlays",
+                .Tooltip = "Draws the geodesic grid plane as a separate overlay pass.", .Doc = kDoc, .Cost = 1}));
+            registry.Add(Setting("overlay.physics_colliders", &R::ShowPhysicsDebug, {
+                .Label = "Physics collider wireframe", .Group = "Overlays",
+                .Tooltip = "PhysX's own debug wireframe for every active collider.", .Doc = kDoc}));
+            registry.Add(Setting("overlay.object_paths", &R::ShowObjectPaths, {
+                .Label = "Object path trails", .Group = "Overlays",
+                .Tooltip = "Recent world-space path of every mesh (green) and sphere (magenta) while playing.",
+                .Doc = kDoc}));
+
+            registry.Add(Setting("debug.view", &R::Debug, {
+                .Label = "Debug view", .Group = "Debug",
+                .Tooltip = "Replaces the image by a diagnostic of the tracer.\n"
+                           "Step count: heat map of ray march steps per pixel.\n"
+                           "Termination: why each ray ended (sky, horizon, object, disk, ran out of steps).",
+                .Doc = kDoc,
+                .Options = {"None", "StepCount", "Termination"},
+                .OptionLabels = {"Off", "Step count heat map", "Termination reason"}}));
+
+            return registry;
+        }
+
+        RenderProfile MakeBuiltIn(std::string name, std::string description, RenderSettings settings)
+        {
+            RenderProfile profile;
+            profile.Name = std::move(name);
+            profile.Description = std::move(description);
+            profile.BuiltIn = true;
+            profile.Settings = settings;
+            return profile;
+        }
+
+        std::vector<RenderProfile> BuildBuiltIns()
+        {
+            std::vector<RenderProfile> profiles;
+
+            RenderSettings flat;
+            flat.TransportMode = Transport::Straight;
+            flat.Bloom = false;
+            flat.LensFlare = false;
+            profiles.push_back(MakeBuiltIn("Flat", "Straight rays, no lensing, no bloom. For editing and placing objects.", flat));
+
+            profiles.push_back(MakeBuiltIn("Lensed", "Analytic lens with bloom and flares. The interactive default.", RenderSettings{}));
+
+            RenderSettings traced;
+            traced.TransportMode = Transport::Integrated;
+            traced.RayStepSize = 0.05f;
+            traced.MaxRaySteps = 4000;
+            profiles.push_back(MakeBuiltIn("Traced", "Geodesic integration at preview tolerance. Cinematic preview, seconds per frame.", traced));
+
+            RenderSettings reference;
+            reference.TransportMode = Transport::Integrated;
+            reference.AccretionDiskVolumetric = true;
+            reference.RayStepSize = 0.01f;
+            reference.MaxRaySteps = 100000;
+            profiles.push_back(MakeBuiltIn("Reference", "Geodesic integration at reference tolerance with the volumetric disk. For final renders.", reference));
+
+            return profiles;
+        }
+
+        constexpr std::array<std::string_view, kRenderContextCount> kContextNames{"Edit", "Play", "Reference", "Export"};
+        constexpr std::array<std::string_view, kRenderContextCount> kContextLabels{
+            "Viewport: editing", "Viewport: playing", "Viewport: reference", "Export"};
+        constexpr std::array<std::string_view, kRenderContextCount> kDefaultProfiles{"Flat", "Lensed", "Reference", "Lensed"};
+
+        template <typename T>
+        void Read(const YAML::Node& node, const char* key, T& out)
+        {
+            if (const auto child = node[key]; child && child.IsScalar())
+            {
+                try { out = child.template as<T>(); } catch (const std::exception&) {}
+            }
+        }
+    }
+
+    const SettingRegistry<RenderSettings>& RenderSettingRegistry()
+    {
+        static const auto registry = BuildRegistry();
+        return registry;
+    }
+
+    std::vector<std::string> SanitizeForDevice(RenderSettings& settings, const GpuCapabilities& caps)
+    {
+        std::vector<std::string> notes;
+        const RenderSettings defaults;
+        for (const auto& setting : RenderSettingRegistry().All())
+        {
+            const auto required = setting.RequiresFor(settings);
+            if (caps.Has(required)) continue;
+
+            const auto before = RenderSettingRegistry().ToText(settings, setting);
+            setting.Set(settings, setting.Get(defaults));
+            if (!caps.Has(setting.RequiresFor(settings)))
+            {
+                setting.Set(settings, setting.Type == FieldType::Bool ? FieldValue{false} : FieldValue{0});
+            }
+            notes.push_back(std::format("{}: '{}' needs {}, using '{}'", setting.Meta.Label, before,
+                                        CapabilityLabel(required), RenderSettingRegistry().ToText(settings, setting)));
+        }
+        return notes;
+    }
+
+    std::string_view RenderContextName(const RenderContext context) noexcept
+    {
+        return kContextNames[static_cast<std::size_t>(context)];
+    }
+
+    std::string_view RenderContextLabel(const RenderContext context) noexcept
+    {
+        return kContextLabels[static_cast<std::size_t>(context)];
+    }
+
+    std::optional<RenderContext> RenderContextFromName(const std::string_view name) noexcept
+    {
+        for (int i = 0; i < kRenderContextCount; ++i)
+        {
+            if (kContextNames[static_cast<std::size_t>(i)] == name) return static_cast<RenderContext>(i);
+        }
+        return std::nullopt;
+    }
+
+    const std::vector<RenderProfile>& BuiltInRenderProfiles()
+    {
+        static const auto profiles = BuildBuiltIns();
+        return profiles;
+    }
+
+    RenderSettings LegacyRenderSettings(const YAML::Node& state)
+    {
+        RenderSettings out;
+        bool lensing = true;
+        bool accurate = false;
+        Read(state, "GravitationalLensing", lensing);
+        Read(state, "PhysicallyAccurate", accurate);
+        out.TransportMode = accurate ? Transport::Integrated : lensing ? Transport::AnalyticLens : Transport::Straight;
+
+        int metric = static_cast<int>(out.Solution);
+        Read(state, "MetricType", metric);
+        out.Solution = static_cast<Spacetime>(std::clamp(metric, 0, 3));
+        int frame = static_cast<int>(out.LengthUnit);
+        Read(state, "FrameMode", frame);
+        out.LengthUnit = static_cast<FrameMode>(std::clamp(frame, 0, 1));
+
+        Read(state, "GravitationalRedshift", out.GravitationalRedshift);
+        Read(state, "DopplerBeaming", out.DopplerBeaming);
+        Read(state, "AccretionDisk", out.AccretionDisk);
+        Read(state, "AccretionDiskVolumetric", out.AccretionDiskVolumetric);
+        Read(state, "AccDiskHeight", out.AccDiskHeight);
+        Read(state, "AccDiskSpeed", out.AccDiskSpeed);
+        Read(state, "AccDiskNoiseScale", out.AccDiskNoiseScale);
+        Read(state, "AccDiskNoiseLOD", out.AccDiskNoiseLOD);
+        Read(state, "RenderBlackHoles", out.RenderBlackHoles);
+        Read(state, "RenderSpheres", out.RenderSpheres);
+        Read(state, "RayStepSize", out.RayStepSize);
+        Read(state, "MaxRaySteps", out.MaxRaySteps);
+        Read(state, "AdaptiveStepRate", out.AdaptiveStepRate);
+        Read(state, "AntiAliasing", out.Fxaa);
+        Read(state, "BloomEnabled", out.Bloom);
+        Read(state, "BloomThreshold", out.BloomThreshold);
+        Read(state, "BloomBlurPasses", out.BloomBlurPasses);
+        Read(state, "BloomIntensity", out.BloomIntensity);
+        Read(state, "BloomDebug", out.BloomDebug);
+        Read(state, "LensFlare", out.LensFlare);
+        Read(state, "LensFlareIntensity", out.LensFlareIntensity);
+        Read(state, "LensFlareThreshold", out.LensFlareThreshold);
+        Read(state, "ThirdPerson", out.ThirdPerson);
+        Read(state, "ThirdPersonDistance", out.ThirdPersonDistance);
+        Read(state, "ThirdPersonHeight", out.ThirdPersonHeight);
+        Read(state, "ShowGravityGrid", out.ShowGravityGrid);
+        Read(state, "ShowPhysicsDebug", out.ShowPhysicsDebug);
+        Read(state, "ShowObjectPaths", out.ShowObjectPaths);
+        std::string precision;
+        Read(state, "GpuPrecision", precision);
+        if (const auto parsed = Units::PrecisionFromName(precision); parsed && *parsed != Units::Precision::F128)
+            out.GpuPrecision = *parsed;
+
+        RenderSettingRegistry().Clamp(out);
+        return out;
+    }
+
+    std::string RenderExtensionText(const Scene& scene)
+    {
+        const auto* node = scene.FindExtension(kRenderExtensionKey);
+        return node ? YAML::Dump(*node) : std::string();
+    }
+
+    void StoreRenderExtension(Scene& scene, const std::string& yaml)
+    {
+        if (yaml.empty())
+        {
+            scene.RemoveExtension(kRenderExtensionKey);
+            return;
+        }
+        scene.SetExtension(kRenderExtensionKey, YAML::Load(yaml));
+    }
+
+    RenderProfileSet::RenderProfileSet()
+        : m_Profiles(BuiltInRenderProfiles())
+    {
+        for (int i = 0; i < kRenderContextCount; ++i) m_Context[static_cast<std::size_t>(i)] = kDefaultProfiles[static_cast<std::size_t>(i)];
+    }
+
+    const RenderProfile* RenderProfileSet::Find(const std::string_view name) const
+    {
+        const auto it = std::ranges::find(m_Profiles, name, &RenderProfile::Name);
+        return it == m_Profiles.end() ? nullptr : &*it;
+    }
+
+    const RenderProfile& RenderProfileSet::ProfileFor(const RenderContext context) const
+    {
+        if (const auto* profile = Find(m_Context[static_cast<std::size_t>(context)])) return *profile;
+        return *Find(kDefaultProfiles[static_cast<std::size_t>(context)]);
+    }
+
+    bool RenderProfileSet::Assign(const RenderContext context, const std::string_view profileName)
+    {
+        if (!Find(profileName)) return false;
+        m_Context[static_cast<std::size_t>(context)] = std::string(profileName);
+        return true;
+    }
+
+    std::string RenderProfileSet::UniqueName(const std::string_view wanted) const
+    {
+        if (!Find(wanted)) return std::string(wanted);
+        for (int suffix = 2;; ++suffix)
+        {
+            auto candidate = std::format("{} {}", wanted, suffix);
+            if (!Find(candidate)) return candidate;
+        }
+    }
+
+    const RenderProfile& RenderProfileSet::Replace(const RenderContext context, const RenderSettings& settings)
+    {
+        const auto& current = ProfileFor(context);
+        if (!current.BuiltIn)
+        {
+            auto& profile = *std::ranges::find(m_Profiles, current.Name, &RenderProfile::Name);
+            profile.Settings = settings;
+            return profile;
+        }
+        RenderProfile fork;
+        fork.Name = UniqueName(current.Name + " (edited)");
+        fork.Description = current.Description;
+        fork.Base = current.Name;
+        fork.Settings = settings;
+        m_Profiles.push_back(std::move(fork));
+        m_Context[static_cast<std::size_t>(context)] = m_Profiles.back().Name;
+        return m_Profiles.back();
+    }
+
+    const RenderProfile& RenderProfileSet::Duplicate(const RenderContext context)
+    {
+        const auto& current = ProfileFor(context);
+        RenderProfile copy;
+        copy.Name = UniqueName(current.Name + " copy");
+        copy.Description = current.Description;
+        copy.Base = current.BuiltIn ? current.Name : current.Base;
+        copy.Settings = current.Settings;
+        m_Profiles.push_back(std::move(copy));
+        m_Context[static_cast<std::size_t>(context)] = m_Profiles.back().Name;
+        return m_Profiles.back();
+    }
+
+    void RenderProfileSet::Add(RenderProfile profile)
+    {
+        profile.BuiltIn = false;
+        profile.Name = UniqueName(profile.Name);
+        m_Profiles.push_back(std::move(profile));
+    }
+
+    bool RenderProfileSet::Remove(const std::string_view name)
+    {
+        const auto it = std::ranges::find(m_Profiles, name, &RenderProfile::Name);
+        if (it == m_Profiles.end() || it->BuiltIn) return false;
+        m_Profiles.erase(it);
+        for (int i = 0; i < kRenderContextCount; ++i)
+        {
+            auto& assigned = m_Context[static_cast<std::size_t>(i)];
+            if (assigned == name) assigned = std::string(kDefaultProfiles[static_cast<std::size_t>(i)]);
+        }
+        return true;
+    }
+
+    bool RenderProfileSet::Rename(const std::string_view name, const std::string_view newName)
+    {
+        if (newName.empty() || newName == name || Find(newName)) return false;
+        const auto it = std::ranges::find(m_Profiles, name, &RenderProfile::Name);
+        if (it == m_Profiles.end() || it->BuiltIn) return false;
+        it->Name = std::string(newName);
+        for (auto& assigned : m_Context)
+        {
+            if (assigned == name) assigned = std::string(newName);
+        }
+        return true;
+    }
+
+    YAML::Node RenderProfileSet::ToYaml() const
+    {
+        YAML::Node node;
+        node["Version"] = kRenderExtensionVersion;
+        YAML::Node contexts(YAML::NodeType::Map);
+        for (int i = 0; i < kRenderContextCount; ++i)
+        {
+            contexts[std::string(kContextNames[static_cast<std::size_t>(i)])] = m_Context[static_cast<std::size_t>(i)];
+        }
+        node["Contexts"] = contexts;
+
+        YAML::Node profiles(YAML::NodeType::Sequence);
+        for (const auto& profile : m_Profiles)
+        {
+            if (profile.BuiltIn) continue;
+            YAML::Node entry;
+            entry["Name"] = profile.Name;
+            if (!profile.Description.empty()) entry["Description"] = profile.Description;
+            const auto* base = Find(profile.Base);
+            entry["Base"] = base && base->BuiltIn ? base->Name : std::string("Lensed");
+            const RenderSettings baseline = base && base->BuiltIn ? base->Settings : RenderSettings{};
+            entry["Set"] = RenderSettingRegistry().Encode(profile.Settings, &baseline);
+            profiles.push_back(entry);
+        }
+        if (profiles.size() > 0) node["Profiles"] = profiles;
+        return node;
+    }
+
+    RenderProfileSet RenderProfileSet::FromYaml(const YAML::Node& node, std::vector<std::string>* warnings)
+    {
+        RenderProfileSet set;
+        const auto warn = [&](std::string message)
+        {
+            if (warnings) warnings->push_back(std::move(message));
+        };
+        if (!node || !node.IsMap()) return set;
+
+        if (const auto profiles = node["Profiles"]; profiles && profiles.IsSequence())
+        {
+            for (const auto& entry : profiles)
+            {
+                const auto name = entry["Name"] ? entry["Name"].as<std::string>("") : std::string();
+                if (name.empty())
+                {
+                    warn("render profile without a name skipped");
+                    continue;
+                }
+                if (set.Find(name))
+                {
+                    warn("render profile '" + name + "' duplicates an existing name, skipped");
+                    continue;
+                }
+                RenderProfile profile;
+                profile.Name = name;
+                profile.Description = entry["Description"] ? entry["Description"].as<std::string>("") : std::string();
+                const auto baseName = entry["Base"] ? entry["Base"].as<std::string>("Lensed") : std::string("Lensed");
+                const auto* base = set.Find(baseName);
+                if (!base || !base->BuiltIn)
+                {
+                    warn("render profile '" + name + "' has unknown base '" + baseName + "', using Lensed");
+                    base = set.Find("Lensed");
+                }
+                profile.Base = base->Name;
+                profile.Settings = base->Settings;
+                for (const auto& key : RenderSettingRegistry().Decode(profile.Settings, entry["Set"]))
+                {
+                    warn("render profile '" + name + "': setting '" + key + "' ignored");
+                }
+                set.m_Profiles.push_back(std::move(profile));
+            }
+        }
+
+        if (const auto contexts = node["Contexts"]; contexts && contexts.IsMap())
+        {
+            for (const auto& entry : contexts)
+            {
+                const auto context = RenderContextFromName(entry.first.as<std::string>(""));
+                const auto profileName = entry.second.as<std::string>("");
+                if (!context) continue;
+                if (!set.Assign(*context, profileName))
+                {
+                    warn("context '" + std::string(RenderContextName(*context)) + "' names unknown profile '"
+                         + profileName + "', using the default");
+                }
+            }
+        }
+        return set;
+    }
+}

@@ -3,6 +3,7 @@ export module MoleHole:Application.State;
 import std;
 import GPP;
 import :UI.State;
+import :Rendering.SettingsService;
 
 export namespace MoleHole
 {
@@ -12,9 +13,10 @@ export namespace MoleHole
     class AppStateService final : public GPP::IHostedService
     {
     public:
-        using Dependencies = std::tuple<UiState, GPP::UiPreferences, GPP::IFileSystem, GPP::Logger>;
+        using Dependencies = std::tuple<UiState, RenderSettingsService, GPP::UiPreferences, GPP::IFileSystem, GPP::Logger>;
 
-        AppStateService(std::shared_ptr<UiState> uiState, std::shared_ptr<GPP::UiPreferences> preferences,
+        AppStateService(std::shared_ptr<UiState> uiState, std::shared_ptr<RenderSettingsService> renderSettings,
+                         std::shared_ptr<GPP::UiPreferences> preferences,
                          std::shared_ptr<GPP::IFileSystem> fileSystem, std::shared_ptr<GPP::Logger> logger);
 
         GPP::Task<void> StartAsync(std::stop_token stopToken) override;
@@ -41,6 +43,7 @@ export namespace MoleHole
         void Save() const;
 
         std::shared_ptr<UiState> m_UiState;
+        std::shared_ptr<RenderSettingsService> m_RenderSettings;
         std::shared_ptr<GPP::UiPreferences> m_Preferences;
         std::shared_ptr<GPP::IFileSystem> m_FileSystem;
         std::shared_ptr<GPP::Logger> m_Logger;

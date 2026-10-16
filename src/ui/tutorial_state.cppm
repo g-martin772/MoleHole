@@ -134,6 +134,7 @@ export namespace MoleHole
         else if (windowName == "System") uiState.ShowSystemWindow = true;
         else if (windowName == "Scene") uiState.ShowSceneWindow = true;
         else if (windowName == "Debug") uiState.ShowDebugWindow = true;
+        else if (windowName == "Render") uiState.ShowRenderWindow = true;
         else if (windowName == "General Relativity") uiState.ShowGeneralRelativityWindow = true;
         else if (windowName == "Science") uiState.ShowScienceWindow = true;
         else if (windowName == "Animation Graph") uiState.ShowAnimationGraphWindow = true;

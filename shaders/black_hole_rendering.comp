@@ -23,7 +23,7 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
     float u_cubeSize;
 
     int u_isPhysicallyAccurate;
-    int u_debugMode;
+    int u_debugMode; // 0 off, 1 step count, 2 termination reason
     int u_metric_type;
     int u_gravitationalLensingEnabled;
 
@@ -133,6 +133,8 @@ void main() {
     else {
         color = hybridRayTrace(rayOrigin, rayDir, hitPoint, hitSolid);
     }
+
+    color = debugViewColor(color);
 
     float depth = 0.999999f;
     if (hitSolid) {

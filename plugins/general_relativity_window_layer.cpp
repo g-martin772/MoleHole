@@ -61,12 +61,13 @@ namespace
 
     struct GeneralRelativityWindowLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, Renderer, LatexRenderer, UiState>;
+        using Dependencies = std::tuple<Logger, Renderer, LatexRenderer, UiState, RenderSettingsService>;
 
         GeneralRelativityWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<Renderer> renderer,
-                                     std::shared_ptr<LatexRenderer> latex, std::shared_ptr<UiState> uiState)
+                                     std::shared_ptr<LatexRenderer> latex, std::shared_ptr<UiState> uiState,
+                                     std::shared_ptr<RenderSettingsService> renderSettings)
             : HotReloadableLayer(logger), m_Renderer(std::move(renderer)), m_Latex(std::move(latex)),
-              m_UiState(std::move(uiState))
+              m_UiState(std::move(uiState)), m_RenderSettings(std::move(renderSettings))
         {
         }
 
@@ -93,14 +94,23 @@ namespace
             ImGui::Spacing();
 
             const char* metricNames[] = {"Schwarzschild", "Kerr", "Reissner-Nordstrom", "Kerr-Newman"};
-            ImGui::Combo("Metric Type", &m_UiState->Render.MetricType, metricNames, IM_ARRAYSIZE(metricNames));
+            const auto context = m_RenderSettings->ActiveContext();
+            int metric = static_cast<int>(m_RenderSettings->Effective().Solution);
+            if (ImGui::Combo("Metric Type", &metric, metricNames, IM_ARRAYSIZE(metricNames)))
+            {
+                auto edited = m_RenderSettings->Profiles().SettingsFor(context);
+                edited.Solution = static_cast<Spacetime>(metric);
+                m_RenderSettings->Edit(context, edited);
+            }
+            ImGui::TextDisabled("Setting of the '%s' profile; only the integrated ray transport evaluates it.",
+                                m_RenderSettings->ProfileFor(context).Name.c_str());
 
             ImGui::Spacing();
             ImGui::TextUnformatted("Metric Tensor (Boyer-Lindquist coordinates):");
 
             const auto device = m_Renderer->GetDevice();
             m_Formulas.Draw(*m_Latex, device, *m_UploadPool, device->GetGraphicsQueue(),
-                           BuildMetricLatex(m_UiState->Render.MetricType));
+                           BuildMetricLatex(static_cast<int>(m_RenderSettings->Effective().Solution)));
 
             ImGui::End();
         }
@@ -109,6 +119,7 @@ namespace
         std::shared_ptr<Renderer> m_Renderer;
         std::shared_ptr<LatexRenderer> m_Latex;
         std::shared_ptr<UiState> m_UiState;
+        std::shared_ptr<RenderSettingsService> m_RenderSettings;
         std::unique_ptr<VulkanCommandPool> m_UploadPool;
         LatexFormulaView m_Formulas;
     };

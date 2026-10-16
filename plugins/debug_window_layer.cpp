@@ -11,19 +11,6 @@ using namespace MoleHole;
 
 namespace
 {
-    void DebugModeTooltip(int debugMode)
-    {
-        const char* tooltip = "Unknown debug mode";
-        switch (debugMode)
-        {
-        case 0: tooltip = "Normal rendering with no debug visualization"; break;
-        case 1: tooltip = "Gravity Grid overlay on the ground plane"; break;
-        case 2: tooltip = "Object trajectory paths (not yet implemented)"; break;
-        default: break;
-        }
-        ImGui::SetTooltip("%s", tooltip);
-    }
-
     // Combo over f32/f64/f128
     bool PrecisionCombo(const char* id, Units::Precision* value,
                         const std::function<const char*(Units::Precision)>& unavailableReason)
@@ -51,10 +38,11 @@ namespace
 
     struct DebugWindowLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, UiState>;
+        using Dependencies = std::tuple<Logger, UiState, RenderSettingsService>;
 
-        DebugWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<UiState> uiState)
-            : HotReloadableLayer(logger), m_UiState(std::move(uiState))
+        DebugWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<UiState> uiState,
+                         std::shared_ptr<RenderSettingsService> renderSettings)
+            : HotReloadableLayer(logger), m_UiState(std::move(uiState)), m_RenderSettings(std::move(renderSettings))
         {
         }
 
@@ -66,16 +54,6 @@ namespace
                 ImGui::End();
                 return;
             }
-
-            auto& render = m_UiState->Render;
-
-            SectionHeader("RENDERING");
-            ImGui::Checkbox("Black Holes", &render.RenderBlackHoles);
-            ImGui::Checkbox("Spheres", &render.RenderSpheres);
-            ImGui::Checkbox("Gravitational Lensing", &render.GravitationalLensing);
-            ImGui::Checkbox("Gravitational Redshift", &render.GravitationalRedshift);
-            ImGui::Checkbox("Doppler Beaming", &render.DopplerBeaming);
-            ImGui::Checkbox("Physically Accurate", &render.PhysicallyAccurate);
 
             SectionHeader("DISPLAY UNITS");
             {
@@ -100,9 +78,8 @@ namespace
                 }
             }
 
-            SectionHeader("PRECISION");
+            SectionHeader("CPU PRECISION");
             Units::Precision cpuPrecision = m_UiState->SimulationPrecision;
-            ImGui::TextUnformatted("CPU simulation");
             if (PrecisionCombo("##cpuprecision", &cpuPrecision, [](Units::Precision p) -> const char*
                 {
                     return Units::CpuSupports(p) ? nullptr : "This compiler has no std::float128_t";
@@ -114,96 +91,42 @@ namespace
             {
                 ImGui::SetTooltip("Arithmetic type of MoleHole's gravity evaluation. Positions are stored in\n"
                                    "double either way; with f32 they are cast before subtraction.\n"
-                                   "PhysX integration stays float32 (local origin).");
-            }
-            ImGui::TextUnformatted("GPU render");
-            const bool gpuFloat64 = m_UiState->GpuFloat64Supported.load(std::memory_order_relaxed);
-            PrecisionCombo("##gpuprecision", &render.GpuPrecision, [gpuFloat64](Units::Precision p) -> const char*
-            {
-                if (p == Units::Precision::F128) return "GPUs have no 128-bit floats";
-                if (p == Units::Precision::F64 && !gpuFloat64) return "Device lacks shaderFloat64";
-                return nullptr;
-            });
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Precision of the geodesic integration (physically accurate mode).\n"
-                                   "f64 runs at 1/32-1/64 rate on consumer GPUs.");
-            }
-            const char* frameItems[] = {"Solar r_g (legacy numbers)", "Heaviest black hole r_g (scale invariant)"};
-            ImGui::TextUnformatted("Render length unit");
-            ImGui::SetNextItemWidth(ImGui::CalcItemWidth());
-            ImGui::Combo("##frame", &render.FrameMode, frameItems, IM_ARRAYSIZE(frameItems));
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Unit of the geometrized render space (G = c = 1). Ray step size and the third-person\n"
-                                   "offsets below are in these units.");
+                                   "PhysX integration stays float32 (local origin).\n"
+                                   "GPU precision is a render setting (Render window, Transport).");
             }
 
-            SectionHeader("ACCRETION DISK");
-            ImGui::Checkbox("Enabled", &render.AccretionDisk);
-            ImGui::Checkbox("Volumetric", &render.AccretionDiskVolumetric);
-            ImGui::SliderFloat("Height", &render.AccDiskHeight, 0.0f, 2.0f);
-            ImGui::SliderFloat("Speed", &render.AccDiskSpeed, 0.0f, 5.0f);
-            ImGui::SliderFloat("Noise Scale", &render.AccDiskNoiseScale, 0.0f, 5.0f);
-            ImGui::SliderFloat("Noise LOD", &render.AccDiskNoiseLOD, 0.0f, 10.0f);
-
-            SectionHeader("RAY MARCHING");
-            ImGui::SliderFloat("Step Size", &render.RayStepSize, 0.001f, 1.0f, "%.4f", ImGuiSliderFlags_Logarithmic);
-            ImGui::SliderInt("Max Steps", &render.MaxRaySteps, 100, 200000);
-            ImGui::SliderFloat("Adaptive Step Rate", &render.AdaptiveStepRate, 0.01f, 10.0f, "%.2f",
-                               ImGuiSliderFlags_Logarithmic);
-
-            SectionHeader("POST PROCESSING");
-            ImGui::Checkbox("Anti-Aliasing (FXAA)", &render.AntiAliasing);
-            ImGui::Checkbox("Lens Flare", &render.LensFlare);
-            ImGui::SliderFloat("Flare Intensity", &render.LensFlareIntensity, 0.0f, 100.0f);
-            ImGui::SliderFloat("Flare Threshold", &render.LensFlareThreshold, 0.0f, 5.0f);
-
-            SectionHeader("THIRD PERSON");
-            ImGui::Checkbox("Third Person Crosshair", &render.ThirdPerson);
-            ImGui::SliderFloat("Distance", &render.ThirdPersonDistance, 1.0f, 100.0f);
-            ImGui::SliderFloat("Height", &render.ThirdPersonHeight, 0.0f, 50.0f);
-
-            SectionHeader("BLOOM");
-            ImGui::Checkbox("Bloom", &render.BloomEnabled);
-            ImGui::SliderFloat("Threshold", &render.BloomThreshold, 0.0f, 5.0f);
-            ImGui::SliderInt("Blur Passes", &render.BloomBlurPasses, 1, 20);
-            ImGui::SliderFloat("Intensity", &render.BloomIntensity, 0.0f, 100.0f);
-            ImGui::Checkbox("Bloom Debug", &render.BloomDebug);
-
-            SectionHeader("DEBUG VISUALIZATION");
-            const char* debugModeItems[] = {"Normal Rendering", "Gravity Grid", "Object Paths"};
-            ImGui::Combo("Debug Mode", &render.DebugMode, debugModeItems, IM_ARRAYSIZE(debugModeItems));
-            ImGui::SameLine();
-            ImGui::TextDisabled("(?)");
-            if (ImGui::IsItemHovered()) DebugModeTooltip(render.DebugMode);
-
-            ImGui::Checkbox("Gravity Grid Overlay", &render.ShowGravityGrid);
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Draws the geodesic grid plane as a separate overlay pass,\n"
-                                   "independent from the 'Debug Mode' setting above.");
-            }
-
-            ImGui::Checkbox("Physics Collider Wireframe", &render.ShowPhysicsDebug);
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Draws PhysX's own debug wireframe for every active collider\n"
-                                   "(PxVisualizationParameter::eCOLLISION_SHAPES).");
-            }
-
-            ImGui::Checkbox("Object Path Trails", &render.ShowObjectPaths);
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Draws each mesh's and sphere's recent world-space path while the\n"
-                                   "simulation is playing (green for meshes, magenta for spheres).");
-            }
+            const auto context = m_RenderSettings->ActiveContext();
+            ImGui::Spacing();
+            ImGui::TextDisabled("Editing the %s profile '%s'.", std::string(RenderContextLabel(context)).c_str(),
+                                m_RenderSettings->ProfileFor(context).Name.c_str());
+            DrawGroup("OVERLAYS", "Overlays", context);
+            DrawGroup("DEBUG VIEW", "Debug", context);
 
             ImGui::End();
         }
 
     private:
+        void DrawGroup(const char* title, const char* group, const RenderContext context)
+        {
+            const auto& registry = RenderSettingRegistry();
+            const auto& set = m_RenderSettings->Profiles();
+            const auto& profile = set.ProfileFor(context);
+            const RenderSettings baseline = profile.BuiltIn ? profile.Settings
+                                            : set.Find(profile.Base) ? set.Find(profile.Base)->Settings : RenderSettings{};
+            RenderSettings edited = profile.Settings;
+            bool changed = false;
+            SectionHeader(title);
+            for (const auto* setting : registry.InGroup(group))
+            {
+                ImGui::PushID(setting->Key.c_str());
+                changed |= DrawRenderSetting(m_UiState->IconFont, *setting, edited, baseline, m_RenderSettings->Capabilities());
+                ImGui::PopID();
+            }
+            if (changed) m_RenderSettings->Edit(context, edited);
+        }
+
         std::shared_ptr<UiState> m_UiState;
+        std::shared_ptr<RenderSettingsService> m_RenderSettings;
     };
 }
 

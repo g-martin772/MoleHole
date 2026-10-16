@@ -10,9 +10,44 @@ namespace
     struct CliExportArgs
     {
         bool Requested = false;
+        bool ListSettings = false;
         ExportRequest Request;
         std::string ScenePath;
+        std::string Error;
     };
+
+    void PrintSettings()
+    {
+        const auto& registry = RenderSettingRegistry();
+        const RenderSettings defaults;
+        for (const auto& group : registry.Groups())
+        {
+            std::println("{}", group);
+            for (const auto* setting : registry.InGroup(group))
+            {
+                std::string options;
+                for (const auto& option : setting->Meta.Options) options += (options.empty() ? "" : "|") + option;
+                std::println("  {:<32} default {:<14} {}{}", setting->Key, registry.ToText(defaults, *setting),
+                             setting->Meta.Label, options.empty() ? "" : "  [" + options + "]");
+            }
+        }
+        std::println("\nProfiles:");
+        for (const auto& profile : BuiltInRenderProfiles()) std::println("  {:<12} {}", profile.Name, profile.Description);
+    }
+
+    // Applies key=value to a scratch copy to reject typos before an export starts
+    bool AddOverride(CliExportArgs& args, std::string key, std::string value)
+    {
+        RenderSettings scratch;
+        if (const auto result = RenderSettingRegistry().SetFromText(scratch, key, value); !result)
+        {
+            args.Error = "--set " + key + "=" + value + ": " + result.error();
+            return false;
+        }
+        std::erase_if(args.Request.Overrides, [&](const auto& entry) { return entry.first == key; });
+        args.Request.Overrides.emplace_back(std::move(key), std::move(value));
+        return true;
+    }
 
     void EnsureRuntimeDirectories()
     {
@@ -51,13 +86,27 @@ namespace
             else if (arg == "--duration") args.Request.DurationSeconds = std::stof(next());
             else if (arg == "--fps") args.Request.Framerate = std::stoi(next());
             else if (arg == "--scene") args.ScenePath = next();
-            else if (arg == "--ray-step-size") args.Request.RayStepSize = std::stof(next());
-            else if (arg == "--max-ray-steps") args.Request.MaxRaySteps = std::stoi(next());
-            else if (arg == "--gpu-precision") args.Request.GpuPrecision = Units::PrecisionFromName(next());
-            else if (arg == "--physically-accurate") args.Request.PhysicallyAccurate = true;
-            else if (arg == "--metric") args.Request.MetricType = std::stoi(next());
+            else if (arg == "--profile") args.Request.Profile = next();
+            else if (arg == "--set")
+            {
+                const auto pair = next();
+                const auto equals = pair.find('=');
+                if (equals == std::string::npos)
+                {
+                    args.Error = "--set expects key=value, got '" + pair + "'";
+                    break;
+                }
+                if (!AddOverride(args, pair.substr(0, equals), pair.substr(equals + 1))) break;
+            }
+            else if (arg == "--list-settings") args.ListSettings = true;
+            // Older flags, now spelled as settings
+            else if (arg == "--ray-step-size") { if (!AddOverride(args, "transport.step_size", next())) break; }
+            else if (arg == "--max-ray-steps") { if (!AddOverride(args, "transport.max_steps", next())) break; }
+            else if (arg == "--gpu-precision") { if (!AddOverride(args, "transport.gpu_precision", next())) break; }
+            else if (arg == "--physically-accurate") { if (!AddOverride(args, "transport.mode", "Integrated")) break; }
+            else if (arg == "--metric") { if (!AddOverride(args, "spacetime.solution", next())) break; }
         }
-        return args.Requested ? std::optional(args) : std::nullopt;
+        return (args.Requested || args.ListSettings || !args.Error.empty()) ? std::optional(args) : std::nullopt;
     }
 }
 
@@ -67,7 +116,18 @@ int main(int argc, char* argv[])
     SetGlobalShaderDefines(Units::ShaderDefines());
     MoleHole::RegisterComponents();
 
-    const auto exportArgs = ParseExportArgs(argc, argv);
+    auto cli = ParseExportArgs(argc, argv);
+    if (cli && !cli->Error.empty())
+    {
+        std::cerr << cli->Error << '\n';
+        return 2;
+    }
+    if (cli && cli->ListSettings)
+    {
+        PrintSettings();
+        return 0;
+    }
+    const auto exportArgs = cli && cli->Requested ? cli : std::nullopt;
 
     auto builder = GuiApplicationBuilder();
 
@@ -104,6 +164,13 @@ int main(int argc, char* argv[])
         });
     }
 
+    builder.Services.AddSingleton<RenderSettingsService>([cli, exportArgs](ServiceProvider&) -> std::shared_ptr<IService>
+    {
+        auto service = std::make_shared<RenderSettingsService>();
+        // Exports apply their own profile; an interactive session takes --profile for every context
+        if (!exportArgs && cli && cli->Request.Profile) service->SetProfileOverride(*cli->Request.Profile);
+        return service;
+    });
     builder.Services.AddSingleton<LatexRenderer>();
     builder.Services.AddHostedService<AppStateService>();
 
@@ -116,6 +183,7 @@ int main(int argc, char* argv[])
         builder.AddHotReloadableLayer("scene-window", "molehole_scene_window_layer.so").SetWindowTarget("main");
         builder.AddHotReloadableLayer("camera-window", "molehole_camera_window_layer.so").SetWindowTarget("main");
         builder.AddHotReloadableLayer("debug-window", "molehole_debug_window_layer.so").SetWindowTarget("main");
+        builder.AddHotReloadableLayer("render-window", "molehole_render_window_layer.so").SetWindowTarget("main");
         builder.AddHotReloadableLayer("system-window", "molehole_system_window_layer.so").SetWindowTarget("main");
         builder.AddHotReloadableLayer("viewport-hud", "molehole_viewport_hud_layer.so").SetWindowTarget("main");
         builder.AddHotReloadableLayer("simulation-controls", "molehole_simulation_controls_layer.so")

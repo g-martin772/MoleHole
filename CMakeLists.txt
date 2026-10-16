@@ -37,6 +37,7 @@ set(MOLEHOLE_UI_PLUGINS
         scene_window_layer
         camera_window_layer
         debug_window_layer
+        render_window_layer
         system_window_layer
         viewport_hud_layer
         simulation_controls_layer

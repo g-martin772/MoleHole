@@ -12,15 +12,17 @@ namespace
     struct TopBarLayer final : public HotReloadableLayer
     {
         using Dependencies = std::tuple<Logger, FileDialog, SceneManager, UiPreferences, FontAssetCatalog, UiState,
-                                        AppStateService, IFileSystem>;
+                                        AppStateService, IFileSystem, RenderSettingsService>;
 
         TopBarLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<FileDialog> fileDialog,
                    std::shared_ptr<SceneManager> scenes, std::shared_ptr<UiPreferences> uiPreferences,
                    std::shared_ptr<FontAssetCatalog> fontAssets, std::shared_ptr<UiState> uiState,
-                   std::shared_ptr<AppStateService> appState, std::shared_ptr<IFileSystem> fileSystem)
+                   std::shared_ptr<AppStateService> appState, std::shared_ptr<IFileSystem> fileSystem,
+                   std::shared_ptr<RenderSettingsService> renderSettings)
             : HotReloadableLayer(logger), m_FileDialog(std::move(fileDialog)), m_Scenes(std::move(scenes)),
               m_UiPreferences(std::move(uiPreferences)), m_FontAssets(std::move(fontAssets)),
-              m_UiState(std::move(uiState)), m_AppState(std::move(appState)), m_FileSystem(std::move(fileSystem))
+              m_UiState(std::move(uiState)), m_AppState(std::move(appState)), m_FileSystem(std::move(fileSystem)),
+              m_RenderSettings(std::move(renderSettings))
         {
         }
 
@@ -185,6 +187,7 @@ namespace
                 ImGui::MenuItem("Camera", nullptr, &m_UiState->ShowCameraWindow);
                 ImGui::MenuItem("System", nullptr, &m_UiState->ShowSystemWindow);
                 ImGui::MenuItem("Scene", nullptr, &m_UiState->ShowSceneWindow);
+                ImGui::MenuItem("Render", nullptr, &m_UiState->ShowRenderWindow);
                 ImGui::MenuItem("Debug", nullptr, &m_UiState->ShowDebugWindow);
                 ImGui::MenuItem("Viewport HUD", nullptr, &m_UiState->ShowViewportHud);
                 ImGui::MenuItem("Camera Gizmos", nullptr, &m_UiState->ShowCameraGizmos);
@@ -346,6 +349,25 @@ namespace
             }
 
             SectionHeader("QUALITY");
+            {
+                const auto& set = m_RenderSettings->Profiles();
+                const std::string defaultLabel = "Export context: " + set.ProfileFor(RenderContext::Export).Name;
+                const char* preview = m_ExportProfile.empty() ? defaultLabel.c_str() : m_ExportProfile.c_str();
+                ImGui::SetNextItemWidth(ImGui::CalcItemWidth());
+                if (ImGui::BeginCombo("Render profile", preview))
+                {
+                    if (ImGui::Selectable(defaultLabel.c_str(), m_ExportProfile.empty())) m_ExportProfile.clear();
+                    for (const auto& profile : set.Profiles())
+                    {
+                        if (ImGui::Selectable(profile.Name.c_str(), profile.Name == m_ExportProfile))
+                            m_ExportProfile = profile.Name;
+                        if (ImGui::IsItemHovered() && !profile.Description.empty())
+                            ImGui::SetTooltip("%s", profile.Description.c_str());
+                    }
+                    ImGui::EndCombo();
+                }
+                if (m_ExportProfile.empty() || !set.Find(m_ExportProfile)) m_ExportProfile.clear();
+            }
             ImGui::Checkbox("Override ray-march quality", &m_ExportOverrideQuality);
             if (m_ExportOverrideQuality)
             {
@@ -403,10 +425,11 @@ namespace
                     request.Height = static_cast<std::uint32_t>(m_ExportHeight);
                     request.DurationSeconds = m_ExportDuration;
                     request.Framerate = m_ExportFps;
+                    if (!m_ExportProfile.empty()) request.Profile = m_ExportProfile;
                     if (m_ExportOverrideQuality)
                     {
-                        request.RayStepSize = m_ExportRayStepSize;
-                        request.MaxRaySteps = m_ExportMaxRaySteps;
+                        request.Overrides.emplace_back("transport.step_size", std::format("{}", m_ExportRayStepSize));
+                        request.Overrides.emplace_back("transport.max_steps", std::format("{}", m_ExportMaxRaySteps));
                     }
                     m_UiState->PendingExport.Set(request);
                     m_ShowExportDialog = false;
@@ -430,7 +453,9 @@ namespace
         std::shared_ptr<FontAssetCatalog> m_FontAssets;
         std::shared_ptr<UiState> m_UiState;
         std::shared_ptr<AppStateService> m_AppState;
+        std::shared_ptr<RenderSettingsService> m_RenderSettings;
 
+        std::string m_ExportProfile;
         bool m_ShowExportDialog = false;
         int m_ExportKind = 0; // 0 = Image, 1 = Video
         int m_ExportWidth = 1920;

@@ -11,45 +11,6 @@ export namespace MoleHole
     constexpr std::uint32_t kViewportBufferId = 1;
     constexpr std::uint32_t kIntroBufferId = 2;
 
-    struct RenderToggles
-    {
-        bool GravitationalLensing = true;
-        bool GravitationalRedshift = true;
-        bool AccretionDisk = true;
-        bool AccretionDiskVolumetric = false;
-        bool DopplerBeaming = true;
-        bool RenderBlackHoles = true;
-        bool RenderSpheres = true;
-        bool PhysicallyAccurate = false;
-        bool ShowGravityGrid = false;
-        bool ShowPhysicsDebug = false;
-        bool ShowObjectPaths = false;
-        int DebugMode = 0;
-        // 0=Schwarzschild, 1=Kerr, 2=Reissner-Nordstrom, 3=Kerr-Newman
-        int MetricType = 1;
-        float AccDiskHeight = 0.2f;
-        float AccDiskSpeed = 0.5f;
-        float AccDiskNoiseScale = 1.0f;
-        float AccDiskNoiseLOD = 5.0f;
-        float RayStepSize = 0.01f;
-        int MaxRaySteps = 100000;
-        float AdaptiveStepRate = 0.8f;
-        bool BloomEnabled = true;
-        float BloomThreshold = 0.6f;
-        int BloomBlurPasses = 5;
-        float BloomIntensity = 5.0f;
-        bool BloomDebug = false;
-        bool AntiAliasing = true;
-        bool LensFlare = true;
-        float LensFlareIntensity = 0.3f;
-        float LensFlareThreshold = 2.0f;
-        bool ThirdPerson = false;
-        float ThirdPersonDistance = 10.0f;
-        float ThirdPersonHeight = 3.0f;
-        int FrameMode = static_cast<int>(MoleHole::FrameMode::PrimaryBlackHole);
-        GPP::Units::Precision GpuPrecision = GPP::Units::Precision::F32;
-    };
-
     enum class GizmoOperation { Translate, Rotate, Scale };
     enum class GizmoMode { Local, World };
 
@@ -61,11 +22,10 @@ export namespace MoleHole
         std::uint32_t Height = 1080;
         float DurationSeconds = 10.0f;
         int Framerate = 60;
-        std::optional<float> RayStepSize;
-        std::optional<int> MaxRaySteps;
-        std::optional<GPP::Units::Precision> GpuPrecision;
-        std::optional<bool> PhysicallyAccurate;
-        std::optional<int> MetricType;
+        // Render profile for this export (CLI --profile); the Export context's profile when unset
+        std::optional<std::string> Profile;
+        // Setting overrides applied on top of the profile (CLI --set key=value)
+        std::vector<std::pair<std::string, std::string>> Overrides;
     };
 
     template <typename T>
@@ -131,11 +91,14 @@ export namespace MoleHole
     {
     public:
         ScriptStatusBoard ScriptStatuses;
-        std::atomic<bool> GpuFloat64Supported{false};
         bool ShowCameraWindow = false;
         bool ShowSystemWindow = false;
         bool ShowSceneWindow = true;
         bool ShowDebugWindow = false;
+        bool ShowRenderWindow = false;
+        // Viewport draws with the Reference profile until switched off
+        bool ReferenceView = false;
+        bool ShowRenderStats = false;
         bool ShowViewportHud = false;
         bool ShowCameraGizmos = true;
         bool ShowSettingsWindow = false;
@@ -198,7 +161,6 @@ export namespace MoleHole
         float ExportStepDelta = 0.0f;
         std::uint64_t ExportStepSerial = 0;
 
-        RenderToggles Render;
         GPP::Units::Precision SimulationPrecision = GPP::Units::Precision::F64;
         float GravityMultiplier = 1.0f;
         float SimulationTickRate = 60.0f;

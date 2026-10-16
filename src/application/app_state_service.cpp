@@ -14,48 +14,18 @@ namespace MoleHole
 {
     namespace
     {
-        template <typename Fn>
-        void ForEachRenderToggle(RenderToggles& render, Fn&& fn)
+        // Render settings used to be one flat list in molehole_state.yaml; their presence marks a pre-profile state file
+        bool HasLegacyRenderKeys(const YAML::Node& render)
         {
-            fn("GravitationalLensing", render.GravitationalLensing);
-            fn("GravitationalRedshift", render.GravitationalRedshift);
-            fn("AccretionDisk", render.AccretionDisk);
-            fn("AccretionDiskVolumetric", render.AccretionDiskVolumetric);
-            fn("DopplerBeaming", render.DopplerBeaming);
-            fn("RenderBlackHoles", render.RenderBlackHoles);
-            fn("RenderSpheres", render.RenderSpheres);
-            fn("PhysicallyAccurate", render.PhysicallyAccurate);
-            fn("ShowGravityGrid", render.ShowGravityGrid);
-            fn("ShowPhysicsDebug", render.ShowPhysicsDebug);
-            fn("ShowObjectPaths", render.ShowObjectPaths);
-            fn("DebugMode", render.DebugMode);
-            fn("MetricType", render.MetricType);
-            fn("FrameMode", render.FrameMode);
-            fn("AccDiskHeight", render.AccDiskHeight);
-            fn("AccDiskSpeed", render.AccDiskSpeed);
-            fn("AccDiskNoiseScale", render.AccDiskNoiseScale);
-            fn("AccDiskNoiseLOD", render.AccDiskNoiseLOD);
-            fn("RayStepSize", render.RayStepSize);
-            fn("MaxRaySteps", render.MaxRaySteps);
-            fn("AdaptiveStepRate", render.AdaptiveStepRate);
-            fn("BloomEnabled", render.BloomEnabled);
-            fn("BloomThreshold", render.BloomThreshold);
-            fn("BloomBlurPasses", render.BloomBlurPasses);
-            fn("BloomIntensity", render.BloomIntensity);
-            fn("BloomDebug", render.BloomDebug);
-            fn("AntiAliasing", render.AntiAliasing);
-            fn("LensFlare", render.LensFlare);
-            fn("LensFlareIntensity", render.LensFlareIntensity);
-            fn("LensFlareThreshold", render.LensFlareThreshold);
-            fn("ThirdPerson", render.ThirdPerson);
-            fn("ThirdPersonDistance", render.ThirdPersonDistance);
-            fn("ThirdPersonHeight", render.ThirdPersonHeight);
+            return render && (render["GravitationalLensing"] || render["BloomEnabled"] || render["MetricType"]
+                              || render["PhysicallyAccurate"]);
         }
     }
 
-    AppStateService::AppStateService(std::shared_ptr<UiState> uiState, std::shared_ptr<UiPreferences> preferences,
+    AppStateService::AppStateService(std::shared_ptr<UiState> uiState, std::shared_ptr<RenderSettingsService> renderSettings,
+                                      std::shared_ptr<UiPreferences> preferences,
                                       std::shared_ptr<IFileSystem> fileSystem, std::shared_ptr<Logger> logger)
-        : m_UiState(std::move(uiState)), m_Preferences(std::move(preferences)),
+        : m_UiState(std::move(uiState)), m_RenderSettings(std::move(renderSettings)), m_Preferences(std::move(preferences)),
           m_FileSystem(std::move(fileSystem)), m_Logger(std::move(logger))
     {
     }
@@ -131,6 +101,7 @@ namespace MoleHole
                 if (const auto v = ui["ShowSystemWindow"]) m_UiState->ShowSystemWindow = v.as<bool>();
                 if (const auto v = ui["ShowSceneWindow"]) m_UiState->ShowSceneWindow = v.as<bool>();
                 if (const auto v = ui["ShowDebugWindow"]) m_UiState->ShowDebugWindow = v.as<bool>();
+                if (const auto v = ui["ShowRenderWindow"]) m_UiState->ShowRenderWindow = v.as<bool>();
                 if (const auto v = ui["ShowGeneralRelativityWindow"])
                     m_UiState->ShowGeneralRelativityWindow = v.as<bool>();
                 if (const auto v = ui["ShowScienceWindow"]) m_UiState->ShowScienceWindow = v.as<bool>();
@@ -143,16 +114,30 @@ namespace MoleHole
             }
             if (const auto render = node["Render"])
             {
-                ForEachRenderToggle(m_UiState->Render, [&](const char* name, auto& value)
-                {
-                    if (const auto v = render[name]) value = v.template as<std::remove_cvref_t<decltype(value)>>();
-                });
                 if (const auto v = render["ShowCameraGizmos"]) m_UiState->ShowCameraGizmos = v.as<bool>();
-                if (const auto v = render["GpuPrecision"])
+            }
+            if (const auto defaults = node["RenderDefaults"])
+            {
+                std::vector<std::string> warnings;
+                m_RenderSettings->SetDefaults(RenderProfileSet::FromYaml(defaults, &warnings));
+                for (const auto& warning : warnings) m_Logger->Warn("AppStateService: {}", warning);
+            }
+            else if (HasLegacyRenderKeys(node["Render"]))
+            {
+                RenderProfile legacy;
+                legacy.Name = "Legacy";
+                legacy.Description = "Render settings from before profiles existed.";
+                legacy.Base = "Lensed";
+                legacy.Settings = LegacyRenderSettings(node["Render"]);
+                RenderProfileSet defaults;
+                defaults.Add(std::move(legacy));
+                for (const auto context : {RenderContext::Edit, RenderContext::Play, RenderContext::Export})
                 {
-                    if (const auto p = Units::PrecisionFromName(v.as<std::string>()); p && *p != Units::Precision::F128)
-                        m_UiState->Render.GpuPrecision = *p;
+                    defaults.Assign(context, "Legacy");
                 }
+                m_RenderSettings->SetDefaults(std::move(defaults));
+                m_Logger->Info("AppStateService: migrated the render toggles of '{}' into the 'Legacy' profile",
+                               m_StatePath.string());
             }
             if (const auto simulation = node["Simulation"])
             {
@@ -230,17 +215,17 @@ namespace MoleHole
             root["UI"]["ShowSystemWindow"] = m_UiState->ShowSystemWindow;
             root["UI"]["ShowSceneWindow"] = m_UiState->ShowSceneWindow;
             root["UI"]["ShowDebugWindow"] = m_UiState->ShowDebugWindow;
+            root["UI"]["ShowRenderWindow"] = m_UiState->ShowRenderWindow;
             root["UI"]["ShowGeneralRelativityWindow"] = m_UiState->ShowGeneralRelativityWindow;
             root["UI"]["ShowScienceWindow"] = m_UiState->ShowScienceWindow;
             root["UI"]["DisplayUnits"] = std::string(Units::DisplayPresetName(Units::GetDisplayPreset()));
             root["UI"]["ShowAnimationGraphWindow"] = m_UiState->ShowAnimationGraphWindow;
 
-            ForEachRenderToggle(m_UiState->Render, [&](const char* name, auto& value) { root["Render"][name] = value; });
             root["Render"]["ShowCameraGizmos"] = m_UiState->ShowCameraGizmos;
+            root["RenderDefaults"] = m_RenderSettings->Defaults().ToYaml();
 
             root["Simulation"]["TickRate"] = m_UiState->SimulationTickRate;
             root["Simulation"]["Precision"] = std::string(Units::PrecisionName(m_UiState->SimulationPrecision));
-            root["Render"]["GpuPrecision"] = std::string(Units::PrecisionName(m_UiState->Render.GpuPrecision));
 
             root["LastExportDirectory"] = GetLastExportDirectory();
             root["DefaultExportDirectory"] = GetDefaultExportDirectory();

@@ -86,11 +86,12 @@ namespace
 
     struct ViewportHudLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, SceneManager, UiState>;
+        using Dependencies = std::tuple<Logger, SceneManager, UiState, RenderSettingsService>;
 
         ViewportHudLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<SceneManager> scenes,
-                         std::shared_ptr<UiState> uiState)
-            : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState))
+                         std::shared_ptr<UiState> uiState, std::shared_ptr<RenderSettingsService> renderSettings)
+            : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState)),
+              m_RenderSettings(std::move(renderSettings))
         {
         }
 
@@ -109,7 +110,7 @@ namespace
 
             auto sceneLock = runner->LockRenderScene();
             const Scene& scene = *sceneLock;
-            const RenderFrame frame = RenderFrame::ForScene(scene, static_cast<FrameMode>(m_UiState->Render.FrameMode),
+            const RenderFrame frame = RenderFrame::ForScene(scene, m_RenderSettings->Effective().LengthUnit,
                                                             m_UiState->ViewPositionM);
             const glm::mat4 viewProj = BuildViewProjection(*m_UiState, width / height, frame);
 
@@ -194,6 +195,7 @@ namespace
     private:
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<UiState> m_UiState;
+        std::shared_ptr<RenderSettingsService> m_RenderSettings;
     };
 }
 
