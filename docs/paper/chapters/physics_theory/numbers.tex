@@ -1,0 +1,90 @@
+\subsection{Numbers and Constants}\label{subsec:physics-numbers-constants}
+
+High-fidelity physical simulation engines require precise numerical representations of physical constants and quantities. 
+These representations must accurately reflect the true values of the constants as established by international standards.
+
+\subsubsection{The Modern SI}
+Following the 2019 revision of the International System of Units (SI)~\cite{BIPM2019SIBrochure,Newell2019NIST330}, 
+the definitions moved from artifact-based definitions to exact numerical definitions based on fundamental constants of nature.
+
+Constants can be categorized into two types: 
+\begin{enumerate}
+\item \textbf{Defined Constants:} These are constants whose numerical values are fixed by definition in the SI standard. 
+    They have zero measurement uncertainty. 
+    These include $c$, $h$, $e$, $k_B$, $N_A$, and others.
+    These values are hardcoded as exact literals to the maximum precision supported by the data type.
+    Many other constants, such as $\mu_0$ and $\epsilon_0$, are derived from these fixed constants 
+    and are also treated as exact values.
+\item \textbf{Experimental Constants:} These constants are determined through empirical measurement 
+    and carry experimental uncertainties\cite{Mohr2016CODATA}. 
+    These include the gravitational constant ($G$), the fine-structure constant ($\alpha$), 
+    and particle/object masses (e.g., electron mass $m_e$, hydrogen mass $m_H$, solar mass $M_\odot$). 
+    While CODATA provides recommended values along with their uncertainties, 
+    they are treated as floating-point values subject to experimental updates.
+\end{enumerate}
+
+\subsubsection{Integer Overflows}
+
+Discrete quantities are represented as binary signed or unsigned integers,
+which can overflow when their values exceed the maximum or minimum representable values.
+The range of an $n$-bit signed integer is $[-2^{n-1}, 2^{n-1}-1]$,
+while an unsigned integer has a range of $[0, 2^n-1]$.
+
+When an integer exceeds its maximum value, it wraps around to the minimum value (and vice versa).
+Therefore, it is crucial to use sufficiently large integer types and/or implement overflow checking mechanisms.
+This requires careful consideration of expected number ranges.
+
+\subsubsection{Floating-Point Representation and Numerical Errors}
+
+Computers approximate real numbers using finite-precision representations 
+governed by the IEEE 754 standard for floating-point arithmetic\cite{IEEE754_2019}.
+Compared to integer representations, floating-point numbers can represent a much wider range of values,
+by using a normalized scientific notation with a fixed number of significant digits (the mantissa) and an exponent.
+
+Floating-point systems introduce fundamental error sources\cite{Goldberg1991FloatingPoint}:
+\begin{itemize}
+\item \textbf{Rounding and Machine Epsilon:} 
+    Real numbers cannot be represented with infinite precision. 
+    The spacing between adjacent representable floating-point numbers is bounded by the Machine Epsilon $\epsilon_{\text{mach}}$.
+    Operations on physical quantities introduce rounding errors that accumulate over multi-step time integrations 
+    (e.g., Verlet or Runge-Kutta integrators).
+    While single precision (32-bit) is the de facto standard for most programing languages, 
+    it is insufficient for large-scale simulations with both high number ranges and small deltas.
+    Double precision (64-bit) and quadruple precision (128-bit) are also available on modern processors, 
+    but come with increased memory usage and computational cost. 
+    See \Cref{tab:floating_point_comparison} for a comparison of IEEE 754 formats.
+\item \textbf{Catastrophic Cancellation:}
+    Subtracting two nearly equal floating-point numbers results in loss of significant digits. 
+    This frequently occurs when computing relative position vectors between close particles 
+    ($\vec{r}_1 - \vec{r}_2$), leading to increased relative errors.
+\item \textbf{Underflow, Overflow, and NaN:}
+    Exceeding the dynamic range of the exponent field results in overflow (yielding $\pm\infty$) 
+    or underflow (yielding subnormal numbers or zero), which can corrupt calculations.
+    A floating-point values might also hold the special value NaN (Not a Number) to indicate undefined or unrepresentable results,
+    such as $0/0$ or $\infty - \infty$.
+\end{itemize}
+
+\begin{table*}
+\centering
+\small
+\caption{Comparison of IEEE 754 floating-point formats\cite{IEEE754_2019}}
+\label{tab:floating_point_comparison}
+\begin{tabularx}{\textwidth}{l c c X X}
+\toprule
+\textbf{Format} & \textbf{Digits} & \textbf{($\epsilon_{\text{mach}}$)} & \textbf{Dynamic Range} & \textbf{Relative Error ($50^{\text{th}}$ / $99^{\text{th}}$)} \\
+\midrule
+\texttt{f32}  & $6-7$   & $\approx 1.19 \times 10^{-7}$  & $1.18 \times 10^{-38}$   to $3.40 \times 10^{38}$   & $\sim 10^{-7}$  / $\sim 10^{-5}$  \\
+\texttt{f64}  & $15-17$ & $\approx 2.22 \times 10^{-16}$ & $2.23 \times 10^{-308}$  to $1.79 \times 10^{308}$  & $\sim 10^{-16}$ / $\sim 10^{-14}$ \\
+\texttt{f128} & $34$    & $\approx 1.92 \times 10^{-34}$ & $3.36 \times 10^{-4932}$ to $1.18 \times 10^{4932}$ & $\sim 10^{-34}$ / $\sim 10^{-32}$ \\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+
+\subsubsection{Simulation Engine Constants Table}
+
+To ensure reproducibility, determinism, and maximum numerical precision, 
+the simulation engine initializes its internal physical constants using exact 2019 SI definitions\cite{Newell2019NIST330, BIPM2019SIBrochure} 
+and standard CODATA evaluated values\cite{Mohr2016CODATA} stored as 64-bit double-precision (or higher) floating-point numbers.
+The excact values can be referenced in the source code under \path{dependencies/gpp/src/core/units/units.cppm}.
+
