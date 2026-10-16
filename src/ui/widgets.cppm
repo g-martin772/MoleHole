@@ -437,7 +437,6 @@ export namespace MoleHole
         return buffers;
     }
 
-    // Right-click picks a display unit; vector components pass a shared `unitScope` so they agree.
     inline bool QuantityValue(const char* id, double* valueSi, GPP::Units::Dimension dimension, double floorSi = 0.0,
                               double min = 0.0, double max = 0.0, ImGuiID unitScope = 0)
     {

@@ -312,7 +312,22 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
     real a = real(u_blackHoles[0].spin) * M;
     real Q = real(u_blackHoles[0].charge);
 
-    rvec3 relativePosCart = rvec3(rayOrigin - u_blackHoles[0].position);
+    vec3 marchOrigin = rayOrigin;
+    {
+        float influenceRadius = calculateEventHorizonRadius(u_blackHoles[0].mass) * 25.0f;
+        vec3 rel = rayOrigin - u_blackHoles[0].position;
+        if (dot(rel, rel) > influenceRadius * influenceRadius) {
+            float enterRadius = influenceRadius * 0.999f;
+            float b = dot(rel, dir);
+            float disc = b * b - (dot(rel, rel) - enterRadius * enterRadius);
+            if (b >= 0.0f || disc < 0.0f) {
+                return texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
+            }
+            marchOrigin = rayOrigin + dir * (-b - sqrt(disc));
+        }
+    }
+
+    rvec3 relativePosCart = rvec3(marchOrigin - u_blackHoles[0].position);
 
     rvec4 relativePosSph = rvec4(0.0, toSphericalReal(relativePosCart));
     rvec4 relativeDirSph = rvec4(1.0, velCartesianToSphericalReal(relativePosCart, rvec3(dir)));

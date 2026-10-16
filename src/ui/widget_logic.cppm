@@ -319,7 +319,6 @@ export namespace MoleHole
         return FormatQuantityAs(valueSi, dimension, forced, 5);
     }
 
-    // Longest label that fits: fewer digits first, then the number without its unit (the tooltip keeps the unit).
     template <typename Measure>
     [[nodiscard]] std::string FitQuantityLabel(const double valueSi, const GPP::Units::Dimension dimension,
                                                const float maxWidth, Measure&& measure,

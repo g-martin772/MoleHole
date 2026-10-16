@@ -1,0 +1,34 @@
+Scene: Sgr A* (scale test)
+SchemaVersion: 2
+TimeScale: 1
+Entities:
+  - Guid: 7700000000000000001
+    Components:
+      Metadata:
+        Guid: 7700000000000000001
+        Name: Sgr A*
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      BlackHole:
+        Mass: {value: 4.297e6, unit: Msun}
+        Spin: 0.5
+        Charge: 0
+        SpinAxis: [0, 1, 0]
+  - Guid: 7700000000000000002
+    Components:
+      Metadata:
+        Guid: 7700000000000000002
+        Name: Camera
+        TypeTag: Camera
+      Transform:
+        Position: {value: [0, 0.4, 1.2], unit: AU}
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 60
+        NearPlane: 1.0e6
+        FarPlane: {value: 100, unit: AU}
+        Primary: true
