@@ -28,18 +28,10 @@ namespace
         RenderSettings Render;
     };
 
-    struct PlayState
-    {
-        std::mutex Mutex;
-        std::optional<Scene> Snapshot;
-        std::optional<RunnerState> Hidden;
-        std::atomic<bool> Active{false};
-    };
-
     struct SimBinding
     {
         std::shared_ptr<SimulationRunner> Runner;
-        std::shared_ptr<PlayState> Play = std::make_shared<PlayState>();
+        std::shared_ptr<PlaySession> Play = std::make_shared<PlaySession>();
     };
 
     // Camera, picking, gizmos and scene switching; the drawing itself is the RenderPipeline's
@@ -106,7 +98,9 @@ namespace
                     sim->Runner->SetTickRate(m_UiState->SimulationTickRate);
                 if (!sim->Runner->IsPaused()) m_Pipeline.RecordObjectPaths(*sim->Runner->AcquireSnapshot());
             }
-            m_FrameParams.Publish(ViewportFrameParams{m_Camera, m_RenderSettings->Effective()});
+            auto render = m_RenderSettings->Effective();
+            render.ResolutionScale *= m_UiState->RenderGovernorScale;
+            m_FrameParams.Publish(ViewportFrameParams{m_Camera, std::move(render)});
         }
 
         void OnRender() override
@@ -173,7 +167,9 @@ namespace
                 const ImVec2 max = ImGui::GetItemRectMax();
                 m_UiState->ViewportScreenMin = {min.x, min.y};
                 m_UiState->ViewportScreenMax = {max.x, max.y};
-                if (m_UiState->ShowRenderStats) DrawStatsOverlay(min);
+                if (m_UiState->ShowRenderStats)
+                    DrawRenderStatsOverlay(min, m_Renderer->GetBufferTargetStats(kViewportBufferId), *m_RenderSettings,
+                                           m_UiState->RenderGovernorScale);
 
                 if (!m_UiState->ExportActive)
                 {
@@ -201,22 +197,6 @@ namespace
         }
 
     private:
-        void DrawStatsOverlay(const ImVec2 min) const
-        {
-            const auto stats = m_Renderer->GetBufferTargetStats(kViewportBufferId);
-            if (!stats) return;
-            const auto context = m_RenderSettings->ActiveContext();
-            const auto text = std::format("{}: {} | {:.1f} fps, GPU {:.1f} ms | tracer {:.0f}%", RenderContextLabel(context),
-                                          m_RenderSettings->ProfileFor(context).Name, stats->FramesPerSecond, stats->GpuMs,
-                                          m_RenderSettings->Effective().ResolutionScale);
-            const ImVec2 size = ImGui::CalcTextSize(text.c_str());
-            const ImVec2 pos(min.x + 8.0f, min.y + 8.0f);
-            auto* list = ImGui::GetWindowDrawList();
-            list->AddRectFilled(ImVec2(pos.x - 4.0f, pos.y - 2.0f), ImVec2(pos.x + size.x + 4.0f, pos.y + size.y + 2.0f),
-                                ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.6f)), 3.0f);
-            list->AddText(pos, ImGui::GetColorU32(ImVec4(0.92f, 0.92f, 0.92f, 1.0f)), text.c_str());
-        }
-
         [[nodiscard]] bool RenderGizmoToolbar(ImVec2 viewportMin, ImVec2 viewportMax)
         {
             struct ButtonSpec { const char* Label; GizmoOperation Op; const char* Tooltip; };
@@ -575,48 +555,27 @@ namespace
             const auto sim = m_Sim.Load();
             if (m_UiState->PendingSnapshotForPlay.exchange(false) && sim->Runner)
             {
-                const bool fresh = !sim->Play->Active.exchange(true);
-                if (fresh) m_Pipeline.ClearObjectPaths();
-                sim->Runner->EnqueueTrackedEdit([play = sim->Play, runner = sim->Runner.get(), fresh](Scene& scene)
-                {
-                    if (fresh)
-                    {
-                        std::scoped_lock lock(play->Mutex);
-                        play->Snapshot = scene.Clone();
-                        play->Hidden = runner->CaptureState();
-                    }
-                    runner->ClearHistory();
-                    runner->SetPaused(false);
-                });
+                if (sim->Play->Resume(sim->Runner)) m_Pipeline.ClearObjectPaths();
             }
 
             if (m_UiState->PendingStopSimulation.exchange(false) && sim->Runner)
             {
-                sim->Play->Active = false;
                 m_RenderSettings->ClearRuntimeOverrides();
                 // Render settings edited while playing are kept; everything else returns to the pre-play scene
-                const auto renderExtension = m_RenderSettings->PersistsToScene()
+                sim->Play->Stop(sim->Runner, m_RenderSettings->PersistsToScene()
                                                  ? std::optional(m_RenderSettings->SceneYaml())
-                                                 : std::nullopt;
-                sim->Runner->EnqueueEdit([play = sim->Play, runner = sim->Runner.get(), renderExtension](Scene& scene)
-                {
-                    std::optional<Scene> snapshot;
-                    std::optional<RunnerState> hidden;
-                    {
-                        std::scoped_lock lock(play->Mutex);
-                        snapshot = std::exchange(play->Snapshot, std::nullopt);
-                        hidden = std::exchange(play->Hidden, std::nullopt);
-                    }
-                    if (snapshot)
-                    {
-                        if (renderExtension) StoreRenderExtension(*snapshot, *renderExtension);
-                        Scene::SyncInto(*snapshot, scene);
-                    }
-                    if (hidden) runner->RestoreState(*hidden);
-                    runner->ClearHistory();
-                    runner->SetPaused(true);
-                });
+                                                 : std::nullopt);
             }
+        }
+
+        // Lowers the tracer resolution while the frame time is over the profile's budget; interactive contexts only
+        void UpdateGovernor(const RenderContext context)
+        {
+            const auto& settings = m_RenderSettings->Effective();
+            const bool active = settings.FrameGovernor && (context == RenderContext::Edit || context == RenderContext::Play);
+            const auto stats = active ? m_Renderer->GetBufferTargetStats(kViewportBufferId) : std::nullopt;
+            m_UiState->RenderGovernorScale = m_Governor.Update(active && stats && stats->Visible,
+                                                               stats ? stats->AverageFrameMs : 0.0, settings.FrameBudgetMs);
         }
 
         // The profile for what the viewport is doing, scripts' overrides, and the mirror of edits into the scene
@@ -628,6 +587,7 @@ namespace
             else if (m_UiState->ReferenceView) context = RenderContext::Reference;
             else if (sim->Runner && !sim->Runner->IsPaused()) context = RenderContext::Play;
             m_RenderSettings->SetActiveContext(context);
+            UpdateGovernor(context);
 
             std::vector<std::string> errors;
             m_RenderSettings->DrainPosted(&errors);
@@ -799,6 +759,7 @@ namespace
 
         // ---- UI thread only ----
         std::chrono::steady_clock::time_point m_LastRenderWrite;
+        FrameGovernor m_Governor;
         int m_SceneCounter{0};
         Camera m_Camera;
         bool m_HasLastMouse{false};

@@ -36,6 +36,8 @@ export namespace MoleHole
         std::string GitCommit;
         GPP::GpuCapabilities Gpu;
         double WallSeconds = 0.0;
+        // GPU time of the last captured frame (what the viewport target measured)
+        double GpuMs = 0.0;
         std::string Timestamp;
     };
 

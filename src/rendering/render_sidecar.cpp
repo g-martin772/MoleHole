@@ -72,6 +72,7 @@ namespace MoleHole
         root["Timestamp"] = info.Timestamp;
         root["GitCommit"] = info.GitCommit;
         root["WallSeconds"] = info.WallSeconds;
+        root["GpuMs"] = info.GpuMs;
 
         auto output = root["Output"];
         output["Path"] = info.OutputPath;

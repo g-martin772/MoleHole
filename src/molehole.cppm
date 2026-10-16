@@ -6,6 +6,7 @@ export import :Simulation.Components;
 export import :Simulation.Picking;
 export import :Simulation.Gravity;
 export import :Simulation.ObjectPaths;
+export import :Simulation.PlaySession;
 export import :Simulation.AnimationGraph;
 export import :Simulation.SceneGraphs;
 export import :Simulation.GraphHistory;

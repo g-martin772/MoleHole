@@ -45,6 +45,8 @@ export namespace MoleHole
         FrameMode LengthUnit = FrameMode::PrimaryBlackHole;
 
         float ResolutionScale = 100.0f;
+        bool FrameGovernor = false;
+        float FrameBudgetMs = 33.3f;
 
         bool Fxaa = true;
         bool Bloom = true;
@@ -67,6 +69,50 @@ export namespace MoleHole
     };
 
     [[nodiscard]] const GPP::SettingRegistry<RenderSettings>& RenderSettingRegistry();
+
+    // Frame-time governor: next multiplier (0.25..1) on the resolution scale. Shrinks when the frame time is over
+    // budget (pixel count is roughly proportional to frame time, so by the square root of the ratio), recovers slowly
+    // when well under it, and moves in 5 % steps so the tracer targets are not reallocated for tiny changes.
+    [[nodiscard]] inline float GovernorStep(const float scale, const double frameMs, const double budgetMs)
+    {
+        constexpr float kMin = 0.25f;
+        float next = scale;
+        if (frameMs > budgetMs * 1.15 && frameMs > 0.0)
+            next = scale * static_cast<float>(std::clamp(std::sqrt(budgetMs / frameMs), 0.75, 0.97));
+        else if (frameMs < budgetMs * 0.7)
+            next = scale * 1.05f;
+        next = std::round(std::clamp(next, kMin, 1.0f) * 20.0f) / 20.0f;
+        if (next == scale && frameMs > budgetMs * 1.15 && scale > kMin) next = std::max(kMin, scale - 0.05f);
+        if (next == scale && frameMs < budgetMs * 0.7 && scale < 1.0f) next = std::min(1.0f, scale + 0.05f);
+        return next;
+    }
+
+    // Applies GovernorStep twice a second; `active` false (reference views, exports, governor off) resets it to 1
+    class FrameGovernor
+    {
+    public:
+        // Returns the multiplier on the resolution scale
+        float Update(const bool active, const double frameMs, const double budgetMs,
+                     const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now())
+        {
+            if (!active)
+            {
+                m_Scale = 1.0f;
+                return m_Scale;
+            }
+            if (now - m_Last >= std::chrono::milliseconds(500) && frameMs > 0.0)
+            {
+                m_Last = now;
+                m_Scale = GovernorStep(m_Scale, frameMs, budgetMs);
+            }
+            return m_Scale;
+        }
+        [[nodiscard]] float Scale() const noexcept { return m_Scale; }
+
+    private:
+        float m_Scale = 1.0f;
+        std::chrono::steady_clock::time_point m_Last;
+    };
 
     // Settings whose selected option needs hardware this device lacks fall back to their default (then to option 0).
     // Returns one note per setting that was changed.

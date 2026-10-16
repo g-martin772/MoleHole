@@ -7,6 +7,7 @@ import GPP;
 import :UI.WidgetLogic;
 import :UI.Widgets;
 import :Rendering.Settings;
+import :Rendering.SettingsService;
 
 export namespace MoleHole
 {
@@ -139,5 +140,22 @@ export namespace MoleHole
             changed = setting.Set(value, setting.Get(baseline)) || changed;
         }
         return changed;
+    }
+
+    // Profile, fps, GPU time and tracer scale in the corner of the viewport image
+    inline void DrawRenderStatsOverlay(const ImVec2 corner, const std::optional<GPP::Renderer::BufferTargetStats>& stats,
+                                       const RenderSettingsService& settings, const float governorScale)
+    {
+        if (!stats) return;
+        const auto context = settings.ActiveContext();
+        const auto text = std::format("{}: {} | {:.1f} fps, GPU {:.1f} ms | tracer {:.0f}%", RenderContextLabel(context),
+                                      settings.ProfileFor(context).Name, stats->FramesPerSecond, stats->GpuMs,
+                                      settings.Effective().ResolutionScale * governorScale);
+        const ImVec2 size = ImGui::CalcTextSize(text.c_str());
+        const ImVec2 pos(corner.x + 8.0f, corner.y + 8.0f);
+        auto* list = ImGui::GetWindowDrawList();
+        list->AddRectFilled(ImVec2(pos.x - 4.0f, pos.y - 2.0f), ImVec2(pos.x + size.x + 4.0f, pos.y + size.y + 2.0f),
+                            ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.6f)), 3.0f);
+        list->AddText(pos, ImGui::GetColorU32(ImVec4(0.92f, 0.92f, 0.92f, 1.0f)), text.c_str());
     }
 }

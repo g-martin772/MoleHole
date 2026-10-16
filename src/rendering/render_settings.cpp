@@ -116,6 +116,15 @@ namespace MoleHole
                 .Tooltip = "Share of the viewport resolution the tracer renders at. The result is scaled to fit.",
                 .Doc = kDoc, .Min = 25.0, .Max = 200.0, .Cost = 4, .Format = "%.0f%%"}));
 
+            registry.Add(Setting("sampling.governor", &R::FrameGovernor, {
+                .Label = "Frame-time governor", .Group = "Sampling",
+                .Tooltip = "While editing or playing, lowers the resolution scale when the frame time exceeds the budget and\n"
+                           "restores it when there is room. Never active in reference views and exports.",
+                .Doc = kDoc}));
+            registry.Add(Setting("sampling.budget_ms", &R::FrameBudgetMs, {
+                .Label = "Frame budget", .Group = "Sampling", .Doc = kDoc, .Min = 4.0, .Max = 500.0,
+                .Scale = SettingScale::Log, .Format = "%.1f ms", .VisibleWhen = "sampling.governor"}));
+
             registry.Add(Setting("post.fxaa", &R::Fxaa, {
                 .Label = "Anti-aliasing (FXAA)", .Group = "Post", .Doc = kDoc, .Cost = 1}));
             registry.Add(Setting("post.bloom", &R::Bloom, {

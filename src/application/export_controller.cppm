@@ -66,5 +66,6 @@ export namespace MoleHole
         std::shared_ptr<Job> m_Job = std::make_shared<Job>();
         std::filesystem::path m_TempDir;
         std::string m_ProfileName;
+        double m_LastGpuMs{0.0};
     };
 }

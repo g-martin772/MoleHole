@@ -481,3 +481,25 @@ TEST_CASE("The tracer size follows the resolution scale", "[rendering][pipeline]
     CHECK(ScaledTraceExtent({1, 1, 1}, 25.0f).width == 1);     // never empty
     CHECK(ScaledTraceExtent({7, 5, 1}, 50.0f).height == 3);
 }
+
+TEST_CASE("The governor shrinks over budget, recovers with headroom and holds in between", "[rendering][governor]")
+{
+    CHECK(GovernorStep(1.0f, 60.0, 33.0) < 1.0f);
+    CHECK(GovernorStep(1.0f, 60.0, 33.0) >= 0.7f);
+    CHECK(GovernorStep(0.5f, 10.0, 33.0) > 0.5f);
+    CHECK(GovernorStep(0.7f, 30.0, 33.0) == 0.7f);
+    CHECK(GovernorStep(1.0f, 10.0, 33.0) == 1.0f);
+    CHECK(GovernorStep(0.25f, 500.0, 33.0) == 0.25f);
+
+    // Converges towards the budget with a frame time that scales with the pixel count
+    float scale = 1.0f;
+    for (int i = 0; i < 30; ++i) scale = GovernorStep(scale, 120.0 * scale * scale, 33.0);
+    const double settled = 120.0 * scale * scale;
+    CHECK(settled <= 33.0 * 1.15);
+    CHECK(settled >= 33.0 * 0.5);
+    CHECK(std::fmod(scale * 20.0f, 1.0f) < 1e-3f);
+
+    // Even a tiny overshoot moves, so the loop cannot stall just above the budget
+    CHECK(GovernorStep(1.0f, 33.0 * 1.16, 33.0) < 1.0f);
+    CHECK(GovernorStep(0.5f, 33.0 * 0.69, 33.0) > 0.5f);
+}

@@ -99,6 +99,8 @@ export namespace MoleHole
         // Viewport draws with the Reference profile until switched off
         bool ReferenceView = false;
         bool ShowRenderStats = false;
+        // Multiplier the frame-time governor puts on the resolution scale (1 = off or idle)
+        float RenderGovernorScale = 1.0f;
         bool ShowViewportHud = false;
         bool ShowCameraGizmos = true;
         bool ShowSettingsWindow = false;

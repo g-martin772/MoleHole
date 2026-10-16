@@ -168,6 +168,7 @@ namespace MoleHole
             return;
         }
         m_MinSerial = readback.Serial + 1;
+        if (const auto stats = m_Renderer->GetBufferTargetStats(m_BufferTargetId)) m_LastGpuMs = stats->GpuMs;
         if (m_Stepping)
         {
             if (const auto runner = m_Runner())
@@ -308,6 +309,7 @@ namespace MoleHole
         info.CameraFov = m_UiState->ViewFov;
         info.GitCommit = ReadGitCommit(std::filesystem::current_path());
         info.Gpu = m_RenderSettings->Capabilities();
+        info.GpuMs = m_LastGpuMs;
         info.WallSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - m_StartTime).count();
         info.Timestamp = UtcTimestamp();
         if (!WriteRenderSidecar(m_Request.OutputPath, info))
