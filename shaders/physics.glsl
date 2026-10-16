@@ -1,3 +1,7 @@
+#include "real.glsl"
+
+const float PHYS_PI = float(R_PI);
+
 const float STEFAN_BOLTZMANN = GPP_STEFAN_BOLTZMANN;
 
 float calculateEventHorizonRadius(float mass) {
@@ -19,7 +23,7 @@ vec3 calculateAngularMomentumFromSpin(float spin, vec3 spinAxis, float mass) {
 }
 
 float getAccretionDiskTemperature(float mass, float radius, float inner_radius) {
-    float constant = (3.0f * mass) / (8 * PI * STEFAN_BOLTZMANN);
+    float constant = (3.0f * mass) / (8 * PHYS_PI * STEFAN_BOLTZMANN);
     float innerTerm = constant * pow(radius, -3.0f) * (1.0f - sqrt(inner_radius / radius));
     return pow(innerTerm, 0.25f);
 }
@@ -35,7 +39,7 @@ vec3 toSpherical(vec3 pos) {
     float theta = acos(clamp(pos.y / r, -1.0, 1.0));
 
     if (theta < EPSILON) theta = EPSILON;
-    if (theta > (PI - EPSILON)) theta = (PI - EPSILON);
+    if (theta > (PHYS_PI - EPSILON)) theta = (PHYS_PI - EPSILON);
 
     float phi = atan(pos.z, pos.x);
     return vec3(r, theta, phi);
@@ -111,8 +115,8 @@ vec2 directionToSpherical(vec3 direction) {
     float theta = atan(d.z, d.x);
     float phi = asin(d.y);
 
-    float u = (theta + PI) / (2.0 * PI);
-    float v = (phi + PI * 0.5) / PI;
+    float u = (theta + PHYS_PI) / (2.0 * PHYS_PI);
+    float v = (phi + PHYS_PI * 0.5) / PHYS_PI;
 
     return vec2(u, v);
 }

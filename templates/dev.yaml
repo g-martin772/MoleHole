@@ -1,4 +1,5 @@
 Scene: Test
+SchemaVersion: 2
 Entities:
   - Guid: 4380484363935821836
     Components:
@@ -7,7 +8,7 @@ Entities:
         Name: BlackHole
         TypeTag: BlackHole
       Transform:
-        Position: [0, 17, 60]
+        Position: [0, 25102.62564685212, 88597.50228300747]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       RigidBody:
@@ -18,18 +19,18 @@ Entities:
         EnableGravity: false
       Collider:
         Shape: Sphere
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 2
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 2953.2500761002493
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
         IsTrigger: true
       BlackHole:
-        Mass: 1
+        Mass: 1.5111915017305185e+30
         Spin: 0.65
-        Charge: 0
-        SpinAxis: [0.5, 1, 0.1]
+        Charge: 0.8
+        SpinAxis: [0.42, 0.33, -0.27]
   - Guid: 16017086654788356877
     Components:
       Metadata:
@@ -37,7 +38,7 @@ Entities:
         Name: Sphere
         TypeTag: Sphere
       Transform:
-        Position: [4.9999995, 1.9180768e-06, 6.7687088e-06]
+        Position: [7383.124451938105, 0.0028322802277830615, 0.009994844889350213]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       RigidBody:
@@ -48,15 +49,15 @@ Entities:
         EnableGravity: true
       Collider:
         Shape: Sphere
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 0.5
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 738.3125190250623
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
         IsTrigger: false
       Sphere:
-        Radius: 0.5
+        Radius: 738.3125190250623
         Spin: 0
         Color: [0.8, 0.8, 0.9]
         SpinAxis: [0, 1, 0]
@@ -68,7 +69,7 @@ Entities:
         Name: Sphere
         TypeTag: Sphere
       Transform:
-        Position: [44.91294, -4.917491, 31.415022]
+        Position: [66319.57173644296, -7261.290334986145, 46388.20805609551]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       RigidBody:
@@ -79,15 +80,15 @@ Entities:
         EnableGravity: true
       Collider:
         Shape: Sphere
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 0.5
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 738.3125190250623
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
         IsTrigger: false
       Sphere:
-        Radius: 0.5
+        Radius: 738.3125190250623
         Spin: 0
         Color: [0.8, 0.8, 0.9]
         SpinAxis: [0, 1, 0]
@@ -99,7 +100,7 @@ Entities:
         Name: Mesh
         TypeTag: Mesh
       Transform:
-        Position: [-26.746088, 31.006155, 5.1414022]
+        Position: [-39493.943210691985, 45784.46480666306, 7591.923219205994]
         Rotation: [0.032389656, 0.17262217, -0.1752161, 0.96873724]
         Scale: [0.9999993, 0.9999988, 0.9999991]
       RigidBody:
@@ -110,9 +111,9 @@ Entities:
         EnableGravity: true
       Collider:
         Shape: ConvexMesh
-        HalfExtents: [0.5, 0.5, 0.5]
-        Radius: 0.5
-        HalfHeight: 0.5
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 738.3125190250623
+        HalfHeight: 738.3125190250623
         StaticFriction: 0.5
         DynamicFriction: 0.5
         Restitution: 0.1
@@ -120,6 +121,7 @@ Entities:
       Mesh:
         AssetPath: /home/gabriel/Repos/MoleHole/assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
         CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 1476.6250380501247
   - Guid: 14745305380211402418
     Components:
       Metadata:
@@ -127,20 +129,33 @@ Entities:
         Name: Camera
         TypeTag: Camera
       Transform:
-        Position: [-45.52147, 44.78979, 69.01485]
+        Position: [-67218.1423708476, 66137.72536300709, 101909.05550727365]
         Rotation: [-0.16883112, -0.2522404, -0.044743963, 0.9517714]
         Scale: [1.0000001, 0.99999976, 1.0000001]
       Camera:
         Fov: 54
-        NearPlane: 0.1
-        FarPlane: 1000
+        NearPlane: 147.66250380501248
+        FarPlane: 1476625.0380501247
         Primary: true
       Scripts:
         - Name: spring_arm_camera
           Props:
-            ArmLength: 100
+            ArmLength: 30000
+            Pitch: 38.9
             Target: 4380484363935821836
 Graphs:
   Version: 3
   Items:
-    []
+    - Name: Graph
+      Enabled: true
+      Entity: 0
+      Graph:
+        NextId: 78
+        Variables:
+          - Name: Angle
+            Type: Float
+            Default:
+              T: Float
+              V: 0
+        Nodes: []
+        Links: []

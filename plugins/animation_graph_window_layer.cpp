@@ -25,6 +25,10 @@ namespace
     constexpr float kCommentTitleHeight = 26.0f;
 
     constexpr int kNavigateToContentRetryFrames = 15;
+    constexpr float kMinEditorExtent = 64.0f;
+    constexpr const char* kEditorViewPath = ".gpp/node_editor.json";
+    constexpr double kMinEditorZoom = 0.05;
+    constexpr double kMaxEditorViewMagnitude = 1.0e6;
     constexpr std::uint64_t kHighlightTicks = 30;
 
     ImVec4 PinColor(const PinType type) { return ToVec4(GraphPinColor(type)); }
@@ -98,6 +102,24 @@ namespace
     {
         for (const auto& entity : entities) { if (entity.Guid == guid) return &entity; }
         return nullptr;
+    }
+
+    bool EditorViewSane(std::string_view json)
+    {
+        static constexpr std::string_view kZoomKey = "\"zoom\":";
+        const std::size_t zoomAt = json.find(kZoomKey);
+        if (zoomAt == std::string_view::npos) return false;
+        for (std::size_t i = 0; i < json.size();)
+        {
+            const char c = json[i];
+            if (c != '-' && c != '.' && !(c >= '0' && c <= '9')) { ++i; continue; }
+            double value = 0.0;
+            const auto [end, ec] = std::from_chars(json.data() + i, json.data() + json.size(), value);
+            if (ec != std::errc{} || !std::isfinite(value) || std::abs(value) > kMaxEditorViewMagnitude) return false;
+            if (i == zoomAt + kZoomKey.size() && value < kMinEditorZoom) return false;
+            i = static_cast<std::size_t>(end - json.data());
+        }
+        return true;
     }
 
     bool EntityMatchesCategory(const EntityOption& entity, const Node& node)
@@ -881,9 +903,42 @@ namespace
 
         // ---- node-editor canvas ----------------------------------------------------------------
 
-        static ed::EditorContext* CreateEditorContext()
+        static std::size_t LoadEditorView(char* data, void* user)
+        {
+            std::ifstream file(kEditorViewPath, std::ios::binary);
+            if (!file) return 0;
+            const std::string json((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            if (!EditorViewSane(json))
+            {
+                static_cast<AnimationGraphWindowLayer*>(user)->m_Logger->Error("[AnimationGraph] Discarding corrupt node editor view '{}'", kEditorViewPath);
+                file.close();
+                std::error_code ec;
+                std::filesystem::remove(kEditorViewPath, ec);
+                return 0;
+            }
+            if (data) std::memcpy(data, json.data(), json.size());
+            return json.size();
+        }
+
+        static bool SaveEditorView(const char* data, std::size_t size, ed::SaveReasonFlags, void* user)
+        {
+            if (!EditorViewSane({data, size}))
+            {
+                static_cast<AnimationGraphWindowLayer*>(user)->m_Logger->Error("[AnimationGraph] Refusing to save corrupt node editor view");
+                return false;
+            }
+            std::ofstream file(kEditorViewPath, std::ios::binary | std::ios::trunc);
+            file.write(data, static_cast<std::streamsize>(size));
+            return static_cast<bool>(file);
+        }
+
+        ed::EditorContext* CreateEditorContext()
         {
             ed::Config config;
+            config.SettingsFile = nullptr;
+            config.LoadSettings = &LoadEditorView;
+            config.SaveSettings = &SaveEditorView;
+            config.UserPointer = this;
             config.EnableSmoothZoom = true;
             config.SmoothZoomPower = 1.15f;
             return ed::CreateEditor(&config);
@@ -1135,6 +1190,8 @@ namespace
 
         void RenderGraphEditor(const std::vector<EntityOption>& entities)
         {
+            const ImVec2 available = ImGui::GetContentRegionAvail();
+            if (available.x < kMinEditorExtent || available.y < kMinEditorExtent) return;
             if (!m_EditorContext) m_EditorContext = CreateEditorContext();
             ed::SetCurrentEditor(m_EditorContext);
             ApplyEditorStyle();

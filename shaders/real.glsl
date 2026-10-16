@@ -1,3 +1,5 @@
+#ifndef REAL_GLSL
+#define REAL_GLSL
 #ifdef GPP_PRECISION_F64
 #extension GL_ARB_gpu_shader_fp64 : require
 #define real double
@@ -92,3 +94,4 @@ void rsincos_pair(real x, out real s, out real c) {
     c = cos(x);
 #endif
 }
+#endif
