@@ -1,7 +1,12 @@
 const float STEFAN_BOLTZMANN = GPP_STEFAN_BOLTZMANN;
 
 float calculateEventHorizonRadius(float mass) {
-    return 2.0f * mass * G / pow(c, 2);
+    return 2 * G * mass / pow(c, 2);
+}
+
+float calculateEventHorizonRadius(float mass, float a) {
+    float chi = a / mass;
+    return mass * (1 + sqrt(1 - pow(chi, 2)));
 }
 
 float calculateInfluenceRadius(float r_s) {

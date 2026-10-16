@@ -322,10 +322,10 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
     // main loop
     for (int i = 0; i < maxSteps; i++) {
 
-        float dist = float(relativePosSph.y);
+        float dist = relativePosSph.y;
 
         if (u_accretionDiskEnabled == 1) {
-            float opticalDepth = adiskColor(vec4(relativePosSph), colorValue, alpha, r_s, rayOrigin, u_blackHoles[0].mass, u_blackHoles[0].spinAxis);
+            float opticalDepth = adiskColor(relativePosSph, colorValue, alpha, r_s, rayOrigin, u_blackHoles[0].mass, u_blackHoles[0].spinAxis);
 
             // Apply volumetric absorption using Beer-Lambert law
             if (opticalDepth > 0.0) {
