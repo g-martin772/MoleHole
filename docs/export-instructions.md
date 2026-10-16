@@ -12,12 +12,21 @@
 ./build/MoleHole --export-video out.mp4 --width 1920 --height 1080 --duration 10 --fps 60
 ```
 
-## Quality 
+## Quality
+Exports use the **Export** context's render profile (default `Lensed`). Pick another with `--profile`, adjust single settings with `--set`:
 
 ```sh
-./build/MoleHole --export-image out.png --width 3840 --height 2160 \
-    --ray-step-size 0.002 --max-ray-steps 200000
+./build/MoleHole --export-image out.png --width 3840 --height 2160 --profile Reference
+./build/MoleHole --export-image out.png --profile Traced --set transport.max_steps=8000 --set post.bloom=off
+./build/MoleHole --list-settings
 ```
+
+Profiles: `Flat`, `Lensed`, `Traced`, `Reference` (see User Guide → Render profiles and settings), plus user profiles stored in the scene.
+Reference at 1920x1080 takes minutes; `Traced` takes seconds.
+
+## Sidecar
+Next to every export: `out.render.yaml` with the scene hash, the profile and **every** resolved setting, overrides, camera, git commit, GPU and driver, resolution, wall time. Use its `Settings` block to reproduce the image.
+The disk noise still follows the wall clock, so two exports of the same scene are not byte-identical yet (see `docs/physics-roadmap/PROGRESS.md`, P0-1).
 
 ### All flags
 
@@ -30,10 +39,14 @@
 | `--duration <seconds>` | video | 10.0 | Length of the output video |
 | `--fps <n>` | video | 60 | Output framerate; also the capture rate from the live sim |
 | `--scene <path>` | both | `templates/test-scene.yaml` | Scene file to load before rendering |
-| `--ray-step-size <f>` | both | scene default | Overrides the raymarcher's step size |
-| `--max-ray-steps <n>` | both | scene default | Overrides the raymarcher's max step count |
-| `--gpu-precision <f32\|f64>` | both | f32 | Precision of the geodesic integration |
-| `--physically-accurate` | both | off | Use the RK4 geodesic renderer instead of the hybrid one |
-| `--metric <0-3>` | both | 1 | 0 Schwarzschild, 1 Kerr, 2 Reissner–Nordström, 3 Kerr–Newman |
+| `--profile <name>` | both | Export context's profile | Render profile (built-in or stored in the scene) |
+| `--set <key=value>` | both | — | Override one render setting; repeatable; bad keys or values abort with exit code 2 |
+| `--list-settings` | — | — | Print every setting key with default and options, then exit |
+| `--ray-step-size <f>` | both | profile | Same as `--set transport.step_size=<f>` |
+| `--max-ray-steps <n>` | both | profile | Same as `--set transport.max_steps=<n>` |
+| `--gpu-precision <f32\|f64>` | both | f32 | Same as `--set transport.gpu_precision=<p>` |
+| `--physically-accurate` | both | off | Same as `--set transport.mode=Integrated` |
+| `--metric <0-3>` | both | profile | Same as `--set spacetime.solution=<n>` (0 Schwarzschild, 1 Kerr, 2 Reissner–Nordström, 3 Kerr–Newman) |
 
-Step size is in units of the render frame's gravitational radius (see the Debug window).
+Step size is in units of the render frame's gravitational radius (`camera.length_unit`).
+Not available yet: `--spp`, `--seed`, `--format`, `--denoise`, `--time-scale`, `--sim-start` (no accumulation or sampler yet).

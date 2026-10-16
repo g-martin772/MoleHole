@@ -7,7 +7,8 @@ Open from sidebar or View menu.
 | Scene | outliner, add objects, inspector |
 | Camera | FOV, speed, sensitivity, reset, scene-camera options |
 | System | tick rate, perf, system info |
-| Debug | render toggles, accretion disk, overlays |
+| Render | render profiles, every render setting, stats, GPU capabilities |
+| Debug | display units, CPU precision, overlays, debug view |
 | Viewport HUD | stats overlay |
 | General Relativity | theory + metric info |
 | Science | science info |
@@ -85,12 +86,14 @@ Open from sidebar or View menu.
 ### System
 - Sim tick rate (slider + presets)
 
+### Render
+- All render settings live here, grouped (Spacetime, Transport, Radiometry, Disk, Objects, Camera, Sampling, Post, Overlays, Debug); search box on top
+- Each setting shows a cost badge (5 pips), a tooltip with its key, and a reset button when it differs from the profile's base
+- See [Render profiles and settings](#render-profiles-and-settings)
+
 ### Debug
-- Toggle: black holes, spheres, lensing, redshift, Doppler, physically accurate
-- Accretion disk: height, speed, noise scale/LOD, volumetric
-- Ray step size, max steps, adaptive step rate
-- Metric type
-- Gravity grid, collider wireframe, object paths
+- Display units, CPU simulation precision
+- Overlays (gravity grid, collider wireframe, object paths) and the debug view of the active profile
 - View menu → Camera Gizmos
 
 ### Config files
@@ -106,6 +109,56 @@ Open from sidebar or View menu.
 - Hover a field to see the SI value and a few other units
 - Right-click a field to force one display unit for it
 - Precision: CPU simulation f32/f64/f128, GPU render f32/f64
+
+## Render profiles and settings
+A **profile** is a named bundle of every render setting. A **context** says which profile is used when:
+
+| Context | Used when | Default profile |
+|---|---|---|
+| Viewport: editing | sim stopped or paused | Flat |
+| Viewport: playing | sim running | Lensed |
+| Viewport: reference | "Render reference" is on | Reference |
+| Export | exporting (GUI or CLI) | Lensed |
+
+Built-in profiles (read-only):
+
+| Profile | Ray transport | Use |
+|---|---|---|
+| Flat | straight rays, no lensing, no bloom | editing, placing objects |
+| Lensed | analytic lens, bloom, flare | interactive default, what the app always looked like |
+| Traced | integrated geodesics, step 0.05, 4000 steps | cinematic preview, seconds per frame |
+| Reference | integrated geodesics, step 0.01, 100000 steps, volumetric disk | final renders, minutes per frame |
+
+- Change a setting while a built-in is selected: it is forked into `<name> (edited)` and assigned to that context
+- Duplicate / rename / delete user profiles in the Render window
+- "Edit what the viewport shows" (on): the Render window edits the profile of the active context. Off: pick any context to prepare it (e.g. Export)
+- Settings are stored in the scene (`Render:` key, only user profiles as differences from their base, plus the context map), so a scene renders the same on another machine. Scenes without it use the app defaults (`.gpp/molehole_state.yaml`, "Use as app default")
+- A scene saved before profiles existed picks up your old toggles as a profile called `Legacy` (once)
+- Render settings edited while playing survive Stop
+- Render reference: viewport uses the Reference context's profile until you switch back
+- Stats overlay: profile, fps, GPU ms and tracer resolution in the viewport corner
+
+```yaml
+Render:
+  Version: 1
+  Contexts: {Edit: Flat, Play: Cinematic, Reference: Reference, Export: Cinematic}
+  Profiles:
+    - Name: Cinematic
+      Base: Lensed
+      Set: {disk.volumetric: true, post.bloom_intensity: 8}
+```
+
+### Settings worth knowing
+- `transport.mode`: Straight / Analytic lens / Integrated. Only Integrated evaluates the spacetime (`spacetime.solution`: Schwarzschild, Kerr, Reissner-Nordstrom, Kerr-Newman; spin a* and charge q* come from each black hole)
+- `sampling.resolution_scale` (25-200 %): the tracer renders at that share of the viewport and the image is scaled. Bloom width is kept the same on screen
+- `sampling.governor` + `sampling.budget_ms`: while editing or playing, lowers the resolution scale (to 25 % at worst) when the frame time exceeds the budget and restores it with headroom; never in reference views or exports
+- `debug.view`: step count heat map, termination reason (sky, horizon, object, opaque disk, ran out of steps, crosshair). Bloom, flare and FXAA are off in debug views
+- `transport.gpu_precision` f64 needs `shaderFloat64`; a setting the GPU cannot run is greyed with the reason, and loaded profiles fall back to the default (shown in the Render window)
+- Mesh objects are rasterised over the traced image (not lensed, always in front). The Integrated transport does not draw spheres yet
+
+### Environment
+- `GPP_GPU=<name part>`: choose the GPU by name instead of the highest score
+- `GPP_GPU_DISABLE=rayQuery,shaderFloat64,...`: behave like a GPU without those features (keys in the Render window's Device section)
 
 ## Components
 | Component | Fields |
@@ -174,6 +227,7 @@ return {
 ### API
 - `scene.exists(e)`, `scene.get(e, comp, field)`, `scene.set(e, comp, field, v)`
 - `scene.find(name)`, `scene.name(e)`, `scene.query(...)`, `scene.look_at(...)`
+- `render.set(key, value)`, `render.get(key)`: change or read a render setting (see `./build/MoleHole --list-settings`) for the running simulation only. The profile is not edited; it reverts on Stop or scene load. Unknown keys or bad values are script errors
 - `vector.create(x,y,z)`, `vec2()`, `vec4()`
 - `math.random` is seeded by the sim (deterministic)
 - Sandboxed: no io / os
@@ -189,8 +243,11 @@ CLI, headless. Output PNG / MP4 (needs ffmpeg).
 ./build/MoleHole --export-image out.png --width 1920 --height 1080 --scene templates/test-scene.yaml
 ./build/MoleHole --export-video out.mp4 --duration 10 --fps 60
 ```
-- GUI: Export → Export Render…
-- Flags: `--width --height --duration --fps --scene --ray-step-size --max-ray-steps --gpu-precision --physically-accurate --metric`
+- GUI: Export → Export Render… (pick a render profile, default: the Export context's)
+- Flags: `--width --height --duration --fps --scene --profile NAME --set key=value --list-settings`; the older `--ray-step-size --max-ray-steps --gpu-precision --physically-accurate --metric` still work
+- Every export writes `<output>.render.yaml` (scene hash, profile and all settings, camera, git commit, GPU, GPU ms, wall time)
+- Disk noise follows the wall clock; `--set disk.speed=0` makes an export reproducible
+- `tools/bench.py`: time every profile, keep or compare golden images
 - Full table: `docs/export-instructions.md`
 
 ## Scene file

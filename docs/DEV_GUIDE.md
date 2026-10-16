@@ -58,12 +58,21 @@ cmake --build --preset vcpkg
 ctest --test-dir build
 ```
 
+### Benchmarks
+```sh
+python3 tools/bench.py --profiles Flat Lensed Traced --width 1920 --height 1080   # GPU ms per profile
+python3 tools/bench.py --save-golden .gpp/golden && python3 tools/bench.py --compare .gpp/golden
+```
+Exports use a static disk, so one machine produces byte-identical images.
+
 ## Layout
 ```
 MoleHole/
   src/main.cpp           entry, DI, layers
   src/molehole.cppm      module root
   src/simulation/        components, graph system
+  src/rendering/         RenderSettings + profiles, RenderPipeline (stages), sidecar, RenderFrame
+  src/application/       app state, ExportController, SceneLoader
   src/ui/                UiState, widgets, theme helpers
   plugins/               hot-reload UI layers
   scripts/  combos/  templates/  shaders/  font/
@@ -82,7 +91,7 @@ gpp/
 - Layers + theme + viewport = `.so` plugins next to `MoleHole`
 - Rebuild target → app reloads (polls 300ms, `config.json`)
 - Shaders hot reload too
-- `molehole_core` = shared lib, not hot-reloaded since that is basically a full app restart anyway
+- `molehole_core` = shared lib, not hot-reloaded since that is basically a full app restart anyway. That includes `RenderPipeline` and its stages (`src/rendering/render_pipeline.cpp`): rebuild and restart after changing them. Shaders still reload live
 
 ---
 
@@ -150,9 +159,21 @@ GPP_DEFINE_HOT_RELOAD_LAYER(FooLayer)
 - Cross-thread state: `UiState` (atomics, `OneShot`, `LatestValue`)
 
 ## Add a render setting
-- Field in `RenderToggles` (`src/ui/ui_state.cppm`)
-- UI in `plugins/debug_window_layer.cpp`
-- Consume in `plugins/viewport_layer.cpp` + shader in `shaders/`
+One place: the field in `RenderSettings` + one `registry.Add(Setting("group.key", &RenderSettings::Field, {...}))` in `BuildRegistry()` (`src/rendering/render_settings.cpp`).
+That generates the Render window row (cost badge, tooltip, reset, search), the scene `Render:` YAML, `--set group.key=value`, `--list-settings`, `render.set/get` and the sidecar.
+- `SettingMeta`: `Label`, `Group`, `Tooltip`, `Doc`, `Min/Max/Scale`, `Cost` 0-5, `Requires` (a `GpuCapability` key), enum `Options` (+ `OptionLabels`, `OptionRequires`, `OptionCosts`), `VisibleWhen` (`"key"`, `"key=N"`, `"key>=N"`, `"key!=N"`)
+- A new setting defaults to `RenderSettings{}`; built-in profiles are in `BuildBuiltIns()`. Keep `Lensed` equal to the defaults (profiles are saved as diffs against their base)
+- Consume it in a stage (`render_pipeline.cpp`) and the shader. Uniforms: `RaytraceParamsGpu` in `src/rendering/render_data.cppm` (std140, static_asserts) and the block in `shaders/black_hole_rendering.comp`
+- Machinery (generic): `gpp/src/simulation/settings.cppm` (`SettingRegistry<T>`); app side: `RenderProfileSet`, `RenderSettingsService`
+- Test: round trips and registry sanity run over every setting (`tests/unit/rendering/render_settings_tests.cpp`)
+
+## Render pipeline
+`RenderPipeline::Build` appends passes from an ordered list of `IRenderStage`s: Trace, Bloom, LensFlare, Composite, GravityGrid, PhysicsDebug, ObjectPaths, Meshes. A stage whose `Enabled(settings)` is false records nothing.
+- New stage: derive `IRenderStage` in `render_pipeline.cpp`, add it in `RenderPipeline::Initialize` at the right place; `Ready()` reports compiled shaders (exports wait for all)
+- Tracer-resolution targets live in `RenderResources` (`ScaledTraceExtent`); the composite scales them to the viewport
+- `ViewportLayer` (`plugins/viewport_layer.cpp`) only owns camera, picking, gizmos and scene switching; export is `ExportController`, loading is `SceneLoader`
+- Context: `ViewportLayer::UpdateRenderSettings` picks Edit / Play / Reference / Export each update; edits are mirrored into the scene's `Render:` extension (not undoable)
+- GPU features: `VulkanDevice::GetCapabilities()` (gpp); a setting's `Requires` is checked in the UI and `SanitizeForDevice`
 
 ## Talk to the simulation
 ```cpp
@@ -196,7 +217,8 @@ runner.EnqueueCommand(cmd, CommandOptions{.Undoable = runner.IsPaused(), .Label 
 - Config section `GPP.Assets.<Kind>` with `Directories`, `Extensions`
 
 ## Add a CLI flag
-- `ParseExportArgs` in `src/main.cpp`
+- Render settings need none: `--set key=value`
+- Other flags: `ParseExportArgs` in `src/main.cpp`
 - Request struct: `ExportRequest` in `src/ui/ui_state.cppm`
 
 ## Add a test
