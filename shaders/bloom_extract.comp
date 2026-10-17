@@ -4,6 +4,7 @@ layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(set = 0, binding = 0, rgba32f) uniform readonly image2D u_inputImage;
 layout(set = 0, binding = 1, rgba32f) uniform writeonly image2D u_brightImage;
+layout(set = 0, binding = 2, rgba32f) uniform readonly image2D u_exposureImage;
 
 layout(push_constant) uniform PushConstants
 {
@@ -18,7 +19,10 @@ void main() {
     }
 
     vec4 color = imageLoad(u_inputImage, texCoords);
-    float brightness = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+    // Threshold on the exposed value so it means the same under any exposure; the stored glow stays in radiance
+    // units and is exposed together with the image in the composite.
+    float exposure = imageLoad(u_exposureImage, ivec2(0)).r;
+    float brightness = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722)) * exposure;
     vec3 bright = brightness > u_bloomThreshold ? color.rgb : vec3(0.0);
     imageStore(u_brightImage, texCoords, vec4(bright, 1.0));
 }

@@ -154,7 +154,7 @@ Inside it the gas plunges into the hole within a few orbits, so it emits little.
 `ProgradeIscoRadius` minimises E(r) numerically, so it also handles charge. For Kerr the unit tests check it
 against the Bardeen–Press–Teukolsky closed form.
 
-The outer edge is fixed at 20 M (`DISK_OUTER_RS` = 10 r_s in `physics.glsl`). It is a free, artistic
+The outer edge is fixed at 20 M (`kDiskOuterRadiusM` in `render_data.cppm`). It is a free, artistic
 parameter, because nothing in the metric sets it.
 
 - Bardeen, Press & Teukolsky (1972), see §4. The ISCO formula is their eq. 2.21.
@@ -162,9 +162,9 @@ parameter, because nothing in the metric sets it.
 
 ## 6. Disk temperature
 
-The disk uses the Shakura–Sunyaev / Page–Thorne-style profile T⁴ ∝ M r⁻³ (1 − √(r_in / r)), with r_in set
-to the ISCO of the active metric. The full relativistic Novikov–Thorne profile would reuse the same E(r),
-L(r) and Ω(r) and is a natural next step.
+The disk uses the relativistic Page–Thorne flux, computed on the CPU from the same E(r), L(r) and Ω(r) as the
+ISCO, with a physical temperature scale from the hole's mass and accretion rate. Details are in
+`docs/notes/disk_rendering.md`.
 
 - Shakura, N. I. & Sunyaev, R. A. (1973). *Black holes in binary systems. Observational appearance.* A&A 24, 337.
 - Novikov, I. D. & Thorne, K. S. (1973). *Astrophysics of black holes.* In *Black Holes (Les Houches)*, 343–450.
@@ -188,8 +188,9 @@ The shift is applied in two places:
 - **Brightness.** Because I_ν / ν³ is invariant along a ray (Liouville), bolometric intensity scales as g⁴.
   This makes the approaching side of the disk brighter and bluer, and the receding side dimmer and redder.
 
-The hybrid (analytic lens) and flat tracers keep their flat-space approximations (`doppler.glsl`). In the
-hybrid tracer the gas now orbits the spin axis.
+The analytic-lens tracer has no geodesic momentum. It takes the photon's angular momentum from its local
+straight-line direction and then applies the same formula, frame dragging included (`analyticLensDiskG` in
+`disk.glsl`). The flat tracer keeps its flat-space approximation (`doppler.glsl`).
 
 - Cunningham, C. T. (1975). *The effects of redshifts and focusing on the spectrum of an accretion disk around a Kerr black hole.* ApJ 202, 788.
 - Luminet, J.-P. (1979). *Image of a spherical black hole with thin accretion disk.* A&A 75, 228.
@@ -198,10 +199,12 @@ hybrid tracer the gas now orbits the spin axis.
 
 ## 8. Volumetric absorption
 
-The Beer–Lambert attenuation needs a proper length, not an affine-parameter step. The length travelled
+Absorption through the gas needs a proper length, not an affine-parameter step. The length travelled
 through the gas in its rest frame is:
 
     ds = (−p·u_em) dλ = dλ / g
+
+The full radiative transfer through the disk is described in `docs/notes/disk_rendering.md`.
 
 ## Limitations
 

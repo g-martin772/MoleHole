@@ -16,7 +16,7 @@ export namespace MoleHole
         glm::vec3 Position{0.0f}; float Mass{0.0f};
         // Spin and Charge are a/M and Q/M; after FillMetricData they hold the clamped values of the active metric.
         glm::vec3 SpinAxis{0.0f, 1.0f, 0.0f}; float Spin{0.0f};
-        float Charge{0.0f}; float HorizonRadius{0.0f}; float IscoRadius{0.0f}; float _Pad0{0.0f};
+        float Charge{0.0f}; float HorizonRadius{0.0f}; float IscoRadius{0.0f}; float MassSolar{0.0f};
     };
     static_assert(sizeof(BlackHoleGpuData) == 48);
 
@@ -30,6 +30,9 @@ export namespace MoleHole
 
     constexpr int kMaxBlackHoles = 8;
     constexpr int kMaxSpheres = 16;
+    constexpr int kDiskProfileVec4s = kDiskProfileSamples / 4;
+    // Outer edge of the disk in M; a free (artistic) parameter, nothing in the metric sets it.
+    constexpr double kDiskOuterRadiusM = 20.0;
 
     struct RaytraceParamsGpu
     {
@@ -83,8 +86,21 @@ export namespace MoleHole
         float _MeshPad0{0.0f};
         float _MeshPad1{0.0f};
         float _MeshPad2{0.0f};
+
+        float DiskAccretionRate{0.1f};
+        float DiskOpacity{2.0f};
+        float DiskDisplayTemperature{0.0f};
+        std::int32_t DiskHotSpots{3};
+
+        // Per black hole: x = peak temperature [K], y = inner radius (ISCO), z = outer radius, both in render units
+        std::array<glm::vec4, kMaxBlackHoles> DiskInfo{};
+        // Per black hole kDiskProfileSamples values of T / peak, log-spaced between DiskInfo.y and DiskInfo.z
+        std::array<glm::vec4, kMaxBlackHoles * kDiskProfileVec4s> DiskProfile{};
     };
-    static_assert(sizeof(RaytraceParamsGpu) == 1424);
+    static_assert(sizeof(RaytraceParamsGpu) == 3616);
+    static_assert(offsetof(RaytraceParamsGpu, DiskAccretionRate) == 1424);
+    static_assert(offsetof(RaytraceParamsGpu, DiskInfo) == 1440);
+    static_assert(offsetof(RaytraceParamsGpu, DiskProfile) == 1568);
     static_assert(offsetof(RaytraceParamsGpu, BlackHoles) == 176);
     static_assert(offsetof(RaytraceParamsGpu, Spheres) == 560);
     static_assert(offsetof(RaytraceParamsGpu, ViewProjection) == 1328);
@@ -105,6 +121,7 @@ export namespace MoleHole
                                : glm::vec3(0.0f, 1.0f, 0.0f);
             gpu.Spin = static_cast<float>(blackHole.Spin);
             gpu.Charge = static_cast<float>(blackHole.Charge);
+            gpu.MassSolar = static_cast<float>(blackHole.Mass / GPP::Units::kSolarMass);
             ++params.NumBlackHoles;
         }
 
@@ -126,19 +143,31 @@ export namespace MoleHole
         }
     }
 
-    // Applies params.MetricType to every black hole and precomputes the radii the shaders need,
-    // so the ISCO root-finding stays on the CPU.
+    // Applies params.MetricType to every black hole and precomputes what the shaders need from the metric:
+    // horizon, ISCO and the Page–Thorne disk temperature profile (params.DiskAccretionRate must be set),
+    // so root-finding and integrals stay on the CPU.
     inline void FillMetricData(RaytraceParamsGpu& params)
     {
         for (int i = 0; i < params.NumBlackHoles; ++i)
         {
-            auto& gpu = params.BlackHoles[static_cast<std::size_t>(i)];
+            const auto index = static_cast<std::size_t>(i);
+            auto& gpu = params.BlackHoles[index];
             const auto metric = MakeKerrNewmanParams(params.MetricType, gpu.Mass, gpu.Spin, gpu.Charge);
             const double mass = metric.Mass > 0.0 ? metric.Mass : 1.0;
             gpu.Spin = static_cast<float>(metric.SpinParameter / mass);
             gpu.Charge = static_cast<float>(metric.Charge / mass);
             gpu.HorizonRadius = static_cast<float>(OuterHorizonRadius(metric));
             gpu.IscoRadius = static_cast<float>(ProgradeIscoRadius(metric));
+
+            const auto disk = BuildDiskProfile(metric, gpu.MassSolar, params.DiskAccretionRate,
+                                               kDiskOuterRadiusM * metric.Mass);
+            params.DiskInfo[index] = glm::vec4(static_cast<float>(disk.PeakTemperature), static_cast<float>(disk.InnerRadius),
+                                               static_cast<float>(disk.OuterRadius), 0.0f);
+            for (int v = 0; v < kDiskProfileVec4s; ++v)
+            {
+                auto& packed = params.DiskProfile[index * kDiskProfileVec4s + static_cast<std::size_t>(v)];
+                for (int c = 0; c < 4; ++c) packed[c] = disk.Temperature[static_cast<std::size_t>(v * 4 + c)];
+            }
         }
     }
 

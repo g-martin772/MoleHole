@@ -1,6 +1,7 @@
 export module MoleHole:Rendering.Metric;
 
 import std;
+import GPP;
 
 // Characteristic radii of the Kerr–Newman family in Boyer–Lindquist coordinates (G = c = 1).
 // Schwarzschild (a = Q = 0), Kerr (Q = 0) and Reissner–Nordström (a = 0) are special cases, so the
@@ -141,5 +142,132 @@ export namespace MoleHole
             else lo = x1;
         }
         return 0.5 * (lo + hi);
+    }
+
+    // Specific angular momentum u_phi of the prograde circular orbit at r.
+    [[nodiscard]] inline double CircularOrbitAngularMomentum(const KerrNewmanParams& p, const double r)
+    {
+        const double omega = ProgradeOrbitalFrequency(p, r);
+        const auto g = EvaluateEquatorialMetric(p, r);
+        const double norm = -(g.Gtt + 2.0 * g.Gtphi * omega + g.Gphiphi * omega * omega);
+        if (!std::isfinite(omega) || !(norm > 0.0)) return std::numeric_limits<double>::quiet_NaN();
+        return (g.Gtphi + g.Gphiphi * omega) / std::sqrt(norm);
+    }
+
+    // Fraction of rest-mass energy radiated by gas spiralling down to the ISCO: 1 - E_isco.
+    [[nodiscard]] inline double RadiativeEfficiency(const KerrNewmanParams& p)
+    {
+        if (p.Mass <= 0.0) return 0.0;
+        return 1.0 - CircularOrbitEnergy(p, ProgradeIscoRadius(p));
+    }
+
+    // Page & Thorne (1974) flux of a geometrically thin, optically thick disk with zero torque at the ISCO,
+    // for unit accretion rate: F = -Omega_,r / (4 pi sqrt(-g) (E - Omega L)^2) * Integral_{r_isco}^{r} (E - Omega L) L_,r dr
+    // with sqrt(-g) = r, the equatorial (t, r, phi) determinant of the Kerr–Newman family in Boyer–Lindquist
+    // coordinates. Evaluated on `radii` (ascending, first >= ISCO); geometric units of p.
+    [[nodiscard]] inline std::vector<double> PageThorneFlux(const KerrNewmanParams& p, const std::span<const double> radii)
+    {
+        std::vector<double> flux(radii.size(), 0.0);
+        if (radii.empty() || p.Mass <= 0.0) return flux;
+
+        const double rIsco = ProgradeIscoRadius(p);
+        const auto derivative = [&](const auto& f, const double r)
+        {
+            const double h = 1e-5 * r;
+            return (f(r + h) - f(r - h)) / (2.0 * h);
+        };
+        const auto omega = [&](const double r) { return ProgradeOrbitalFrequency(p, r); };
+        const auto angularMomentum = [&](const double r) { return CircularOrbitAngularMomentum(p, r); };
+        const auto integrand = [&](const double r)
+        {
+            return (CircularOrbitEnergy(p, r) - omega(r) * angularMomentum(r)) * derivative(angularMomentum, r);
+        };
+
+        // Integrate with Simpson's rule in u = ln r between consecutive radii, starting at the ISCO; the panel count
+        // grows with the gap so sparse or far-out radii stay accurate.
+        const auto integrandLog = [&](const double u) { const double r = std::exp(u); return integrand(r) * r; };
+        double integral = 0.0;
+        double previous = rIsco;
+        for (std::size_t i = 0; i < radii.size(); ++i)
+        {
+            const double r = std::max(radii[i], rIsco);
+            if (r > previous)
+            {
+                const double u0 = std::log(previous);
+                const double u1 = std::log(r);
+                const int panels = 2 * std::max(8, static_cast<int>(std::ceil(64.0 * (u1 - u0))));
+                const double h = (u1 - u0) / panels;
+                double sum = integrandLog(u0) + integrandLog(u1);
+                for (int k = 1; k < panels; ++k) sum += integrandLog(u0 + k * h) * (k % 2 ? 4.0 : 2.0);
+                integral += sum * h / 3.0;
+            }
+            previous = r;
+
+            const double energyMinusOmegaL = CircularOrbitEnergy(p, r) - omega(r) * angularMomentum(r);
+            const double value = -derivative(omega, r) / (4.0 * std::numbers::pi * r * energyMinusOmegaL * energyMinusOmegaL) * integral;
+            flux[i] = std::isfinite(value) ? std::max(value, 0.0) : 0.0;
+        }
+        return flux;
+    }
+
+    constexpr int kDiskProfileSamples = 64;
+
+    // Radial temperature profile of the disk for the shaders: kDiskProfileSamples samples of T / PeakTemperature,
+    // logarithmically spaced between InnerRadius (the ISCO) and OuterRadius.
+    struct DiskProfile
+    {
+        double PeakTemperature{0.0}; // K
+        double InnerRadius{0.0};     // geometric units of the KerrNewmanParams
+        double OuterRadius{0.0};
+        std::array<float, kDiskProfileSamples> Temperature{};
+    };
+
+    // T = (F / sigma)^(1/4) with F = Mdot c^6 / (G^2 M^2) * F_dimensionless(r / M) and
+    // Mdot = eddingtonRatio * L_Edd / (eta c^2), L_Edd = 4 pi G M m_p c / sigma_T.
+    [[nodiscard]] inline DiskProfile BuildDiskProfile(const KerrNewmanParams& p, const double massSolar,
+                                                      const double eddingtonRatio, const double outerRadius)
+    {
+        DiskProfile profile;
+        if (p.Mass <= 0.0 || massSolar <= 0.0) return profile;
+
+        using namespace GPP::Units;
+        constexpr double kG = kGravitationalConstant;
+        constexpr double kC = kSpeedOfLight;
+
+        // Shape in units of M (dimensionless), scaled back to the caller's units at the end.
+        const KerrNewmanParams unit{.Mass = 1.0, .SpinParameter = p.SpinParameter / p.Mass, .Charge = p.Charge / p.Mass};
+        const double rIn = ProgradeIscoRadius(unit);
+        const double rOut = std::max(outerRadius / p.Mass, rIn * 1.01);
+        std::array<double, kDiskProfileSamples> radii{};
+        for (int i = 0; i < kDiskProfileSamples; ++i)
+        {
+            radii[static_cast<std::size_t>(i)] = rIn * std::pow(rOut / rIn, static_cast<double>(i) / (kDiskProfileSamples - 1));
+        }
+        const auto flux = PageThorneFlux(unit, radii);
+
+        const double massKg = massSolar * kSolarMass;
+        const double eddingtonLuminosity = 4.0 * std::numbers::pi * kG * massKg * kProtonMass * kC / kThomsonCrossSection;
+        const double efficiency = std::max(RadiativeEfficiency(unit), 1e-3);
+        const double accretionRate = std::max(eddingtonRatio, 0.0) * eddingtonLuminosity / (efficiency * kC * kC);
+        const double fluxScale = accretionRate * std::pow(kC, 6) / (kG * kG * massKg * massKg);
+
+        double peak = 0.0;
+        std::array<double, kDiskProfileSamples> temperature{};
+        for (int i = 0; i < kDiskProfileSamples; ++i)
+        {
+            const auto index = static_cast<std::size_t>(i);
+            temperature[index] = std::pow(fluxScale * flux[index] / kStefanBoltzmann, 0.25);
+            peak = std::max(peak, temperature[index]);
+        }
+
+        profile.PeakTemperature = peak;
+        profile.InnerRadius = rIn * p.Mass;
+        profile.OuterRadius = rOut * p.Mass;
+        for (int i = 0; i < kDiskProfileSamples; ++i)
+        {
+            const auto index = static_cast<std::size_t>(i);
+            profile.Temperature[index] = peak > 0.0 ? static_cast<float>(temperature[index] / peak) : 0.0f;
+        }
+        return profile;
     }
 }

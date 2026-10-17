@@ -103,3 +103,75 @@ TEST_CASE("FillMetricData writes clamped parameters and radii", "[rendering][met
     CHECK(bh.HorizonRadius == Approx(1.0 + std::sqrt(1.0 - 0.81)));
     CHECK(bh.IscoRadius == Approx(BardeenPressTeukolskyIsco(0.9)).epsilon(1e-4));
 }
+
+TEST_CASE("Radiative efficiency is 1 - E_isco", "[rendering][metric][disk]")
+{
+    // Schwarzschild: 1 - sqrt(8/9); Kerr a = 0.998: about 0.32 (Thorne 1974)
+    CHECK(RadiativeEfficiency({.Mass = 1.0}) == Approx(1.0 - std::sqrt(8.0 / 9.0)).epsilon(1e-5));
+    CHECK(RadiativeEfficiency({.Mass = 1.0, .SpinParameter = 0.998}) == Approx(0.32).epsilon(0.02));
+    CHECK(RadiativeEfficiency({.Mass = 1.0, .SpinParameter = 0.9}) > RadiativeEfficiency({.Mass = 1.0, .SpinParameter = 0.5}));
+}
+
+TEST_CASE("Page-Thorne flux vanishes at the ISCO and approaches the Newtonian disk far out", "[rendering][metric][disk]")
+{
+    for (const double a : {0.0, 0.9})
+    {
+        INFO(a);
+        const KerrNewmanParams p{.Mass = 1.0, .SpinParameter = a};
+        const double rIsco = ProgradeIscoRadius(p);
+        const std::array<double, 4> radii{rIsco, 1.5 * rIsco, 3.0 * rIsco, 1e6};
+        const auto flux = PageThorneFlux(p, radii);
+        CHECK(flux[0] == Approx(0.0).margin(1e-12));
+        CHECK(flux[1] > 0.0);
+        CHECK(flux[2] > 0.0);
+        // Shakura-Sunyaev limit 3 / (8 pi r^3) (1 - sqrt(r_in / r)) with G = M = 1; far enough out that the
+        // relativistic correction to the sqrt(r_in / r) term is below the tolerance
+        const double r = radii[3];
+        const double newtonian = 3.0 / (8.0 * std::numbers::pi * r * r * r) * (1.0 - std::sqrt(rIsco / r));
+        CHECK(flux[3] == Approx(newtonian).epsilon(2e-3));
+    }
+}
+
+TEST_CASE("The Schwarzschild Page-Thorne flux peaks near 9.5 M", "[rendering][metric][disk]")
+{
+    std::vector<double> radii;
+    for (double r = 6.0; r <= 20.0; r += 0.05) radii.push_back(r);
+    const auto flux = PageThorneFlux({.Mass = 1.0}, radii);
+    const auto peak = std::ranges::max_element(flux) - flux.begin();
+    CHECK(radii[static_cast<std::size_t>(peak)] == Approx(9.55).margin(0.15));
+}
+
+TEST_CASE("Disk temperature scales as M^-1/4 at a fixed Eddington ratio", "[rendering][metric][disk]")
+{
+    const KerrNewmanParams p{.Mass = 1.0};
+    const auto stellar = BuildDiskProfile(p, 10.0, 0.1, 20.0);
+    const auto supermassive = BuildDiskProfile(p, 1e7, 0.1, 20.0);
+    CHECK(stellar.PeakTemperature > 3e6);
+    CHECK(stellar.PeakTemperature < 3e7);
+    CHECK(stellar.PeakTemperature / supermassive.PeakTemperature == Approx(std::pow(1e6, 0.25)).epsilon(1e-6));
+    // T ~ (accretion rate)^(1/4)
+    CHECK(BuildDiskProfile(p, 10.0, 1.0, 20.0).PeakTemperature / stellar.PeakTemperature == Approx(std::pow(10.0, 0.25)).epsilon(1e-6));
+    // Normalised table: zero at the ISCO, peak 1
+    CHECK(stellar.Temperature.front() == Approx(0.0f).margin(1e-6));
+    CHECK(*std::ranges::max_element(stellar.Temperature) == Approx(1.0f));
+    CHECK(stellar.InnerRadius == Approx(6.0).epsilon(1e-6));
+    CHECK(stellar.OuterRadius == Approx(20.0));
+}
+
+TEST_CASE("FillMetricData writes the disk profile in render units", "[rendering][metric][disk]")
+{
+    RaytraceParamsGpu params{};
+    params.NumBlackHoles = 1;
+    params.MetricType = static_cast<std::int32_t>(MetricKind::Schwarzschild);
+    params.DiskAccretionRate = 0.1f;
+    params.BlackHoles[0].Mass = 2.0f; // render units
+    params.BlackHoles[0].MassSolar = 10.0f;
+
+    FillMetricData(params);
+
+    const auto& info = params.DiskInfo[0];
+    CHECK(info.x > 3e6f);
+    CHECK(info.y == Approx(12.0f));
+    CHECK(info.z == Approx(static_cast<float>(kDiskOuterRadiusM) * 2.0f));
+    CHECK(params.DiskProfile[0].x == Approx(0.0f).margin(1e-6f));
+}

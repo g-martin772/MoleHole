@@ -92,6 +92,7 @@ TEST_CASE("The Lensed built-in equals the struct defaults so profiles can be sav
     CHECK(set.Find("Flat")->Settings.TransportMode == Transport::Straight);
     CHECK(set.Find("Traced")->Settings.TransportMode == Transport::Integrated);
     CHECK(set.Find("Reference")->Settings.AccretionDiskVolumetric);
+    CHECK_FALSE(set.Find("Reference")->Settings.LensFlare);
     for (const auto& profile : set.Profiles()) CHECK(profile.BuiltIn);
 
     const auto& flat = set.Find("Flat")->Settings;

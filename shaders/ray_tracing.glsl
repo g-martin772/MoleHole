@@ -86,13 +86,13 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
     return record;
 }
 
-vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection, out vec3 hitPoint, out bool hitSolid) {
+// alpha is the transmittance of everything in front (disk gas); it carries over between zones.
+vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, out bool hitEventHorizon, out bool exitedZone, out vec3 newOrigin, out vec3 newDirection, out vec3 hitPoint, out bool hitSolid, inout float alpha) {
     hitEventHorizon = false;
     exitedZone = false;
     hitSolid = false;
     hitPoint = vec3(0.0);
     vec3 color = vec3(0.0);
-    float alpha = 1.0;
 
     newOrigin = rayOrigin;
     newDirection = rayDirection;
@@ -147,21 +147,47 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         }
 
         if (u_accretionDiskEnabled == 1) {
-            // Get optical depth from the accretion disk at this position
             BlackHoleData bh = u_blackHoles[closestBH];
-            vec3 localPos = transpose(spinFrame(bh.spinAxis)) * relativePos;
-            float lutRedshift = hybridDiskLutRedshift(relativePos, -newDirection, r_s, bh.spinAxis);
-            float opticalDepth = adiskColor(localPos, length(relativePos), bh.iscoRadius, DISK_OUTER_RS * r_s,
-                                            bh.mass, lutRedshift, 1.0, color, alpha);
+            Spacetime st = spacetimeOf(bh);
+            mat3 toLocal = transpose(spinFrame(bh.spinAxis));
+            vec3 axis = normalize(bh.spinAxis);
+            vec4 diskInfo = u_diskInfo[closestBH];
+            // The analytic lens is a Schwarzschild-like approximation that breaks down inside the Schwarzschild
+            // photon sphere (3 M), so its disk starts no closer than that even when the ISCO of a fast spin does.
+            diskInfo.y = max(diskInfo.y, 1.5 * r_s);
+            float temperature, column;
 
-            // Apply volumetric absorption using Beer-Lambert law
-            if (opticalDepth > 0.0) {
-                float transmittance = beerLambert(opticalDepth, currentStepSize);
-                alpha *= transmittance;
-                if (alpha < 0.01) {
-                    g_termination = TERM_DISK;
-                    return color;
+            if (u_accretionDiskVolumetric == 1) {
+                float r = length(relativePos);
+                vec3 localPos = toLocal * relativePos;
+                float H = diskScaleHeight(st, r);
+                float zOverH = localPos.z / H;
+                if (r >= diskInfo.y && r <= diskInfo.z && abs(zOverH) < 4.0) {
+                    diskGas(st, closestBH, r, atan(localPos.y, localPos.x), zOverH, temperature, column);
+                    float g = analyticLensDiskG(st, relativePos, newDirection, bh.spinAxis);
+                    diskAccumulate(diskVolumeAbsorption(column, zOverH, H) * currentStepSize,
+                                   diskSourceRadiance(closestBH, temperature, g), color, alpha);
                 }
+            } else {
+                // Thin disk: shade exactly where this step crosses the equatorial plane.
+                vec3 nextPos = relativePos + newDirection * currentStepSize;
+                float z0 = dot(relativePos, axis);
+                float z1 = dot(nextPos, axis);
+                if (z0 * z1 < 0.0) {
+                    vec3 crossing = mix(relativePos, nextPos, z0 / (z0 - z1));
+                    float r = length(crossing);
+                    if (r >= diskInfo.y && r <= diskInfo.z) {
+                        vec3 localPos = toLocal * crossing;
+                        diskGas(st, closestBH, r, atan(localPos.y, localPos.x), 0.0, temperature, column);
+                        float g = analyticLensDiskG(st, crossing, newDirection, bh.spinAxis);
+                        diskAccumulate(diskSheetDepth(column, abs(dot(newDirection, axis))),
+                                       diskSourceRadiance(closestBH, temperature, g), color, alpha);
+                    }
+                }
+            }
+            if (alpha < 0.01) {
+                g_termination = TERM_DISK;
+                return color;
             }
         }
 
@@ -173,7 +199,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
                 hitPoint = newOrigin + newDirection * hit.t;
             }
             g_termination = hit.type == 3 ? TERM_CROSSHAIR : TERM_OBJECT;
-            return color + hit.color;
+            return color + alpha * hit.color;
         }
 
         // Check event horizon
@@ -190,6 +216,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
 
 vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bool hitSolid) {
     vec3 color = vec3(0.0);
+    float alpha = 1.0;
     vec3 currentOrigin = rayOrigin;
     vec3 currentDir = rayDirection;
     hitSolid = false;
@@ -210,7 +237,7 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             bool hitHorizon, exited;
             vec3 newOrigin, newDir;
             vec3 zoneHitPoint; bool zoneHitSolid;
-            vec3 marchColor = rayMarchInfluenceZone(closestBH, currentOrigin, currentDir, hitHorizon, exited, newOrigin, newDir, zoneHitPoint, zoneHitSolid);
+            vec3 marchColor = rayMarchInfluenceZone(closestBH, currentOrigin, currentDir, hitHorizon, exited, newOrigin, newDir, zoneHitPoint, zoneHitSolid, alpha);
             color += marchColor;
             if (zoneHitSolid) {
                 hitSolid = true;
@@ -248,7 +275,7 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
 
             if (hit.hit) {
                 if (hit.t < minDistToInfluence) {
-                    color += hit.color;
+                    color += alpha * hit.color;
                     if (hit.type == 1 || hit.type == 2) {
                         hitSolid = true;
                         hitPoint = currentOrigin + currentDir * hit.t;
@@ -266,13 +293,13 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
                 continue;
             }
 
-            color += texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
+            color += alpha * texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
             return color;
         }
     }
 
     g_termination = TERM_STEPS;
-    color += texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
+    color += alpha * texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
     return color;
 }
 
@@ -289,6 +316,19 @@ bool segmentObjectHit(vec3 origin, vec3 dir, float maxDistance, out vec3 color, 
     return true;
 }
 
+
+// Frequency ratio g = nu_camera / nu_emitted for disk gas at (r, theta) on the integrated path, honouring the
+// redshift / Doppler toggles: the gravitational part is the lapse ratio, the rest is Doppler and frame dragging.
+// gLaunch is the ratio relative to the launch ZAMO, which converts affine steps into proper lengths.
+float integratedDiskG(Spacetime st, real r, real theta, real E, real L, float cameraEnergy, float cameraAlpha,
+                      out float gLaunch) {
+    float alphaEmitter;
+    diskRedshift(st, r, theta, E, L, gLaunch, alphaEmitter);
+    float gTotal = gLaunch * cameraEnergy;
+    float gGravity = alphaEmitter / max(cameraAlpha, 1e-6f);
+    return (u_gravitationalRedshiftEnabled == 1 ? gGravity : 1.0f)
+         * (u_dopplerBeamingEnabled > 0.5f ? gTotal / max(gGravity, 1e-6f) : 1.0f);
+}
 
 // Beyond this radius (in M) rays travel straight; 50 M = 25 r_s, where deflection is a few percent.
 const float INTEGRATION_RADIUS_M = 50.0f;
@@ -360,12 +400,13 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     real phi = startBL.z;
 
     real rEscape = real(influenceRadius);
-    real diskInner = st.rIsco;
-    real diskOuter = real(DISK_OUTER_RS * calculateEventHorizonRadius(mass));
+    vec4 diskInfo = u_diskInfo[0];
+    real diskOuter = real(diskInfo.z);
     real maxStep = real(10.0f * u_rayStepSize * mass);
+    bool volumetricDisk = u_accretionDiskEnabled == 1 && u_accretionDiskVolumetric == 1;
 
     float ergoPath = 0.0f;
-    real prevCosTheta = rcos(y.y);
+    float temperature, column;
 
     g_maxStepCount = u_maxRaySteps;
     g_termination = TERM_STEPS;
@@ -398,8 +439,17 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         // bound the angle covered per step so they are resolved instead of jumping across the pole.
         real angularRate = abs(dy.y) + abs(dphi);
         h = min(h, real(0.02) / max(angularRate, real(1e-6)));
+        // Resolve the vertical profile of the volumetric disk: at most a quarter scale height per step inside it.
+        if (volumetricDisk && r < real(1.1) * diskOuter) {
+            float H = diskScaleHeight(st, float(r));
+            if (abs(float(r * rcos(y.y))) < 5.0f * H) h = min(h, real(0.25f * H));
+        }
 
         vec3 chordStart = objects ? blToCartesian(y.x, y.y, phi, st.a) : vec3(0.0f);
+        real r0 = y.x;
+        real phi0 = phi;
+        real pth0 = y.w;
+        real ct0 = rcos(y.y);
         geodesicStep(st, E, L, y, phi, -h, dy, dphi);
         r = y.x;
         if (isnan(r) || r <= st.rPlus) {
@@ -416,40 +466,50 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             }
         }
 
+        // Equatorial-plane crossing of this step, linearly interpolated in cos(theta).
+        real ct = rcos(y.y);
+        bool crossed = sign(ct) != sign(ct0);
+        real f = crossed ? ct0 / (ct0 - ct) : real(0.0);
+        real rCross = mix(r0, y.x, f);
+
         if (u_debugMode == 4) {
-            real ct = rcos(y.y);
             real rErgo = st.M + sqrt(max(st.M * st.M - st.a * st.a * ct * ct - st.Q * st.Q, real(0.0)));
             if (r < rErgo) ergoPath += float(h);
-            if (sign(ct) != sign(prevCosTheta) && abs(r - st.rIsco) < real(0.1) * st.M) {
+            if (crossed && abs(rCross - st.rIsco) < real(0.1) * st.M) {
                 colorValue += ISCO_RING_COLOR * alpha;
             }
-            prevCosTheta = ct;
         }
 
-        if (u_accretionDiskEnabled == 1 && r >= diskInner && r <= diskOuter) {
-            vec3 localPos = blToCartesian(r, y.y, phi, st.a);
-
-            float gLaunch, alphaEmitter;
-            diskRedshift(st, r, y.y, E, L, gLaunch, alphaEmitter);
-            float gTotal = gLaunch * cameraEnergy;
-            float gGravity = alphaEmitter / max(float(cameraAlpha), 1e-6f);
-            float g = (u_gravitationalRedshiftEnabled == 1 ? gGravity : 1.0f)
-                    * (u_dopplerBeamingEnabled > 0.5f ? gTotal / max(gGravity, 1e-6f) : 1.0f);
-            // The LUT divides the temperature by its redshift coordinate; 0.5 is the unshifted baseline.
-            float lutRedshift = 0.5f / max(g, 1e-3f);
-            // I_nu / nu^3 is invariant, so bolometric intensity scales with g^4.
-            float intensity = pow(g, 4.0f);
-
-            float opticalDepth = adiskColor(localPos, float(r), float(diskInner), float(diskOuter), mass,
-                                            lutRedshift, intensity, colorValue, alpha);
-            if (opticalDepth > 0.0f) {
-                // Proper length in the gas rest frame: ds = (-p . u_em) dlambda.
-                float ds = float(h) / max(gLaunch, 1e-6f);
-                alpha *= beerLambert(opticalDepth, ds);
-                if (alpha < 0.01f) {
-                    g_termination = TERM_DISK;
-                    break;
+        if (u_accretionDiskEnabled == 1) {
+            float gLaunch;
+            if (volumetricDisk) {
+                if (r >= real(diskInfo.y) && r <= diskOuter) {
+                    vec3 localPos = blToCartesian(r, y.y, phi, st.a);
+                    float H = diskScaleHeight(st, float(r));
+                    float zOverH = localPos.z / H;
+                    if (abs(zOverH) < 4.0f) {
+                        float g = integratedDiskG(st, r, y.y, E, L, cameraEnergy, float(cameraAlpha), gLaunch);
+                        diskGas(st, 0, float(r), float(phi), zOverH, temperature, column);
+                        // Proper length through the gas: ds = (-p . u_em) dlambda.
+                        float ds = float(h) / max(gLaunch, 1e-6f);
+                        diskAccumulate(diskVolumeAbsorption(column, zOverH, H) * ds,
+                                       diskSourceRadiance(0, temperature, g), colorValue, alpha);
+                    }
                 }
+            } else if (crossed && rCross >= real(diskInfo.y) && rCross <= diskOuter) {
+                real halfPi = real(R_PI) * real(0.5);
+                float g = integratedDiskG(st, rCross, halfPi, E, L, cameraEnergy, float(cameraAlpha), gLaunch);
+                // |cos| of the ray to the disk normal in the local ZAMO frame: p^(theta) / E_local.
+                real zamoAlpha, zamoOmega;
+                zamo(st, rCross, halfPi, zamoAlpha, zamoOmega);
+                real localEnergy = (E - zamoOmega * L) / max(zamoAlpha, real(1e-6));
+                float mu = float(abs(mix(pth0, y.w, f)) / (rCross * max(localEnergy, real(1e-6))));
+                diskGas(st, 0, float(rCross), float(mix(phi0, phi, f)), 0.0f, temperature, column);
+                diskAccumulate(diskSheetDepth(column, mu), diskSourceRadiance(0, temperature, g), colorValue, alpha);
+            }
+            if (alpha < 0.01f) {
+                g_termination = TERM_DISK;
+                break;
             }
         }
     }

@@ -127,7 +127,7 @@ Built-in profiles (read-only):
 | Flat | straight rays, no lensing, no bloom | editing, placing objects |
 | Lensed | analytic lens, bloom, flare | interactive default, what the app always looked like |
 | Traced | integrated geodesics, step 0.05, 4000 steps | cinematic preview, seconds per frame |
-| Reference | integrated geodesics, step 0.01, 100000 steps, volumetric disk | final renders, minutes per frame |
+| Reference | integrated geodesics, step 0.01, 100000 steps, volumetric disk, no lens flare | final renders, minutes per frame |
 
 - Change a setting while a built-in is selected: it is forked into `<name> (edited)` and assigned to that context
 - Duplicate / rename / delete user profiles in the Render window
@@ -152,7 +152,10 @@ Render:
 - `transport.mode`: Straight / Analytic lens / Integrated. Only Integrated evaluates the spacetime (`spacetime.solution`: Schwarzschild, Kerr, Reissner-Nordstrom, Kerr-Newman; spin a* and charge q* come from each black hole)
 - `sampling.resolution_scale` (25-200 %): the tracer renders at that share of the viewport and the image is scaled. Bloom width is kept the same on screen
 - `sampling.governor` + `sampling.budget_ms`: while editing or playing, lowers the resolution scale (to 25 % at worst) when the frame time exceeds the budget and restores it with headroom; never in reference views or exports
-- `debug.view`: step count heat map, termination reason (sky, horizon, object, opaque disk, ran out of steps, crosshair). Bloom, flare and FXAA are off in debug views
+- `debug.view`: step count heat map, termination reason (sky, horizon, object, opaque disk, ran out of steps, crosshair), geodesic constraint drift and ergosphere & ISCO (Integrated only). Bloom, flare, FXAA and tone mapping are off in debug views
+- Disk physics: inner edge at the ISCO, Page-Thorne temperature from the hole's mass and `disk.accretion_rate` (Eddington ratio), Keplerian rotation of the active metric, redshift and beaming from the metric. `disk.volumetric` off = thin disk shaded where rays cross the plane, on = flared gas with radiative transfer (`disk.height` = scale height in M at r = 10 M). Background: `docs/notes/disk_rendering.md`
+- Disk look: `disk.opacity` (translucent to opaque), `disk.hot_spots`, `disk.noise_scale` / `disk.noise_lod` (turbulence), `disk.speed` (angular speed of the inner edge in rad/s). `disk.display_temperature` (K) colours the hottest gas like an exposure for colour: all temperatures scale together, so ratios and shifts stay physical; 0 = physical colour (stellar-mass holes are ~10^7 K, blue-white)
+- `post.tonemap` (None / Reinhard / ACES) with `post.exposure_mode` (Manual / Auto), `post.exposure` (EV) and `post.exposure_key`. Bloom and flare thresholds apply to the exposed image. None shows the raw tracer output like before HDR
 - `transport.gpu_precision` f64 needs `shaderFloat64`; a setting the GPU cannot run is greyed with the reason, and loaded profiles fall back to the default (shown in the Render window)
 - Mesh objects are rasterised over the traced image (not lensed, always in front). The Integrated transport does not draw spheres yet
 

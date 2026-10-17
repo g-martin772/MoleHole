@@ -52,6 +52,14 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
     float _meshPad0;
     float _meshPad1;
     float _meshPad2;
+
+    float u_diskAccretionRate;     // Eddington ratio
+    float u_diskOpacity;           // vertical optical depth
+    float u_diskDisplayTemperature; // K of the hottest gas; 0 = physical
+    int u_diskHotSpots;
+
+    vec4 u_diskInfo[8];      // x = peak temperature [K], y = inner radius (ISCO), z = outer radius
+    vec4 u_diskProfile[128]; // per hole 64 samples of T / peak, log-spaced between u_diskInfo.y and .z
 };
 
 layout(set = 0, binding = 2) uniform sampler2D u_skyboxTexture;

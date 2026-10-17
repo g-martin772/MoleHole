@@ -52,6 +52,7 @@ export namespace MoleHole
         std::unique_ptr<GPP::VulkanImage> BloomBrightImage;
         std::array<std::unique_ptr<GPP::VulkanImage>, 2> BloomBlurImages;
         std::unique_ptr<GPP::VulkanImage> LensFlareImage;
+        std::unique_ptr<GPP::VulkanImage> ExposureImage; // 1x1, written by the Exposure stage
         GPP::VulkanImage* BloomResult = nullptr;
 
         MeshTraceFrame MeshTrace;

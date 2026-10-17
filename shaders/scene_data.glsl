@@ -9,7 +9,7 @@ struct BlackHoleData
     float charge;        // Q / M of the active metric (clamped on the host)
     float horizonRadius; // outer horizon r+
     float iscoRadius;    // prograde innermost stable circular orbit
-    float _pad0;
+    float massSolar;     // physical mass in solar masses
 };
 
 struct SphereData

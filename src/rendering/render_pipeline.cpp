@@ -455,6 +455,10 @@ namespace MoleHole
 
                 params.DebugMode = static_cast<std::int32_t>(render.Debug);
                 params.MetricType = static_cast<std::int32_t>(render.Solution);
+                params.DiskAccretionRate = render.DiskAccretionRate;
+                params.DiskOpacity = render.DiskOpacity;
+                params.DiskDisplayTemperature = render.DiskDisplayTemperature;
+                params.DiskHotSpots = render.DiskHotSpots;
                 FillMetricData(params);
                 params.IsPhysicallyAccurate = render.TransportMode == Transport::Integrated ? 1 : 0;
                 params.GravitationalLensingEnabled = render.Lensing() ? 1 : 0;
@@ -499,6 +503,51 @@ namespace MoleHole
             MeshAccelerator m_Meshes;
         };
 
+        // Meters the traced image and writes the tone mapper's exposure to a 1x1 image (always 1 without tone mapping)
+        class ExposureStage final : public IRenderStage
+        {
+        public:
+            explicit ExposureStage(RenderResources& res) : m_Res(res)
+            {
+                m_Pipeline = MakeComputePipeline(res, "exposure.comp");
+            }
+
+            [[nodiscard]] std::string_view Name() const override { return "Exposure"; }
+            [[nodiscard]] bool Ready() const override { return Compiled(m_Pipeline); }
+            [[nodiscard]] std::optional<std::string> Failure() const override { return CompileFailure(Name(), {&m_Pipeline}); }
+
+            void Record(RenderFrameContext& ctx) override
+            {
+                const auto device = m_Res.Device;
+                auto* res = &m_Res;
+                const auto exposure = m_Pipeline;
+                struct { std::int32_t Enabled; std::int32_t Auto; float Ev; float Key; } push{
+                    ctx.Settings.ToneMapping != ToneMap::None ? 1 : 0,
+                    ctx.Settings.Exposure == ExposureMode::Auto ? 1 : 0,
+                    ctx.Settings.ExposureEv, ctx.Settings.AutoExposureKey};
+                ctx.Graph.AddComputePass(
+                    "Exposure", {}, {},
+                    [device, res, exposure, push](const vk::CommandBuffer cmd, RenderGraph& g)
+                    {
+                        const auto pipeline = exposure->GetPipeline();
+                        if (!pipeline) return;
+                        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->GetPipeline());
+                        const auto set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
+                        DescriptorSetWriter(device->GetDevice())
+                            .WriteStorageImage(set, 0, res->RaytraceImage->GetImageView())
+                            .WriteStorageImage(set, 1, res->ExposureImage->GetImageView())
+                            .Update();
+                        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline->GetLayout(), 0, set, {});
+                        cmd.pushConstants(pipeline->GetLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(push), &push);
+                        cmd.dispatch(1, 1, 1);
+                    });
+            }
+
+        private:
+            RenderResources& m_Res;
+            std::shared_ptr<ShaderPipeline> m_Pipeline;
+        };
+
         class BloomStage final : public IRenderStage
         {
         public:
@@ -537,6 +586,7 @@ namespace MoleHole
                         DescriptorSetWriter(device->GetDevice())
                             .WriteStorageImage(set, 0, res->RaytraceImage->GetImageView())
                             .WriteStorageImage(set, 1, res->BloomBrightImage->GetImageView())
+                            .WriteStorageImage(set, 2, res->ExposureImage->GetImageView())
                             .Update();
                         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline->GetLayout(), 0, set, {});
                         cmd.pushConstants(pipeline->GetLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(float), &threshold);
@@ -615,6 +665,7 @@ namespace MoleHole
                         DescriptorSetWriter(device->GetDevice())
                             .WriteStorageImage(set, 0, blurred->GetImageView())
                             .WriteStorageImage(set, 1, res->LensFlareImage->GetImageView())
+                            .WriteStorageImage(set, 2, res->ExposureImage->GetImageView())
                             .Update();
                         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline->GetLayout(), 0, set, {});
                         struct { float Intensity; float Threshold; std::int32_t Enabled; } push{
@@ -685,6 +736,8 @@ namespace MoleHole
                                                        vk::ImageLayout::eGeneral)
                             .WriteCombinedImageSampler(set, 2, res->LensFlareImage->GetImageView(), res->LensFlareImage->GetSampler(),
                                                        vk::ImageLayout::eGeneral)
+                            .WriteCombinedImageSampler(set, 3, res->ExposureImage->GetImageView(), res->ExposureImage->GetSampler(),
+                                                       vk::ImageLayout::eGeneral)
                             .Update();
                         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->GetLayout(), 0, set, {});
                         struct
@@ -697,9 +750,11 @@ namespace MoleHole
                             float LensFlareIntensity;
                             float RtWidth;
                             float RtHeight;
+                            std::int32_t ToneMapping;
                         } push{settings.Fxaa ? 1 : 0, settings.Bloom ? 1 : 0, settings.BloomIntensity,
                                settings.BloomDebug ? 1 : 0, settings.LensFlare ? 1 : 0, settings.LensFlareIntensity,
-                               static_cast<float>(traceExtent.width), static_cast<float>(traceExtent.height)};
+                               static_cast<float>(traceExtent.width), static_cast<float>(traceExtent.height),
+                               static_cast<std::int32_t>(settings.ToneMapping)};
                         cmd.pushConstants(pipeline->GetLayout(), vk::ShaderStageFlagBits::eFragment, 0, sizeof(push), &push);
                         cmd.draw(3, 1, 0, 0);
                     });
@@ -1089,6 +1144,7 @@ namespace MoleHole
         auto trace = std::make_unique<TraceStage>(res, impl.StartTime);
         trace->Initialize();
         impl.Stages.push_back(std::move(trace));
+        impl.Stages.push_back(std::make_unique<ExposureStage>(res));
         impl.Stages.push_back(std::make_unique<BloomStage>(res));
         impl.Stages.push_back(std::make_unique<LensFlareStage>(res));
         impl.Stages.push_back(std::make_unique<CompositeStage>(res));
@@ -1145,10 +1201,11 @@ namespace MoleHole
             CreateOrResize(res, res.LensFlareImage, traceExtent, "ViewportLensFlare");
             res.TraceExtent = traceExtent;
         }
+        if (!res.ExposureImage) CreateOrResize(res, res.ExposureImage, vk::Extent3D{1, 1, 1}, "ViewportExposure");
         res.BloomResult = res.BloomBlurImages[0].get();
         res.MeshTrace = {};
 
-        // A debug view shows the tracer's raw output: no glow, flare or smoothing on top of it
+        // A debug view shows the tracer's raw output: no glow, flare, smoothing or tone mapping on top of it
         RenderSettings settings = inputs.Settings;
         if (settings.Debug != DebugView::None)
         {
@@ -1156,6 +1213,7 @@ namespace MoleHole
             settings.BloomDebug = false;
             settings.LensFlare = false;
             settings.Fxaa = false;
+            settings.ToneMapping = ToneMap::None;
         }
 
         RenderFrameContext context{

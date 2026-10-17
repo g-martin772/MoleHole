@@ -6,6 +6,7 @@ layout(location = 0) out vec4 FragColor;
 layout(set = 0, binding = 0) uniform sampler2D u_raytracedImage;
 layout(set = 0, binding = 1) uniform sampler2D u_bloomImage;
 layout(set = 0, binding = 2) uniform sampler2D u_lensFlareImage;
+layout(set = 0, binding = 3) uniform sampler2D u_exposureImage;
 
 layout(push_constant) uniform PushConstants
 {
@@ -17,6 +18,7 @@ layout(push_constant) uniform PushConstants
     float u_lensFlareIntensity;
     float rt_w;
     float rt_h;
+    int u_toneMap; // 0 none (raw), 1 Reinhard, 2 ACES
 };
 
 const float FXAA_SPAN_MAX = 8.0;
@@ -62,6 +64,29 @@ vec3 FxaaPixelShader(vec2 uv, sampler2D tex, vec2 rcpFrame) {
     return rgbB;
 }
 
+// Narkowicz (2015) fit of the ACES reference rendering transform.
+vec3 toneMapAces(vec3 x) {
+    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+
+// Reinhard et al. (2002) on luminance, keeping the hue.
+vec3 toneMapReinhard(vec3 x) {
+    float luminance = dot(x, vec3(0.2126, 0.7152, 0.0722));
+    return x / (1.0 + luminance);
+}
+
+// The colour target is UNORM, so the display encoding is applied here.
+vec3 linearToSrgb(vec3 c) {
+    c = clamp(c, 0.0, 1.0);
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+}
+
+vec3 displayColor(vec3 hdr, float exposure) {
+    if (u_toneMap == 0) return hdr;
+    vec3 exposed = max(hdr, vec3(0.0)) * exposure;
+    return linearToSrgb(u_toneMap == 1 ? toneMapReinhard(exposed) : toneMapAces(exposed));
+}
+
 void main() {
     gl_FragDepth = texelFetch(u_raytracedImage, min(ivec2(TexCoord * vec2(rt_w, rt_h)), ivec2(rt_w, rt_h) - 1), 0).a;
 
@@ -74,13 +99,10 @@ void main() {
 
     vec3 bloom = texture(u_bloomImage, TexCoord).rgb;
     vec3 flare = texture(u_lensFlareImage, TexCoord).rgb;
+    float exposure = texelFetch(u_exposureImage, ivec2(0), 0).r;
 
-    if (u_bloomDebug == 1) {
-        FragColor = vec4(bloom, 1.0);
-        return;
-    }
-    if (u_bloomDebug == 2) {
-        FragColor = vec4(bloom, 1.0);
+    if (u_bloomDebug == 1 || u_bloomDebug == 2) {
+        FragColor = vec4(displayColor(bloom, exposure), 1.0);
         return;
     }
 
@@ -91,5 +113,5 @@ void main() {
         color += flare * u_lensFlareIntensity;
     }
 
-    FragColor = vec4(color, 1.0);
+    FragColor = vec4(displayColor(color, exposure), 1.0);
 }

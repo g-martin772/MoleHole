@@ -74,21 +74,49 @@ namespace MoleHole
                 .Doc = kDoc, .Cost = 1}));
             registry.Add(Setting("disk.volumetric", &R::AccretionDiskVolumetric, {
                 .Label = "Volumetric", .Group = "Disk",
-                .Tooltip = "Absorb light inside a noisy 3D disk instead of a thin emitting surface.\n"
+                .Tooltip = "Off: geometrically thin disk, shaded exactly where rays cross the equatorial plane.\n"
+                           "On: flared 3D disk with radiative transfer through the gas.\n"
                            "Not used by the Straight transport.",
                 .Doc = kDoc, .Cost = 3, .VisibleWhen = "disk.enabled & transport.mode>=1"}));
             registry.Add(Setting("disk.height", &R::AccDiskHeight, {
-                .Label = "Height", .Group = "Disk", .Tooltip = "Not used by the Straight transport.", .Doc = kDoc,
-                .Min = 0.0, .Max = 2.0, .VisibleWhen = "disk.enabled & transport.mode>=1"}));
+                .Label = "Height", .Group = "Disk",
+                .Tooltip = "Gaussian scale height in M at r = 10 M; the disk flares outwards with constant H / r.\n"
+                           "Only the volumetric disk has a height.",
+                .Doc = kDoc, .Min = 0.0, .Max = 2.0, .VisibleWhen = "disk.enabled & transport.mode>=1"}));
             registry.Add(Setting("disk.speed", &R::AccDiskSpeed, {
-                .Label = "Speed", .Group = "Disk", .Doc = kDoc, .Min = 0.0, .Max = 5.0,
-                .VisibleWhen = "disk.enabled"}));
+                .Label = "Speed", .Group = "Disk",
+                .Tooltip = "Angular speed of the inner edge in rad/s of wall time. Gas further out follows Kepler's\n"
+                           "law of the active metric, so the disk shears instead of turning rigidly.",
+                .Doc = kDoc, .Min = 0.0, .Max = 5.0, .VisibleWhen = "disk.enabled"}));
             registry.Add(Setting("disk.noise_scale", &R::AccDiskNoiseScale, {
                 .Label = "Noise scale", .Group = "Disk", .Doc = kDoc, .Min = 0.0, .Max = 5.0,
                 .VisibleWhen = "disk.enabled"}));
             registry.Add(Setting("disk.noise_lod", &R::AccDiskNoiseLOD, {
                 .Label = "Noise detail", .Group = "Disk", .Tooltip = "Not used by the Straight transport.", .Doc = kDoc,
                 .Min = 0.0, .Max = 10.0, .VisibleWhen = "disk.enabled & transport.mode>=1"}));
+            registry.Add(Setting("disk.accretion_rate", &R::DiskAccretionRate, {
+                .Label = "Accretion rate", .Group = "Disk",
+                .Tooltip = "Mass inflow as a fraction of the Eddington rate. Sets the physical temperature of the\n"
+                           "Page-Thorne disk together with the hole's mass and the metric's radiative efficiency.",
+                .Doc = kDoc, .Min = 1e-4, .Max = 1.0, .Scale = SettingScale::Log, .Format = "%.4f",
+                .VisibleWhen = "disk.enabled & transport.mode>=1"}));
+            registry.Add(Setting("disk.opacity", &R::DiskOpacity, {
+                .Label = "Opacity", .Group = "Disk",
+                .Tooltip = "Optical depth straight through the disk. Low: translucent gas, the far side shines through.\n"
+                           "High: an opaque glowing surface.",
+                .Doc = kDoc, .Min = 0.01, .Max = 100.0, .Scale = SettingScale::Log, .Format = "%.2f",
+                .VisibleWhen = "disk.enabled & transport.mode>=1"}));
+            registry.Add(Setting("disk.display_temperature", &R::DiskDisplayTemperature, {
+                .Label = "Display temperature", .Group = "Disk",
+                .Tooltip = "Colour of the hottest gas on screen in K, like an exposure for colour: every temperature is\n"
+                           "scaled by the same factor, so ratios, redshift and the radial gradient stay physical.\n"
+                           "0 = physical (stellar-mass holes are ~10^7 K and look blue-white).",
+                .Doc = kDoc, .Min = 0.0, .Max = 40000.0, .Format = "%.0f K",
+                .VisibleWhen = "disk.enabled & transport.mode>=1"}));
+            registry.Add(Setting("disk.hot_spots", &R::DiskHotSpots, {
+                .Label = "Hot spots", .Group = "Disk",
+                .Tooltip = "Hotter clumps of gas on circular geodesics of the metric.",
+                .Doc = kDoc, .Min = 0, .Max = 8, .VisibleWhen = "disk.enabled & transport.mode>=1"}));
 
             registry.Add(Setting("objects.black_holes", &R::RenderBlackHoles, {
                 .Label = "Black holes", .Group = "Objects", .Doc = kDoc}));
@@ -139,6 +167,28 @@ namespace MoleHole
                 .Label = "Frame budget", .Group = "Sampling", .Doc = kDoc, .Min = 4.0, .Max = 500.0,
                 .Scale = SettingScale::Log, .Format = "%.1f ms", .VisibleWhen = "sampling.governor"}));
 
+            registry.Add(Setting("post.tonemap", &R::ToneMapping, {
+                .Label = "Tone mapping", .Group = "Post",
+                .Tooltip = "Maps the HDR radiance of the tracer to the screen. None keeps the raw values (legacy look).",
+                .Doc = kDoc,
+                .Options = {"None", "Reinhard", "Aces"},
+                .OptionLabels = {"None (raw)", "Reinhard", "ACES filmic"}}));
+            registry.Add(Setting("post.exposure_mode", &R::Exposure, {
+                .Label = "Exposure", .Group = "Post",
+                .Tooltip = "Manual: fixed exposure value. Auto: meters the image's log-average luminance each frame.",
+                .Doc = kDoc,
+                .Options = {"Manual", "Auto"},
+                .OptionLabels = {"Manual", "Auto"},
+                .VisibleWhen = "post.tonemap>=1"}));
+            registry.Add(Setting("post.exposure", &R::ExposureEv, {
+                .Label = "Exposure (EV)", .Group = "Post",
+                .Tooltip = "Exposure compensation in stops (x2 per stop), applied after metering.",
+                .Doc = kDoc, .Min = -10.0, .Max = 10.0, .Format = "%+.1f EV", .VisibleWhen = "post.tonemap>=1"}));
+            registry.Add(Setting("post.exposure_key", &R::AutoExposureKey, {
+                .Label = "Auto key", .Group = "Post",
+                .Tooltip = "Grey level the metered average is mapped to.",
+                .Doc = kDoc, .Min = 0.01, .Max = 1.0, .Scale = SettingScale::Log, .Format = "%.2f",
+                .VisibleWhen = "post.tonemap>=1 & post.exposure_mode>=1"}));
             registry.Add(Setting("post.fxaa", &R::Fxaa, {
                 .Label = "Anti-aliasing (FXAA)", .Group = "Post", .Doc = kDoc, .Cost = 1}));
             registry.Add(Setting("post.bloom", &R::Bloom, {
@@ -221,6 +271,7 @@ namespace MoleHole
             RenderSettings reference;
             reference.TransportMode = Transport::Integrated;
             reference.AccretionDiskVolumetric = true;
+            reference.LensFlare = false;
             reference.RayStepSize = 0.01f;
             reference.MaxRaySteps = 100000;
             profiles.push_back(MakeBuiltIn("Reference", "Geodesic integration at reference tolerance with the volumetric disk. For final renders.", reference));

@@ -12,6 +12,8 @@ export namespace MoleHole
     enum class Transport : int { Straight = 0, AnalyticLens = 1, Integrated = 2 };
     enum class DebugView : int { None = 0, StepCount = 1, Termination = 2, ConstraintDrift = 3, Ergosphere = 4 };
     enum class MeshMode : int { Raster = 0, Traced = 1 };
+    enum class ToneMap : int { None = 0, Reinhard = 1, Aces = 2 };
+    enum class ExposureMode : int { Manual = 0, Auto = 1 };
 
     struct RenderSettings
     {
@@ -32,6 +34,10 @@ export namespace MoleHole
         float AccDiskSpeed = 0.5f;
         float AccDiskNoiseScale = 1.0f;
         float AccDiskNoiseLOD = 5.0f;
+        float DiskAccretionRate = 0.1f;      // Eddington ratio
+        float DiskOpacity = 2.0f;            // vertical optical depth
+        float DiskDisplayTemperature = 0.0f; // K of the hottest gas on screen; 0 = physical
+        int DiskHotSpots = 3;
 
         bool RenderBlackHoles = true;
         bool RenderSpheres = true;
@@ -56,6 +62,10 @@ export namespace MoleHole
         bool LensFlare = true;
         float LensFlareIntensity = 0.3f;
         float LensFlareThreshold = 2.0f;
+        ToneMap ToneMapping = ToneMap::Aces;
+        ExposureMode Exposure = ExposureMode::Manual;
+        float ExposureEv = 0.0f;
+        float AutoExposureKey = 0.18f;
 
         bool ShowGravityGrid = false;
         bool ShowPhysicsDebug = false;

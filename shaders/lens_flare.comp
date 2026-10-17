@@ -4,6 +4,7 @@ layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(set = 0, binding = 0, rgba32f) uniform readonly image2D u_inputImage;
 layout(set = 0, binding = 1, rgba32f) uniform writeonly image2D u_outputImage;
+layout(set = 0, binding = 2, rgba32f) uniform readonly image2D u_exposureImage;
 
 layout(push_constant) uniform PushConstants
 {
@@ -14,6 +15,19 @@ layout(push_constant) uniform PushConstants
 
 const int NUM_GHOSTS = 5;
 const float GHOST_DISPERSAL = 0.3;
+
+// Ghosts are magnified copies of the bloom image; bilinear filtering keeps them smooth instead of blocky.
+vec3 sampleBilinear(vec2 uv, ivec2 size) {
+    vec2 p = uv * vec2(size) - 0.5;
+    ivec2 i0 = ivec2(floor(p));
+    vec2 f = p - vec2(i0);
+    ivec2 maxCoord = size - 1;
+    vec3 c00 = imageLoad(u_inputImage, clamp(i0, ivec2(0), maxCoord)).rgb;
+    vec3 c10 = imageLoad(u_inputImage, clamp(i0 + ivec2(1, 0), ivec2(0), maxCoord)).rgb;
+    vec3 c01 = imageLoad(u_inputImage, clamp(i0 + ivec2(0, 1), ivec2(0), maxCoord)).rgb;
+    vec3 c11 = imageLoad(u_inputImage, clamp(i0 + ivec2(1, 1), ivec2(0), maxCoord)).rgb;
+    return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+}
 
 void main() {
     ivec2 texCoords = ivec2(gl_GlobalInvocationID.xy);
@@ -31,16 +45,16 @@ void main() {
     vec2 center = vec2(0.5);
     vec2 toCenter = center - uv;
 
+    // Threshold on the exposed value (like bloom) with a soft knee, so ghosts fade in instead of cutting out blocks
+    float exposure = imageLoad(u_exposureImage, ivec2(0)).r;
     vec3 result = vec3(0.0);
     for (int i = 0; i < NUM_GHOSTS; i++) {
         vec2 ghostUv = uv + toCenter * GHOST_DISPERSAL * float(i);
-        ivec2 ghostCoord = ivec2(ghostUv * vec2(imageSize));
-        if (ghostCoord.x >= 0 && ghostCoord.x < imageSize.x && ghostCoord.y >= 0 && ghostCoord.y < imageSize.y) {
-            vec3 sampleColor = imageLoad(u_inputImage, ghostCoord).rgb;
-            float brightness = dot(sampleColor, vec3(0.2126, 0.7152, 0.0722));
-            if (brightness > u_flareThreshold) {
-                result += sampleColor * (1.0 / float(i + 1));
-            }
+        if (all(greaterThanEqual(ghostUv, vec2(0.0))) && all(lessThan(ghostUv, vec2(1.0)))) {
+            vec3 sampleColor = sampleBilinear(ghostUv, imageSize);
+            float brightness = dot(sampleColor, vec3(0.2126, 0.7152, 0.0722)) * exposure;
+            float weight = smoothstep(u_flareThreshold, u_flareThreshold * 1.5 + 1e-3, brightness);
+            result += sampleColor * weight * (1.0 / float(i + 1));
         }
     }
 
