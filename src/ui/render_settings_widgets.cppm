@@ -160,7 +160,8 @@ export namespace MoleHole
                            static_cast<int>(entry.Meaning.size()), entry.Meaning.data());
     }
 
-    inline void DrawStepCountLegend()
+    inline void DrawHeatLegend(const std::string_view lowLabel, const std::string_view highLabel,
+                               const std::string_view note)
     {
         constexpr int kSegments = 48;
         const float width = ImGui::GetContentRegionAvail().x;
@@ -181,12 +182,12 @@ export namespace MoleHole
 
         const ImVec2 labels = ImGui::GetCursorScreenPos();
         const ImU32 text = ImGui::GetColorU32(ImGuiCol_TextDisabled);
-        const std::string low(kStepCountLowLabel);
-        const std::string high(kStepCountHighLabel);
+        const std::string low(lowLabel);
+        const std::string high(highLabel);
         list->AddText(labels, text, low.c_str());
         list->AddText(ImVec2(labels.x + width - ImGui::CalcTextSize(high.c_str()).x, labels.y), text, high.c_str());
         ImGui::Dummy(ImVec2(width, ImGui::GetTextLineHeight()));
-        TextDisabledWrapped(kStepCountNote);
+        TextDisabledWrapped(note);
     }
 
     inline void DrawDebugViewLegend(const DebugView view)
@@ -194,8 +195,15 @@ export namespace MoleHole
         if (view == DebugView::None) return;
         ImGui::Spacing();
         ImGui::TextDisabled("LEGEND");
-        if (view == DebugView::StepCount) DrawStepCountLegend();
-        else for (const auto& entry : kTerminationLegend) DrawLegendEntry(entry);
+        switch (view)
+        {
+        case DebugView::StepCount: DrawHeatLegend(kStepCountLowLabel, kStepCountHighLabel, kStepCountNote); break;
+        case DebugView::ConstraintDrift:
+            DrawHeatLegend(kConstraintDriftLowLabel, kConstraintDriftHighLabel, kConstraintDriftNote);
+            break;
+        case DebugView::Ergosphere: for (const auto& entry : kMetricStructureLegend) DrawLegendEntry(entry); break;
+        default: for (const auto& entry : kTerminationLegend) DrawLegendEntry(entry); break;
+        }
         ImGui::Spacing();
     }
 

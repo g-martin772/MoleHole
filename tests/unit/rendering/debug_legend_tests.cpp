@@ -231,3 +231,24 @@ TEST_CASE("PhysX debug colours that vanish on the dark viewport are remapped", "
     std::set<std::uint32_t> sources;
     for (const auto& remap : kPhysicsDebugRemap) CHECK(sources.insert(remap.Rgb).second);
 }
+
+TEST_CASE("The ergosphere & ISCO legend matches the shader colours", "[rendering][legend]")
+{
+    const auto shader = ReadShaders();
+    for (const auto& entry : kMetricStructureLegend)
+    {
+        INFO(entry.Id);
+        const auto color = ColorAfter(shader, std::string(entry.Id) + " = vec3", '(', ')');
+        CHECK(entry.Color.R == Approx(color.R));
+        CHECK(entry.Color.G == Approx(color.G));
+        CHECK(entry.Color.B == Approx(color.B));
+    }
+}
+
+TEST_CASE("The constraint drift legend matches the shader's log scale", "[rendering][legend]")
+{
+    const auto shader = ReadShaders();
+    CHECK(shader.contains("debugHeat((log(max(g_constraintDrift, 1e-8)) / log(10.0) + 6.0) / 6.0)"));
+    CHECK(kConstraintDriftLowLabel == "1e-6");
+    CHECK(kConstraintDriftHighLabel == "1");
+}

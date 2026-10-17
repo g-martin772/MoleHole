@@ -6,6 +6,7 @@ import std;
 import glm;
 import GPP;
 import :Simulation.Components;
+import :Rendering.Metric;
 import :Rendering.Frame;
 
 export namespace MoleHole
@@ -13,8 +14,9 @@ export namespace MoleHole
     struct BlackHoleGpuData
     {
         glm::vec3 Position{0.0f}; float Mass{0.0f};
+        // Spin and Charge are a/M and Q/M; after FillMetricData they hold the clamped values of the active metric.
         glm::vec3 SpinAxis{0.0f, 1.0f, 0.0f}; float Spin{0.0f};
-        float Charge{0.0f}; float _Pad0{0.0f}; float _Pad1{0.0f}; float _Pad2{0.0f};
+        float Charge{0.0f}; float HorizonRadius{0.0f}; float IscoRadius{0.0f}; float _Pad0{0.0f};
     };
     static_assert(sizeof(BlackHoleGpuData) == 48);
 
@@ -121,6 +123,22 @@ export namespace MoleHole
                 gpu.Mass = static_cast<float>(rigidBody->Mass / GPP::Units::kSolarMass);
             }
             ++params.NumSpheres;
+        }
+    }
+
+    // Applies params.MetricType to every black hole and precomputes the radii the shaders need,
+    // so the ISCO root-finding stays on the CPU.
+    inline void FillMetricData(RaytraceParamsGpu& params)
+    {
+        for (int i = 0; i < params.NumBlackHoles; ++i)
+        {
+            auto& gpu = params.BlackHoles[static_cast<std::size_t>(i)];
+            const auto metric = MakeKerrNewmanParams(params.MetricType, gpu.Mass, gpu.Spin, gpu.Charge);
+            const double mass = metric.Mass > 0.0 ? metric.Mass : 1.0;
+            gpu.Spin = static_cast<float>(metric.SpinParameter / mass);
+            gpu.Charge = static_cast<float>(metric.Charge / mass);
+            gpu.HorizonRadius = static_cast<float>(OuterHorizonRadius(metric));
+            gpu.IscoRadius = static_cast<float>(ProgradeIscoRadius(metric));
         }
     }
 

@@ -178,10 +178,13 @@ namespace MoleHole
                 .Label = "Debug view", .Group = "Debug",
                 .Tooltip = "Replaces the image by a diagnostic of the tracer.\n"
                            "Step count: heat map of ray march steps per pixel.\n"
-                           "Termination: why each ray ended (sky, horizon, object, disk, ran out of steps).",
+                           "Termination: why each ray ended (sky, horizon, object, disk, ran out of steps).\n"
+                           "Constraint drift (integrated only): how far each ray strays from a light path.\n"
+                           "Ergosphere & ISCO (integrated only): ergosphere tinted, innermost stable orbit as a ring.",
                 .Doc = kDoc,
-                .Options = {"None", "StepCount", "Termination"},
-                .OptionLabels = {"Off", "Step count heat map", "Termination reason"}}));
+                .Options = {"None", "StepCount", "Termination", "ConstraintDrift", "Ergosphere"},
+                .OptionLabels = {"Off", "Step count heat map", "Termination reason", "Geodesic constraint drift",
+                                 "Ergosphere & ISCO"}}));
 
             return registry;
         }

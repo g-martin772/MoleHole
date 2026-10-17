@@ -455,6 +455,7 @@ namespace MoleHole
 
                 params.DebugMode = static_cast<std::int32_t>(render.Debug);
                 params.MetricType = static_cast<std::int32_t>(render.Solution);
+                FillMetricData(params);
                 params.IsPhysicallyAccurate = render.TransportMode == Transport::Integrated ? 1 : 0;
                 params.GravitationalLensingEnabled = render.Lensing() ? 1 : 0;
                 params.GravitationalRedshiftEnabled = render.GravitationalRedshift ? 1 : 0;

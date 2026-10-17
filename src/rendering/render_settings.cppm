@@ -10,7 +10,7 @@ export namespace MoleHole
 {
     enum class Spacetime : int { Schwarzschild = 0, Kerr = 1, ReissnerNordstrom = 2, KerrNewman = 3 };
     enum class Transport : int { Straight = 0, AnalyticLens = 1, Integrated = 2 };
-    enum class DebugView : int { None = 0, StepCount = 1, Termination = 2 };
+    enum class DebugView : int { None = 0, StepCount = 1, Termination = 2, ConstraintDrift = 3, Ergosphere = 4 };
     enum class MeshMode : int { Raster = 0, Traced = 1 };
 
     struct RenderSettings

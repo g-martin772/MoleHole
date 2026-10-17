@@ -1,4 +1,7 @@
-float calculateDopplerEffect(vec3 pos, vec3 viewDir)
+// Flat-space approximations used by the hybrid and flat tracers; the integrated path computes the exact
+// frequency ratio from the metric (diskRedshift in kerr.glsl).
+// pos is in units of the horizon radius; the gas orbits prograde around spinAxis.
+float calculateDopplerEffect(vec3 pos, vec3 viewDir, vec3 spinAxis)
 {
     vec3 vel;
     float r = sqrt(dot(pos, pos));
@@ -6,10 +9,8 @@ float calculateDopplerEffect(vec3 pos, vec3 viewDir)
 
     if (r < 1.0) return 1.0;
 
-    float velMag0 = -sqrt((1.0 * 1.0 / (2.0 * (safeR - 1.0))));
-    float velMag1 = -sqrt((1.0 * 1.0 / r) * (1.0 - 3.0 * 1.0 / (safeR)));
-    float velMag = velMag0;
-    vec3 velDir = normalize(cross(vec3(0.0, 1.0, 0.0), pos));
+    float velMag = sqrt((1.0 * 1.0 / (2.0 * (safeR - 1.0))));
+    vec3 velDir = normalize(cross(normalize(spinAxis), pos));
     vel = velDir * velMag;
     vec3 beta_s = vel;
 
@@ -17,6 +18,12 @@ float calculateDopplerEffect(vec3 pos, vec3 viewDir)
     float dopplerShift = gamma * (1.0 + dot(vel, normalize(viewDir)));
 
     return max(0.0001, dopplerShift);
+}
+
+// Orbit around -y, the convention the flat tracer's disk frame was built with.
+float calculateDopplerEffect(vec3 pos, vec3 viewDir)
+{
+    return calculateDopplerEffect(pos, viewDir, vec3(0.0, -1.0, 0.0));
 }
 
 float calculateRedShift(vec3 pos)
@@ -29,4 +36,18 @@ float calculateRedShift(vec3 pos)
 
     redshift *= valid;
     return redshift;
+}
+
+// Blackbody LUT redshift coordinate for the hybrid tracer (0.5 = unshifted baseline the disk was tuned with).
+float hybridDiskLutRedshift(vec3 relativePos, vec3 viewDir, float horizonRadius, vec3 spinAxis)
+{
+    if (u_dopplerBeamingEnabled < 0.5) return 0.5;
+
+    vec3 pos = relativePos / max(1e-6, horizonRadius);
+    float grFactor = 1.0;
+    if (u_gravitationalRedshiftEnabled == 1) {
+        grFactor = max(calculateRedShift(pos), 1e-6);
+    }
+    float doppler = calculateDopplerEffect(pos, viewDir, spinAxis);
+    return 1.0 / (2.0 * doppler * grFactor);
 }

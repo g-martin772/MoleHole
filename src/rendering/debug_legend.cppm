@@ -75,6 +75,17 @@ export namespace MoleHole
     inline constexpr std::string_view kStepCountHighLabel = "step budget";
     inline constexpr std::string_view kStepCountNote = "Colour = sqrt(steps / step budget), so cheap and expensive pixels both stay readable.";
 
+    inline constexpr std::string_view kConstraintDriftLowLabel = "1e-6";
+    inline constexpr std::string_view kConstraintDriftHighLabel = "1";
+    inline constexpr std::string_view kConstraintDriftNote = "Colour = log10 of the largest |2H| / E^2 along the ray. Light paths have H = 0; "
+                                                             "drift near the horizon is expected and harmless.";
+
+    // ERGOSPHERE_TINT / ISCO_RING_COLOR in shaders/debug_view.glsl
+    inline constexpr std::array<LegendEntry, 2> kMetricStructureLegend{{
+        {"ERGOSPHERE_TINT", "Ergosphere", "inside it nothing can stay at rest; tint grows with the path length inside", {0.6f, 0.0f, 0.8f}},
+        {"ISCO_RING_COLOR", "ISCO", "innermost stable circular orbit, where rays cross the equatorial plane", {0.0f, 1.0f, 0.0f}},
+    }};
+
     inline constexpr std::array<LegendEntry, 6> kTerminationLegend{{
         {"TERM_SKY", "Sky", "ray escaped to the background", {0.04f, 0.08f, 0.22f}},
         {"TERM_HORIZON", "Horizon", "ray fell into a black hole", {0.9f, 0.05f, 0.05f}},

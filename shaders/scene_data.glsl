@@ -5,11 +5,11 @@ struct BlackHoleData
     vec3 position;
     float mass;
     vec3 spinAxis;
-    float spin;
-    float charge;
+    float spin;          // a / M of the active metric (clamped on the host)
+    float charge;        // Q / M of the active metric (clamped on the host)
+    float horizonRadius; // outer horizon r+
+    float iscoRadius;    // prograde innermost stable circular orbit
     float _pad0;
-    float _pad1;
-    float _pad2;
 };
 
 struct SphereData

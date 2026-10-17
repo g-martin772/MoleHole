@@ -148,7 +148,11 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
 
         if (u_accretionDiskEnabled == 1) {
             // Get optical depth from the accretion disk at this position
-            float opticalDepth = adiskColor(vec4(0.0, toSpherical(relativePos)), color, alpha, r_s, newOrigin, u_blackHoles[closestBH].mass, u_blackHoles[closestBH].spinAxis);
+            BlackHoleData bh = u_blackHoles[closestBH];
+            vec3 localPos = transpose(spinFrame(bh.spinAxis)) * relativePos;
+            float lutRedshift = hybridDiskLutRedshift(relativePos, -newDirection, r_s, bh.spinAxis);
+            float opticalDepth = adiskColor(localPos, length(relativePos), bh.iscoRadius, DISK_OUTER_RS * r_s,
+                                            bh.mass, lutRedshift, 1.0, color, alpha);
 
             // Apply volumetric absorption using Beer-Lambert law
             if (opticalDepth > 0.0) {
@@ -173,7 +177,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         }
 
         // Check event horizon
-        if (distToBH < r_s) {
+        if (distToBH < u_blackHoles[closestBH].horizonRadius) {
             hitEventHorizon = true;
             g_termination = TERM_HORIZON;
             return color;
@@ -272,52 +276,6 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     return color;
 }
 
-// ?
-rvec4 normalize4Velocity(rvec4 pos, rvec4 vel, real M) {
-    real r = pos.y;
-    real theta = pos.z;
-    real rs = 2.0 * G * M / (c * c);
-
-    real r_s_factor = 1.0 - rs / r;
-    if (r_s_factor < 0.001) r_s_factor = 0.001;  // Avoid singularity
-
-    real sinTheta = rsin(theta);
-    real v_spatial_sq = (vel.y * vel.y) / r_s_factor +
-    vel.z * vel.z * r * r +
-    vel.w * vel.w * r * r * sinTheta * sinTheta;
-
-    vel.x = sqrt(max(v_spatial_sq / r_s_factor, 0.0));
-
-    return vel;
-}
-
-rvec3 toSphericalReal(rvec3 pos) {
-    real r = max(length(pos), real(EPSILON));
-    real theta = clamp(racos(pos.y / r), real(EPSILON), real(R_PI) - real(EPSILON));
-    real phi = ratan2(pos.z, pos.x);
-    return rvec3(r, theta, phi);
-}
-
-rvec3 velCartesianToSphericalReal(rvec3 p, rvec3 v) {
-    real r = max(length(p), real(EPSILON));
-    real rho = max(sqrt(p.x * p.x + p.z * p.z), real(EPSILON));
-    real vr = dot(p, v) / r;
-    real vtheta = (p.y * (p.x * v.x + p.z * v.z) - rho * rho * v.y) / max(r * r * rho, real(EPSILON));
-    real vphi = (p.x * v.z - p.z * v.x) / max(rho * rho, real(EPSILON * EPSILON));
-    return clamp(rvec3(vr, vtheta, vphi), rvec3(-1e6), rvec3(1e6));
-}
-
-rvec3 velSphericalToCartesianReal(rvec3 p, rvec3 v) {
-    real st, ct, sp, cp;
-    rsincos_pair(p.y, st, ct);
-    rsincos_pair(p.z, sp, cp);
-    real r = p.x;
-    real vx = v.x * st * cp + r * v.y * ct * cp - r * st * v.z * sp;
-    real vy = v.x * ct - r * v.y * st;
-    real vz = v.x * st * sp + r * v.y * ct * sp + r * st * v.z * cp;
-    return clamp(rvec3(vx, vy, vz), rvec3(-1e6), rvec3(1e6));
-}
-
 bool segmentObjectHit(vec3 origin, vec3 dir, float maxDistance, out vec3 color, inout vec3 hitPoint, inout bool hitSolid) {
     HitRecord hit = rayTraceNormalSpace(origin, dir, maxDistance);
     color = vec3(0.0f);
@@ -331,6 +289,13 @@ bool segmentObjectHit(vec3 origin, vec3 dir, float maxDistance, out vec3 color, 
     return true;
 }
 
+
+// Beyond this radius (in M) rays travel straight; 50 M = 25 r_s, where deflection is a few percent.
+const float INTEGRATION_RADIUS_M = 50.0f;
+
+// Integrated path: traces the photon that reaches the camera backwards along a null geodesic of the
+// Kerr–Newman family. Horizon, ISCO, disk plane, disk motion and redshift all follow from the metric.
+// See docs/notes/metric_rendering.md.
 vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bool hitSolid) {
 
     vec3 colorValue = vec3(0.0f);
@@ -339,26 +304,23 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     hitSolid = false;
     bool objects = (u_renderSpheres == 1 && u_numSpheres > 0) || u_numMeshInstances > 0 || u_enableThirdPerson == 1;
     vec3 objectColor;
-
-    if (u_blackHoles[0].mass == 0.0f) {
-        if (objects && segmentObjectHit(rayOrigin, normalize(rayDirection), 1e10f, objectColor, hitPoint, hitSolid)) return objectColor;
-        return texture(u_skyboxTexture, directionToSpherical(rayDirection)).rgb;
-    }
-
     vec3 dir = normalize(rayDirection);
 
-    float stepSize = u_rayStepSize;
-    float maxSteps = u_maxRaySteps;
-    float adaptiveStepRate = u_adaptiveStepRate;
+    if (u_numBlackHoles == 0 || u_blackHoles[0].mass <= 0.0f) {
+        if (objects && segmentObjectHit(rayOrigin, dir, 1e10f, objectColor, hitPoint, hitSolid)) return objectColor;
+        return texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
+    }
 
-    real M = real(u_blackHoles[0].mass);
-    real a = real(u_blackHoles[0].spin) * M;
-    real Q = real(u_blackHoles[0].charge);
+    BlackHoleData bh = u_blackHoles[0];
+    Spacetime st = spacetimeOf(bh);
+    float mass = bh.mass;
+    mat3 frame = spinFrame(bh.spinAxis);
+    mat3 toLocal = transpose(frame);
 
+    float influenceRadius = INTEGRATION_RADIUS_M * mass;
     vec3 marchOrigin = rayOrigin;
     {
-        float influenceRadius = calculateEventHorizonRadius(u_blackHoles[0].mass) * 25.0f;
-        vec3 rel = rayOrigin - u_blackHoles[0].position;
+        vec3 rel = rayOrigin - bh.position;
         if (dot(rel, rel) > influenceRadius * influenceRadius) {
             float enterRadius = influenceRadius * 0.999f;
             float b = dot(rel, dir);
@@ -373,78 +335,141 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         }
     }
 
-    rvec3 relativePosCart = rvec3(marchOrigin - u_blackHoles[0].position);
+    rvec3 cameraBL = cartesianToBL(rvec3(toLocal * (rayOrigin - bh.position)), st.a);
+    if (cameraBL.x <= st.rPlus) {
+        g_termination = TERM_HORIZON;
+        return vec3(0.0f);
+    }
 
-    rvec4 relativePosSph = rvec4(0.0, toSphericalReal(relativePosCart));
-    rvec4 relativeDirSph = rvec4(1.0, velCartesianToSphericalReal(relativePosCart, rvec3(dir)));
+    // The photon arriving here travels along -rayDirection; launch it from the local ZAMO frame and integrate
+    // backwards in affine parameter. (Reversing the direction instead is wrong once a != 0.)
+    rvec3 startBL = cartesianToBL(rvec3(toLocal * (marchOrigin - bh.position)), st.a);
+    vec3 dirLocal = normalize(toLocal * dir);
+    vec3 er, eTheta, ePhi;
+    blBasis(startBL.x, startBL.y, startBL.z, st.a, er, eTheta, ePhi);
+    vec3 n = -vec3(dot(dirLocal, er), dot(dirLocal, eTheta), dot(dirLocal, ePhi));
+    real E, L, pr, pth;
+    launchPhoton(st, startBL.x, startBL.y, n, E, L, pr, pth);
 
-    float r_s = calculateEventHorizonRadius(u_blackHoles[0].mass);
+    // Frequencies are measured relative to the launch ZAMO; refer them to the camera's ZAMO instead.
+    real cameraAlpha, cameraOmega;
+    zamo(st, cameraBL.x, cameraBL.y, cameraAlpha, cameraOmega);
+    float cameraEnergy = float((E - cameraOmega * L) / max(cameraAlpha, real(1e-6)));
 
-    // main loop
-    g_maxStepCount = int(maxSteps);
+    rvec4 y = rvec4(startBL.x, startBL.y, pr, pth);
+    real phi = startBL.z;
+
+    real rEscape = real(influenceRadius);
+    real diskInner = st.rIsco;
+    real diskOuter = real(DISK_OUTER_RS * calculateEventHorizonRadius(mass));
+    real maxStep = real(10.0f * u_rayStepSize * mass);
+
+    float ergoPath = 0.0f;
+    real prevCosTheta = rcos(y.y);
+
+    g_maxStepCount = u_maxRaySteps;
     g_termination = TERM_STEPS;
-    for (int i = 0; i < maxSteps; i++) {
+    for (int i = 0; i < u_maxRaySteps; i++) {
         g_stepCount++;
 
-        float dist = float(relativePosSph.y);
-
-        if (u_accretionDiskEnabled == 1) {
-            float opticalDepth = adiskColor(vec4(relativePosSph), colorValue, alpha, r_s, rayOrigin, u_blackHoles[0].mass, u_blackHoles[0].spinAxis);
-
-            // Apply volumetric absorption using Beer-Lambert law
-            if (opticalDepth > 0.0) {
-                float transmittance = beerLambert(opticalDepth, stepSize);
-                alpha *= transmittance;
-                if (alpha < 0.01) {
-                    g_termination = TERM_DISK;
-                    return colorValue;
-                }
-            }
-        }
-
-        // check if we've hit the event horizon
-        if (dist < r_s + 100.0f * EPSILON) {
+        real r = y.x;
+        if (isnan(r) || r - st.rPlus < real(0.01) * st.M) {
             g_termination = TERM_HORIZON;
-            return vec3(0.0f);
+            break;
         }
-
-        // check if we've escaped the influence zone
-        if (dist > r_s * 25.0f) {
+        if (r > rEscape) {
             g_termination = TERM_SKY;
             break;
         }
 
-        // adaptive step size near horizon
-        if (dist < r_s * 3.0f) {
-            stepSize = u_rayStepSize * adaptiveStepRate * 0.1f;
-        } else if (dist < r_s * 10.0f) {
-            stepSize = u_rayStepSize * adaptiveStepRate;
-        } else {
-            stepSize = u_rayStepSize;
+        rvec4 dy;
+        real dphi, K;
+        geodesicRhs(st, E, L, y, dy, dphi, K);
+        if (u_debugMode == 3) {
+            real ct = rcos(y.y);
+            real Sigma = r * r + st.a * st.a * ct * ct;
+            g_constraintDrift = max(g_constraintDrift, float(abs(K) / (Sigma * max(E * E, real(1e-6)))));
         }
 
-        vec3 chordStart = objects ? toCartesian(vec3(relativePosSph.yzw)) : vec3(0.0f);
-        relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, M);
-        rk4_step(relativePosSph, relativeDirSph, real(stepSize), M, a, Q);
-        relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, M);
+        // Geometric approach to the horizon; capped through the disk so the volume is sampled densely enough.
+        real h = real(u_rayStepSize * u_adaptiveStepRate) * (r - st.rPlus);
+        if (r < real(1.2) * diskOuter) h = min(h, maxStep);
+        // Rays passing close to the polar axis sweep through phi quickly (dphi/dlambda ~ L / sin^2 theta);
+        // bound the angle covered per step so they are resolved instead of jumping across the pole.
+        real angularRate = abs(dy.y) + abs(dphi);
+        h = min(h, real(0.02) / max(angularRate, real(1e-6)));
+
+        vec3 chordStart = objects ? blToCartesian(y.x, y.y, phi, st.a) : vec3(0.0f);
+        geodesicStep(st, E, L, y, phi, -h, dy, dphi);
+        r = y.x;
+        if (isnan(r) || r <= st.rPlus) {
+            g_termination = TERM_HORIZON;
+            break;
+        }
 
         if (objects) {
-            vec3 chord = toCartesian(vec3(relativePosSph.yzw)) - chordStart;
+            vec3 chord = frame * (blToCartesian(y.x, y.y, phi, st.a) - chordStart);
             float chordLength = length(chord);
             if (chordLength > 0.0f
-                && segmentObjectHit(u_blackHoles[0].position + chordStart, chord / chordLength, chordLength, objectColor, hitPoint, hitSolid)) {
+                && segmentObjectHit(bh.position + frame * chordStart, chord / chordLength, chordLength, objectColor, hitPoint, hitSolid)) {
                 return colorValue + alpha * objectColor;
+            }
+        }
+
+        if (u_debugMode == 4) {
+            real ct = rcos(y.y);
+            real rErgo = st.M + sqrt(max(st.M * st.M - st.a * st.a * ct * ct - st.Q * st.Q, real(0.0)));
+            if (r < rErgo) ergoPath += float(h);
+            if (sign(ct) != sign(prevCosTheta) && abs(r - st.rIsco) < real(0.1) * st.M) {
+                colorValue += ISCO_RING_COLOR * alpha;
+            }
+            prevCosTheta = ct;
+        }
+
+        if (u_accretionDiskEnabled == 1 && r >= diskInner && r <= diskOuter) {
+            vec3 localPos = blToCartesian(r, y.y, phi, st.a);
+
+            float gLaunch, alphaEmitter;
+            diskRedshift(st, r, y.y, E, L, gLaunch, alphaEmitter);
+            float gTotal = gLaunch * cameraEnergy;
+            float gGravity = alphaEmitter / max(float(cameraAlpha), 1e-6f);
+            float g = (u_gravitationalRedshiftEnabled == 1 ? gGravity : 1.0f)
+                    * (u_dopplerBeamingEnabled > 0.5f ? gTotal / max(gGravity, 1e-6f) : 1.0f);
+            // The LUT divides the temperature by its redshift coordinate; 0.5 is the unshifted baseline.
+            float lutRedshift = 0.5f / max(g, 1e-3f);
+            // I_nu / nu^3 is invariant, so bolometric intensity scales with g^4.
+            float intensity = pow(g, 4.0f);
+
+            float opticalDepth = adiskColor(localPos, float(r), float(diskInner), float(diskOuter), mass,
+                                            lutRedshift, intensity, colorValue, alpha);
+            if (opticalDepth > 0.0f) {
+                // Proper length in the gas rest frame: ds = (-p . u_em) dlambda.
+                float ds = float(h) / max(gLaunch, 1e-6f);
+                alpha *= beerLambert(opticalDepth, ds);
+                if (alpha < 0.01f) {
+                    g_termination = TERM_DISK;
+                    break;
+                }
             }
         }
     }
 
-    dir = vec3(velSphericalToCartesianReal(relativePosSph.yzw, relativeDirSph.yzw));
-
-    if (objects && g_termination == TERM_SKY
-        && segmentObjectHit(u_blackHoles[0].position + toCartesian(vec3(relativePosSph.yzw)), normalize(dir), 1e10f, objectColor, hitPoint, hitSolid)) {
-        return objectColor;
+    if (u_debugMode == 4) {
+        colorValue = mix(colorValue, ERGOSPHERE_TINT, 1.0f - exp(-ergoPath / mass));
     }
 
-    vec3 color = texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
-    return color;
+    if (g_termination == TERM_HORIZON || g_termination == TERM_DISK) return colorValue;
+
+    // Direction the light came from: the photon moves along +velocity, so the source lies along -velocity.
+    rvec4 dy;
+    real dphi, K;
+    geodesicRhs(st, E, L, y, dy, dphi, K);
+    vec3 skyDirection = normalize(frame * -blVelocityToCartesian(y.x, y.y, phi, st.a, dy.x, dy.y, dphi));
+
+    if (objects && g_termination == TERM_SKY
+        && segmentObjectHit(bh.position + frame * blToCartesian(y.x, y.y, phi, st.a), skyDirection, 1e10f, objectColor, hitPoint, hitSolid)) {
+        return colorValue + alpha * objectColor;
+    }
+
+    return colorValue + alpha * texture(u_skyboxTexture, directionToSpherical(skyDirection)).rgb;
 }

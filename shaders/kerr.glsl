@@ -1,90 +1,198 @@
-rmat4 compute_kerr_newman_metric(real r, real theta, real M, real a, real Q) {
-    real rs = 2.0 * M;
-    real rq2 = rsq(Q * M);
-    real r2 = r * r;
+// Null geodesics of the Kerr–Newman family in Boyer–Lindquist coordinates (G = c = 1).
+// Schwarzschild (a = Q = 0), Kerr (Q = 0) and Reissner–Nordström (a = 0) are special cases; the host
+// zeroes a / Q according to the selected metric and precomputes r+ and the ISCO (src/rendering/metric.cppm).
+// The integration runs in `real` (double with GPP_PRECISION_F64). Background and sources:
+// docs/notes/metric_rendering.md
+
+struct Spacetime {
+    real M;
+    real a;
+    real Q;
+    real rPlus;
+    real rIsco;
+};
+
+Spacetime spacetimeOf(BlackHoleData bh) {
+    Spacetime st;
+    st.M = real(bh.mass);
+    st.a = real(bh.spin) * st.M;
+    st.Q = real(bh.charge) * st.M;
+    st.rPlus = real(bh.horizonRadius);
+    st.rIsco = real(bh.iscoRadius);
+    return st;
+}
+
+real safeSin(real s) {
+    return abs(s) < real(1e-4) ? (s < real(0.0) ? real(-1e-4) : real(1e-4)) : s;
+}
+
+// Local frame of a hole: columns X, Y, Z with Z along the spin axis, right-handed so that +phi is the
+// direction of rotation. world = F * local, local = transpose(F) * world.
+mat3 spinFrame(vec3 spinAxis) {
+    vec3 z = normalize(spinAxis);
+    vec3 helper = abs(z.y) < 0.99f ? vec3(0.0f, 1.0f, 0.0f) : vec3(1.0f, 0.0f, 0.0f);
+    vec3 x = normalize(cross(helper, z));
+    vec3 y = cross(z, x);
+    return mat3(x, y, z);
+}
+
+// Boyer–Lindquist (r, theta, phi) <-> local Cartesian. For a != 0 these are oblate spheroidal coordinates;
+// plain spherical coordinates would put the camera at the wrong r.
+rvec3 cartesianToBL(rvec3 p, real a) {
     real a2 = a * a;
-    real safe_theta = clamp(theta, real(EPSILON), real(R_PI) - real(EPSILON));
-    real sin2theta = rsq(rsin(safe_theta));
-    real cos2theta = rsq(rcos(safe_theta));
-    real Sigma = r2 + a2 * cos2theta;
-    real Delta = r2 - rs * r + a2 + rq2;
-
-    rmat4 g = rmat4(0.0);
-    g[0][0] = -(Delta - a2 * sin2theta) / Sigma;
-    g[0][3] = -a * sin2theta * (r2 + a2 - Delta) / Sigma;
-    g[3][0] = g[0][3];
-    g[1][1] = Sigma / Delta;
-    g[2][2] = Sigma;
-    g[3][3] = (rsq(r2 + a2) - a2 * Delta * sin2theta) * sin2theta / Sigma;
-    return g;
+    real w = dot(p, p) - a2;
+    real r2 = real(0.5) * (w + sqrt(w * w + real(4.0) * a2 * p.z * p.z));
+    real r = sqrt(max(r2, real(1e-12)));
+    real theta = racos(clamp(p.z / r, real(-1.0), real(1.0)));
+    real phi = ratan2(p.y, p.x);
+    return rvec3(r, theta, phi);
 }
 
-// 0 Schwarzschild, 1 Kerr, 2 Reissner-Nordstrom, 3 Kerr-Newman.
-void select_parameters(inout real a, inout real Q) {
-    if (u_metric_type == 0) { a = 0.0; Q = 0.0; }
-    else if (u_metric_type == 1) { Q = 0.0; }
-    else if (u_metric_type == 2) { a = 0.0; }
+vec3 blToCartesian(real r, real theta, real phi, real a) {
+    real s, ct, sp, cp;
+    rsincos_pair(theta, s, ct);
+    rsincos_pair(phi, sp, cp);
+    real rho = sqrt(r * r + a * a);
+    return vec3(rvec3(rho * s * cp, rho * s * sp, r * ct));
 }
 
-rmat4 compute_metric(real t, real r, real theta, real phi, real M, real a, real Q) {
-    select_parameters(a, Q);
-    return compute_kerr_newman_metric(r, theta, M, a, Q);
+// Orthonormal directions of increasing r, theta, phi (they are mutually orthogonal in flat space).
+void blBasis(real r, real theta, real phi, real a, out vec3 er, out vec3 eTheta, out vec3 ePhi) {
+    real s, ct, sp, cp;
+    rsincos_pair(theta, s, ct);
+    rsincos_pair(phi, sp, cp);
+    real rho = sqrt(r * r + a * a);
+    er = normalize(vec3(rvec3(r / rho * s * cp, r / rho * s * sp, ct)));
+    eTheta = normalize(vec3(rvec3(rho * ct * cp, rho * ct * sp, -r * s)));
+    ePhi = vec3(rvec3(-sp, cp, real(0.0)));
 }
 
-rmat4 compute_inv_metric(rmat4 g) {
-    return inverse(g);
+// Velocity of a Boyer–Lindquist trajectory expressed in the hole's local Cartesian frame.
+vec3 blVelocityToCartesian(real r, real theta, real phi, real a, real dr, real dtheta, real dphi) {
+    real s, ct, sp, cp;
+    rsincos_pair(theta, s, ct);
+    rsincos_pair(phi, sp, cp);
+    real rho = sqrt(r * r + a * a);
+    rvec3 dR = rvec3(r / rho * s * cp, r / rho * s * sp, ct);
+    rvec3 dTheta = rvec3(rho * ct * cp, rho * ct * sp, -r * s);
+    rvec3 dPhi = rvec3(-rho * s * sp, rho * s * cp, real(0.0));
+    return vec3(dr * dR + dtheta * dTheta + dphi * dPhi);
 }
 
-rmat4[4] compute_d_metric(real t, real r, real theta, real phi, real M, real a, real Q) {
-    rmat4[4] d_g;
-    d_g[0] = rmat4(0.0);
-    d_g[3] = rmat4(0.0);
-    d_g[1] = (compute_metric(t, r + R_FD_EPS, theta, phi, M, a, Q) - compute_metric(t, r - R_FD_EPS, theta, phi, M, a, Q)) / (2.0 * R_FD_EPS);
-    d_g[2] = (compute_metric(t, r, theta + R_FD_EPS, phi, M, a, Q) - compute_metric(t, r, theta - R_FD_EPS, phi, M, a, Q)) / (2.0 * R_FD_EPS);
-    return d_g;
+// Covariant t/phi block of the metric at (r, theta); the rr and thetatheta parts are Sigma/Delta and Sigma.
+void metricTPhi(Spacetime st, real r, real theta, out real gtt, out real gtphi, out real gphiphi) {
+    real s, ct;
+    rsincos_pair(theta, s, ct);
+    s = safeSin(s);
+    real a2 = st.a * st.a, s2 = s * s;
+    real Sigma = r * r + a2 * ct * ct;
+    real Delta = r * r - real(2.0) * st.M * r + a2 + st.Q * st.Q;
+    real A = rsq(r * r + a2) - Delta * a2 * s2;
+    gtt = -(Delta - a2 * s2) / Sigma;
+    gtphi = -st.a * s2 * (r * r + a2 - Delta) / Sigma;
+    gphiphi = A * s2 / Sigma;
 }
 
-// Geodesic equation d^2x^mu/dlambda^2 = -Gamma^mu_{nu sigma} v^nu v^sigma.
-// The metric is stationary and axisymmetric,
-// so the t and phi derivatives vanish?
-void geodesic_equation(rvec4 pos, rvec4 vel, out rvec4 accel, real M, real a, real Q) {
-    rmat4 g = compute_metric(pos[0], pos[1], pos[2], pos[3], M, a, Q);
-    rmat4 g_inv = compute_inv_metric(g);
-    rmat4[4] d_g = compute_d_metric(pos[0], pos[1], pos[2], pos[3], M, a, Q);
+// Lapse alpha and frame-dragging rate omega of the zero-angular-momentum observer (ZAMO).
+void zamo(Spacetime st, real r, real theta, out real alpha, out real omega) {
+    real s, ct;
+    rsincos_pair(theta, s, ct);
+    s = safeSin(s);
+    real a2 = st.a * st.a;
+    real Sigma = r * r + a2 * ct * ct;
+    real Delta = r * r - real(2.0) * st.M * r + a2 + st.Q * st.Q;
+    real A = rsq(r * r + a2) - Delta * a2 * s * s;
+    alpha = sqrt(max(Sigma * Delta / A, real(0.0)));
+    omega = st.a * (real(2.0) * st.M * r - st.Q * st.Q) / A;
+}
 
-    rvec4 Gamma = rvec4(0.0);
-    for (int rho = 0; rho < 4; rho++) {
-        for (int nu = 0; nu < 4; nu++) {
-            for (int sigma = 0; sigma < 4; sigma++) {
-                Gamma[rho] += 0.5 * (d_g[nu][rho][sigma] + d_g[sigma][nu][rho] - d_g[rho][sigma][nu]) * vel[nu] * vel[sigma];
-            }
-        }
+// Hamiltonian H = K / (2 Sigma) in Carter's separated form with p_t = -E and p_phi = L conserved:
+//   K = Delta p_r^2 + p_theta^2 + (L / sin(theta) - a E sin(theta))^2 - ((r^2 + a^2) E - a L)^2 / Delta
+// State y = (r, theta, p_r, p_theta); phi is integrated alongside for the disk and the exit direction.
+void geodesicRhs(Spacetime st, real E, real L, rvec4 y, out rvec4 dy, out real dphi, out real K) {
+    real r = y.x, pr = y.z, pth = y.w;
+    real a = st.a, a2 = a * a;
+    real s, ct;
+    rsincos_pair(y.y, s, ct);
+    s = safeSin(s);
+
+    real Sigma = r * r + a2 * ct * ct;
+    real Delta = r * r - real(2.0) * st.M * r + a2 + st.Q * st.Q;
+    real P = (r * r + a2) * E - a * L;
+    real T = L / s - a * E * s;
+    K = Delta * pr * pr + pth * pth + T * T - P * P / Delta;
+
+    real dDelta = real(2.0) * r - real(2.0) * st.M;
+    real dP = real(2.0) * r * E;
+    real Kr = dDelta * pr * pr - (real(2.0) * P * dP * Delta - P * P * dDelta) / (Delta * Delta);
+    real Ktheta = real(2.0) * T * (-L * ct / (s * s) - a * E * ct);
+    real SigmaR = real(2.0) * r;
+    real SigmaTheta = real(-2.0) * a2 * ct * s;
+
+    dy.x = Delta * pr / Sigma;
+    dy.y = pth / Sigma;
+    dy.z = real(-0.5) * (Kr - K * SigmaR / Sigma) / Sigma;
+    dy.w = real(-0.5) * (Ktheta - K * SigmaTheta / Sigma) / Sigma;
+    dphi = (T / s + a * P / Delta) / Sigma;
+}
+
+// k1 / f1 are the derivatives at y, already evaluated by the caller to choose the step size.
+void geodesicStep(Spacetime st, real E, real L, inout rvec4 y, inout real phi, real h, rvec4 k1, real f1) {
+    rvec4 k2, k3, k4;
+    real f2, f3, f4, K;
+    geodesicRhs(st, E, L, y + real(0.5) * h * k1, k2, f2, K);
+    geodesicRhs(st, E, L, y + real(0.5) * h * k2, k3, f3, K);
+    geodesicRhs(st, E, L, y + h * k3, k4, f4, K);
+    y += (h / real(6.0)) * (k1 + real(2.0) * k2 + real(2.0) * k3 + k4);
+    phi += (h / real(6.0)) * (f1 + real(2.0) * f2 + real(2.0) * f3 + f4);
+}
+
+// Photon momentum seen by a ZAMO at (r, theta) travelling along the unit local direction n (components
+// along e_r, e_theta, e_phi), normalised to unit energy in that frame. Exactly null by construction.
+void launchPhoton(Spacetime st, real r, real theta, vec3 n, out real E, out real L, out real pr, out real pth) {
+    real s, ct;
+    rsincos_pair(theta, s, ct);
+    s = safeSin(s);
+    real a2 = st.a * st.a;
+    real Sigma = r * r + a2 * ct * ct;
+    real Delta = r * r - real(2.0) * st.M * r + a2 + st.Q * st.Q;
+    real A = rsq(r * r + a2) - Delta * a2 * s * s;
+    real alpha, omega;
+    zamo(st, r, theta, alpha, omega);
+
+    L = sqrt(A / Sigma) * abs(s) * real(n.z);
+    E = alpha + omega * L;
+    pr = sqrt(Sigma / Delta) * real(n.x);
+    pth = sqrt(Sigma) * real(n.y);
+}
+
+// Angular velocity of a prograde circular equatorial orbit at radius r (see ProgradeOrbitalFrequency).
+real keplerOmega(Spacetime st, real r) {
+    real a = st.a;
+    real df = (real(2.0) * st.Q * st.Q - real(2.0) * st.M * r) / (r * r * r);
+    real dgtt = df;
+    real dgtphi = -a * df;
+    real dgphiphi = real(2.0) * r + a * a * df;
+    return (-dgtphi + sqrt(max(dgtphi * dgtphi - dgtt * dgphiphi, real(0.0)))) / dgphiphi;
+}
+
+// Frequency ratio g = nu_observed / nu_emitted for disk gas on circular orbits, relative to the ZAMO the
+// photon was launched from (unit energy there). gTotal contains gravitational shift, Doppler shift and
+// frame dragging; alphaEmitter is the lapse at the emitter for splitting off the gravitational part.
+void diskRedshift(Spacetime st, real r, real theta, real E, real L, out float gTotal, out float alphaEmitter) {
+    real gtt, gtphi, gphiphi;
+    metricTPhi(st, r, theta, gtt, gtphi, gphiphi);
+    real alpha, omegaZamo;
+    zamo(st, r, theta, alpha, omegaZamo);
+
+    real omega = keplerOmega(st, r);
+    real norm = -(gtt + real(2.0) * gtphi * omega + gphiphi * omega * omega);
+    if (!(norm > real(1e-6))) {
+        // No timelike circular orbit here (off-plane or too close); co-rotate with the local ZAMO instead.
+        omega = omegaZamo;
+        norm = -(gtt + real(2.0) * gtphi * omega + gphiphi * omega * omega);
     }
-
-    accel = rvec4(0.0);
-    for (int mu = 0; mu < 4; mu++) {
-        for (int rho = 0; rho < 4; rho++) {
-            accel[mu] -= g_inv[mu][rho] * Gamma[rho];
-        }
-    }
-}
-
-void rk4_step(inout rvec4 p, inout rvec4 vel, real dt, real M, real a, real Q) {
-    rvec4 k1_v, k2_v, k3_v, k4_v;
-    rvec4 k1_p, k2_p, k3_p, k4_p;
-
-    geodesic_equation(p, vel, k1_v, M, a, Q);
-    k1_p = vel;
-
-    geodesic_equation(p + 0.5 * dt * k1_p, vel + 0.5 * dt * k1_v, k2_v, M, a, Q);
-    k2_p = vel + 0.5 * dt * k1_v;
-
-    geodesic_equation(p + 0.5 * dt * k2_p, vel + 0.5 * dt * k2_v, k3_v, M, a, Q);
-    k3_p = vel + 0.5 * dt * k2_v;
-
-    geodesic_equation(p + dt * k3_p, vel + dt * k3_v, k4_v, M, a, Q);
-    k4_p = vel + dt * k3_v;
-
-    p += (dt / 6.0) * (k1_p + 2.0 * k2_p + 2.0 * k3_p + k4_p);
-    vel += (dt / 6.0) * (k1_v + 2.0 * k2_v + 2.0 * k3_v + k4_v);
+    real ut = inversesqrt(max(norm, real(1e-12)));
+    gTotal = float(real(1.0) / max(ut * (E - omega * L), real(1e-6)));
+    alphaEmitter = float(alpha);
 }
