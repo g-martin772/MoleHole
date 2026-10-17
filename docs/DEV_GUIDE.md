@@ -170,6 +170,7 @@ That generates the Render window row (cost badge, tooltip, reset, search), the s
 ## Render pipeline
 `RenderPipeline::Build` appends passes from an ordered list of `IRenderStage`s: Trace, Bloom, LensFlare, Composite, GravityGrid, PhysicsDebug, ObjectPaths, Meshes. A stage whose `Enabled(settings)` is false records nothing.
 - New stage: derive `IRenderStage` in `render_pipeline.cpp`, add it in `RenderPipeline::Initialize` at the right place; `Ready()` reports compiled shaders (exports wait for all)
+- GPU timings: `Build` wraps every stage in `graph.BeginScope(name)` / `EndScope()`; passes added in between share the scope. gpp (`GpuProfiler`, `GPP.Graphics:Vulkan.GpuProfiler`) writes timestamps around each scope while the graph executes (sliced passes are summed per segment), and `Renderer::BufferTargetStats::Passes` carries the last frame's `{Name, Ms}` in pipeline order for the stats overlay and the sidecar `GpuPassMs`. Devices without timestamp support (`GpuCapabilities::GpuTimestamps()`) report no passes. Elsewhere `GpuScope scope(profiler, cmd, "name")` brackets raw command recording
 - Tracer-resolution targets live in `RenderResources` (`ScaledTraceExtent`); the composite scales them to the viewport
 - `ViewportLayer` (`plugins/viewport_layer.cpp`) only owns camera, picking, gizmos and scene switching; export is `ExportController`, loading is `SceneLoader`
 - Context: `ViewportLayer::UpdateRenderSettings` picks Edit / Play / Reference / Export each update; edits are mirrored into the scene's `Render:` extension (not undoable)

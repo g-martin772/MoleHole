@@ -75,6 +75,7 @@ TEST_CASE("The sidecar records what is needed to reproduce the image", "[renderi
     info.GitCommit = "abc123";
     info.WallSeconds = 12.5;
     info.GpuMs = 41.5;
+    info.GpuPassMs = {{"Trace", 30.25}, {"Bloom", 2.5}};
     info.Timestamp = "2026-10-16T12:00:00Z";
     info.Gpu.DeviceName = "Test GPU";
     info.Gpu.RayQuery = true;
@@ -83,6 +84,8 @@ TEST_CASE("The sidecar records what is needed to reproduce the image", "[renderi
     const auto node = YAML::Load(BuildRenderSidecar(info));
     CHECK(node["GitCommit"].as<std::string>() == "abc123");
     CHECK(node["GpuMs"].as<double>() == 41.5);
+    CHECK(node["GpuPassMs"]["Trace"].as<double>() == 30.25);
+    CHECK(node["GpuPassMs"]["Bloom"].as<double>() == 2.5);
     CHECK(node["Output"]["Width"].as<int>() == 1920);
     CHECK(node["Output"]["Kind"].as<std::string>() == "image");
     CHECK_FALSE(node["Output"]["Framerate"]);

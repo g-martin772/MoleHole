@@ -1146,7 +1146,9 @@ namespace MoleHole
         for (const auto& stage : impl.Stages)
         {
             if (!stage->Enabled(settings)) continue;
+            graph.BeginScope(std::string(stage->Name()));
             stage->Record(context);
+            graph.EndScope();
             recorded.emplace_back(stage->Name());
         }
         std::scoped_lock lock(impl.RecordedMutex);

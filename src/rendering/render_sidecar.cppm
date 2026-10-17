@@ -36,6 +36,7 @@ export namespace MoleHole
         GPP::GpuCapabilities Gpu;
         double WallSeconds = 0.0;
         double GpuMs = 0.0;
+        std::vector<std::pair<std::string, double>> GpuPassMs;
         std::string Timestamp;
     };
 

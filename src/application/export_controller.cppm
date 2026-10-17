@@ -63,5 +63,6 @@ export namespace MoleHole
         std::filesystem::path m_TempDir;
         std::string m_ProfileName;
         double m_LastGpuMs{0.0};
+        std::vector<std::pair<std::string, double>> m_LastPassMs;
     };
 }

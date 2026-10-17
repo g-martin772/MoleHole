@@ -73,6 +73,11 @@ namespace MoleHole
         root["GitCommit"] = info.GitCommit;
         root["WallSeconds"] = info.WallSeconds;
         root["GpuMs"] = info.GpuMs;
+        if (!info.GpuPassMs.empty())
+        {
+            auto passes = root["GpuPassMs"];
+            for (const auto& [name, ms] : info.GpuPassMs) passes[name] = ms;
+        }
 
         auto output = root["Output"];
         output["Path"] = info.OutputPath;

@@ -223,11 +223,33 @@ export namespace MoleHole
         const auto text = std::format("{}: {} | {:.1f} fps, GPU {:.1f} ms | tracer {:.0f}%", RenderContextLabel(context),
                                       settings.ProfileFor(context).Name, stats->FramesPerSecond, stats->GpuMs,
                                       settings.Effective().ResolutionScale * governorScale);
-        const ImVec2 size = ImGui::CalcTextSize(text.c_str());
+        const ImVec2 headerSize = ImGui::CalcTextSize(text.c_str());
         const ImVec2 pos(corner.x + 8.0f, corner.y + 8.0f);
+        const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+        constexpr float kColumnGap = 16.0f;
+
+        std::vector<std::string> values;
+        float nameWidth = 0.0f;
+        float valueWidth = 0.0f;
+        for (const auto& pass : stats->Passes)
+        {
+            values.push_back(std::format("{:.2f} ms", pass.Ms));
+            nameWidth = std::max(nameWidth, ImGui::CalcTextSize(pass.Name.c_str()).x);
+            valueWidth = std::max(valueWidth, ImGui::CalcTextSize(values.back().c_str()).x);
+        }
+        const float width = std::max(headerSize.x, nameWidth + kColumnGap + valueWidth);
+        const float height = headerSize.y + static_cast<float>(stats->Passes.size()) * lineHeight;
+
         auto* list = ImGui::GetWindowDrawList();
-        list->AddRectFilled(ImVec2(pos.x - 4.0f, pos.y - 2.0f), ImVec2(pos.x + size.x + 4.0f, pos.y + size.y + 2.0f),
+        list->AddRectFilled(ImVec2(pos.x - 4.0f, pos.y - 2.0f), ImVec2(pos.x + width + 4.0f, pos.y + height + 2.0f),
                             ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.6f)), 3.0f);
         list->AddText(pos, ImGui::GetColorU32(ImVec4(0.92f, 0.92f, 0.92f, 1.0f)), text.c_str());
+        const ImU32 passColor = ImGui::GetColorU32(ImVec4(0.72f, 0.72f, 0.72f, 1.0f));
+        float y = pos.y + lineHeight;
+        for (std::size_t i = 0; i < stats->Passes.size(); ++i, y += lineHeight)
+        {
+            list->AddText(ImVec2(pos.x, y), passColor, stats->Passes[i].Name.c_str());
+            list->AddText(ImVec2(pos.x + width - ImGui::CalcTextSize(values[i].c_str()).x, y), passColor, values[i].c_str());
+        }
     }
 }

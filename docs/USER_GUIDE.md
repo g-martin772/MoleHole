@@ -136,7 +136,7 @@ Built-in profiles (read-only):
 - A scene saved before profiles existed picks up your old toggles as a profile called `Legacy` (once)
 - Render settings edited while playing survive Stop
 - Render reference: viewport uses the Reference context's profile until you switch back
-- Stats overlay: profile, fps, GPU ms and tracer resolution in the viewport corner
+- Stats overlay: profile, fps, GPU ms and tracer resolution in the viewport corner, then one line per active render stage with its GPU ms (Trace, Bloom, Composite...)
 
 ```yaml
 Render:
