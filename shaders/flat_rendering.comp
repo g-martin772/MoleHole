@@ -1,0 +1,224 @@
+#version 450
+
+// Straight-ray transport: analytic shadow spheres, photon rings and thin disks, no ray marching
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+#include "real.glsl"
+
+const float EPSILON = 0.00005f;
+
+#include "scene_data.glsl"
+#include "trace_common.glsl"
+#include "doppler.glsl"
+#include "noise.glsl"
+#include "physics.glsl"
+#include "crosshair.glsl"
+#include "lut_loader.glsl"
+#include "sphere.glsl"
+#include "debug_view.glsl"
+
+// Display temperature of the inner edge (K) and its fall-off with radius: spreads the blackbody LUT over the annulus
+const float FLAT_DISK_TEMP_INNER = 5200.0f;
+const float FLAT_DISK_TEMP_FALLOFF = 1.9f;
+const float FLAT_DISK_GAIN = 1.6f;
+// Critical impact parameter 3 sqrt(3) M in r_s
+const float SHADOW_RS = 1.5f * sqrt(3.0f);
+const float RING_WIDTH_RS = 0.1f;
+
+// Sphere that subtends the shadow's apparent size from the ray origin (Synge: sin a = b_c / r * sqrt(1 - r_s / r)),
+// so the straight-ray shadow matches what the lensed views show; never smaller than the horizon
+float shadowRadius(int hole, vec3 rayOrigin) {
+    float r_s = calculateEventHorizonRadius(u_blackHoles[hole].mass);
+    float r = length(rayOrigin - u_blackHoles[hole].position) / r_s;
+    return r_s * max(SHADOW_RS * sqrt(max(1.0f - 1.0f / r, 0.0f)), 1.0f);
+}
+
+float diskHit(int hole, vec3 rayOrigin, vec3 rayDir) {
+    vec3 axis = u_blackHoles[hole].spinAxis;
+    float facing = dot(rayDir, axis);
+    if (abs(facing) < 1e-6f) return -1.0f;
+    float t = dot(u_blackHoles[hole].position - rayOrigin, axis) / facing;
+    if (t <= EPSILON) return -1.0f;
+    float r_s = calculateEventHorizonRadius(u_blackHoles[hole].mass);
+    float r = length(rayOrigin + rayDir * t - u_blackHoles[hole].position) / r_s;
+    return r >= DISK_INNER_RS && r <= DISK_OUTER_RS ? t : -1.0f;
+}
+
+// Photon ring: glow just outside the shadow at the ray's closest approach, never thinner than about two pixels
+float ringHit(int hole, vec3 rayOrigin, vec3 rayDir, float pixelAngle, out float glow) {
+    glow = 0.0f;
+    vec3 toHole = u_blackHoles[hole].position - rayOrigin;
+    float t = dot(toHole, rayDir);
+    if (t <= EPSILON) return -1.0f;
+    float r_s = calculateEventHorizonRadius(u_blackHoles[hole].mass);
+    float width = max(RING_WIDTH_RS, 2.0f * t * pixelAngle / r_s);
+    float u = (length(toHole - rayDir * t) - shadowRadius(hole, rayOrigin)) / (r_s * width);
+    if (u < 0.0f || u > 4.0f) return -1.0f;
+    glow = exp(-2.0f * u) * (1.0f - u * 0.25f);
+    return t;
+}
+
+// rgb = emitted radiance, a = opacity
+vec4 shadeDisk(int hole, vec3 rayOrigin, vec3 rayDir, float t, float pixelAngle) {
+    vec3 axis = u_blackHoles[hole].spinAxis;
+    float r_s = calculateEventHorizonRadius(u_blackHoles[hole].mass);
+    vec3 rel = rayOrigin + rayDir * t - u_blackHoles[hole].position;
+
+    // right-handed (tangentX, up, tangentZ) with up = -axis: doppler.glsl's flow then turns prograde about the spin axis
+    vec3 up = -axis;
+    vec3 tangentX = normalize(cross(up, abs(up.y) < 0.9f ? vec3(0.0f, 1.0f, 0.0f) : vec3(1.0f, 0.0f, 0.0f)));
+    vec3 tangentZ = cross(tangentX, up);
+    vec3 local = vec3(dot(rel, tangentX), 0.0f, dot(rel, tangentZ)) / r_s;
+    float r = length(local.xz);
+    float phi = atan(local.z, local.x);
+    float cosView = max(abs(dot(rayDir, axis)), 0.05f);
+
+    // streaks run along phi; they fade out where a pixel's radial footprint covers about half a noise cell
+    vec3 inPlane = rayDir - axis * dot(rayDir, axis);
+    float radialAlongView = dot(rel, inPlane) / max(length(rel) * length(inPlane), 1e-6f);
+    float stretch = sqrt(radialAlongView * radialAlongView / (cosView * cosView) + 1.0f - radialAlongView * radialAlongView);
+    float footprint = t * pixelAngle * stretch / r_s * max(u_accDiskNoiseScale, 0.25f);
+    float detailCoarse = 1.0f - smoothstep(0.25f, 0.6f, footprint * 1.5f);
+    float detailFine = 1.0f - smoothstep(0.25f, 0.6f, footprint * 4.0f);
+    float streaks = 1.0f;
+    if (detailCoarse > 0.0f) {
+        float swirl = phi - u_time * u_accDiskSpeed + 2.0f * log(r);
+        vec3 p = vec3(cos(swirl) * 3.0f, sin(swirl) * 3.0f, r * 1.5f) * u_accDiskNoiseScale;
+        streaks += detailCoarse * 0.45f * snoise(p);
+        if (detailFine > 0.0f) {
+            float swirlFast = phi - u_time * u_accDiskSpeed * 1.7f + 3.0f * log(r);
+            vec3 q = vec3(cos(swirlFast) * 7.0f, sin(swirlFast) * 7.0f, r * 4.0f) * u_accDiskNoiseScale + 17.0f;
+            streaks += detailFine * 0.25f * snoise(q);
+        }
+    }
+
+    float temperature = FLAT_DISK_TEMP_INNER * pow(r / DISK_INNER_RS, -FLAT_DISK_TEMP_FALLOFF);
+    float shift = 1.0f;
+    float beaming = 1.0f;
+    if (u_dopplerBeamingEnabled > 0.5f) {
+        vec3 toCamera = -rayDir;
+        float doppler = calculateDopplerEffect(local, vec3(dot(toCamera, tangentX), dot(toCamera, up), dot(toCamera, tangentZ)));
+        shift *= doppler;
+        beaming = clamp(doppler * doppler * doppler, 0.2f, 4.0f);
+    }
+    if (u_gravitationalRedshiftEnabled == 1) {
+        shift *= sqrt(max(1.0f - 1.0f / r, 0.0f));
+    }
+    vec3 emission = getBlackbodyColorLUT(temperature, 1.0f / shift) * FLAT_DISK_GAIN * beaming * streaks;
+
+    float edge = smoothstep(DISK_INNER_RS, DISK_INNER_RS * 1.12f, r) * (1.0f - smoothstep(DISK_OUTER_RS * 0.7f, DISK_OUTER_RS, r));
+    float density = min(edge * clamp(0.45f + 0.35f * streaks, 0.0f, 1.0f), 0.98f);
+    float alpha = 1.0f - pow(1.0f - density, 1.0f / cosView);
+    return vec4(emission, alpha);
+}
+
+void main() {
+    ivec2 texCoords;
+    if (!traceTexel(texCoords)) {
+        return;
+    }
+
+    vec3 rayOrigin;
+    vec3 rayDir;
+    cameraRay(texCoords, rayOrigin, rayDir);
+    float pixelAngle = 2.0f * tan(radians(u_fov) * 0.5f) / float(imageSize(l_outputImage).y);
+
+    float tOpaque = 1e30f;
+    bool solid = false;
+    vec3 background = texture(u_skyboxTexture, directionToSpherical(rayDir)).rgb;
+    g_termination = TERM_SKY;
+
+    if (u_renderBlackHoles == 1) {
+        for (int i = 0; i < u_numBlackHoles; i++) {
+            float t;
+            if (intersectSphere(rayOrigin, rayDir, u_blackHoles[i].position, shadowRadius(i, rayOrigin), t) && t < tOpaque) {
+                tOpaque = t;
+                solid = true;
+                background = vec3(0.0f);
+                g_termination = TERM_HORIZON;
+            }
+        }
+    }
+
+    if (u_renderSpheres == 1) {
+        vec3 lightDir = normalize(vec3(1.0f, 1.0f, 1.0f));
+        for (int i = 0; i < u_numSpheres; i++) {
+            float t;
+            if (intersectSphere(rayOrigin, rayDir, u_spheres[i].position, u_spheres[i].radius, t) && t < tOpaque) {
+                tOpaque = t;
+                solid = true;
+                background = renderSphere(rayOrigin + rayDir * t, rayDir, i, lightDir);
+                g_termination = TERM_OBJECT;
+            }
+        }
+    }
+
+    if (u_enableThirdPerson == 1) {
+        float t;
+        int axis = intersectCrosshair(rayOrigin, rayDir, u_cameraPos, u_cubeSize * 0.3f, t);
+        if (axis > 0 && t < tOpaque) {
+            tOpaque = t;
+            solid = true;
+            background = getCrosshairColor(axis);
+            g_termination = TERM_CROSSHAIR;
+        }
+    }
+
+    // disks and photon rings in front of the opaque hit, nearest first (candidate 2i = disk of hole i, 2i+1 = its ring);
+    // the first disk that hides half of what is behind it sets the depth
+    vec3 color = vec3(0.0f);
+    float transmittance = 1.0f;
+    float depthT = solid ? tOpaque : -1.0f;
+    bool diskDepth = false;
+    g_maxStepCount = max(u_numBlackHoles, 1);
+    if (u_renderBlackHoles == 1) {
+        bool disks = u_accretionDiskEnabled == 1;
+        int candidates = 2 * u_numBlackHoles;
+        float candidateT[16];
+        float glow[8];
+        for (int i = 0; i < u_numBlackHoles; i++) {
+            candidateT[2 * i] = disks ? diskHit(i, rayOrigin, rayDir) : -1.0f;
+            candidateT[2 * i + 1] = ringHit(i, rayOrigin, rayDir, pixelAngle, glow[i]);
+        }
+        vec3 ringColor = getBlackbodyColorLUT(FLAT_DISK_TEMP_INNER, 1.0f) * FLAT_DISK_GAIN * (disks ? 1.0f : 0.4f);
+        for (int layer = 0; layer < candidates; layer++) {
+            int nearest = -1;
+            float tNearest = tOpaque;
+            for (int candidate = 0; candidate < candidates; candidate++) {
+                float t = candidateT[candidate];
+                if (t > 0.0f && t < tNearest) {
+                    tNearest = t;
+                    nearest = candidate;
+                }
+            }
+            if (nearest < 0) break;
+            candidateT[nearest] = -1.0f;
+
+            if ((nearest & 1) == 1) {
+                color += transmittance * glow[nearest >> 1] * ringColor;
+                continue;
+            }
+            vec4 disk = shadeDisk(nearest >> 1, rayOrigin, rayDir, tNearest, pixelAngle);
+            g_stepCount++;
+            color += transmittance * disk.a * disk.rgb;
+            transmittance *= 1.0f - disk.a;
+            if (!diskDepth && transmittance < 0.5f) {
+                diskDepth = true;
+                depthT = tNearest;
+                g_termination = TERM_DISK;
+            }
+        }
+    }
+    color += transmittance * background;
+
+    color = debugViewColor(color);
+
+    // third person: the ray origin sits behind the view camera, hits next to or behind it are in front of every mesh
+    float depth = FAR_DEPTH;
+    if (depthT >= 0.0f) {
+        vec4 clipPos = u_viewProjection * vec4(rayOrigin + rayDir * depthT, 1.0f);
+        depth = clipPos.w > 0.0f ? clamp(clipPos.z / clipPos.w, 0.0f, FAR_DEPTH) : 0.0f;
+    }
+    imageStore(l_outputImage, texCoords, vec4(color, depth));
+}

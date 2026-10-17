@@ -34,8 +34,8 @@ float adiskColorVariant(vec4 posSph, inout vec3 color, inout float alpha, float 
 
 // Returns the optical depth (density) at this position for volumetric rendering
 float adiskColor(vec4 posSph, inout vec3 color, inout float alpha, float eventHorizonRadius, vec3 rayOrigin, float blackHoleMass, vec3 blackHoleSpinAxis) {
-    float iscoRadius = 5.4f * eventHorizonRadius;
-    float outerRadius = 10.0f * eventHorizonRadius;
+    float iscoRadius = DISK_INNER_RS * eventHorizonRadius;
+    float outerRadius = DISK_OUTER_RS * eventHorizonRadius;
     float r_sph = posSph.y;
     float theta_sph = posSph.z;
     float phi_sph = posSph.w;

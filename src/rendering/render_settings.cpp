@@ -30,7 +30,7 @@ namespace MoleHole
             registry.Add(Setting("transport.mode", &R::TransportMode, {
                 .Label = "Ray transport", .Group = "Transport",
                 .Tooltip = "How camera rays travel through curved space.\n"
-                           "Straight: no bending, black holes are plain shadows.\n"
+                           "Straight: no bending, analytic shadow and thin disk, no ray marching. Fastest, for editing.\n"
                            "Analytic lens: precomputed deflection, fast and good-looking.\n"
                            "Integrated: geodesic integration of the selected metric, physically accurate.",
                 .Doc = kDoc,
@@ -68,14 +68,18 @@ namespace MoleHole
                 .Tooltip = "Brighten the approaching side of the disk and dim the receding side.", .Doc = kDoc}));
 
             registry.Add(Setting("disk.enabled", &R::AccretionDisk, {
-                .Label = "Accretion disk", .Group = "Disk", .Doc = kDoc, .Cost = 1}));
+                .Label = "Accretion disk", .Group = "Disk",
+                .Tooltip = "Thin disk in each black hole's equatorial plane.\n"
+                           "The Straight transport draws a simplified analytic disk (no volume, height or noise detail).",
+                .Doc = kDoc, .Cost = 1}));
             registry.Add(Setting("disk.volumetric", &R::AccretionDiskVolumetric, {
                 .Label = "Volumetric", .Group = "Disk",
-                .Tooltip = "Absorb light inside a noisy 3D disk instead of a thin emitting surface.",
-                .Doc = kDoc, .Cost = 3, .VisibleWhen = "disk.enabled"}));
+                .Tooltip = "Absorb light inside a noisy 3D disk instead of a thin emitting surface.\n"
+                           "Not used by the Straight transport.",
+                .Doc = kDoc, .Cost = 3, .VisibleWhen = "disk.enabled & transport.mode>=1"}));
             registry.Add(Setting("disk.height", &R::AccDiskHeight, {
-                .Label = "Height", .Group = "Disk", .Doc = kDoc, .Min = 0.0, .Max = 2.0,
-                .VisibleWhen = "disk.enabled"}));
+                .Label = "Height", .Group = "Disk", .Tooltip = "Not used by the Straight transport.", .Doc = kDoc,
+                .Min = 0.0, .Max = 2.0, .VisibleWhen = "disk.enabled & transport.mode>=1"}));
             registry.Add(Setting("disk.speed", &R::AccDiskSpeed, {
                 .Label = "Speed", .Group = "Disk", .Doc = kDoc, .Min = 0.0, .Max = 5.0,
                 .VisibleWhen = "disk.enabled"}));
@@ -83,17 +87,27 @@ namespace MoleHole
                 .Label = "Noise scale", .Group = "Disk", .Doc = kDoc, .Min = 0.0, .Max = 5.0,
                 .VisibleWhen = "disk.enabled"}));
             registry.Add(Setting("disk.noise_lod", &R::AccDiskNoiseLOD, {
-                .Label = "Noise detail", .Group = "Disk", .Doc = kDoc, .Min = 0.0, .Max = 10.0,
-                .VisibleWhen = "disk.enabled"}));
+                .Label = "Noise detail", .Group = "Disk", .Tooltip = "Not used by the Straight transport.", .Doc = kDoc,
+                .Min = 0.0, .Max = 10.0, .VisibleWhen = "disk.enabled & transport.mode>=1"}));
 
             registry.Add(Setting("objects.black_holes", &R::RenderBlackHoles, {
                 .Label = "Black holes", .Group = "Objects", .Doc = kDoc}));
             registry.Add(Setting("objects.spheres", &R::RenderSpheres, {
                 .Label = "Spheres", .Group = "Objects", .Doc = kDoc}));
             registry.Add(Setting("objects.meshes", &R::RenderMeshes, {
-                .Label = "Meshes", .Group = "Objects",
-                .Tooltip = "Mesh objects are rasterised over the traced image, they are not lensed.",
+                .Label = "Meshes", .Group = "Objects", .Tooltip = "Draw mesh objects (glTF models).",
                 .Doc = kDoc, .Cost = 1}));
+            registry.Add(Setting("objects.mesh_mode", &R::MeshDrawMode, {
+                .Label = "Mesh mode", .Group = "Objects",
+                .Tooltip = "Raster: drawn over the traced image, not lensed.\n"
+                           "Traced: hit by the tracer's rays (hardware ray queries), so meshes are bent by the hole and\n"
+                           "hidden by the shadow, the disk and other objects. The Straight transport always rasterises.",
+                .Doc = kDoc,
+                .Options = {"Raster", "Traced"},
+                .OptionLabels = {"Raster overlay", "Traced (lensed)"},
+                .OptionRequires = {"", std::string(GpuCapability::kRayQuery)},
+                .OptionCosts = {0, 1},
+                .VisibleWhen = "objects.meshes & transport.mode>=1"}));
 
             registry.Add(Setting("camera.third_person", &R::ThirdPerson, {
                 .Label = "Third person crosshair", .Group = "Camera", .Doc = kDoc}));
@@ -190,7 +204,8 @@ namespace MoleHole
             flat.TransportMode = Transport::Straight;
             flat.Bloom = false;
             flat.LensFlare = false;
-            profiles.push_back(MakeBuiltIn("Flat", "Straight rays, no lensing, no bloom. For editing and placing objects.", flat));
+            flat.MeshDrawMode = MeshMode::Raster;
+            profiles.push_back(MakeBuiltIn("Flat", "Straight rays, analytic shadow and disk, no lensing, no bloom. Fast, for editing and placing objects.", flat));
 
             profiles.push_back(MakeBuiltIn("Lensed", "Analytic lens with bloom and flares. The interactive default.", RenderSettings{}));
 

@@ -1,6 +1,3 @@
-const float G = 1.0f;
-const float c = 1.0f;
-
 rmat4 compute_kerr_newman_metric(real r, real theta, real M, real a, real Q) {
     real rs = 2.0 * M;
     real rq2 = rsq(Q * M);

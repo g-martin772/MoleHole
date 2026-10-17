@@ -8,13 +8,11 @@ import :Rendering.Frame;
 
 export namespace MoleHole
 {
-    // Order matches the shader's metric index
     enum class Spacetime : int { Schwarzschild = 0, Kerr = 1, ReissnerNordstrom = 2, KerrNewman = 3 };
     enum class Transport : int { Straight = 0, AnalyticLens = 1, Integrated = 2 };
     enum class DebugView : int { None = 0, StepCount = 1, Termination = 2 };
+    enum class MeshMode : int { Raster = 0, Traced = 1 };
 
-    // Every switch of the renderer. Declared once in RenderSettingRegistry(); the Render window, the scene's
-    // `Render:` YAML, `--set key=value` and `render.set` are generated from that list.
     struct RenderSettings
     {
         Spacetime Solution = Spacetime::Kerr;
@@ -38,6 +36,7 @@ export namespace MoleHole
         bool RenderBlackHoles = true;
         bool RenderSpheres = true;
         bool RenderMeshes = true;
+        MeshMode MeshDrawMode = MeshMode::Traced;
 
         bool ThirdPerson = false;
         float ThirdPersonDistance = 10.0f;

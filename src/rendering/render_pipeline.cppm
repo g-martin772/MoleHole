@@ -8,11 +8,11 @@ import :Rendering.Frame;
 import :Rendering.Camera;
 import :Rendering.Settings;
 import :Rendering.Meshes;
+import :Rendering.MeshTrace;
 import :Simulation.ObjectPaths;
 
 export namespace MoleHole
 {
-    // What one frame of the viewport is drawn from
     struct RenderInputs
     {
         const GPP::Scene* Scene = nullptr;
@@ -21,7 +21,16 @@ export namespace MoleHole
         std::shared_ptr<GPP::PhysicsSimulationModule> Physics;
     };
 
-    // Device objects the stages share
+    struct MeshTraceFrame
+    {
+        bool Active = false;
+        vk::AccelerationStructureKHR Tlas{};
+        vk::Buffer Instances{};
+        std::array<const GPP::VulkanImage*, kMeshTextureSlots> Textures{};
+        glm::vec4 Bounds{0.0f};
+        std::int32_t Count = 0;
+    };
+
     struct RenderResources
     {
         std::shared_ptr<GPP::Renderer> Renderer;
@@ -38,17 +47,16 @@ export namespace MoleHole
         std::shared_ptr<GPP::VulkanImage> Skybox;
         std::shared_ptr<GPP::VulkanImage> DummyWhiteTexture;
 
-        // Tracer-resolution targets (see RenderFrameContext::TraceExtent)
         vk::Extent3D TraceExtent{0, 0, 0};
         std::unique_ptr<GPP::VulkanImage> RaytraceImage;
         std::unique_ptr<GPP::VulkanImage> BloomBrightImage;
         std::array<std::unique_ptr<GPP::VulkanImage>, 2> BloomBlurImages;
         std::unique_ptr<GPP::VulkanImage> LensFlareImage;
-        // Final blur of the bloom chain; what the composite samples
         GPP::VulkanImage* BloomResult = nullptr;
+
+        MeshTraceFrame MeshTrace;
     };
 
-    // Everything a stage may read while recording
     struct RenderFrameContext
     {
         GPP::RenderGraph& Graph;
@@ -62,14 +70,12 @@ export namespace MoleHole
         GPP::RenderGraphHandle DepthTarget = GPP::kInvalidRenderGraphHandle;
         vk::Format ColorFormat = vk::Format::eUndefined;
         vk::Format DepthFormat = vk::Format::eUndefined;
-        // Viewport buffer and the (scaled) size the tracer renders at
         vk::Extent3D DisplayExtent{0, 0, 0};
         vk::Extent3D TraceExtent{0, 0, 0};
         std::uint32_t GroupsX = 0;
         std::uint32_t GroupsY = 0;
     };
 
-    // One pass or group of passes. A stage the settings turn off records nothing and costs nothing.
     class IRenderStage
     {
     public:
@@ -77,11 +83,9 @@ export namespace MoleHole
         [[nodiscard]] virtual std::string_view Name() const = 0;
         [[nodiscard]] virtual bool Enabled(const RenderSettings&) const { return true; }
         virtual void Record(RenderFrameContext& context) = 0;
-        // Shaders compiled; an export waits for every stage
         [[nodiscard]] virtual bool Ready() const { return true; }
     };
 
-    // trace -> bloom -> lens flare -> composite -> overlays -> meshes, each a stage the profile can switch off
     class RenderPipeline
     {
     public:
@@ -93,19 +97,15 @@ export namespace MoleHole
         RenderPipeline(const RenderPipeline&) = delete;
         RenderPipeline& operator=(const RenderPipeline&) = delete;
 
-        // Compiles shaders and builds the LUTs; call from the layer's OnAttach
         void Initialize();
 
-        // Trail history of meshes and spheres while the simulation plays
         void RecordObjectPaths(const GPP::Scene& scene);
         void ClearObjectPaths();
 
-        // Render thread: appends this frame's passes to the graph
         void Build(GPP::RenderGraph& graph, const RenderInputs& inputs);
 
         [[nodiscard]] bool AllStagesReady() const;
         [[nodiscard]] const GPP::GpuCapabilities& Capabilities() const;
-        // Names of the stages that recorded in the last Build, in order
         [[nodiscard]] std::vector<std::string> LastRecordedStages() const;
 
     private:
@@ -113,7 +113,6 @@ export namespace MoleHole
         std::unique_ptr<Impl> m_Impl;
     };
 
-    // Size the tracer renders at for a viewport and a resolution-scale setting (percent)
     [[nodiscard]] inline vk::Extent3D ScaledTraceExtent(const vk::Extent3D display, const float scalePercent)
     {
         const float scale = std::clamp(scalePercent, 25.0f, 200.0f) / 100.0f;
@@ -122,5 +121,23 @@ export namespace MoleHole
             return std::max<std::uint32_t>(1, static_cast<std::uint32_t>(std::lround(static_cast<float>(value) * scale)));
         };
         return {scaled(display.width), scaled(display.height), display.depth};
+    }
+
+    [[nodiscard]] inline bool WantsTracedMeshes(const RenderSettings& settings) noexcept
+    {
+        return settings.RenderMeshes && settings.MeshDrawMode == MeshMode::Traced
+               && settings.TransportMode != Transport::Straight;
+    }
+
+    enum class TraceKernel { Flat, Marcher, MarcherF64, MarcherMeshes, MarcherMeshesF64 };
+
+    [[nodiscard]] inline TraceKernel SelectTraceKernel(const RenderSettings& settings, const bool f64Available,
+                                                       const bool tracedMeshes = false)
+    {
+        if (settings.TransportMode == Transport::Straight) return TraceKernel::Flat;
+        const bool f64 = settings.TransportMode == Transport::Integrated
+                         && settings.GpuPrecision == GPP::Units::Precision::F64 && f64Available;
+        if (tracedMeshes) return f64 ? TraceKernel::MarcherMeshesF64 : TraceKernel::MarcherMeshes;
+        return f64 ? TraceKernel::MarcherF64 : TraceKernel::Marcher;
     }
 }

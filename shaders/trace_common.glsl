@@ -1,0 +1,116 @@
+layout(set = 0, binding = 0, rgba32f) uniform image2D l_outputImage;
+
+layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
+{
+    vec3 u_cameraPos; float u_fov;
+    vec3 u_cameraFront; float u_aspect;
+    vec3 u_cameraUp; float u_time;
+    vec3 u_cameraRight; float u_cameraRightPad;
+
+    int u_enableThirdPerson;
+    float u_thirdPersonDistance;
+    float u_thirdPersonHeight;
+    float u_cubeSize;
+
+    int u_isPhysicallyAccurate;
+    int u_debugMode; // 0 off, 1 step count, 2 termination reason
+    int u_metric_type;
+    int u_gravitationalLensingEnabled;
+
+    int u_accretionDiskEnabled;
+    int u_accretionDiskVolumetric;
+    int u_renderBlackHoles;
+    int u_renderSpheres;
+
+    int u_gravitationalRedshiftEnabled;
+    float u_accDiskHeight;
+    float u_accDiskNoiseScale;
+    float u_accDiskNoiseLOD;
+
+    float u_accDiskSpeed;
+    float u_dopplerBeamingEnabled;
+    float u_lutTempMin;
+    float u_lutTempMax;
+
+    float u_lutRedshiftMin;
+    float u_lutRedshiftMax;
+    float u_rayStepSize;
+    int u_maxRaySteps;
+
+    float u_adaptiveStepRate;
+    int u_numBlackHoles;
+    int u_numSpheres;
+    float _pad0;
+
+    BlackHoleData u_blackHoles[8];
+    SphereData u_spheres[16];
+
+    mat4 u_viewProjection;
+
+    vec4 u_meshBounds;
+    int u_numMeshInstances;
+    float _meshPad0;
+    float _meshPad1;
+    float _meshPad2;
+};
+
+layout(set = 0, binding = 2) uniform sampler2D u_skyboxTexture;
+layout(set = 0, binding = 3) uniform sampler2D u_blackbodyLUT;
+layout(set = 0, binding = 4) uniform sampler2D u_accelerationLUT;
+layout(set = 0, binding = 5) uniform sampler2D u_hrDiagramLUT;
+
+layout(push_constant) uniform SlicePushBlock
+{
+    uint u_firstWorkgroup;
+    uint u_workgroupsPerRow;
+};
+
+const float FAR_DEPTH = 0.999999f;
+
+bool traceTexel(out ivec2 texCoords) {
+    uint workgroup = u_firstWorkgroup + gl_WorkGroupID.x;
+    uvec2 workgroupCoords = uvec2(workgroup % u_workgroupsPerRow, workgroup / u_workgroupsPerRow);
+    texCoords = ivec2(workgroupCoords * 16u + gl_LocalInvocationID.xy);
+    ivec2 imageSize = imageSize(l_outputImage);
+    return texCoords.x < imageSize.x && texCoords.y < imageSize.y;
+}
+
+void cameraRay(ivec2 texCoords, out vec3 rayOrigin, out vec3 rayDir) {
+    ivec2 imageSize = imageSize(l_outputImage);
+    vec2 uv = (vec2(texCoords) + 0.5f) / vec2(imageSize);
+    uv = uv * 2.0f - 1.0f;
+    uv.x *= u_aspect;
+    uv.y = -uv.y;
+
+    vec3 cameraFront;
+    vec3 cameraUp;
+    vec3 cameraRight;
+
+    if (u_enableThirdPerson == 1) {
+        vec3 cubeRight = normalize(cross(u_cameraFront, u_cameraUp));
+        vec3 actualCubeUp = normalize(cross(cubeRight, u_cameraFront));
+
+        vec3 offsetBack = -u_cameraFront * u_thirdPersonDistance;
+        vec3 offsetUp = actualCubeUp * u_thirdPersonHeight;
+        rayOrigin = u_cameraPos + offsetBack + offsetUp;
+
+        vec3 lookAtPoint = u_cameraPos + u_cameraFront * 1.0;
+        cameraFront = normalize(lookAtPoint - rayOrigin);
+        cameraUp = actualCubeUp;
+        cameraRight = normalize(cross(cameraFront, cameraUp));
+        cameraUp = normalize(cross(cameraRight, cameraFront));
+    } else {
+        rayOrigin = u_cameraPos;
+        cameraFront = u_cameraFront;
+        cameraUp = u_cameraUp;
+        cameraRight = u_cameraRight;
+    }
+
+    float tanHalfFov = tan(radians(u_fov) * 0.5);
+    rayDir = normalize(cameraFront + cameraRight * uv.x * tanHalfFov + cameraUp * uv.y * tanHalfFov);
+}
+
+float hitDepth(vec3 hitPoint) {
+    vec4 clipPos = u_viewProjection * vec4(hitPoint, 1.0f);
+    return clipPos.z / clipPos.w;
+}

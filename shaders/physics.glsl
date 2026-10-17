@@ -4,6 +4,13 @@ const float PHYS_PI = float(R_PI);
 
 const float STEFAN_BOLTZMANN = GPP_STEFAN_BOLTZMANN;
 
+const float G = 1.0f;
+const float c = 1.0f;
+
+// Accretion disk annulus in event-horizon radii
+const float DISK_INNER_RS = 5.4f;
+const float DISK_OUTER_RS = 10.0f;
+
 float calculateEventHorizonRadius(float mass) {
     return 2 * G * mass / pow(c, 2);
 }

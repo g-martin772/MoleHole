@@ -1,14 +1,3 @@
-// Diagnostics for the debug views (u_debugMode): steps taken and why the ray ended
-const int TERM_SKY = 0;
-const int TERM_HORIZON = 1;
-const int TERM_OBJECT = 2;
-const int TERM_DISK = 3;
-const int TERM_STEPS = 4;
-const int TERM_CROSSHAIR = 5;
-int g_stepCount = 0;
-int g_maxStepCount = 1; // budget the step count is shown against
-int g_termination = TERM_SKY;
-
 struct HitRecord {
     bool hit;
     float t;
@@ -62,6 +51,20 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
             }
         }
     }
+
+#ifdef GPP_MESH_TRACE
+    {
+        float t;
+        vec3 meshColor;
+        if (traceMeshes(rayOrigin, rayDir, record.t, t, meshColor)) {
+            record.hit = true;
+            record.t = t;
+            record.type = 2;
+            record.objectIndex = 0;
+            record.color = meshColor;
+        }
+    }
+#endif
 
     if (u_enableThirdPerson == 1) {
         float t;
@@ -161,7 +164,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
         // Check object intersections within marching step
         HitRecord hit = rayTraceNormalSpace(newOrigin, newDirection, currentStepSize);
         if (hit.hit) {
-            if (hit.type == 1) {
+            if (hit.type == 1 || hit.type == 2) {
                 hitSolid = true;
                 hitPoint = newOrigin + newDirection * hit.t;
             }
@@ -242,7 +245,7 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             if (hit.hit) {
                 if (hit.t < minDistToInfluence) {
                     color += hit.color;
-                    if (hit.type == 1) {
+                    if (hit.type == 1 || hit.type == 2) {
                         hitSolid = true;
                         hitPoint = currentOrigin + currentDir * hit.t;
                     }
@@ -315,13 +318,32 @@ rvec3 velSphericalToCartesianReal(rvec3 p, rvec3 v) {
     return clamp(rvec3(vx, vy, vz), rvec3(-1e6), rvec3(1e6));
 }
 
-vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
+bool segmentObjectHit(vec3 origin, vec3 dir, float maxDistance, out vec3 color, inout vec3 hitPoint, inout bool hitSolid) {
+    HitRecord hit = rayTraceNormalSpace(origin, dir, maxDistance);
+    color = vec3(0.0f);
+    if (!hit.hit) return false;
+    color = hit.color;
+    if (hit.type == 1 || hit.type == 2) {
+        hitSolid = true;
+        hitPoint = origin + dir * hit.t;
+    }
+    g_termination = hit.type == 3 ? TERM_CROSSHAIR : TERM_OBJECT;
+    return true;
+}
+
+vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bool hitSolid) {
 
     vec3 colorValue = vec3(0.0f);
     float alpha = 1.0f;
+    hitPoint = vec3(0.0f);
+    hitSolid = false;
+    bool objects = (u_renderSpheres == 1 && u_numSpheres > 0) || u_numMeshInstances > 0 || u_enableThirdPerson == 1;
+    vec3 objectColor;
 
-    if (u_blackHoles[0].mass == 0.0f)
-    return texture(u_skyboxTexture, directionToSpherical(rayDirection)).rgb;
+    if (u_blackHoles[0].mass == 0.0f) {
+        if (objects && segmentObjectHit(rayOrigin, normalize(rayDirection), 1e10f, objectColor, hitPoint, hitSolid)) return objectColor;
+        return texture(u_skyboxTexture, directionToSpherical(rayDirection)).rgb;
+    }
 
     vec3 dir = normalize(rayDirection);
 
@@ -342,9 +364,12 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
             float b = dot(rel, dir);
             float disc = b * b - (dot(rel, rel) - enterRadius * enterRadius);
             if (b >= 0.0f || disc < 0.0f) {
+                if (objects && segmentObjectHit(rayOrigin, dir, 1e10f, objectColor, hitPoint, hitSolid)) return objectColor;
                 return texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
             }
-            marchOrigin = rayOrigin + dir * (-b - sqrt(disc));
+            float entry = -b - sqrt(disc);
+            if (objects && segmentObjectHit(rayOrigin, dir, entry, objectColor, hitPoint, hitSolid)) return objectColor;
+            marchOrigin = rayOrigin + dir * entry;
         }
     }
 
@@ -398,35 +423,28 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection) {
             stepSize = u_rayStepSize;
         }
 
+        vec3 chordStart = objects ? toCartesian(vec3(relativePosSph.yzw)) : vec3(0.0f);
         relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, M);
         rk4_step(relativePosSph, relativeDirSph, real(stepSize), M, a, Q);
         relativeDirSph = normalize4Velocity(relativePosSph, relativeDirSph, M);
+
+        if (objects) {
+            vec3 chord = toCartesian(vec3(relativePosSph.yzw)) - chordStart;
+            float chordLength = length(chord);
+            if (chordLength > 0.0f
+                && segmentObjectHit(u_blackHoles[0].position + chordStart, chord / chordLength, chordLength, objectColor, hitPoint, hitSolid)) {
+                return colorValue + alpha * objectColor;
+            }
+        }
     }
 
     dir = vec3(velSphericalToCartesianReal(relativePosSph.yzw, relativeDirSph.yzw));
 
+    if (objects && g_termination == TERM_SKY
+        && segmentObjectHit(u_blackHoles[0].position + toCartesian(vec3(relativePosSph.yzw)), normalize(dir), 1e10f, objectColor, hitPoint, hitSolid)) {
+        return objectColor;
+    }
+
     vec3 color = texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
     return color;
-}
-
-// Debug views: colours that do not depend on the scene's own lighting
-vec3 debugHeat(float t) {
-    t = clamp(t, 0.0, 1.0);
-    return clamp(vec3(1.5 * t - 0.25, 1.5 - abs(3.0 * t - 1.5), 1.25 - 1.5 * t), 0.0, 1.0);
-}
-
-vec3 debugViewColor(vec3 shaded) {
-    if (u_debugMode == 1) {
-        // square root keeps both cheap and expensive pixels readable
-        return debugHeat(sqrt(float(g_stepCount) / float(max(g_maxStepCount, 1))));
-    }
-    if (u_debugMode == 2) {
-        if (g_termination == TERM_SKY) return vec3(0.04, 0.08, 0.22);
-        if (g_termination == TERM_HORIZON) return vec3(0.9, 0.05, 0.05);
-        if (g_termination == TERM_OBJECT) return vec3(0.1, 0.8, 0.2);
-        if (g_termination == TERM_DISK) return vec3(1.0, 0.6, 0.0);
-        if (g_termination == TERM_STEPS) return vec3(1.0, 1.0, 1.0);
-        return vec3(0.0, 0.9, 0.9);
-    }
-    return shaded;
 }

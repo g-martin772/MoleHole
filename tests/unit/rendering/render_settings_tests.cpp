@@ -44,9 +44,11 @@ TEST_CASE("Every render setting is declared once with a label, a group and sane 
             CHECK((setting.Meta.OptionRequires.empty() || setting.Meta.OptionRequires.size() == setting.Meta.Options.size()));
             CHECK((setting.Meta.OptionCosts.empty() || setting.Meta.OptionCosts.size() == setting.Meta.Options.size()));
         }
-        if (!setting.Meta.VisibleWhen.empty())
+        for (const auto clause : std::views::split(setting.Meta.VisibleWhen, '&'))
         {
-            const auto dependency = setting.Meta.VisibleWhen.substr(0, setting.Meta.VisibleWhen.find_first_of("=!>"));
+            auto dependency = std::string(std::string_view(clause));
+            dependency = dependency.substr(0, dependency.find_first_of("=!>"));
+            std::erase(dependency, ' ');
             CHECK(registry.Find(dependency) != nullptr);
         }
     }
@@ -88,6 +90,74 @@ TEST_CASE("The Lensed built-in equals the struct defaults so profiles can be sav
     CHECK(set.Find("Traced")->Settings.TransportMode == Transport::Integrated);
     CHECK(set.Find("Reference")->Settings.AccretionDiskVolumetric);
     for (const auto& profile : set.Profiles()) CHECK(profile.BuiltIn);
+
+    const auto& flat = set.Find("Flat")->Settings;
+    CHECK_FALSE(flat.UsesBloomChain());
+    CHECK(flat.Fxaa);
+}
+
+TEST_CASE("The Straight transport hides the disk settings its analytic disk ignores", "[rendering][settings]")
+{
+    const auto& registry = RenderSettingRegistry();
+    const auto visible = [&](const RenderSettings& settings, const char* key)
+    {
+        return registry.IsVisible(settings, *registry.Find(key));
+    };
+    RenderSettings flat = RenderProfileSet().Find("Flat")->Settings;
+    for (const auto* key : {"disk.volumetric", "disk.height", "disk.noise_lod"}) CHECK_FALSE(visible(flat, key));
+    for (const auto* key : {"disk.enabled", "disk.speed", "disk.noise_scale", "radiometry.redshift", "radiometry.doppler"})
+        CHECK(visible(flat, key));
+
+    const RenderSettings lensed;
+    for (const auto* key : {"disk.volumetric", "disk.height", "disk.noise_lod"}) CHECK(visible(lensed, key));
+    RenderSettings noDisk;
+    noDisk.AccretionDisk = false;
+    CHECK_FALSE(visible(noDisk, "disk.volumetric"));
+}
+
+TEST_CASE("The trace stage runs the analytic kernel for straight rays and the marcher otherwise", "[rendering][pipeline]")
+{
+    RenderSettings settings;
+    settings.TransportMode = Transport::Straight;
+    settings.GpuPrecision = Units::Precision::F64;
+    CHECK(SelectTraceKernel(settings, true) == TraceKernel::Flat);
+    settings.TransportMode = Transport::AnalyticLens;
+    CHECK(SelectTraceKernel(settings, true) == TraceKernel::Marcher);
+    settings.TransportMode = Transport::Integrated;
+    CHECK(SelectTraceKernel(settings, true) == TraceKernel::MarcherF64);
+    CHECK(SelectTraceKernel(settings, false) == TraceKernel::Marcher);
+    settings.GpuPrecision = Units::Precision::F32;
+    CHECK(SelectTraceKernel(settings, true) == TraceKernel::Marcher);
+    CHECK(SelectTraceKernel(settings, true, true) == TraceKernel::MarcherMeshes);
+    settings.GpuPrecision = Units::Precision::F64;
+    CHECK(SelectTraceKernel(settings, true, true) == TraceKernel::MarcherMeshesF64);
+    CHECK(SelectTraceKernel(settings, false, true) == TraceKernel::MarcherMeshes);
+    settings.TransportMode = Transport::Straight;
+    CHECK(SelectTraceKernel(settings, true, true) == TraceKernel::Flat);
+}
+
+TEST_CASE("Meshes are traced in the lensed profiles and rasterised for straight rays or without ray queries", "[rendering][pipeline]")
+{
+    const RenderProfileSet set;
+    CHECK_FALSE(WantsTracedMeshes(set.Find("Flat")->Settings));
+    CHECK(WantsTracedMeshes(set.Find("Lensed")->Settings));
+    CHECK(WantsTracedMeshes(set.Find("Traced")->Settings));
+    CHECK(WantsTracedMeshes(set.Find("Reference")->Settings));
+
+    RenderSettings settings;
+    settings.RenderMeshes = false;
+    CHECK_FALSE(WantsTracedMeshes(settings));
+    settings.RenderMeshes = true;
+    settings.TransportMode = Transport::Straight;
+    CHECK_FALSE(WantsTracedMeshes(settings));
+
+    RenderSettings lensed;
+    auto caps = FullGpu();
+    caps.Disable(GpuCapability::kRayQuery);
+    const auto notes = SanitizeForDevice(lensed, caps);
+    REQUIRE(notes.size() == 1);
+    CHECK(lensed.MeshDrawMode == MeshMode::Raster);
+    CHECK_FALSE(WantsTracedMeshes(lensed));
 }
 
 TEST_CASE("Default contexts follow the architecture table, export keeps today's look", "[rendering][profiles]")
