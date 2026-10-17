@@ -89,8 +89,18 @@ export namespace MoleHole
             if (m_Set.Rename(name, newName)) Touch();
         }
 
-        void LoadScene(const std::string& yaml)
+        void HoldForReload() noexcept { m_Held = m_HasScene; }
+
+        void LoadScene(const std::string& yaml, const std::string& scenePath = {})
         {
+            const bool keepLive = m_Held && !scenePath.empty() && scenePath == m_ScenePath;
+            m_Held = false;
+            m_ScenePath = scenePath;
+            if (keepLive)
+            {
+                m_ForceWrite = m_Adopted;
+                return;
+            }
             std::vector<std::string> warnings;
             m_Set = m_Defaults;
             if (!yaml.empty())
@@ -104,17 +114,19 @@ export namespace MoleHole
             m_Revision = 0;
             m_WrittenRevision = 0;
             m_RuntimeOverrides.clear();
+            m_ForceWrite = false;
             Rebuild();
         }
 
-        [[nodiscard]] bool SceneWritePending() const noexcept { return m_Revision != m_WrittenRevision; }
+        [[nodiscard]] bool SceneWritePending() const noexcept { return m_ForceWrite || m_Revision != m_WrittenRevision; }
 
         [[nodiscard]] bool PersistsToScene() const noexcept { return m_Adopted; }
 
         [[nodiscard]] std::optional<std::string> TakeSceneWrite()
         {
-            if (m_Revision == m_WrittenRevision) return std::nullopt;
+            if (!SceneWritePending()) return std::nullopt;
             m_WrittenRevision = m_Revision;
+            m_ForceWrite = false;
             return SceneYaml();
         }
 
@@ -224,6 +236,9 @@ export namespace MoleHole
         std::vector<std::string> m_Warnings;
         bool m_HasScene = false;
         bool m_Adopted = false;
+        bool m_Held = false;
+        bool m_ForceWrite = false;
+        std::string m_ScenePath;
         std::uint64_t m_Revision = 0;
         std::uint64_t m_WrittenRevision = 0;
 

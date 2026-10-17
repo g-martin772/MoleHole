@@ -74,6 +74,7 @@ namespace
         void OnDetach() override
         {
             m_Loader.WaitIdle();
+            m_RenderSettings->HoldForReload();
             if (const auto sim = m_Sim.Load(); sim->Runner) sim->Runner->Stop();
             m_Logger->Info("ViewportLayer detached");
         }
@@ -489,7 +490,7 @@ namespace
                 {
                     m_Logger->Info("ViewportLayer: loaded scene '{}'", result->SceneName);
                 }
-                m_RenderSettings->LoadScene(result->RenderExtension);
+                m_RenderSettings->LoadScene(result->RenderExtension, m_UiState->CurrentScenePath);
                 for (const auto& warning : m_RenderSettings->Warnings()) m_Logger->Warn("ViewportLayer: {}", warning);
                 StartSimulationFor(result->SceneName);
             }

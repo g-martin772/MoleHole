@@ -371,6 +371,58 @@ TEST_CASE("Edits fork a built-in, are written to the scene once, and survive a s
     CHECK_FALSE(other.SceneWritePending());
 }
 
+TEST_CASE("A layer reload keeps live render edits for the same scene file only", "[rendering][service]")
+{
+    RenderSettingsService service;
+    service.LoadScene({}, "scenes/a.yaml");
+    auto edited = service.Profiles().SettingsFor(RenderContext::Edit);
+    edited.Bloom = true;
+    service.Edit(RenderContext::Edit, edited);
+    (void)service.TakeSceneWrite();
+    service.SetActiveContext(RenderContext::Play);
+    service.PostOverride("sampling.resolution_scale", "50");
+    service.DrainPosted();
+
+    service.HoldForReload();
+    service.LoadScene({}, "scenes/a.yaml");
+    CHECK(service.Effective().ResolutionScale == 50.0f);
+    service.SetActiveContext(RenderContext::Edit);
+    CHECK(service.Effective().Bloom);
+    CHECK(service.Profiles().ProfileName(RenderContext::Edit) == "Flat (edited)");
+    REQUIRE(service.SceneWritePending());
+    const auto rewritten = service.TakeSceneWrite();
+    REQUIRE(rewritten);
+    CHECK_FALSE(service.SceneWritePending());
+
+    RenderSettingsService reader;
+    reader.LoadScene(*rewritten);
+    CHECK(reader.Effective().Bloom);
+
+    // The hold is consumed by one load; later loads reseed as usual
+    service.LoadScene({}, "scenes/a.yaml");
+    CHECK_FALSE(service.Effective().Bloom);
+
+    service.Edit(RenderContext::Edit, edited);
+    service.HoldForReload();
+    service.LoadScene({}, "scenes/b.yaml");
+    CHECK_FALSE(service.Effective().Bloom);
+
+    service.Edit(RenderContext::Edit, edited);
+    service.HoldForReload();
+    service.LoadScene({}, {});
+    CHECK_FALSE(service.Effective().Bloom);
+}
+
+TEST_CASE("A layer reload without unsaved edits leaves nothing to write back", "[rendering][service]")
+{
+    RenderSettingsService service;
+    service.LoadScene({}, "scenes/a.yaml");
+    service.HoldForReload();
+    service.LoadScene({}, "scenes/a.yaml");
+    CHECK_FALSE(service.SceneWritePending());
+    CHECK_FALSE(service.PersistsToScene());
+}
+
 TEST_CASE("A scene without render settings starts from the app defaults", "[rendering][service]")
 {
     RenderSettingsService service;
