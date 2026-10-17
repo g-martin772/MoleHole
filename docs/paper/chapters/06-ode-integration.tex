@@ -1,0 +1,47 @@
+\chapter{Numerical Integration of ODEs}\label{ch:ode-integration}
+\plannedscope{The geodesic solver toolbox}
+
+\section{Initial Value Problems}\label{sec:initial-value-problems}
+\planned{local/global error, order, consistency, stability, convergence}
+
+\section{Elementary One-Step Methods}\label{sec:elementary-one-step-methods}
+\planned{Euler, midpoint, Heun}
+
+\section{Runge--Kutta Methods}\label{sec:runge-kutta-methods}
+\planned{Butcher tableau, order conditions, RK4 and its error}
+
+\section{Embedded Pairs and Adaptive Step Control}\label{sec:embedded-pairs-and-adaptive-step-control}
+\planned{RKF45, Cash--Karp, Dormand--Prince 5(4) FSAL, I/PI controllers, tolerances, step rejection}
+
+\section{Dense Output\optmark}\label{sec:dense-output}
+\planned{continuous extension, intersecting geometry between steps}
+
+\section{Stability and Stiffness\optmark}\label{sec:stability-and-stiffness}
+\planned{stability regions, implicit methods, Gauss--Legendre}
+
+\section{Extrapolation and Multistep Methods\optmark}\label{sec:extrapolation-and-multistep-methods}
+\planned{Richardson, Bulirsch--Stoer, Adams}
+
+\section{Geometric Integration}\label{sec:geometric-integration}
+\planned{symplectic maps, Verlet/leapfrog, Yoshida and Forest--Ruth, backward error analysis, bounded vs. drifting energy}
+
+\section{Non-Separable Hamiltonians}\label{sec:non-separable-hamiltonians}
+\planned{implicit midpoint, extended phase space (Pihajoki, Tao), explicit symplectic Kerr integrators, when RK beats symplectic for null rays}
+
+\section{Constraints, Invariants, Time Transformations}\label{sec:constraints-invariants-time-transformati}
+\planned{$H=0$ drift, $E,L_z,Q$ diagnostics, renormalization, Mino time, Preto--Tremaine}
+
+\section{Sensitivity and Chaos}\label{sec:sensitivity-and-chaos}
+\planned{Lyapunov exponent near the photon sphere, convergence testing, log-log order slopes, Aitken}
+
+\section{Event Handling}\label{sec:event-handling}
+\planned{plane crossing, horizon, terminal conditions, step truncation and bisection}
+
+\section{Step-Size Heuristics for Rays}\label{sec:step-size-heuristics-for-rays}
+\planned{$\Delta\lambda=\varepsilon r$, logarithmic radial cost}
+
+\section{Particle Integrators}\label{sec:particle-integrators}
+\planned{velocity Verlet, softening, spatial hashing, Barnes--Hut, determinism}
+
+\section{GPU Execution}\label{sec:gpu-execution}
+\planned{one ray per thread, divergence, fixed budgets, wavefront}

@@ -1,0 +1,11 @@
+\section{Integers and Overflow}\label{sec:integer-overflows}
+
+Discrete quantities are represented as binary signed or unsigned integers,
+which can overflow when their values exceed the maximum or minimum representable values.
+The range of an $n$-bit signed integer is $[-2^{n-1}, 2^{n-1}-1]$,
+while an unsigned integer has a range of $[0, 2^n-1]$.
+
+When an integer exceeds its maximum value, it wraps around to the minimum value (and vice versa).
+Therefore, it is crucial to use sufficiently large integer types and/or implement overflow checking mechanisms.
+This requires careful consideration of expected number ranges.
+

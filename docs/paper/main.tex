@@ -1,64 +1,35 @@
-\documentclass[twocolumn]{article}
+\documentclass[10pt, a4paper, twocolumn, openany, oneside]{book}
 
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage{geometry}
-\geometry{a4paper, margin=1in}
-
-\usepackage{amsmath}
-\usepackage{amssymb}
-\usepackage{amsfonts}
-\usepackage{mathtools}
-\usepackage{physics}
-
-\usepackage{graphicx}
-\usepackage{float}
-\usepackage{caption}
-\usepackage{subcaption}
-\usepackage{booktabs}
-\usepackage{tabularx}
-
-\usepackage[hidelinks]{hyperref}
-\usepackage{cleveref}
-\usepackage[style=numeric-comp, backend=biber]{biblatex}
-\addbibresource{references.bib}
-
-\usepackage[acronym,toc]{glossaries}
-\makeglossaries
-\loadglsentries{acronyms}
-
-\usepackage{titlesec}
-\usepackage{blindtext}
+\input{preamble}
+\input{macros}
 
 \title{\textbf{MoleHole: Real-time Black Hole Simulation}}
 \author{Gabriel Martin and Leonhard Neuhold}
 \date{\today}
 
+\ifdefined\onlychapters\includeonly{\onlychapters}\fi
+
 \begin{document}
 
+\frontmatter
 \onecolumn
 \maketitle
 \thispagestyle{empty}
 \begin{abstract}
-    bla bla bla
+    \TODO{bla bla bla}
 \end{abstract}
 \newpage
 
-\thispagestyle{empty}
 \tableofcontents
-\newpage
-
+\ifdraftmode\listoftodos\fi
+\clearpage
 \twocolumn
-\setcounter{page}{1}
 
-\input{chapters/intro}
-\input{chapters/math_theory}
-\input{chapters/rendering_theory/chapter}
-\input{chapters/physics_theory/chapter}
+\mainmatter
+\input{chapters/structure}
 
+\backmatter
+\printbibliography[heading=bibintoc]
 \printglossary[type=\acronymtype, title=Acronyms]
-
-\nocite{*}
-\printbibliography
 
 \end{document}

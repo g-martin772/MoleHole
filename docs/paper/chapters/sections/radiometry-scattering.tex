@@ -1,9 +1,9 @@
-\subsection{Radiometry and Surface Scattering}\label{subsec:radiometry-surface-reflectance}
+\section{Radiometry and Surface Scattering}\label{sec:radiometry-surface-reflectance}
 
 This section covers the fundamental concepts of radiometry, photometry, and surface scattering functions 
 that are essential for understanding light transport in rendering.
 
-\subsubsection{Radiometry and Photometry}\label{subsubsec:radiometry-photometry}
+\subsection{Radiometry and Photometry}\label{subsec:radiometry-photometry}
 
 It is important to understand the difference between radiometry (physical measurement of \gls{em} radiation)
 and photometry (light as it is perceived by the human eye).
@@ -51,7 +51,7 @@ output devices (displays) and human perception operate in the photometric domain
     \end{tabular}
 \end{table*}
 
-\subsubsection{Bidirectional Reflectance Distribution Function (BRDF)}\label{subsubsec:brdf}
+\subsection{Bidirectional Reflectance Distribution Function (BRDF)}\label{subsec:brdf}
 
 The \gls{brdf} defines how a material scatters incoming light from direction $\omega_i$ 
 into outgoing direction $\omega_o$ at a given surface point $x$~\cite{136913.136929}.
@@ -83,7 +83,7 @@ The \gls{brdf} must also satisfy the following requirements:
     \]
 \end{itemize}
 
-\subsubsection{Bidirectional Transmittance Distribution Function (BTDF)}\label{subsubsec:btdf}
+\subsection{Bidirectional Transmittance Distribution Function (BTDF)}\label{subsec:btdf}
 
 While the \gls{brdf} covers reflection, the \gls{btdf} handles light that passes through a surface (transmission).
 The lower hemisphere $\Omega^-$ is used for incoming light (\gls{brdf}), 
@@ -98,7 +98,7 @@ according to Snell's law.~\cite{136913.136929,Born_Wolf_Bhatia_Clemmow_Gabor_Sto
 \]
 
 
-\subsubsection{Bidirectional Scattering Distribution Function (BSDF)}\label{subsubsec:bsdf}
+\subsection{Bidirectional Scattering Distribution Function (BSDF)}\label{subsec:bsdf}
 
 The \gls{bsdf} unifies reflection and transmission into a single function
 over the entire sphere of directions $4\pi$ steradians,
@@ -123,7 +123,7 @@ Therefore, the general BSDF is defined piecewise as:
     \end{cases}
 \end{align}
 
-\subsubsection{Isotropic vs Anisotropic Scattering}\label{subsubsec:isotropic-anisotropic-scattering}
+\subsection{Isotropic vs Anisotropic Scattering}\label{subsec:isotropic-anisotropic-scattering}
 
 Scattering at a point depends on 4 angular dimensions: 
 the incident direction $(\theta_i, \phi_i)$ and the outgoing direction $(\theta_o, \phi_o)$.

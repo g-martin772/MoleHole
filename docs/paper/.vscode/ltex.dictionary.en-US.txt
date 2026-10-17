@@ -1,0 +1,7 @@
+CODATA
+Verlet
+Runge-Kutta
+Octrees
+Octree
+tristimulus
+Lambertian

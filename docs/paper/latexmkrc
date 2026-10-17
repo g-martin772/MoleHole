@@ -1,0 +1,17 @@
+use File::Basename;
+$pdf_mode = 1;
+$out_dir = 'build/cli';
+$pdflatex = 'pdflatex -interaction=nonstopmode -file-line-error -synctex=1 %O %S';
+$bibtex_use = 2;
+$max_repeat = 6;
+$clean_ext .= ' bbl run.xml acn acr alg glg glo gls ist slg slo sls sbl sbo synctex.gz';
+
+add_cus_dep('glo', 'gls', 0, 'makeglossaries');
+add_cus_dep('acn', 'acr', 0, 'makeglossaries');
+add_cus_dep('sbo', 'sbl', 0, 'makeglossaries');
+sub makeglossaries {
+    my ($base, $path) = @_;
+    my ($name, $dir) = fileparse($base);
+    $dir = $out_dir if $dir eq './' || $dir eq '';
+    return system("makeglossaries -d '$dir' '$name'");
+}

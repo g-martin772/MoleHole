@@ -1,10 +1,4 @@
-\subsection{Raytracing}\label{subsec:raytracing}
-
-\subsubsection{Overview}\label{subsubsec:rt-overview}
-
-TODO: Ray and camera math, ray generation, ray intersection, spheres, planes, triangles, etc.
-
-\subsubsection{Acceleration Structures}\label{subsubsec:acceleration-structures}
+\section{Acceleration Structures}\label{sec:acceleration-structures}
 
 Acceleration structures are essential for reducing the computational complexity of ray-tracing
 from $O(N \cdot M)$ to a logarithmic scale.
@@ -34,7 +28,7 @@ Common types include:
     \item \textbf{Bounding Sphere}: {
         Defined by a center point and a radius.
         They are rotationally invariant and offer the fastest intersection test
-        (procedural spheres work well with way math as described in \Cref{subsubsec:rt-overview}),
+        (procedural spheres work well with way math as described in \Cref{sec:ray-intersection}),
         but often provide a bad fit for complex objects because the spheres will inevitably overlap.
     }
 \end{itemize}
@@ -83,7 +77,7 @@ The quality of the tree depends heavily on the split strategy:
 The choice of acceleration structure involves trade-offs between build time, memory usage, and traversal speed,
 as shown in \Cref{tab:comparison-of-as}.
 
-\begin{table*}[h]
+\begin{table*}[t]
     \centering
     \caption{Comparison of Spatial Acceleration Structures\cite{tuwien_rendering_2020}}
     \label{tab:comparison-of-as}

@@ -1,0 +1,31 @@
+\section{The Modern SI and Physical Constants}\label{sec:modern-si}
+
+High-fidelity physical simulation engines require precise numerical representations of physical constants and quantities. 
+These representations must accurately reflect the true values of the constants as established by international standards.
+
+\subsection{Defined and Experimental Constants}
+Following the 2019 revision of the International System of Units (SI)~\cite{BIPM2019SIBrochure,Newell2019NIST330}, 
+the definitions moved from artifact-based definitions to exact numerical definitions based on fundamental constants of nature.
+
+Constants can be categorized into two types: 
+\begin{enumerate}
+\item \textbf{Defined Constants:} These are constants whose numerical values are fixed by definition in the SI standard. 
+    They have zero measurement uncertainty. 
+    These include $c$, $h$, $e$, $k_B$, $N_A$, and others.
+    These values are hardcoded as exact literals to the maximum precision supported by the data type.
+    Many other constants, such as $\mu_0$ and $\epsilon_0$, are derived from these fixed constants 
+    and are also treated as exact values.
+\item \textbf{Experimental Constants:} These constants are determined through empirical measurement 
+    and carry experimental uncertainties\cite{Mohr2016CODATA}. 
+    These include the gravitational constant ($G$), the fine-structure constant ($\alpha$), 
+    and particle/object masses (e.g., electron mass $m_e$, hydrogen mass $m_H$, solar mass $M_\odot$). 
+    While CODATA provides recommended values along with their uncertainties, 
+    they are treated as floating-point values subject to experimental updates.
+\end{enumerate}
+
+\subsection{Simulation Engine Constants}\label{subsec:engine-constants}
+
+To ensure reproducibility, determinism, and maximum numerical precision, 
+the simulation engine initializes its internal physical constants using exact 2019 SI definitions\cite{Newell2019NIST330, BIPM2019SIBrochure} 
+and standard CODATA evaluated values\cite{Mohr2016CODATA} stored as 64-bit double-precision (or higher) floating-point numbers.
+The exact values can be referenced in the source code under \path{dependencies/gpp/src/core/units/units.cppm}.

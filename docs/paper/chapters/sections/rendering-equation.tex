@@ -1,11 +1,10 @@
-
-\subsection{The Rendering Equation}\label{subsec:rendering-equation}
+\section{The Rendering Equation}\label{sec:rendering-equation}
 
 The fundamental mathematical model for simulating light in physically-based rendering is the Rendering Equation,
 introduced by Kajiya in 1986\cite{10.1145/15886.15902}.
 It describes the equilibrium distribution of radiance in a scene.
 
-\subsubsection{The Equation}\label{subsubsec:the-equation}
+\subsection{The Equation}\label{subsec:the-equation}
 
 The Rendering Equation expresses the total spectral radiance $L_o$
 leaving a point $x$ in direction $\omega_o$ as the sum
@@ -17,7 +16,7 @@ of emitted radiance $L_e$ and reflected radiance:
     \label{eq:rendering-equation}
 \end{align}
 
-where:
+Where:
 \begin{itemize}
     \item $L_o(x, \omega_o)$ is the total outgoing radiance.
     \item $L_e(x, \omega_o)$ is the emitted radiance (for light sources).
@@ -43,9 +42,9 @@ Radiance ($L$) is the central quantity in rendering for several reasons:
 
 The recursive nature of $L_i$ (which is the $L_o$ from another point)
 makes this integral equation difficult to solve analytically.
-Therefore, most implementations use numerical methods like Monte Carlo integration (see ~\ref{subsubsec:monte-carlo}).
+Therefore, most implementations use numerical methods like Monte Carlo integration (see \cref{sec:monte-carlo}).
 
-\subsubsection{Spherical Integration}
+\subsection{Spherical Integration}
 
 To solve the integral numerically, we often parameterize the hemisphere $\Omega$
 using spherical coordinates $(\theta, \phi)$.
@@ -66,7 +65,7 @@ and $\phi$ is the azimuth angle (range $[0, 2\pi]$).
 The term $\cos\theta$ comes from the geometry term $(\omega_i \cdot n)$,
 and $\sin\theta$ comes from the differential solid angle measure.
 
-\subsubsection{Color Spectrum}
+\subsection{Color Spectrum}
 
 Radiance $L$ varies with wavelength ($L(\lambda)$).
 In computer graphics, strictly accurate rendering would require integrating over the entire visible spectrum.
@@ -76,7 +75,7 @@ This mimics the tristimulus response of the human eye.
 While sufficient for most purposes, this approximation can fail for phenomena like
 dispersion, fluorescence or metamerism resulting in inaccurate results.
 
-\subsubsection{Energy Conservation (White Furnace Test)}
+\subsection{Energy Conservation (White Furnace Test)}
 
 A physically-based material must conserve energy: it cannot reflect more light than it receives.
 The ``White Furnace Test'' is a thought experiment (or unit-test) used to verify this.

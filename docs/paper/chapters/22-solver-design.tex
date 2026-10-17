@@ -1,0 +1,32 @@
+\chapter{Design Space and Solver Architecture}\label{ch:solver-design}
+\plannedscope{How the pieces of the previous parts become a renderer}
+
+\section{Pipeline Overview}\label{sec:pipeline-overview}
+\planned{camera tetrad, null ray, integrate, hit (disk/object/sky), $g$-shift, spectral, display}
+
+\section{Solver Families}\label{sec:solver-families}
+\planned{Binet (exact Schwarzschild), Carter, Kerr--Schild Hamiltonian (default), generic AD, lens-map LUT, comparison table, decision rationale}
+
+\section{Kerr--Schild Hamiltonian Solver}\label{sec:kerr-schild-hamiltonian-solver}
+\planned{$\partial f$, $\partial l$, RK4 vs. DP54, constraint handling}
+
+\section{Step Control and Termination}\label{sec:step-control-and-termination}
+\planned{capture/escape/budget, far-field asymptotic remainder}
+
+\section{Lens-Map LUT Tier}\label{sec:lens-map-lut-tier}
+\planned{parameterization $(a_*,r_{\mathrm{obs}},\theta_{\mathrm{obs}})$, interpolation error, 3-D object limitation}
+
+\section{Scene Geometry}\label{sec:scene-geometry}
+\planned{ray segments as chords, BVH/ray query, flat far field $R_{\mathrm{flat}}$ and its error bound}
+
+\section{Disks and Volumes Along Curved Rays}\label{sec:disks-and-volumes-along-curved-rays}
+\planned{plane-crossing root finding, higher-order images, transfer integration}
+
+\section{Sky Lookup and Anti-Aliasing}\label{sec:sky-lookup-and-anti-aliasing}
+\planned{ray-differential filtering, point stars}
+
+\section{Lighting in Curved Space}\label{sec:lighting-in-curved-space}
+\planned{lights as $g$-shifted emitters, shading in the surface rest frame, what is dropped (GI)}
+
+\section{Novel Contributions}\label{sec:novel-contributions}
+\planned{to be defined together with the introduction}

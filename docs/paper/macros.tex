@@ -1,0 +1,40 @@
+\newcommand{\dd}{\mathop{}\!\mathrm{d}}
+\newcommand{\D}{\mathrm{D}}
+\NewDocumentCommand{\dv}{o m m}{\frac{\mathrm{d}\IfValueT{#1}{^{#1}}#2}{\mathrm{d}#3\IfValueT{#1}{^{#1}}}}
+\NewDocumentCommand{\pdv}{o m m}{\frac{\partial\IfValueT{#1}{^{#1}}#2}{\partial #3\IfValueT{#1}{^{#1}}}}
+\DeclarePairedDelimiter{\abs}{\lvert}{\rvert}
+\DeclarePairedDelimiter{\norm}{\lVert}{\rVert}
+\DeclarePairedDelimiter{\avg}{\langle}{\rangle}
+\newcommand{\vect}[1]{\bm{#1}}
+\newcommand{\eu}{\mathrm{e}}
+\newcommand{\iu}{\mathrm{i}}
+\newcommand{\RR}{\mathbb{R}}
+\newcommand{\Exp}{\mathbb{E}}
+\DeclareMathOperator{\sgn}{sgn}
+\DeclareMathOperator{\Tr}{Tr}
+\DeclareMathOperator{\diag}{diag}
+\DeclareMathOperator{\Var}{Var}
+
+\newcommand{\cd}{\nabla}
+\newcommand{\Lie}{\mathcal{L}}
+\newcommand{\Chr}[3]{\Gamma^{#1}_{\ #2#3}}
+\newcommand{\Riem}{R}
+\newcommand{\Ric}{R}
+\newcommand{\Ein}{G}
+\newcommand{\Msun}{M_{\odot}}
+\newcommand{\rs}{r_{\mathrm{s}}}
+\newcommand{\rg}{r_{\mathrm{g}}}
+\newcommand{\astar}{a_{*}}
+\newcommand{\risco}{r_{\mathrm{ISCO}}}
+\newcommand{\Lz}{L_{z}}
+
+\DeclareSIUnit\solarmass{\ensuremath{M_{\odot}}}
+\DeclareSIUnit\lightyear{ly}
+
+\newcommand{\planned}[1]{\ifdraftmode\par\smallskip\noindent{\small\itshape\color{black!55}Planned: #1.}\par\smallskip\fi}
+\newcommand{\plannedscope}[1]{\ifdraftmode\noindent{\small\itshape\color{black!55}Scope: #1.}\par\smallskip\fi}
+\DeclareRobustCommand{\optmark}{\ifdraftmode\ (opt.)\fi}
+\DeclareRobustCommand{\mentionmark}{\ifdraftmode\ (mention)\fi}
+\newcommand{\TODO}[1]{\todo[inline, color=orange!30]{#1}}
+\newcommand{\citeneeded}{\ifdraftmode\textsuperscript{\color{red}[cite]}\fi}
+\newcommand{\verify}[1]{\ifdraftmode{\color{red}#1}\else#1\fi}
