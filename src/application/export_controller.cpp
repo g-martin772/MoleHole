@@ -178,11 +178,10 @@ namespace MoleHole
                 m_TickDebt -= static_cast<double>(ticks);
                 runner->StepAndWait(ticks);
                 ++m_UiState->ExportStepSerial;
-                m_MinSerial = readback.Serial + 3; // frames already in flight still show the old snapshot
+                m_MinSerial = readback.Serial + 3;
             }
         }
 
-        // The profile that rendered this frame; recorded once for the sidecar
         if (m_FrameIndex == 0) m_ProfileName = m_RenderSettings->ProfileFor(RenderContext::Export).Name;
 
         const auto path = m_Request.RequestKind == ExportRequest::Kind::Image

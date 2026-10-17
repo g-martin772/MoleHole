@@ -8,8 +8,6 @@ import :Rendering.SettingsService;
 
 export namespace MoleHole
 {
-    // Runs image and video exports of the viewport buffer: waits for the shaders, steps the simulation per frame,
-    // reads frames back, encodes, and leaves a `.render.yaml` next to the result.
     class ExportController
     {
     public:
@@ -19,9 +17,7 @@ export namespace MoleHole
                          std::shared_ptr<AppStateService> appState, std::shared_ptr<RenderSettingsService> renderSettings,
                          std::shared_ptr<GPP::Logger> logger, std::uint32_t bufferTargetId, RunnerProvider runner);
 
-        // UI thread, once per update
         void Update();
-        // Render thread: every stage's shaders are compiled
         void SetPipelinesReady(const bool ready) noexcept { m_PipelinesReady.store(ready, std::memory_order_release); }
 
     private:

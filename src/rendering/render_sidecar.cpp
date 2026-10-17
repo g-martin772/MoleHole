@@ -98,7 +98,6 @@ namespace MoleHole
         YAML::Node overrides(YAML::NodeType::Map);
         for (const auto& [key, value] : info.Overrides) overrides[key] = value;
         if (overrides.size() > 0) profile["Overrides"] = overrides;
-        // Every key, so the render does not depend on what the defaults are later
         root["Settings"] = RenderSettingRegistry().Encode(info.Settings);
 
         auto gpu = root["Gpu"];

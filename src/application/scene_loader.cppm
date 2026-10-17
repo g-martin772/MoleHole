@@ -8,7 +8,6 @@ import :Rendering.Settings;
 
 export namespace MoleHole
 {
-    // Loads a scene file on the thread pool, one at a time, and hands the outcome to the UI thread
     class SceneLoader
     {
     public:
@@ -20,7 +19,6 @@ export namespace MoleHole
             std::string Path;
             std::string SceneName;
             std::string Error;
-            // The scene's `Render:` extension as YAML text, empty when it has none
             std::string RenderExtension;
         };
 
@@ -31,7 +29,6 @@ export namespace MoleHole
         {
         }
 
-        // False while another load is in flight
         bool Begin(std::string path, const Result::Kind kind)
         {
             bool expected = false;
@@ -47,7 +44,6 @@ export namespace MoleHole
             }
             catch (const std::exception&)
             {
-                // The pool is shutting down together with the application: nothing to load for.
                 m_State->InFlight.store(false, std::memory_order_release);
                 m_State->InFlight.notify_all();
                 return false;

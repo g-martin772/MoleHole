@@ -8,8 +8,6 @@ import :Rendering.Settings;
 
 export namespace MoleHole
 {
-    // The profiles, which one each context uses, and the settings that result for the context being drawn.
-    // UI thread only, except PostOverride which any thread may call.
     class RenderSettingsService final : public GPP::IService
     {
     public:
@@ -30,11 +28,9 @@ export namespace MoleHole
         }
         [[nodiscard]] RenderContext ActiveContext() const noexcept { return m_Active; }
 
-        // Settings of the active context after overrides and device fallbacks
         [[nodiscard]] const RenderSettings& Effective() const noexcept { return m_Effective; }
-        // Any thread: the effective settings as of the last rebuild
         [[nodiscard]] std::shared_ptr<const RenderSettings> Snapshot() const { return m_Snapshot.load(); }
-        // Any thread: one effective setting as text, nullopt for an unknown key
+
         [[nodiscard]] std::optional<std::string> ReadSetting(const std::string_view key) const
         {
             const auto* setting = RenderSettingRegistry().Find(key);
@@ -42,18 +38,18 @@ export namespace MoleHole
             if (!setting || !snapshot) return std::nullopt;
             return RenderSettingRegistry().ToText(*snapshot, *setting);
         }
-        // Any thread: whether `key=value` would be accepted; empty when it would, the reason otherwise
+
         [[nodiscard]] static std::string ValidateSetting(const std::string_view key, const std::string_view value)
         {
             RenderSettings scratch;
             const auto result = RenderSettingRegistry().SetFromText(scratch, key, value);
             return result ? std::string() : result.error();
         }
-        // What the device fallback changed, for display
+
         [[nodiscard]] const std::vector<std::string>& EffectiveNotes() const noexcept { return m_Notes; }
 
         [[nodiscard]] const RenderProfileSet& Profiles() const noexcept { return m_Set; }
-        // The profile a context uses, honouring --profile
+
         [[nodiscard]] const RenderProfile& ProfileFor(const RenderContext context) const
         {
             if (!m_ProfileOverride.empty())
@@ -64,34 +60,35 @@ export namespace MoleHole
         }
         [[nodiscard]] bool ProfileOverridden() const noexcept { return !m_ProfileOverride.empty() && m_Set.Find(m_ProfileOverride); }
 
-        // Edits go to the context's profile; a built-in is forked first
         void Edit(const RenderContext context, const RenderSettings& settings)
         {
             if (SettingsEqual(m_Set.SettingsFor(context), settings)) return;
             m_Set.Replace(context, settings);
             Touch();
         }
+
         void Assign(const RenderContext context, const std::string_view name)
         {
             if (m_Set.ProfileName(context) == name || !m_Set.Assign(context, name)) return;
             Touch();
         }
+
         void Duplicate(const RenderContext context)
         {
             m_Set.Duplicate(context);
             Touch();
         }
+
         void Remove(const std::string_view name)
         {
             if (m_Set.Remove(name)) Touch();
         }
+
         void Rename(const std::string_view name, const std::string_view newName)
         {
             if (m_Set.Rename(name, newName)) Touch();
         }
 
-        // ---- persistence ----
-        // Scene extension as YAML text; empty (no extension) falls back to the app defaults
         void LoadScene(const std::string& yaml)
         {
             std::vector<std::string> warnings;
@@ -109,17 +106,20 @@ export namespace MoleHole
             m_RuntimeOverrides.clear();
             Rebuild();
         }
-        // True when an edit has not been mirrored into the scene yet
+
         [[nodiscard]] bool SceneWritePending() const noexcept { return m_Revision != m_WrittenRevision; }
-        // True once the scene carries (or must carry) its own `Render:` extension: it had one, or was edited
+
         [[nodiscard]] bool PersistsToScene() const noexcept { return m_Adopted; }
+
         [[nodiscard]] std::optional<std::string> TakeSceneWrite()
         {
             if (m_Revision == m_WrittenRevision) return std::nullopt;
             m_WrittenRevision = m_Revision;
             return SceneYaml();
         }
+
         [[nodiscard]] std::string SceneYaml() const { return YAML::Dump(m_Set.ToYaml()); }
+
         [[nodiscard]] const std::vector<std::string>& Warnings() const noexcept { return m_Warnings; }
 
         void SetDefaults(RenderProfileSet defaults)
@@ -132,14 +132,12 @@ export namespace MoleHole
         [[nodiscard]] const RenderProfileSet& Defaults() const noexcept { return m_Defaults; }
         void UseCurrentAsDefaults() { m_Defaults = m_Set; }
 
-        // ---- per-run overrides ----
-        // --profile: wins over every context's assignment
         void SetProfileOverride(std::string name)
         {
             m_ProfileOverride = std::move(name);
             Rebuild();
         }
-        // key=value pairs applied on top of the active profile while the Export context is active
+
         void SetExportOverrides(std::vector<std::pair<std::string, std::string>> overrides)
         {
             m_ExportOverrides = std::move(overrides);
@@ -150,13 +148,12 @@ export namespace MoleHole
             return m_ExportOverrides;
         }
 
-        // Any thread: scripts adjusting a setting for the running simulation. Cleared on scene load and Stop.
         void PostOverride(std::string key, std::string value)
         {
             std::scoped_lock lock(m_PostMutex);
             m_Posted.emplace_back(std::move(key), std::move(value));
         }
-        // Applies posted overrides; returns false for none. Errors are reported through `errors`.
+
         bool DrainPosted(std::vector<std::string>* errors = nullptr)
         {
             std::vector<std::pair<std::string, std::string>> posted;

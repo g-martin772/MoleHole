@@ -21,7 +21,6 @@ export namespace MoleHole
 
         std::string ScenePath;
         std::string SceneName;
-        // Serialized scene, hashed so a changed scene is noticed
         std::string SceneYaml;
 
         std::string ProfileName;
@@ -36,20 +35,17 @@ export namespace MoleHole
         std::string GitCommit;
         GPP::GpuCapabilities Gpu;
         double WallSeconds = 0.0;
-        // GPU time of the last captured frame (what the viewport target measured)
         double GpuMs = 0.0;
         std::string Timestamp;
     };
 
-    // FNV-1a 64 bit; stable across runs and platforms, unlike std::hash
+    // FNV-1a 64 bit
     [[nodiscard]] std::uint64_t HashText(std::string_view text) noexcept;
     [[nodiscard]] std::string HashHex(std::string_view text);
 
-    // Short commit of the checkout `repoRoot` belongs to; "unknown" when it is not a git checkout
     [[nodiscard]] std::string ReadGitCommit(const std::filesystem::path& repoRoot);
 
     [[nodiscard]] std::filesystem::path SidecarPathFor(const std::filesystem::path& output);
     [[nodiscard]] std::string BuildRenderSidecar(const RenderSidecarInfo& info);
-    // False when the file could not be written
     bool WriteRenderSidecar(const std::filesystem::path& output, const RenderSidecarInfo& info);
 }

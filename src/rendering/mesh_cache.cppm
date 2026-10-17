@@ -6,7 +6,6 @@ import GPP;
 
 export namespace MoleHole
 {
-    // glTF scenes by asset path, loaded once and shared by the renderer, picking and collider cooking
     class MeshCache
     {
     public:

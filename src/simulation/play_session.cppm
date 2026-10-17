@@ -6,11 +6,9 @@ import :Rendering.Settings;
 
 export namespace MoleHole
 {
-    // Play / Stop of one simulation: the first Play keeps a copy of the scene, Stop puts it back.
     class PlaySession : public std::enable_shared_from_this<PlaySession>
     {
     public:
-        // Starts or resumes. True when this call began a fresh session (snapshot taken)
         bool Resume(const std::shared_ptr<GPP::SimulationRunner>& runner)
         {
             const bool fresh = !m_Active.exchange(true);
@@ -28,8 +26,6 @@ export namespace MoleHole
             return fresh;
         }
 
-        // Restores the pre-play scene. `renderExtension` (the scene's Render: YAML) is kept, so settings edited
-        // while playing survive.
         void Stop(const std::shared_ptr<GPP::SimulationRunner>& runner, std::optional<std::string> renderExtension)
         {
             m_Active = false;

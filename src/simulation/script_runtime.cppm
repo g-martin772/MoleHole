@@ -11,20 +11,15 @@ import :Simulation.AnimationGraphExecutor;
 
 export namespace MoleHole
 {
-    // Drives the transpiled Luau of every enabled event graph with the interpreter's lifecycle and semantics.
-    // How `render.set(key, value)` and `render.get(key)` reach the renderer; scripts see them as unavailable without it
     struct RenderBridge
     {
-        // Error text, empty when the value was accepted
         std::function<std::string(const std::string& key, const std::string& text)> Set;
-        // Setting as text, nullopt for an unknown key
         std::function<std::optional<std::string>(const std::string& key)> Get;
     };
 
     class ScriptRuntime final : public IGraphRuntime
     {
     public:
-        // Script components (.luau files attached to entities) run when assets is given; component graphs always do.
         ScriptRuntime(const SceneGraphs& graphs, ScriptCache& cache, std::function<void(std::string)> onPrint = nullptr,
                       const TranspileOptions& options = {}, const GPP::LuauLimits& limits = {},
                       const GPP::AssetDirectories* assets = nullptr);
@@ -32,7 +27,6 @@ export namespace MoleHole
         ScriptRuntime(const ScriptRuntime&) = delete;
         ScriptRuntime& operator=(const ScriptRuntime&) = delete;
 
-        // False when a graph failed to compile or load; the caller should fall back to the interpreter.
         [[nodiscard]] bool Ok() const;
         [[nodiscard]] const std::string& Error() const;
         [[nodiscard]] const std::string& LastRuntimeError() const;
@@ -46,7 +40,6 @@ export namespace MoleHole
         void PostEvent(std::string name, std::vector<GPP::LuauValue> args) override;
         [[nodiscard]] std::vector<GPP::ScriptError> TakeScriptErrors() override;
         [[nodiscard]] std::vector<GPP::ScriptStatus> ScriptStatuses() const override;
-        // Tasks currently suspended across all graphs (latent nodes waiting on time, conditions or events).
         [[nodiscard]] std::size_t ActiveTasks() const;
 
     private:

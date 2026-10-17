@@ -63,7 +63,6 @@ vec3 FxaaPixelShader(vec2 uv, sampler2D tex, vec2 rcpFrame) {
 }
 
 void main() {
-    // nearest texel: depth must not blend across silhouettes when the tracer runs at another resolution
     gl_FragDepth = texelFetch(u_raytracedImage, min(ivec2(TexCoord * vec2(rt_w, rt_h)), ivec2(rt_w, rt_h) - 1), 0).a;
 
     vec3 color;
