@@ -1,6 +1,5 @@
 Scene: Test
 SchemaVersion: 2
-TimeScale: 4.911927171628457e-05
 Entities:
   - Guid: 4380484363935821836
     Components:
@@ -28,8 +27,8 @@ Entities:
         Restitution: 0.1
         IsTrigger: true
       BlackHole:
-        Mass: 1.9884098706980507e+30
-        Spin: 0.65
+        Mass: 5.405058714559787e+30
+        Spin: 0.999
         Charge: 0
         SpinAxis: [0.5, 1, 0.1]
   - Guid: 16017086654788356877
@@ -123,6 +122,21 @@ Entities:
         AssetPath: /home/gabriel/Repos/MoleHole/assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
         CenterOfMassOffset: [0, 0, 0]
         MetresPerUnit: 1476.6250380501247
+  - Guid: 4240113347262655872
+    Components:
+      Metadata:
+        Guid: 4240113347262655872
+        Name: Camera
+        TypeTag: Camera
+      Transform:
+        Position: [84368.62120304586, 133031.738325076, 464127.43207877915]
+        Rotation: [-0.14426483, 0.13473046, 0.019831039, 0.9801235]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 60
+        NearPlane: 147.66250380501248
+        FarPlane: 1476625.0380501247
+        Primary: true
 Graphs:
   Version: 1
   Items:
@@ -171,3 +185,37 @@ Graphs:
         Links:
           - {Id: 4, StartPinId: 3500, EndPinId: 2002}
           - {Id: 5, StartPinId: 1500, EndPinId: 2001}
+Render:
+  Version: 1
+  Contexts:
+    Edit: Flat (edited)
+    Play: Reference
+    Reference: Reference
+    Export: Reference
+  Profiles:
+    - Name: Legacy
+      Description: Render settings from before profiles existed.
+      Base: Lensed
+      Set:
+        transport.step_size: 0.0335
+        transport.max_steps: 112044
+        transport.adaptive_rate: 0.52
+        disk.volumetric: true
+        disk.height: 0.832
+        disk.speed: 0.04
+        disk.noise_scale: 5
+        disk.noise_lod: 3.751
+        camera.third_person_height: 20.8
+        post.bloom_threshold: 0.68
+        post.bloom_passes: 7
+        post.bloom_intensity: 8.932
+        post.lens_flare: false
+        post.flare_intensity: 0
+        post.flare_threshold: 5
+    - Name: Flat (edited)
+      Description: Straight rays, analytic shadow and disk, no lensing, no bloom. Fast, for editing and placing objects.
+      Base: Flat
+      Set:
+        spacetime.solution: KerrNewman
+        transport.mode: Integrated
+        disk.volumetric: true
