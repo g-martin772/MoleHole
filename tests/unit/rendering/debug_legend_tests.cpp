@@ -160,9 +160,24 @@ TEST_CASE("Overlay legend colours match the render pipeline", "[rendering][legen
         CHECK(it->Color.G == Approx(color.G));
         CHECK(it->Color.B == Approx(color.B));
     };
-    expect(kGravityGridLegend, "kGravityGridColor", '{', '}');
     expect(kObjectPathLegend, "kMeshColor", '{', '}');
     expect(kObjectPathLegend, "kSphereColor", '{', '}');
+}
+
+TEST_CASE("The gravity grid swatch shows the grid as blended in the viewport", "[rendering][legend]")
+{
+    const auto pipeline = ReadSource("src/rendering/render_pipeline.cpp");
+    CHECK(pipeline.contains("params.Opacity = kGravityGridOpacity;"));
+    CHECK_FALSE(pipeline.contains("constexpr float kGravityGridOpacity"));
+    CHECK_FALSE(pipeline.contains("kGravityGridColor{"));
+
+    const auto shown = kGravityGridLegend.front().Color;
+    const auto expected = OverBackground(kGravityGridColor, kGravityGridOpacity, kViewportBackground);
+    CHECK(shown == expected);
+    CHECK(shown.B == Approx(kGravityGridColor.B * kGravityGridOpacity + kViewportBackground.B * (1.0f - kGravityGridOpacity)));
+    CHECK(shown.B < kGravityGridColor.B);
+    CHECK(OverBackground({0.2f, 0.4f, 0.6f}, 1.0f, {1.0f, 1.0f, 1.0f}) == LegendColor{0.2f, 0.4f, 0.6f});
+    CHECK(OverBackground({0.2f, 0.4f, 0.6f}, 0.0f, {1.0f, 0.5f, 0.0f}) == LegendColor{1.0f, 0.5f, 0.0f});
 }
 
 TEST_CASE("Overlay legends point at boolean render settings", "[rendering][legend]")
@@ -183,22 +198,36 @@ TEST_CASE("Overlay legends point at boolean render settings", "[rendering][legen
     }
 }
 
-TEST_CASE("Collider legend colours are PhysX debug colours", "[rendering][legend]")
+TEST_CASE("Collider legend colours are the PhysX debug colours as the pipeline draws them", "[rendering][legend]")
 {
-    const auto channels = [](const physx::PxU32 argb)
-    {
-        return LegendColor{static_cast<float>((argb >> 16) & 0xFF) / 255.0f, static_cast<float>((argb >> 8) & 0xFF) / 255.0f,
-                           static_cast<float>(argb & 0xFF) / 255.0f};
-    };
-    const std::map<std::string_view, physx::PxU32> known{
+    const auto pipeline = ReadSource("src/rendering/render_pipeline.cpp");
+    CHECK(pipeline.contains("PhysicsDebugColor(argb)"));
+
+    // PhysX 5.5 NpDebugViz: velocity arrows use plain 0xffffff and 0x000000
+    const std::map<std::string_view, physx::PxU32> raw{
         {"eARGB_MAGENTA", physx::PxDebugColor::eARGB_MAGENTA}, {"eARGB_YELLOW", physx::PxDebugColor::eARGB_YELLOW},
         {"eARGB_RED", physx::PxDebugColor::eARGB_RED},         {"eARGB_GREEN", physx::PxDebugColor::eARGB_GREEN},
-        {"eARGB_BLUE", physx::PxDebugColor::eARGB_BLUE},       {"eARGB_WHITE", physx::PxDebugColor::eARGB_WHITE}};
+        {"eARGB_BLUE", physx::PxDebugColor::eARGB_BLUE},       {"eARGB_WHITE", physx::PxDebugColor::eARGB_WHITE},
+        {"PX_LIN_VELOCITY", 0xffffffu},                        {"PX_ANG_VELOCITY", 0x000000u}};
+    CHECK(raw.size() == kColliderLegend.size());
     for (const auto& entry : kColliderLegend)
     {
         INFO(entry.Id);
-        const auto it = known.find(entry.Id);
-        REQUIRE(it != known.end());
-        CHECK(entry.Color == channels(it->second));
+        const auto it = raw.find(entry.Id);
+        REQUIRE(it != raw.end());
+        CHECK(entry.Color == PhysicsDebugColor(it->second));
     }
+}
+
+TEST_CASE("PhysX debug colours that vanish on the dark viewport are remapped", "[rendering][legend]")
+{
+    for (const physx::PxU32 black : {0x000000u, static_cast<physx::PxU32>(physx::PxDebugColor::eARGB_BLACK)})
+    {
+        const auto color = PhysicsDebugColor(black);
+        CHECK(color.R + color.G + color.B > 0.5f);
+    }
+    CHECK(PhysicsDebugColor(physx::PxDebugColor::eARGB_RED) == LegendColor{1.0f, 0.0f, 0.0f});
+    CHECK(PhysicsDebugColor(0x808080u).R == Approx(128.0f / 255.0f));
+    std::set<std::uint32_t> sources;
+    for (const auto& remap : kPhysicsDebugRemap) CHECK(sources.insert(remap.Rgb).second);
 }

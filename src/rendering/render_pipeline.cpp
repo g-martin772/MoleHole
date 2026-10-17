@@ -2,6 +2,7 @@ module MoleHole;
 
 import :Rendering.Pipeline;
 import :Rendering.Data;
+import :Rendering.DebugLegend;
 import :Rendering.MeshTrace;
 import :Rendering.Lut;
 import :Simulation.Components;
@@ -21,8 +22,6 @@ namespace MoleHole
         constexpr int kGravityGridResolution = 256;
         constexpr float kGravityGridCellSize = 2.0f;
         constexpr float kGravityGridLineThickness = 0.03f;
-        constexpr float kGravityGridOpacity = 0.7f;
-        const glm::vec3 kGravityGridColor{0.1f, 0.1f, 0.8f};
 
         vk::ImageUsageFlags StorageSampledUsage()
         {
@@ -720,7 +719,7 @@ namespace MoleHole
                 params.CellSize = kGravityGridCellSize;
                 params.LineThickness = kGravityGridLineThickness;
                 params.Opacity = kGravityGridOpacity;
-                params.Color = kGravityGridColor;
+                params.Color = glm::vec3(kGravityGridColor.R, kGravityGridColor.G, kGravityGridColor.B);
                 FillGravityGridData(params, ctx.Scene, ctx.Frame);
                 m_ParamsBuffer->Upload(&params, sizeof(params));
 
@@ -831,12 +830,10 @@ namespace MoleHole
                 {
                     return ctx.Frame.ToRender(physicsOrigin + glm::dvec3(p.x, p.y, p.z));
                 };
-                const auto append = [&](const glm::vec3& position, const physx::PxU32 color)
+                const auto append = [&](const glm::vec3& position, const physx::PxU32 argb)
                 {
-                    vertices.insert(vertices.end(), {position.x, position.y, position.z,
-                                                     static_cast<float>((color >> 16) & 0xFF) / 255.0f,
-                                                     static_cast<float>((color >> 8) & 0xFF) / 255.0f,
-                                                     static_cast<float>(color & 0xFF) / 255.0f});
+                    const auto color = PhysicsDebugColor(argb);
+                    vertices.insert(vertices.end(), {position.x, position.y, position.z, color.R, color.G, color.B});
                 };
                 for (const auto& line : lines)
                 {
