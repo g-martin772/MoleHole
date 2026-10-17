@@ -98,10 +98,9 @@ namespace
             const auto context = m_RenderSettings->ActiveContext();
             ImGui::Text("%s -> %s", std::string(RenderContextLabel(context)).c_str(),
                         m_RenderSettings->ProfileFor(context).Name.c_str());
-            ImGui::Text("%.1f fps, frame %.1f ms, GPU %.1f ms", stats->FramesPerSecond, stats->AverageFrameMs, stats->GpuMs);
             const auto trace = ScaledTraceExtent(vk::Extent3D{stats->Extent.x, stats->Extent.y, 1},
                                                  effective.ResolutionScale * m_UiState->RenderGovernorScale);
-            ImGui::Text("Viewport %ux%u, tracer %ux%u (%.0f%%)", stats->Extent.x, stats->Extent.y, trace.width, trace.height,
+            ImGui::Text("Tracer %ux%u (%.0f%% of the viewport)", trace.width, trace.height,
                         effective.ResolutionScale * m_UiState->RenderGovernorScale);
             if (m_UiState->RenderGovernorScale < 1.0f)
                 ImGui::TextDisabled("Governor: %.0f%% of the profile's scale", m_UiState->RenderGovernorScale * 100.0f);
