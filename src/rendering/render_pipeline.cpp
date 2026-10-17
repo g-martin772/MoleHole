@@ -112,6 +112,18 @@ namespace MoleHole
             return pipeline && pipeline->GetPipeline();
         }
 
+        std::optional<std::string> CompileFailure(std::string_view stage,
+                                                  std::initializer_list<const std::shared_ptr<ShaderPipeline>*> pipelines)
+        {
+            for (const auto* pipeline : pipelines)
+            {
+                if (!*pipeline || (*pipeline)->GetPipeline()) continue;
+                if ((*pipeline)->GetCompilationProgress().state == ShaderCompilationState::Failed)
+                    return std::format("{} shader failed to compile: {}", stage, (*pipeline)->LastError());
+            }
+            return std::nullopt;
+        }
+
         void CreateOrResize(RenderResources& res, std::unique_ptr<VulkanImage>& image, vk::Extent3D extent,
                             std::string debugName)
         {
@@ -349,6 +361,11 @@ namespace MoleHole
                        && MeshPipelinesReady();
             }
 
+            [[nodiscard]] std::optional<std::string> Failure() const override
+            {
+                return CompileFailure(Name(), {&m_Pipeline, &m_FlatPipeline, &m_PipelineF64, &m_MeshPipeline, &m_MeshPipelineF64});
+            }
+
             void Record(RenderFrameContext& ctx) override
             {
                 if (m_MeshPipeline && WantsTracedMeshes(ctx.Settings) && MeshPipelinesReady()) m_Meshes.Record(ctx);
@@ -493,6 +510,10 @@ namespace MoleHole
             [[nodiscard]] std::string_view Name() const override { return "Bloom"; }
             [[nodiscard]] bool Enabled(const RenderSettings& settings) const override { return settings.UsesBloomChain(); }
             [[nodiscard]] bool Ready() const override { return Compiled(m_ExtractPipeline) && Compiled(m_BlurPipeline); }
+            [[nodiscard]] std::optional<std::string> Failure() const override
+            {
+                return CompileFailure(Name(), {&m_ExtractPipeline, &m_BlurPipeline});
+            }
 
             void Record(RenderFrameContext& ctx) override
             {
@@ -571,6 +592,7 @@ namespace MoleHole
             [[nodiscard]] std::string_view Name() const override { return "LensFlare"; }
             [[nodiscard]] bool Enabled(const RenderSettings& settings) const override { return settings.LensFlare; }
             [[nodiscard]] bool Ready() const override { return Compiled(m_Pipeline); }
+            [[nodiscard]] std::optional<std::string> Failure() const override { return CompileFailure(Name(), {&m_Pipeline}); }
 
             void Record(RenderFrameContext& ctx) override
             {
@@ -614,6 +636,7 @@ namespace MoleHole
 
             [[nodiscard]] std::string_view Name() const override { return "Composite"; }
             [[nodiscard]] bool Ready() const override { return Compiled(m_Pipeline); }
+            [[nodiscard]] std::optional<std::string> Failure() const override { return CompileFailure(Name(), {&m_Pipeline}); }
 
             void Record(RenderFrameContext& ctx) override
             {
@@ -1158,6 +1181,15 @@ namespace MoleHole
     bool RenderPipeline::AllStagesReady() const
     {
         return !m_Impl->Stages.empty() && std::ranges::all_of(m_Impl->Stages, [](const auto& stage) { return stage->Ready(); });
+    }
+
+    std::optional<std::string> RenderPipeline::FirstFailure() const
+    {
+        for (const auto& stage : m_Impl->Stages)
+        {
+            if (auto failure = stage->Failure()) return failure;
+        }
+        return std::nullopt;
     }
 
     const GpuCapabilities& RenderPipeline::Capabilities() const

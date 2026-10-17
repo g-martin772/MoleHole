@@ -13,6 +13,7 @@ namespace
         bool ListSettings = false;
         ExportRequest Request;
         std::string ScenePath;
+        float TimeoutSeconds = 120.0f;
         std::string Error;
     };
 
@@ -85,6 +86,18 @@ namespace
             else if (arg == "--duration") args.Request.DurationSeconds = std::stof(next());
             else if (arg == "--fps") args.Request.Framerate = std::stoi(next());
             else if (arg == "--scene") args.ScenePath = next();
+            else if (arg == "--export-timeout")
+            {
+                const auto value = next();
+                float seconds = -1.0f;
+                std::from_chars(value.data(), value.data() + value.size(), seconds);
+                if (seconds < 0.0f)
+                {
+                    args.Error = "--export-timeout expects seconds >= 0, got '" + value + "'";
+                    break;
+                }
+                args.TimeoutSeconds = seconds;
+            }
             else if (arg == "--profile") args.Request.Profile = next();
             else if (arg == "--set")
             {
@@ -138,14 +151,17 @@ int main(int argc, char* argv[])
     builder.ConfigureImGui({"DockingEnable", "ViewportsEnable"}, true);
     builder.SetTheme("molehole_theme.so", true);
 
+    std::shared_ptr<UiState> exportState;
     if (exportArgs)
     {
         builder.SetHeadless(true);
-        builder.Services.AddSingleton<UiState>([exportArgs](ServiceProvider&) -> std::shared_ptr<IService>
+        exportState = std::make_shared<UiState>();
+        builder.Services.AddSingleton<UiState>([exportArgs, exportState](ServiceProvider&) -> std::shared_ptr<IService>
         {
-            auto state = std::make_shared<UiState>();
+            auto state = exportState;
             state->PendingExport.Set(exportArgs->Request);
             state->ExitWhenExportDone = true;
+            state->ExportTimeoutSeconds = exportArgs->TimeoutSeconds;
             if (!exportArgs->ScenePath.empty())
             {
                 state->StartupScenePath = exportArgs->ScenePath;
@@ -205,5 +221,6 @@ int main(int argc, char* argv[])
            .SetBufferTarget(kViewportBufferId);
 
     auto app = builder.Build();
-    return app->Run();
+    const int result = app->Run();
+    return result != 0 || !exportState ? result : exportState->ExportExitCode;
 }

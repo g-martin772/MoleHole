@@ -84,6 +84,7 @@ export namespace MoleHole
         [[nodiscard]] virtual bool Enabled(const RenderSettings&) const { return true; }
         virtual void Record(RenderFrameContext& context) = 0;
         [[nodiscard]] virtual bool Ready() const { return true; }
+        [[nodiscard]] virtual std::optional<std::string> Failure() const { return std::nullopt; }
     };
 
     class RenderPipeline
@@ -105,6 +106,7 @@ export namespace MoleHole
         void Build(GPP::RenderGraph& graph, const RenderInputs& inputs);
 
         [[nodiscard]] bool AllStagesReady() const;
+        [[nodiscard]] std::optional<std::string> FirstFailure() const;
         [[nodiscard]] const GPP::GpuCapabilities& Capabilities() const;
         [[nodiscard]] std::vector<std::string> LastRecordedStages() const;
 

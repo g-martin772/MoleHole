@@ -19,6 +19,7 @@ export namespace MoleHole
 
         void Update();
         void SetPipelinesReady(const bool ready) noexcept { m_PipelinesReady.store(ready, std::memory_order_release); }
+        void SetPipelineFailure(std::optional<std::string> failure);
 
     private:
         struct Job
@@ -36,6 +37,8 @@ export namespace MoleHole
         void Finish();
         void LogProgress();
         void WriteSidecar();
+        void Abort(int exitCode, const std::string& reason);
+        void CheckWatchdog();
 
         std::shared_ptr<GPP::Renderer> m_Renderer;
         std::shared_ptr<UiState> m_UiState;
@@ -46,6 +49,11 @@ export namespace MoleHole
         RunnerProvider m_Runner;
 
         std::atomic<bool> m_PipelinesReady{false};
+        std::mutex m_FailureMutex;
+        std::optional<std::string> m_PipelineFailure;
+        std::optional<std::chrono::steady_clock::time_point> m_LastProgress;
+        bool m_ReadySeen{false};
+        int m_LastWritten{-1};
         bool m_PendingCapture{false};
         ExportRequest m_Request;
         int m_FrameIndex{0};

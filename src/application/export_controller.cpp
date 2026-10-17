@@ -38,8 +38,46 @@ namespace MoleHole
     {
     }
 
+    void ExportController::SetPipelineFailure(std::optional<std::string> failure)
+    {
+        std::scoped_lock lock(m_FailureMutex);
+        m_PipelineFailure = std::move(failure);
+    }
+
+    void ExportController::CheckWatchdog()
+    {
+        if (!m_UiState->ExitWhenExportDone) return;
+        const auto now = std::chrono::steady_clock::now();
+        if (!m_LastProgress) m_LastProgress = now;
+        const float timeout = m_UiState->ExportTimeoutSeconds;
+        if (timeout <= 0.0f) return;
+        const double idle = std::chrono::duration<double>(now - *m_LastProgress).count();
+        if (idle > timeout)
+            Abort(4, std::format("no progress for {:.1f} s ({}), giving up (see --export-timeout)", idle,
+                                 m_UiState->ExportActive ? m_UiState->ExportStatus : "waiting for the scene"));
+    }
+
+    void ExportController::Abort(const int exitCode, const std::string& reason)
+    {
+        m_Logger->Error("Export failed: {}", reason);
+        m_UiState->ExportExitCode = exitCode;
+        m_UiState->ExportStatus = "Failed: " + reason;
+        m_UiState->ExportActive = false;
+        m_PendingCapture = false;
+        if (!m_TempDir.empty())
+        {
+            std::error_code ec;
+            std::filesystem::remove_all(m_TempDir, ec);
+        }
+        Application::Instance().Stop();
+    }
+
     void ExportController::Update()
     {
+        if (m_UiState->ExitWhenExportDone && m_UiState->ExportExitCode != 0) return;
+        CheckWatchdog();
+        if (m_UiState->ExitWhenExportDone && m_UiState->ExportExitCode != 0) return;
+
         if (m_PendingCapture)
         {
             m_PendingCapture = false;
@@ -65,6 +103,7 @@ namespace MoleHole
             if (!runner || !runner->IsPaused())
             {
                 m_AwaitPlay = false;
+                m_LastProgress = std::chrono::steady_clock::now();
                 m_Stepping = runner != nullptr;
                 m_UiState->ExportStepDelta = 1.0f / static_cast<float>(std::max(1, m_Request.Framerate));
             }
@@ -81,11 +120,26 @@ namespace MoleHole
         }
         else if (m_PipelinesReady.load(std::memory_order_acquire))
         {
+            if (!m_ReadySeen)
+            {
+                m_ReadySeen = true;
+                m_LastProgress = std::chrono::steady_clock::now();
+            }
             m_PendingCapture = true;
         }
         else
         {
-            m_UiState->ExportStatus = "Compiling shaders...";
+            std::optional<std::string> failure;
+            {
+                std::scoped_lock lock(m_FailureMutex);
+                failure = m_PipelineFailure;
+            }
+            if (failure)
+            {
+                if (m_UiState->ExitWhenExportDone) Abort(3, *failure);
+                else m_UiState->ExportStatus = "Shader compile failed: " + *failure;
+            }
+            else m_UiState->ExportStatus = "Compiling shaders...";
         }
     }
 
@@ -102,7 +156,10 @@ namespace MoleHole
                             : 1;
         m_AllCaptured = false;
         m_EncodeStarted = false;
+        m_ReadySeen = false;
+        m_LastWritten = -1;
         m_StartTime = std::chrono::steady_clock::now();
+        m_LastProgress = m_StartTime;
         m_LastLog = m_StartTime;
         m_Job = std::make_shared<Job>();
 
@@ -168,6 +225,7 @@ namespace MoleHole
             return;
         }
         m_MinSerial = readback.Serial + 1;
+        m_LastProgress = std::chrono::steady_clock::now();
         if (const auto stats = m_Renderer->GetBufferTargetStats(m_BufferTargetId))
         {
             m_LastGpuMs = stats->GpuMs;
@@ -242,6 +300,11 @@ namespace MoleHole
     void ExportController::PollCompletion()
     {
         const int written = m_Job->FramesWritten.load();
+        if (written != m_LastWritten)
+        {
+            m_LastWritten = written;
+            m_LastProgress = std::chrono::steady_clock::now();
+        }
         m_UiState->ExportProgress = static_cast<float>(written) / static_cast<float>(m_TotalFrames);
 
         if (written < m_TotalFrames && m_Job->WritesInFlight.load() > 0)
@@ -283,7 +346,11 @@ namespace MoleHole
                 }
                 return;
             }
-            if (!m_Job->EncodeFinished.load()) return;
+            if (!m_Job->EncodeFinished.load())
+            {
+                m_LastProgress = std::chrono::steady_clock::now();
+                return;
+            }
         }
 
         Finish();
@@ -339,6 +406,7 @@ namespace MoleHole
         m_UiState->ExportProgress = 1.0f;
         if (failed)
         {
+            m_UiState->ExportExitCode = 5;
             m_UiState->ExportStatus = m_Job->EncodeFailed.load() ? "Failed: ffmpeg encoding error"
                                                                  : "Failed: could not write image";
         }

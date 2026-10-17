@@ -41,12 +41,23 @@ The disk noise still follows the wall clock, so two exports of the same scene ar
 | `--scene <path>` | both | `templates/test-scene.yaml` | Scene file to load before rendering |
 | `--profile <name>` | both | Export context's profile | Render profile (built-in or stored in the scene) |
 | `--set <key=value>` | both | — | Override one render setting; repeatable; bad keys or values abort with exit code 2 |
+| `--export-timeout <seconds>` | both | 120 | Give up when the export makes no progress (scene load, shader compile, a frame, encoding) for this long; `0` disables |
 | `--list-settings` | — | — | Print every setting key with default and options, then exit |
 | `--ray-step-size <f>` | both | profile | Same as `--set transport.step_size=<f>` |
 | `--max-ray-steps <n>` | both | profile | Same as `--set transport.max_steps=<n>` |
 | `--gpu-precision <f32\|f64>` | both | f32 | Same as `--set transport.gpu_precision=<p>` |
 | `--physically-accurate` | both | off | Same as `--set transport.mode=Integrated` |
 | `--metric <0-3>` | both | profile | Same as `--set spacetime.solution=<n>` (0 Schwarzschild, 1 Kerr, 2 Reissner–Nordström, 3 Kerr–Newman) |
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Export finished |
+| 2 | Bad command-line value (`--set`, `--export-timeout`) |
+| 3 | A shader the render needs failed to compile (the `[error]` line names the shader and the compiler message) |
+| 4 | No progress for `--export-timeout` seconds |
+| 5 | Writing the image or encoding the video failed |
 
 Step size is in units of the render frame's gravitational radius (`camera.length_unit`).
 Not available yet: `--spp`, `--seed`, `--format`, `--denoise`, `--time-scale`, `--sim-start` (no accumulation or sampler yet).

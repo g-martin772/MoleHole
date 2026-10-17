@@ -158,6 +158,8 @@ export namespace MoleHole
         float ExportProgress = 0.0f;
         std::string ExportStatus;
         bool ExitWhenExportDone = false;
+        float ExportTimeoutSeconds = 120.0f;
+        int ExportExitCode = 0;
         float ExportStepDelta = 0.0f;
         std::uint64_t ExportStepSerial = 0;
 

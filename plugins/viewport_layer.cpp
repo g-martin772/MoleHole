@@ -108,6 +108,7 @@ namespace
         {
             FixupPendingConvexHulls();
             m_Export.SetPipelinesReady(m_Pipeline.AllStagesReady());
+            m_Export.SetPipelineFailure(m_Pipeline.FirstFailure());
         }
 
         void OnRenderGraph(RenderGraph& graph) override
