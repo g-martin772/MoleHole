@@ -44,12 +44,15 @@ TEST_CASE("Every render setting is declared once with a label, a group and sane 
             CHECK((setting.Meta.OptionRequires.empty() || setting.Meta.OptionRequires.size() == setting.Meta.Options.size()));
             CHECK((setting.Meta.OptionCosts.empty() || setting.Meta.OptionCosts.size() == setting.Meta.Options.size()));
         }
-        for (const auto clause : std::views::split(setting.Meta.VisibleWhen, '&'))
+        for (const auto& conditions : {setting.Meta.VisibleWhen, setting.Meta.CostWhen})
         {
-            auto dependency = std::string(std::string_view(clause));
-            dependency = dependency.substr(0, dependency.find_first_of("=!>"));
-            std::erase(dependency, ' ');
-            CHECK(registry.Find(dependency) != nullptr);
+            for (const auto clause : std::views::split(conditions, '&'))
+            {
+                auto dependency = std::string(std::string_view(clause));
+                dependency = dependency.substr(0, dependency.find_first_of("=!>"));
+                std::erase(dependency, ' ');
+                CHECK(registry.Find(dependency) != nullptr);
+            }
         }
     }
     CHECK(registry.Groups().front() == "Spacetime");
@@ -94,6 +97,27 @@ TEST_CASE("The Lensed built-in equals the struct defaults so profiles can be sav
     const auto& flat = set.Find("Flat")->Settings;
     CHECK_FALSE(flat.UsesBloomChain());
     CHECK(flat.Fxaa);
+}
+
+TEST_CASE("GPU precision only costs anything under the Integrated transport", "[rendering][settings]")
+{
+    const auto& registry = RenderSettingRegistry();
+    const auto* precision = registry.Find("transport.gpu_precision");
+    REQUIRE(precision);
+    RenderSettings settings;
+    registry.SetFromText(settings, "transport.gpu_precision", "f64");
+    for (const auto* mode : {"Straight", "AnalyticLens"})
+    {
+        INFO(mode);
+        registry.SetFromText(settings, "transport.mode", mode);
+        CHECK(registry.CostFor(settings, *precision) == 0);
+    }
+    registry.SetFromText(settings, "transport.mode", "Integrated");
+    CHECK(registry.CostFor(settings, *precision) == 4);
+    registry.SetFromText(settings, "transport.gpu_precision", "f32");
+    CHECK(registry.CostFor(settings, *precision) == 0);
+    registry.SetFromText(settings, "transport.gpu_precision", "f128");
+    CHECK(registry.CostFor(settings, *precision) == 5);
 }
 
 TEST_CASE("The Straight transport hides the disk settings its analytic disk ignores", "[rendering][settings]")

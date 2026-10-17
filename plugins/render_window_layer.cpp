@@ -194,7 +194,7 @@ namespace
                 for (const auto* setting : rows)
                 {
                     ImGui::PushID(setting->Key.c_str());
-                    changed |= DrawRenderSetting(icons, *setting, edited, baseline, caps);
+                    changed |= DrawRenderSetting(icons, registry, *setting, edited, baseline, caps);
                     ImGui::PopID();
                     if (setting->Key == "debug.view") DrawDebugViewLegend(edited.Debug);
                 }

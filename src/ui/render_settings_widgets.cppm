@@ -35,10 +35,10 @@ export namespace MoleHole
     }
 
     [[nodiscard]] inline std::string RenderSettingTooltip(const GPP::SettingDesc<RenderSettings>& setting,
-                                                          const RenderSettings& value, const GPP::GpuCapabilities& caps)
+                                                          const RenderSettings& value, const GPP::GpuCapabilities& caps,
+                                                          const int cost)
     {
         std::string text = setting.Meta.Tooltip;
-        const int cost = setting.CostFor(value);
         if (!text.empty()) text += "\n\n";
         text += std::format("{}\nCost: {}/5", setting.Key, cost);
         const auto required = setting.RequiresFor(value);
@@ -47,19 +47,20 @@ export namespace MoleHole
         return text;
     }
 
-    inline bool DrawRenderSetting(ImFont* icons, const GPP::SettingDesc<RenderSettings>& setting, RenderSettings& value,
+    inline bool DrawRenderSetting(ImFont* icons, const GPP::SettingRegistry<RenderSettings>& registry,
+                                  const GPP::SettingDesc<RenderSettings>& setting, RenderSettings& value,
                                   const RenderSettings& baseline, const GPP::GpuCapabilities& caps)
     {
         using GPP::FieldType;
         const auto& meta = setting.Meta;
         const bool modified = setting.Get(value) != setting.Get(baseline);
         const bool wholeUnavailable = !caps.Has(meta.Requires);
-        const auto tooltip = RenderSettingTooltip(setting, value, caps);
+        const int cost = registry.CostFor(value, setting);
+        const auto tooltip = RenderSettingTooltip(setting, value, caps, cost);
         bool changed = false;
 
         const auto draw = [&]
         {
-            const int cost = setting.CostFor(value);
             const float badgeWidth = cost > 0 ? 5.0f * 4.0f + 4.0f * 2.0f + ImGui::GetStyle().ItemInnerSpacing.x : 0.0f;
             const float width = std::max(30.0f, ImGui::CalcItemWidth() - badgeWidth);
             ImGui::SetNextItemWidth(width);

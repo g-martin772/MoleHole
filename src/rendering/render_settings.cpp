@@ -58,7 +58,7 @@ namespace MoleHole
                 .Doc = kDoc,
                 .Options = {"f32", "f64", "f128"},
                 .OptionRequires = {"", std::string(GpuCapability::kShaderFloat64), std::string(GpuCapability::kNever)},
-                .OptionCosts = {0, 4, 5}}));
+                .OptionCosts = {0, 4, 5}, .CostWhen = "transport.mode>=2"}));
 
             registry.Add(Setting("radiometry.redshift", &R::GravitationalRedshift, {
                 .Label = "Gravitational redshift", .Group = "Radiometry",
