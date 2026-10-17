@@ -12,7 +12,7 @@ namespace
     constexpr const char* kIconCamera = "\xef\x80\xb0"; // U+F030
     constexpr const char* kIconSystem = "\xef\x8b\x9b"; // U+F2DB (microchip)
     constexpr const char* kIconScene = "\xef\x80\xbe"; // U+F03E (image)
-    constexpr const char* kIconDebug = "\xef\x86\x88"; // U+F188 (bug)
+    constexpr const char* kIconSimulation = "\xef\x80\x97"; // U+F017 (clock)
     constexpr const char* kIconRender = "\xef\x87\x9e"; // U+F1DE (sliders)
     constexpr const char* kIconHud = "\xef\x98\xa4"; // U+F624 (gauge)
     constexpr const char* kIconAtom = "\xef\x97\x92"; // U+F5D2 (general relativity)
@@ -70,7 +70,7 @@ namespace
                     {kIconSystem, "SYS", "System", &m_UiState->ShowSystemWindow},
                     {kIconScene, "SCN", "Scene", &m_UiState->ShowSceneWindow},
                     {kIconRender, "RND", "Render", &m_UiState->ShowRenderWindow},
-                    {kIconDebug, "DBG", "Debug", &m_UiState->ShowDebugWindow},
+                    {kIconSimulation, "SIM", "Simulation", &m_UiState->ShowSimulationWindow},
                     {kIconHud, "HUD", "Viewport HUD", &m_UiState->ShowViewportHud},
                     {kIconAtom, "GR", "General Relativity", &m_UiState->ShowGeneralRelativityWindow},
                     {kIconBrain, "SCI", "Science", &m_UiState->ShowScienceWindow},

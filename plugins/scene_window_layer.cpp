@@ -231,32 +231,6 @@ namespace
                                                                           : m_UiState->CurrentScenePath.c_str());
             ImGui::TextDisabled("%s", runner->IsPaused() ? "Paused" : "Running");
 
-            if (BeginSection(icons, "Simulation"))
-            {
-                float gravity = m_UiState->GravityMultiplier;
-                if (PropertyRow(icons, "Gravity Strength", gravity != 1.0f, [&]
-                {
-                    DragFloatValue("##v", &gravity, 0.01f, 0.0f, 10.0f, "%.2fx");
-                }))
-                {
-                    gravity = 1.0f;
-                }
-                m_UiState->GravityMultiplier = gravity;
-
-                double timeScale = runner->Metadata().TimeScale;
-                if (PropertyRow(icons, "Time Scale", timeScale != 1.0, [&]
-                {
-                    if (QuantityValue("##timescale", &timeScale, Units::Dimension::None, 1.0e-6, 1.0e-12, 1.0e12))
-                    {
-                        runner->EnqueueEdit([timeScale](Scene& scene) { scene.SetTimeScale(timeScale); });
-                    }
-                }, "Physical (SI) seconds per second of simulation clock. 1 = real time."))
-                {
-                    runner->EnqueueEdit([](Scene& scene) { scene.SetTimeScale(1.0); });
-                }
-                EndSection();
-            }
-
             if (BeginSection(icons, "Outliner"))
             {
                 auto sceneLock = runner->LockRenderScene();

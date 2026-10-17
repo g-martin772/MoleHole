@@ -7,11 +7,11 @@ import GPP;
 import :UI.WidgetLogic;
 import :UI.Widgets;
 import :Rendering.Settings;
+import :Rendering.DebugLegend;
 import :Rendering.SettingsService;
 
 export namespace MoleHole
 {
-    // Five pips, filled up to `cost` (0-5); free settings draw nothing
     inline void DrawCostBadge(const int cost)
     {
         if (cost <= 0) return;
@@ -47,7 +47,6 @@ export namespace MoleHole
         return text;
     }
 
-    // One row: label, widget, cost badge, reset to `baseline`. Returns true when `value` changed.
     inline bool DrawRenderSetting(ImFont* icons, const GPP::SettingDesc<RenderSettings>& setting, RenderSettings& value,
                                   const RenderSettings& baseline, const GPP::GpuCapabilities& caps)
     {
@@ -142,7 +141,79 @@ export namespace MoleHole
         return changed;
     }
 
-    // Profile, fps, GPU time and tracer scale in the corner of the viewport image
+    inline ImU32 LegendU32(const LegendColor& color)
+    {
+        return ToU32(glm::vec4(color.R, color.G, color.B, 1.0f));
+    }
+
+    inline void DrawLegendEntry(const LegendEntry& entry)
+    {
+        const float size = ImGui::GetTextLineHeight();
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        auto* list = ImGui::GetWindowDrawList();
+        list->AddRectFilled(pos, ImVec2(pos.x + size, pos.y + size), LegendU32(entry.Color), 2.0f);
+        list->AddRect(pos, ImVec2(pos.x + size, pos.y + size), ToU32(HexColor(0x808080)), 2.0f);
+        ImGui::Dummy(ImVec2(size, size));
+        ImGui::SameLine();
+        ImGui::TextWrapped("%.*s - %.*s", static_cast<int>(entry.Label.size()), entry.Label.data(),
+                           static_cast<int>(entry.Meaning.size()), entry.Meaning.data());
+    }
+
+    inline void DrawStepCountLegend()
+    {
+        constexpr int kSegments = 48;
+        const float width = ImGui::GetContentRegionAvail().x;
+        const float height = ImGui::GetTextLineHeight();
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        auto* list = ImGui::GetWindowDrawList();
+        for (int i = 0; i < kSegments; ++i)
+        {
+            const float t0 = static_cast<float>(i) / kSegments;
+            const float t1 = static_cast<float>(i + 1) / kSegments;
+            const ImU32 left = LegendU32(DebugHeat(t0));
+            const ImU32 right = LegendU32(DebugHeat(t1));
+            list->AddRectFilledMultiColor(ImVec2(pos.x + t0 * width, pos.y), ImVec2(pos.x + t1 * width, pos.y + height),
+                                          left, right, right, left);
+        }
+        list->AddRect(pos, ImVec2(pos.x + width, pos.y + height), ToU32(HexColor(0x808080)));
+        ImGui::Dummy(ImVec2(width, height));
+
+        const ImVec2 labels = ImGui::GetCursorScreenPos();
+        const ImU32 text = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+        const std::string low(kStepCountLowLabel);
+        const std::string high(kStepCountHighLabel);
+        list->AddText(labels, text, low.c_str());
+        list->AddText(ImVec2(labels.x + width - ImGui::CalcTextSize(high.c_str()).x, labels.y), text, high.c_str());
+        ImGui::Dummy(ImVec2(width, ImGui::GetTextLineHeight()));
+        TextDisabledWrapped(kStepCountNote);
+    }
+
+    inline void DrawDebugViewLegend(const DebugView view)
+    {
+        if (view == DebugView::None) return;
+        ImGui::Spacing();
+        ImGui::TextDisabled("LEGEND");
+        if (view == DebugView::StepCount) DrawStepCountLegend();
+        else for (const auto& entry : kTerminationLegend) DrawLegendEntry(entry);
+        ImGui::Spacing();
+    }
+
+    inline void DrawOverlayLegends(const RenderSettings& value)
+    {
+        bool any = false;
+        for (const auto& legend : kOverlayLegends)
+        {
+            const auto* setting = RenderSettingRegistry().Find(legend.SettingKey);
+            if (!setting || !std::get<bool>(setting->Get(value))) continue;
+            if (!any) ImGui::Spacing();
+            if (!any) ImGui::TextDisabled("LEGEND");
+            any = true;
+            ImGui::TextDisabled("%s", setting->Meta.Label.c_str());
+            for (const auto& entry : legend.Entries) DrawLegendEntry(entry);
+        }
+        if (any) ImGui::Spacing();
+    }
+
     inline void DrawRenderStatsOverlay(const ImVec2 corner, const std::optional<GPP::Renderer::BufferTargetStats>& stats,
                                        const RenderSettingsService& settings, const float governorScale)
     {

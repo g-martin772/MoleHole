@@ -1,8 +1,8 @@
-#include <vulkan/vulkan.hpp>
 #include <imgui.h>
 
 import GPP;
 import MoleHole;
+import vulkan;
 import std;
 
 #include <gpp/hot_reload_export.h>
@@ -12,21 +12,14 @@ using namespace MoleHole;
 
 namespace
 {
-    ImVec4 RateColor(const double value, const double good, const double ok)
-    {
-        return value >= good ? ImVec4(0.2f, 0.9f, 0.2f, 1.0f)
-               : value >= ok ? ImVec4(0.9f, 0.9f, 0.2f, 1.0f)
-                             : ImVec4(0.9f, 0.2f, 0.2f, 1.0f);
-    }
-
     struct SystemWindowLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, Renderer, SceneManager, UiState>;
+        using Dependencies = std::tuple<Logger, Renderer, UiState, RenderSettingsService>;
 
         SystemWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<Renderer> renderer,
-                          std::shared_ptr<SceneManager> scenes, std::shared_ptr<UiState> uiState)
-            : HotReloadableLayer(logger), m_Renderer(std::move(renderer)), m_Scenes(std::move(scenes)),
-              m_UiState(std::move(uiState))
+                          std::shared_ptr<UiState> uiState, std::shared_ptr<RenderSettingsService> renderSettings)
+            : HotReloadableLayer(logger), m_Renderer(std::move(renderer)), m_UiState(std::move(uiState)),
+              m_RenderSettings(std::move(renderSettings))
         {
         }
 
@@ -70,75 +63,21 @@ namespace
                 }
             }
 
-            const auto runner = m_UiState->CurrentSceneName.empty()
-                                    ? nullptr
-                                    : m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
-            if (runner)
-            {
-                const auto sim = runner->GetStats();
-                if (sim.Paused)
-                {
-                    ImGui::TextDisabled("Simulation: paused  (target %.0f Hz)", sim.TargetTickRate);
-                }
-                else
-                {
-                    ImGui::TextColored(RateColor(sim.TicksPerSecond, sim.TargetTickRate * 0.95,
-                                                 sim.TargetTickRate * 0.5),
-                                       "Simulation: %6.1f ups   %5.2f ms/tick  (target %.0f Hz)", sim.TicksPerSecond,
-                                       sim.AverageTickMs, sim.TargetTickRate);
-                    if (sim.Stalled)
-                    {
-                        ImGui::TextColored(ImVec4(0.9f, 0.2f, 0.2f, 1.0f),
-                                           "            STALLED: one tick has been running for %.1f s - showing the last published state",
-                                           sim.CurrentTickMs / 1000.0);
-                    }
-                    else if (sim.Overrunning)
-                    {
-                        ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f),
-                                           "            ticks take longer than the tick period (max %.1f ms): the simulation runs slower than real time",
-                                           sim.MaxTickMs);
-                    }
-                }
-            }
-            else
-            {
-                ImGui::TextDisabled("Simulation: no active scene");
-            }
-
-            SectionHeader("SIMULATION");
-            float tickRate = m_UiState->SimulationTickRate;
-            ImGui::SetNextItemWidth(-1);
-            if (ImGui::SliderFloat("##TickRate", &tickRate, static_cast<float>(SimulationRunner::kMinTickRate),
-                                   1000.0f, "Tick rate: %.0f Hz", ImGuiSliderFlags_Logarithmic))
-            {
-                m_UiState->SimulationTickRate = std::clamp(tickRate, static_cast<float>(SimulationRunner::kMinTickRate),
-                                                           static_cast<float>(SimulationRunner::kMaxTickRate));
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("How many times per second the simulation steps (Ctrl+click to type a value).\n"
-                                  "Independent of the UI and viewport frame rates.");
-            }
-            for (const float preset : {30.0f, 60.0f, 120.0f, 240.0f})
-            {
-                char label[16];
-                std::snprintf(label, sizeof(label), "%.0f Hz", preset);
-                if (ImGui::SmallButton(label)) m_UiState->SimulationTickRate = preset;
-                ImGui::SameLine();
-            }
-            ImGui::NewLine();
+            DrawRenderStats();
 
             SectionHeader("SYSTEM INFO");
             const auto properties = m_Renderer->GetDevice()->GetPhysicalDevice().getProperties();
             ImGui::Text("GPU: %s", properties.deviceName.data());
             ImGui::Text("Driver Version: %u", properties.driverVersion);
-            ImGui::Text("API Version: %u.%u.%u", VK_API_VERSION_MAJOR(properties.apiVersion),
-                        VK_API_VERSION_MINOR(properties.apiVersion), VK_API_VERSION_PATCH(properties.apiVersion));
+            ImGui::Text("API Version: %u.%u.%u", vk::apiVersionMajor(properties.apiVersion),
+                        vk::apiVersionMinor(properties.apiVersion), vk::apiVersionPatch(properties.apiVersion));
 
             if (const auto target = m_Renderer->GetRenderTargetInfo(kViewportBufferId))
             {
                 ImGui::Text("Viewport Resolution: %ux%u", target->Extent.width, target->Extent.height);
             }
+
+            DrawDevice();
 
             ImGui::End();
 
@@ -146,9 +85,46 @@ namespace
         }
 
     private:
+        void DrawRenderStats()
+        {
+            SectionHeader("RENDER");
+            const auto stats = m_Renderer->GetBufferTargetStats(kViewportBufferId);
+            if (!stats)
+            {
+                ImGui::TextDisabled("Viewport not rendering.");
+                return;
+            }
+            const auto& effective = m_RenderSettings->Effective();
+            const auto context = m_RenderSettings->ActiveContext();
+            ImGui::Text("%s -> %s", std::string(RenderContextLabel(context)).c_str(),
+                        m_RenderSettings->ProfileFor(context).Name.c_str());
+            ImGui::Text("%.1f fps, frame %.1f ms, GPU %.1f ms", stats->FramesPerSecond, stats->AverageFrameMs, stats->GpuMs);
+            const auto trace = ScaledTraceExtent(vk::Extent3D{stats->Extent.x, stats->Extent.y, 1},
+                                                 effective.ResolutionScale * m_UiState->RenderGovernorScale);
+            ImGui::Text("Viewport %ux%u, tracer %ux%u (%.0f%%)", stats->Extent.x, stats->Extent.y, trace.width, trace.height,
+                        effective.ResolutionScale * m_UiState->RenderGovernorScale);
+            if (m_UiState->RenderGovernorScale < 1.0f)
+                ImGui::TextDisabled("Governor: %.0f%% of the profile's scale", m_UiState->RenderGovernorScale * 100.0f);
+            ImGui::Text("Ray steps: up to %d at %.4f", effective.MaxRaySteps, effective.RayStepSize);
+        }
+
+        void DrawDevice()
+        {
+            const auto& caps = m_RenderSettings->Capabilities();
+            SectionHeader("DEVICE");
+            ImGui::TextWrapped("%s (%s)", caps.DeviceName.c_str(), std::string(GpuTypeName(caps.Type)).c_str());
+            TextDisabledWrapped(caps.Reason);
+            for (const auto key : GpuCapability::kAll)
+            {
+                const bool has = caps.Has(key);
+                ImGui::TextColored(has ? ImVec4(0.45f, 0.8f, 0.45f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s  %s",
+                                   has ? "yes" : "no ", std::string(CapabilityLabel(key)).c_str());
+            }
+        }
+
         std::shared_ptr<Renderer> m_Renderer;
-        std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<UiState> m_UiState;
+        std::shared_ptr<RenderSettingsService> m_RenderSettings;
         float m_FrameTimeHistory[60] = {};
         int m_FrameTimeIndex = 0;
     };

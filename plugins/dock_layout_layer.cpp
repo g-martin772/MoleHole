@@ -52,7 +52,7 @@ namespace
             ImGui::DockBuilderDockWindow("Camera", dockRightTop);
             ImGui::DockBuilderDockWindow("Scene", dockRightBottom);
             ImGui::DockBuilderDockWindow("Render", dockRightBottom);
-            ImGui::DockBuilderDockWindow("Debug", dockRightBottom);
+            ImGui::DockBuilderDockWindow("Simulation", dockRightBottom);
             ImGui::DockBuilderDockWindow("Viewport", dockCenter);
             ImGui::DockBuilderDockWindow("General Relativity", dockBottom);
             ImGui::DockBuilderDockWindow("Science", dockBottom);

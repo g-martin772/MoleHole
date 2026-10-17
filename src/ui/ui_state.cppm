@@ -22,9 +22,7 @@ export namespace MoleHole
         std::uint32_t Height = 1080;
         float DurationSeconds = 10.0f;
         int Framerate = 60;
-        // Render profile for this export (CLI --profile); the Export context's profile when unset
         std::optional<std::string> Profile;
-        // Setting overrides applied on top of the profile (CLI --set key=value)
         std::vector<std::pair<std::string, std::string>> Overrides;
     };
 
@@ -94,7 +92,7 @@ export namespace MoleHole
         bool ShowCameraWindow = false;
         bool ShowSystemWindow = false;
         bool ShowSceneWindow = true;
-        bool ShowDebugWindow = false;
+        bool ShowSimulationWindow = false;
         bool ShowRenderWindow = false;
         // Viewport draws with the Reference profile until switched off
         bool ReferenceView = false;

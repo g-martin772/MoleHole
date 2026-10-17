@@ -68,10 +68,10 @@ TEST_CASE("ApplyTutorialStepVisibility forces exactly the target window's flag a
 {
     UiState uiState;
     const bool sceneWindowBefore = uiState.ShowSceneWindow; // defaults true, unrelated to this step
-    const TutorialStep debugStep{"Debug", "Debug Panel", "..."};
-    ApplyTutorialStepVisibility(uiState, debugStep);
+    const TutorialStep simulationStep{"Simulation", "Simulation Panel", "..."};
+    ApplyTutorialStepVisibility(uiState, simulationStep);
 
-    CHECK(uiState.ShowDebugWindow);
+    CHECK(uiState.ShowSimulationWindow);
     CHECK_FALSE(uiState.ShowCameraWindow);
     CHECK_FALSE(uiState.ShowSystemWindow);
     CHECK(uiState.ShowSceneWindow == sceneWindowBefore);
@@ -91,7 +91,7 @@ TEST_CASE("ApplyTutorialStepVisibility is a no-op for a step with no target wind
     CHECK_FALSE(uiState.ShowCameraWindow);
     CHECK_FALSE(uiState.ShowSystemWindow);
     CHECK(uiState.ShowSceneWindow == sceneWindowBefore);
-    CHECK_FALSE(uiState.ShowDebugWindow);
+    CHECK_FALSE(uiState.ShowSimulationWindow);
     CHECK_FALSE(uiState.ShowGeneralRelativityWindow);
     CHECK_FALSE(uiState.ShowScienceWindow);
     CHECK_FALSE(uiState.ShowAnimationGraphWindow);

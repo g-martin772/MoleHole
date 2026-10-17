@@ -28,6 +28,7 @@ export import :Simulation.GraphTranspiler;
 export import :Simulation.ScriptRuntime;
 export import :Rendering.Frame;
 export import :Rendering.Settings;
+export import :Rendering.DebugLegend;
 export import :Rendering.SettingsService;
 export import :Rendering.Sidecar;
 export import :Rendering.Meshes;

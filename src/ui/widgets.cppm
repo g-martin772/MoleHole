@@ -99,6 +99,20 @@ export namespace MoleHole
         ImGui::Spacing();
     }
 
+    inline void TextDisabledWrapped(const std::string_view text)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextWrapped("%.*s", static_cast<int>(text.size()), text.data());
+        ImGui::PopStyleColor();
+    }
+
+    inline ImVec4 RateColor(const double value, const double good, const double ok)
+    {
+        return value >= good ? ImVec4(0.2f, 0.9f, 0.2f, 1.0f)
+               : value >= ok ? ImVec4(0.9f, 0.9f, 0.2f, 1.0f)
+                             : ImVec4(0.9f, 0.2f, 0.2f, 1.0f);
+    }
+
     inline ImFont* EnsureIconFont(UiState& state)
     {
         if (!state.IconFont)

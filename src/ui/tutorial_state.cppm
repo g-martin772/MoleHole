@@ -41,15 +41,21 @@ export namespace MoleHole
         {
             "System",
             "System & Performance",
-            "Shows live FPS and frame-time history, along with your GPU, driver,\n"
-            "and Vulkan API version, and the viewport's current render resolution."
+            "Shows live FPS and frame-time history, the render stats of the viewport,\n"
+            "your GPU with the features it supports, driver and Vulkan API version."
         },
         {
-            "Debug",
-            "Debug Panel",
-            "Toggle individual rendering effects (lensing, redshift, Doppler beaming,\n"
-            "the accretion disk) and debug visualizations like the gravity grid,\n"
-            "physics collider wireframe, and object path trails."
+            "Render",
+            "Render Panel",
+            "Pick a render profile for editing, playing and exporting, and tune every\n"
+            "render setting. Overlays (gravity grid, collider wireframe, object paths)\n"
+            "and debug views come with a legend of their colours."
+        },
+        {
+            "Simulation",
+            "Simulation Panel",
+            "Tick rate and timing of the simulation, gravity strength, time scale\n"
+            "and the CPU precision of the physics."
         },
         {
             nullptr,
@@ -133,7 +139,7 @@ export namespace MoleHole
         if (windowName == "Camera") uiState.ShowCameraWindow = true;
         else if (windowName == "System") uiState.ShowSystemWindow = true;
         else if (windowName == "Scene") uiState.ShowSceneWindow = true;
-        else if (windowName == "Debug") uiState.ShowDebugWindow = true;
+        else if (windowName == "Simulation") uiState.ShowSimulationWindow = true;
         else if (windowName == "Render") uiState.ShowRenderWindow = true;
         else if (windowName == "General Relativity") uiState.ShowGeneralRelativityWindow = true;
         else if (windowName == "Science") uiState.ShowScienceWindow = true;

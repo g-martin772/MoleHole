@@ -53,12 +53,12 @@ namespace MoleHole
                 .VisibleWhen = "transport.mode>=1"}));
             registry.Add(Setting("transport.gpu_precision", &R::GpuPrecision, {
                 .Label = "GPU precision", .Group = "Transport",
-                .Tooltip = "Arithmetic of the geodesic integration. f64 runs at 1/32-1/64 rate on consumer GPUs.",
+                .Tooltip = "Arithmetic of the geodesic integration. Only the Integrated transport uses it.\n"
+                           "f64 runs at 1/32-1/64 rate on consumer GPUs.",
                 .Doc = kDoc,
                 .Options = {"f32", "f64", "f128"},
                 .OptionRequires = {"", std::string(GpuCapability::kShaderFloat64), std::string(GpuCapability::kNever)},
-                .OptionCosts = {0, 4, 5},
-                .VisibleWhen = "transport.mode=2"}));
+                .OptionCosts = {0, 4, 5}}));
 
             registry.Add(Setting("radiometry.redshift", &R::GravitationalRedshift, {
                 .Label = "Gravitational redshift", .Group = "Radiometry",

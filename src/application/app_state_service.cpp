@@ -14,7 +14,6 @@ namespace MoleHole
 {
     namespace
     {
-        // Render settings used to be one flat list in molehole_state.yaml; their presence marks a pre-profile state file
         bool HasLegacyRenderKeys(const YAML::Node& render)
         {
             return render && (render["GravitationalLensing"] || render["BloomEnabled"] || render["MetricType"]
@@ -100,7 +99,7 @@ namespace MoleHole
                 if (const auto v = ui["ShowCameraWindow"]) m_UiState->ShowCameraWindow = v.as<bool>();
                 if (const auto v = ui["ShowSystemWindow"]) m_UiState->ShowSystemWindow = v.as<bool>();
                 if (const auto v = ui["ShowSceneWindow"]) m_UiState->ShowSceneWindow = v.as<bool>();
-                if (const auto v = ui["ShowDebugWindow"]) m_UiState->ShowDebugWindow = v.as<bool>();
+                if (const auto v = ui["ShowSimulationWindow"]) m_UiState->ShowSimulationWindow = v.as<bool>();
                 if (const auto v = ui["ShowRenderWindow"]) m_UiState->ShowRenderWindow = v.as<bool>();
                 if (const auto v = ui["ShowGeneralRelativityWindow"])
                     m_UiState->ShowGeneralRelativityWindow = v.as<bool>();
@@ -214,7 +213,7 @@ namespace MoleHole
             root["UI"]["ShowCameraWindow"] = m_UiState->ShowCameraWindow;
             root["UI"]["ShowSystemWindow"] = m_UiState->ShowSystemWindow;
             root["UI"]["ShowSceneWindow"] = m_UiState->ShowSceneWindow;
-            root["UI"]["ShowDebugWindow"] = m_UiState->ShowDebugWindow;
+            root["UI"]["ShowSimulationWindow"] = m_UiState->ShowSimulationWindow;
             root["UI"]["ShowRenderWindow"] = m_UiState->ShowRenderWindow;
             root["UI"]["ShowGeneralRelativityWindow"] = m_UiState->ShowGeneralRelativityWindow;
             root["UI"]["ShowScienceWindow"] = m_UiState->ShowScienceWindow;

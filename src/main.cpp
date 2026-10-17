@@ -35,7 +35,6 @@ namespace
         for (const auto& profile : BuiltInRenderProfiles()) std::println("  {:<12} {}", profile.Name, profile.Description);
     }
 
-    // Applies key=value to a scratch copy to reject typos before an export starts
     bool AddOverride(CliExportArgs& args, std::string key, std::string value)
     {
         RenderSettings scratch;
@@ -167,7 +166,6 @@ int main(int argc, char* argv[])
     builder.Services.AddSingleton<RenderSettingsService>([cli, exportArgs](ServiceProvider&) -> std::shared_ptr<IService>
     {
         auto service = std::make_shared<RenderSettingsService>();
-        // Exports apply their own profile; an interactive session takes --profile for every context
         if (!exportArgs && cli && cli->Request.Profile) service->SetProfileOverride(*cli->Request.Profile);
         return service;
     });
@@ -182,7 +180,7 @@ int main(int argc, char* argv[])
         builder.AddHotReloadableLayer("topbar", "molehole_topbar_layer.so").SetWindowTarget("main");
         builder.AddHotReloadableLayer("scene-window", "molehole_scene_window_layer.so").SetWindowTarget("main");
         builder.AddHotReloadableLayer("camera-window", "molehole_camera_window_layer.so").SetWindowTarget("main");
-        builder.AddHotReloadableLayer("debug-window", "molehole_debug_window_layer.so").SetWindowTarget("main");
+        builder.AddHotReloadableLayer("simulation-window", "molehole_simulation_window_layer.so").SetWindowTarget("main");
         builder.AddHotReloadableLayer("render-window", "molehole_render_window_layer.so").SetWindowTarget("main");
         builder.AddHotReloadableLayer("system-window", "molehole_system_window_layer.so").SetWindowTarget("main");
         builder.AddHotReloadableLayer("viewport-hud", "molehole_viewport_hud_layer.so").SetWindowTarget("main");

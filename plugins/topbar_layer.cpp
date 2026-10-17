@@ -188,7 +188,7 @@ namespace
                 ImGui::MenuItem("System", nullptr, &m_UiState->ShowSystemWindow);
                 ImGui::MenuItem("Scene", nullptr, &m_UiState->ShowSceneWindow);
                 ImGui::MenuItem("Render", nullptr, &m_UiState->ShowRenderWindow);
-                ImGui::MenuItem("Debug", nullptr, &m_UiState->ShowDebugWindow);
+                ImGui::MenuItem("Simulation", nullptr, &m_UiState->ShowSimulationWindow);
                 ImGui::MenuItem("Viewport HUD", nullptr, &m_UiState->ShowViewportHud);
                 ImGui::MenuItem("Camera Gizmos", nullptr, &m_UiState->ShowCameraGizmos);
                 ImGui::MenuItem("General Relativity", nullptr, &m_UiState->ShowGeneralRelativityWindow);
@@ -231,7 +231,7 @@ namespace
 
             const ImGuiViewport* viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowSize(ImVec2(480, 450), ImGuiCond_Appearing);
+            ImGui::SetNextWindowSize(ImVec2(480, 520), ImGuiCond_Appearing);
 
             if (ImGui::BeginPopupModal("Settings", &m_UiState->ShowSettingsWindow, ImGuiWindowFlags_NoResize))
             {
@@ -268,6 +268,29 @@ namespace
                 if (ImGui::SliderFloat("Font Size", &fontSize, 10.0f, 32.0f, "%.0f"))
                 {
                     m_UiPreferences->SetFont(currentFont, fontSize);
+                }
+
+                SectionHeader("UNITS");
+                {
+                    const auto current = Units::GetDisplayPreset();
+                    ImGui::SetNextItemWidth(ImGui::CalcItemWidth());
+                    if (ImGui::BeginCombo("Display units", std::string(Units::DisplayPresetName(current)).c_str()))
+                    {
+                        for (const auto preset : Units::kDisplayPresets)
+                        {
+                            if (ImGui::Selectable(std::string(Units::DisplayPresetName(preset)).c_str(), preset == current))
+                            {
+                                Units::SetDisplayPreset(preset);
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Which units the inspector prefers for lengths, masses and times.\n"
+                                          "Auto picks by magnitude; Human = m/km/kg, Stellar = Rsun/AU/Msun, Galactic = pc/Msun/yr.\n"
+                                          "Right-click a value to force one unit for that field.");
+                    }
                 }
 
                 SectionHeader("EXPORT");

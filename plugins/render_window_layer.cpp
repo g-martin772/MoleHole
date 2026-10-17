@@ -2,7 +2,6 @@
 
 import GPP;
 import MoleHole;
-import vulkan;
 import std;
 
 #include <gpp/hot_reload_export.h>
@@ -12,10 +11,9 @@ using namespace MoleHole;
 
 namespace
 {
-    constexpr std::array<RenderContext, kRenderContextCount> kContexts{
+    constexpr std::array kContexts{
         RenderContext::Edit, RenderContext::Play, RenderContext::Reference, RenderContext::Export};
 
-    // Settings the profile is compared against for the "modified" marks and reset buttons
     RenderSettings BaselineFor(const RenderProfileSet& set, const RenderProfile& profile)
     {
         if (profile.BuiltIn) return profile.Settings;
@@ -25,12 +23,11 @@ namespace
 
     struct RenderWindowLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, UiState, RenderSettingsService, Renderer>;
+        using Dependencies = std::tuple<Logger, UiState, RenderSettingsService>;
 
         RenderWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<UiState> uiState,
-                          std::shared_ptr<RenderSettingsService> settings, std::shared_ptr<Renderer> renderer)
-            : HotReloadableLayer(logger), m_UiState(std::move(uiState)), m_Settings(std::move(settings)),
-              m_Renderer(std::move(renderer))
+                          std::shared_ptr<RenderSettingsService> settings)
+            : HotReloadableLayer(logger), m_UiState(std::move(uiState)), m_Settings(std::move(settings))
         {
         }
 
@@ -50,8 +47,6 @@ namespace
             DrawProfileBar();
             DrawActions();
             DrawSettings();
-            DrawStats();
-            DrawDevice();
             ImGui::End();
         }
 
@@ -201,51 +196,16 @@ namespace
                     ImGui::PushID(setting->Key.c_str());
                     changed |= DrawRenderSetting(icons, *setting, edited, baseline, caps);
                     ImGui::PopID();
+                    if (setting->Key == "debug.view") DrawDebugViewLegend(edited.Debug);
                 }
+                if (group == "Overlays") DrawOverlayLegends(edited);
                 EndSection();
             }
             if (changed) m_Settings->Edit(m_EditContext, edited);
         }
 
-        void DrawStats()
-        {
-            SectionHeader("STATS");
-            const auto stats = m_Renderer->GetBufferTargetStats(kViewportBufferId);
-            if (!stats)
-            {
-                ImGui::TextDisabled("Viewport not rendering.");
-                return;
-            }
-            const auto& effective = m_Settings->Effective();
-            ImGui::Text("%s -> %s", std::string(RenderContextLabel(m_Settings->ActiveContext())).c_str(),
-                        m_Settings->ProfileFor(m_Settings->ActiveContext()).Name.c_str());
-            ImGui::Text("%.1f fps, frame %.1f ms, GPU %.1f ms", stats->FramesPerSecond, stats->AverageFrameMs, stats->GpuMs);
-            const auto trace = ScaledTraceExtent(vk::Extent3D{stats->Extent.x, stats->Extent.y, 1},
-                                             effective.ResolutionScale * m_UiState->RenderGovernorScale);
-            ImGui::Text("Viewport %ux%u, tracer %ux%u (%.0f%%)", stats->Extent.x, stats->Extent.y, trace.width, trace.height,
-                        effective.ResolutionScale * m_UiState->RenderGovernorScale);
-            if (m_UiState->RenderGovernorScale < 1.0f)
-                ImGui::TextDisabled("Governor: %.0f%% of the profile's scale", m_UiState->RenderGovernorScale * 100.0f);
-            ImGui::Text("Ray steps: up to %d at %.4f", effective.MaxRaySteps, effective.RayStepSize);
-        }
-
-        void DrawDevice()
-        {
-            const auto& caps = m_Settings->Capabilities();
-            SectionHeader("DEVICE");
-            ImGui::TextWrapped("%s (%s)", caps.DeviceName.c_str(), std::string(GpuTypeName(caps.Type)).c_str());
-            ImGui::TextDisabled("%s", caps.Reason.c_str());
-            for (const auto key : GpuCapability::kAll)
-            {
-                const bool has = caps.Has(key);
-                ImGui::TextColored(has ? ImVec4(0.45f, 0.8f, 0.45f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s  %s",
-                                   has ? "yes" : "no ", std::string(CapabilityLabel(key)).c_str());
-            }
-        }
-
         std::shared_ptr<UiState> m_UiState;
         std::shared_ptr<RenderSettingsService> m_Settings;
-        std::shared_ptr<Renderer> m_Renderer;
         RenderContext m_EditContext = RenderContext::Edit;
         bool m_Follow = true;
         std::string m_Search;
