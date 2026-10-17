@@ -100,12 +100,6 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
     float stepSize = u_rayStepSize * 10.0f;
     float maxSteps = u_maxRaySteps / 50;
     float adaptiveStepRate = u_adaptiveStepRate;
-    vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-
-    float mass = u_blackHoles[closestHole].mass;
-    /*stepSize *= 1.0f * mass;
-    maxSteps *= 1.0f * mass;
-    adaptiveStepRate *= 1.0f * mass;*/
 
     // volumetric
     float visibility = 1.0f;
@@ -222,7 +216,6 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     hitSolid = false;
     hitPoint = vec3(0.0);
 
-    vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
     int maxOuterIterations = max(50, u_maxRaySteps / 200);
 
     g_maxStepCount = maxOuterIterations + u_maxRaySteps / 50;

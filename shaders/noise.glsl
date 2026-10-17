@@ -16,41 +16,12 @@ float hash(ivec3 p) {
     return float(q.x) / 4294967295.0;
 }
 
-// Alternative hash function using floats for continuous inputs
-float hash13(vec3 p3) {
-    p3 = fract(p3 * 0.1031);
-    p3 += dot(p3, p3.zyx + 31.32);
-    return fract((p3.x + p3.y) * p3.z);
-}
-
 vec3 hash33(vec3 p3) {
     p3 = fract(p3 * vec3(.1031,.11369,.13787));
     p3 += dot(p3, p3.yxz+19.19);
     return -1.0 + 2.0 * fract(vec3((p3.x + p3.y)*p3.z, (p3.x+p3.z)*p3.y, (p3.y+p3.z)*p3.x));
 }
 
-float worley(vec3 p, float scale){
-    vec3 id = floor(p*scale);
-    vec3 fd = fract(p*scale);
-    float n = 0.0f;
-    float minimalDist = 1.0f;
-
-    // iterate over neighbouring space to find closest point
-    for(float x = -1.0f; x <= 1.0f; x++){
-        for(float y = -1.0f; y <= 1.0f; y++){
-            for(float z = -1.0f; z <= 1.0f; z++){
-                vec3 coord = vec3(x, y, z);
-                vec3 rId = hash33(mod(id + coord, scale)) * 0.5f + 0.5f;
-                vec3 r = coord + rId - fd;
-                float d = dot(r,r);
-                if(d < minimalDist){
-                    minimalDist = d;
-                }
-            }
-        }
-    }
-    return 1.0f - minimalDist;
-}
 vec4 permute(vec4 x) {
     return mod(((x * 34.0) + 1.0) * x, 289.0);
 }

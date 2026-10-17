@@ -1,4 +1,4 @@
-#version 450
+#version 460
 
 // Straight-ray transport: analytic shadow spheres, photon rings and thin disks, no ray marching
 

@@ -8,7 +8,7 @@ Entities:
         Name: BlackHole
         TypeTag: BlackHole
       Transform:
-        Position: [0, 25102.62564685212, 103363.75266350873]
+        Position: [0, 28587.582585204855, 103363.75266350873]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       RigidBody:
@@ -27,10 +27,10 @@ Entities:
         Restitution: 0.1
         IsTrigger: true
       BlackHole:
-        Mass: 5.405058714559787e+30
-        Spin: 0.999
+        Mass: 8.544197214389525e+36
+        Spin: 0.519
         Charge: 0
-        SpinAxis: [0.5, 1, 0.1]
+        SpinAxis: [0.43, 1.16, 0.1]
   - Guid: 16017086654788356877
     Components:
       Metadata:
@@ -188,7 +188,7 @@ Graphs:
 Render:
   Version: 1
   Contexts:
-    Edit: Flat (edited)
+    Edit: Interstellar
     Play: Reference
     Reference: Reference
     Export: Reference
@@ -212,10 +212,26 @@ Render:
         post.lens_flare: false
         post.flare_intensity: 0
         post.flare_threshold: 5
-    - Name: Flat (edited)
+    - Name: Interstellar
       Description: Straight rays, analytic shadow and disk, no lensing, no bloom. Fast, for editing and placing objects.
       Base: Flat
       Set:
         spacetime.solution: KerrNewman
         transport.mode: Integrated
+        transport.step_size: 0.007
+        transport.max_steps: 85033
+        transport.adaptive_rate: 0.88
+        radiometry.redshift: false
+        radiometry.doppler: false
         disk.volumetric: true
+        disk.height: 0.043
+        disk.speed: 0.431
+        disk.opacity: 0.49
+        disk.display_temperature: 4232
+        disk.hot_spots: 4
+        sampling.resolution_scale: 200
+        post.exposure: -1
+        post.bloom: true
+        post.bloom_threshold: 0.721
+        post.bloom_passes: 7
+        post.bloom_intensity: 40.122
