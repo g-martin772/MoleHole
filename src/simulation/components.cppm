@@ -51,9 +51,9 @@ namespace MoleHole
                                {.Label = "Mass", .Min = 1.0, .Speed = 1.0e27, .Dim = GPP::Units::Dimension::Mass,
                                 .LegacyScale = GPP::Units::Legacy::kBlackHoleMassKg}),
                     GPP::Field("Spin", &BlackHoleComponent::Spin,
-                               {.Label = "Spin a*", .Min = 0.0, .Max = 0.998, .Speed = 0.01}),
+                               {.Label = "Spin a*", .Min = -1.5, .Max = 1.5, .Speed = 0.01}),
                     GPP::Field("Charge", &BlackHoleComponent::Charge,
-                               {.Label = "Charge q*", .Min = 0.0, .Max = 1.0, .Speed = 0.01}),
+                               {.Label = "Charge q*", .Min = 0.0, .Max = 1.5, .Speed = 0.01}),
                     GPP::Field("SpinAxis", &BlackHoleComponent::SpinAxis,
                                {.Label = "Spin Axis", .Speed = 0.01, .Kind = GPP::FieldKind::Direction}),
                     GPP::Computed<BlackHoleComponent, std::string>(

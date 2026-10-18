@@ -37,13 +37,34 @@ TEST_CASE("Metric type zeroes the parameters it does not model", "[rendering][me
     CHECK(kerrNewman.Charge == Approx(1.0));
 }
 
-TEST_CASE("Spin and charge are clamped so the horizon always exists", "[rendering][metric]")
+TEST_CASE("Spin and charge are not clamped, a naked singularity has no horizon", "[rendering][metric]")
 {
     const auto p = MakeKerrNewmanParams(3, 1.0, 1.0, 1.0);
-    const double magnitude = std::hypot(p.SpinParameter, p.Charge);
-    CHECK(magnitude == Approx(kMaxHorizonParameter));
-    CHECK(p.SpinParameter == Approx(p.Charge));
-    CHECK(OuterHorizonRadius(p) > 1.0);
+    CHECK(p.SpinParameter == Approx(1.0));
+    CHECK(p.Charge == Approx(1.0));
+    CHECK_FALSE(HasHorizon(p));
+    CHECK(OuterHorizonRadius(p) == 0.0);
+    CHECK(CaptureRadius(p) == Approx(kNakedCaptureRadiusM));
+
+    const auto extremal = MakeKerrNewmanParams(1, 1.0, 1.0, 0.0);
+    CHECK(HasHorizon(extremal));
+    CHECK(OuterHorizonRadius(extremal) == Approx(1.0));
+    CHECK(CaptureRadius(extremal) == Approx(1.0));
+
+    const auto overspun = MakeKerrNewmanParams(1, 3.0, 1.2, 0.0);
+    CHECK(overspun.SpinParameter == Approx(3.6));
+    CHECK_FALSE(HasHorizon(overspun));
+
+    const auto devScene = MakeKerrNewmanParams(3, 1.0, 0.65, 0.8);
+    CHECK_FALSE(HasHorizon(devScene));
+    CHECK(HasHorizon(MakeKerrNewmanParams(1, 1.0, 0.65, 0.8)));
+}
+
+TEST_CASE("The metric sees |a| and |Q|, the spin sign reverses the axis", "[rendering][metric]")
+{
+    const auto negative = MakeKerrNewmanParams(3, 2.0, -0.5, -0.25);
+    CHECK(negative.SpinParameter == Approx(1.0));
+    CHECK(negative.Charge == Approx(0.5));
 }
 
 TEST_CASE("Outer horizon and ergosphere radii", "[rendering][metric]")
@@ -86,7 +107,7 @@ TEST_CASE("ISCO of extremal Reissner-Nordstrom is 4M", "[rendering][metric]")
     CHECK(ProgradeIscoRadius({.Mass = 1.0, .Charge = 1.0}) == Approx(4.0).epsilon(1e-4));
 }
 
-TEST_CASE("FillMetricData writes clamped parameters and radii", "[rendering][metric]")
+TEST_CASE("FillMetricData writes the metric parameters and radii", "[rendering][metric]")
 {
     RaytraceParamsGpu params{};
     params.NumBlackHoles = 1;
@@ -102,6 +123,72 @@ TEST_CASE("FillMetricData writes clamped parameters and radii", "[rendering][met
     CHECK(bh.Charge == 0.0f);
     CHECK(bh.HorizonRadius == Approx(1.0 + std::sqrt(1.0 - 0.81)));
     CHECK(bh.IscoRadius == Approx(BardeenPressTeukolskyIsco(0.9)).epsilon(1e-4));
+}
+
+TEST_CASE("FillMetricData keeps a naked singularity finite", "[rendering][metric]")
+{
+    RaytraceParamsGpu params{};
+    params.NumBlackHoles = 1;
+    params.MetricType = static_cast<std::int32_t>(MetricKind::KerrNewman);
+    params.DiskAccretionRate = 0.1f;
+    params.BlackHoles[0].Mass = 1.0f;
+    params.BlackHoles[0].MassSolar = 10.0f;
+    params.BlackHoles[0].Spin = 0.65f;
+    params.BlackHoles[0].Charge = 0.8f;
+
+    FillMetricData(params);
+
+    const auto& bh = params.BlackHoles[0];
+    CHECK(bh.Spin == Approx(0.65f));
+    CHECK(bh.Charge == Approx(0.8f));
+    CHECK(bh.HorizonRadius == Approx(static_cast<float>(kNakedCaptureRadiusM)));
+    CHECK(std::isfinite(bh.IscoRadius));
+    CHECK(bh.IscoRadius > bh.HorizonRadius);
+    CHECK(std::isfinite(params.DiskInfo[0].x));
+    CHECK(params.DiskInfo[0].x > 0.0f);
+}
+
+TEST_CASE("FillMetricData recomputes only when a hole parameter changes", "[rendering][metric]")
+{
+    RaytraceParamsGpu params{};
+    params.NumBlackHoles = 2;
+    params.MetricType = static_cast<std::int32_t>(MetricKind::Kerr);
+    params.DiskAccretionRate = 0.1f;
+    const auto reset = [&]
+    {
+        params.BlackHoles[0] = {.Mass = 1.0f, .Spin = 0.5f, .MassSolar = 10.0f};
+        params.BlackHoles[1] = {.Mass = 0.5f, .Spin = 0.9f, .MassSolar = 5.0f};
+    };
+
+    MetricCache cache;
+    reset();
+    FillMetricData(params, cache);
+    CHECK(cache.Misses == 2);
+    const auto first = params.BlackHoles[1];
+    const auto firstProfile = params.DiskProfile;
+
+    reset();
+    FillMetricData(params, cache);
+    CHECK(cache.Misses == 2);
+    CHECK(params.BlackHoles[1].IscoRadius == first.IscoRadius);
+    CHECK(std::memcmp(params.DiskProfile.data(), firstProfile.data(), sizeof(firstProfile)) == 0);
+
+    reset();
+    params.BlackHoles[1].Spin = 0.3f;
+    FillMetricData(params, cache);
+    CHECK(cache.Misses == 3);
+    CHECK(params.BlackHoles[1].IscoRadius > first.IscoRadius);
+
+    reset();
+    params.MetricType = static_cast<std::int32_t>(MetricKind::Schwarzschild);
+    FillMetricData(params, cache);
+    CHECK(cache.Misses == 5);
+    CHECK(params.BlackHoles[0].Spin == 0.0f);
+
+    reset();
+    params.DiskAccretionRate = 0.2f;
+    FillMetricData(params, cache);
+    CHECK(cache.Misses == 7);
 }
 
 TEST_CASE("Radiative efficiency is 1 - E_isco", "[rendering][metric][disk]")

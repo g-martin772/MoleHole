@@ -8,21 +8,21 @@ import GPP;
 // renderer only ever deals with one metric. Background and sources: docs/notes/metric_rendering.md
 export namespace MoleHole
 {
-    // Mirrors RenderToggles::MetricType.
     enum class MetricKind : std::int32_t { Schwarzschild = 0, Kerr = 1, ReissnerNordstrom = 2, KerrNewman = 3 };
 
-    // Thorne (1974) limit; also keeps a² + Q² < M² so the horizon exists (no naked singularity).
-    constexpr double kMaxHorizonParameter = 0.998;
+    // Radius (in M) the integrator treats as captured when there is no horizon; numerical, not physical.
+    constexpr double kNakedCaptureRadiusM = 0.05;
 
     struct KerrNewmanParams
     {
         double Mass{1.0};
-        double SpinParameter{0.0}; // a = J / M, in units of length
-        double Charge{0.0};        // geometrized charge Q
+        double SpinParameter{0.0}; // a = J / M, in units of length, >= 0 (the sign of the spin flips the spin axis)
+        double Charge{0.0};        // geometrized charge |Q|
     };
 
-    // `spin` and `charge` are the dimensionless BlackHoleComponent fields a/M and Q/M. The metric type
-    // zeroes the parameters it does not model, then a² + Q² is clamped below kMaxHorizonParameter² M².
+    // `spin` and `charge` are the dimensionless BlackHoleComponent fields a/M and Q/M. The metric type zeroes the
+    // parameters it does not model. Nothing is clamped: a² + Q² > M² is a naked singularity (HasHorizon is false).
+    // Only |a| and |Q| enter the metric; a negative spin is handled by reversing the spin axis (SpinAxisFor).
     [[nodiscard]] inline KerrNewmanParams MakeKerrNewmanParams(const std::int32_t metricType, const double mass,
                                                                 const double spin, const double charge)
     {
@@ -30,25 +30,30 @@ export namespace MoleHole
         const bool rotating = kind == MetricKind::Kerr || kind == MetricKind::KerrNewman;
         const bool charged = kind == MetricKind::ReissnerNordstrom || kind == MetricKind::KerrNewman;
 
-        double a = rotating ? std::abs(spin) : 0.0;
-        double q = charged ? std::abs(charge) : 0.0;
-        const double magnitude = std::sqrt(a * a + q * q);
-        if (magnitude > kMaxHorizonParameter)
-        {
-            a *= kMaxHorizonParameter / magnitude;
-            q *= kMaxHorizonParameter / magnitude;
-        }
-
         const double m = std::max(mass, 0.0);
-        return KerrNewmanParams{.Mass = m, .SpinParameter = a * m, .Charge = q * m};
+        return KerrNewmanParams{.Mass = m, .SpinParameter = rotating ? std::abs(spin) * m : 0.0,
+                                .Charge = charged ? std::abs(charge) * m : 0.0};
     }
 
+    [[nodiscard]] inline bool HasHorizon(const KerrNewmanParams& p)
+    {
+        return p.SpinParameter * p.SpinParameter + p.Charge * p.Charge <= p.Mass * p.Mass * (1.0 + 1e-12);
+    }
+
+    // Larger root of Δ = 0; 0 for a naked singularity (no horizon).
     [[nodiscard]] inline double OuterHorizonRadius(const KerrNewmanParams& p)
     {
+        if (!HasHorizon(p)) return 0.0;
         const double m = p.Mass;
         const double a = p.SpinParameter;
         const double q = p.Charge;
         return m + std::sqrt(std::max(m * m - a * a - q * q, 0.0));
+    }
+
+    // Radius inside which the integrators stop a ray: the horizon, or a small numerical radius around a naked singularity.
+    [[nodiscard]] inline double CaptureRadius(const KerrNewmanParams& p)
+    {
+        return HasHorizon(p) ? OuterHorizonRadius(p) : kNakedCaptureRadiusM * p.Mass;
     }
 
     // Static limit: inside it no observer can stay at rest relative to the distant stars.
@@ -106,33 +111,40 @@ export namespace MoleHole
         return -(g.Gtt + g.Gtphi * omega) / std::sqrt(norm);
     }
 
-    // Innermost stable circular orbit (prograde): the minimum of E(r) over the circular orbits.
-    // Solved numerically so it covers charge as well, where no closed form like Bardeen–Press–Teukolsky's exists.
+    // Innermost stable circular orbit (prograde): the minimum of the circular-orbit energy E(r), found by walking
+    // inwards from 12 M while E keeps falling. Solved numerically so it covers charge as well, where no closed
+    // form like Bardeen–Press–Teukolsky's exists. Without a horizon the walk also stops where E turns non-positive
+    // or undefined (the orbit branch ends there) and the last good sample is returned.
     [[nodiscard]] inline double ProgradeIscoRadius(const KerrNewmanParams& p)
     {
         if (p.Mass <= 0.0) return 0.0;
 
-        const double rLow = OuterHorizonRadius(p) * (1.0 + 1e-6);
+        const double rLow = CaptureRadius(p) * (1.0 + 1e-6);
         const double rHigh = 12.0 * p.Mass;
         constexpr int kSamples = 4096;
-
-        int best = -1;
-        double bestEnergy = std::numeric_limits<double>::infinity();
-        for (int i = 0; i <= kSamples; ++i)
-        {
-            const double r = rLow + (rHigh - rLow) * static_cast<double>(i) / kSamples;
-            const double energy = CircularOrbitEnergy(p, r);
-            if (energy < bestEnergy)
-            {
-                bestEnergy = energy;
-                best = i;
-            }
-        }
-        if (best < 0) return 6.0 * p.Mass;
-
         const double step = (rHigh - rLow) / kSamples;
-        double lo = rLow + step * std::max(best - 1, 0);
-        double hi = rLow + step * std::min(best + 1, kSamples);
+        const auto radius = [&](const int i) { return rLow + step * static_cast<double>(i); };
+
+        int best = kSamples;
+        double bestEnergy = CircularOrbitEnergy(p, rHigh);
+        if (!std::isfinite(bestEnergy)) return 6.0 * p.Mass;
+        bool minimum = false;
+        for (int i = kSamples - 1; i >= 0; --i)
+        {
+            const double energy = CircularOrbitEnergy(p, radius(i));
+            if (!std::isfinite(energy) || energy <= 0.0) break;
+            if (energy > bestEnergy)
+            {
+                minimum = true;
+                break;
+            }
+            best = i;
+            bestEnergy = energy;
+        }
+        if (!minimum) return radius(best);
+
+        double lo = radius(std::max(best - 1, 0));
+        double hi = radius(std::min(best + 1, kSamples));
         constexpr double kInvPhi = 0.6180339887498949;
         for (int i = 0; i < 100; ++i)
         {
