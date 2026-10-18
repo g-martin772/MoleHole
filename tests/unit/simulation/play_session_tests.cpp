@@ -86,3 +86,36 @@ TEST_CASE("Stop without a render extension leaves the scene's own", "[simulation
     CHECK(RenderExtensionText(*runner->AcquireSnapshot()).find("Traced") != std::string::npos);
     runner->Stop();
 }
+
+TEST_CASE("Stop resets the simulation clock to the play-start time, pause keeps it", "[simulation][playstop][simclock]")
+{
+    RegisterComponents();
+    auto logger = std::make_shared<Logger>();
+    SceneManager scenes(logger, std::make_shared<FileSystem>());
+    Scene scene("PlayClock");
+    scene.SetTimeScale(2.0);
+    auto runner = scenes.CreateSimulation(std::move(scene), std::vector<std::shared_ptr<ISimulationModule>>{});
+    runner->Start();
+    runner->SetPaused(true);
+    runner->SetSimTime(50.0);
+
+    auto session = std::make_shared<PlaySession>();
+    session->Resume(runner);
+    REQUIRE(WaitFor([&] { return runner->AcquireSnapshot()->Clock().Time > 50.5; }));
+
+    runner->SetPaused(true);
+    REQUIRE(WaitFor([&] { return runner->GetStats().Paused; }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    const auto paused = runner->AcquireSnapshot()->Clock();
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    CHECK(runner->AcquireSnapshot()->Clock() == paused);
+    CHECK(paused.Time > 50.5);
+
+    session->Resume(runner);
+    REQUIRE(WaitFor([&] { return runner->AcquireSnapshot()->Clock().Time > paused.Time + 0.5; }));
+
+    session->Stop(runner, std::nullopt);
+    REQUIRE(WaitFor([&] { return runner->IsPaused() && runner->AcquireSnapshot()->Clock().Time == 50.0; }));
+    CHECK(runner->AcquireSnapshot()->Clock().Elapsed == 0.0);
+    runner->Stop();
+}

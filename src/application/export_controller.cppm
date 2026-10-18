@@ -67,6 +67,8 @@ export namespace MoleHole
         std::chrono::steady_clock::time_point m_LastLog;
         bool m_StartedPlay{false};
         double m_TickDebt{0.0};
+        double m_SimStart{0.0};
+        double m_TimeScale{1.0};
         std::shared_ptr<Job> m_Job = std::make_shared<Job>();
         std::filesystem::path m_TempDir;
         std::string m_ProfileName;

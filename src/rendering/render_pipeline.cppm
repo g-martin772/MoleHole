@@ -42,7 +42,6 @@ export namespace MoleHole
         std::unique_ptr<GPP::VulkanCommandPool> UploadPool;
 
         std::shared_ptr<GPP::VulkanImage> BlackbodyLut;
-        std::shared_ptr<GPP::VulkanImage> AccelerationLut;
         std::shared_ptr<GPP::VulkanImage> HrDiagramLut;
         std::shared_ptr<GPP::VulkanImage> Skybox;
         std::shared_ptr<GPP::VulkanImage> DummyWhiteTexture;

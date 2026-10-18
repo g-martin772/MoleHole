@@ -7,14 +7,16 @@ import glm;
 import GPP;
 import :Simulation.Components;
 import :Rendering.Metric;
+import :Rendering.DiskPhase;
 import :Rendering.Frame;
+import :Rendering.Settings;
 
 export namespace MoleHole
 {
     struct BlackHoleGpuData
     {
         glm::vec3 Position{0.0f}; float Mass{0.0f};
-        // Spin and Charge are a/M and Q/M; after FillMetricData they hold the clamped values of the active metric.
+        // Spin and Charge are |a|/M and |Q|/M; after FillMetricData they hold the values of the active metric.
         glm::vec3 SpinAxis{0.0f, 1.0f, 0.0f}; float Spin{0.0f};
         float Charge{0.0f}; float HorizonRadius{0.0f}; float IscoRadius{0.0f}; float MassSolar{0.0f};
     };
@@ -38,8 +40,8 @@ export namespace MoleHole
     {
         glm::vec3 CameraPos{0.0f}; float Fov{60.0f};
         glm::vec3 CameraFront{0.0f, 0.0f, -1.0f}; float Aspect{1.0f};
-        glm::vec3 CameraUp{0.0f, 1.0f, 0.0f}; float Time{0.0f};
-        glm::vec3 CameraRight{1.0f, 0.0f, 0.0f}; float _CameraRightPad{0.0f};
+        glm::vec3 CameraUp{0.0f, 1.0f, 0.0f}; float FlatPhase{0.0f};
+        glm::vec3 CameraRight{1.0f, 0.0f, 0.0f}; float FlatPhaseFast{0.0f};
 
         std::int32_t EnableThirdPerson{0};
         float ThirdPersonDistance{5.0f};
@@ -96,8 +98,11 @@ export namespace MoleHole
         std::array<glm::vec4, kMaxBlackHoles> DiskInfo{};
         // Per black hole kDiskProfileSamples values of T / peak, log-spaced between DiskInfo.y and DiskInfo.z
         std::array<glm::vec4, kMaxBlackHoles * kDiskProfileVec4s> DiskProfile{};
+        // Per black hole kDiskPhaseBins bins of the gas rotation angle, see DiskPhaseTable
+        std::array<glm::vec4, kMaxBlackHoles * kDiskPhaseBins> DiskPhase{};
     };
-    static_assert(sizeof(RaytraceParamsGpu) == 3616);
+    static_assert(sizeof(RaytraceParamsGpu) == 3616 + 16 * kMaxBlackHoles * kDiskPhaseBins);
+    static_assert(offsetof(RaytraceParamsGpu, DiskPhase) == 3616);
     static_assert(offsetof(RaytraceParamsGpu, DiskAccretionRate) == 1424);
     static_assert(offsetof(RaytraceParamsGpu, DiskInfo) == 1440);
     static_assert(offsetof(RaytraceParamsGpu, DiskProfile) == 1568);
@@ -106,24 +111,32 @@ export namespace MoleHole
     static_assert(offsetof(RaytraceParamsGpu, ViewProjection) == 1328);
     static_assert(offsetof(RaytraceParamsGpu, MeshBounds) == 1392);
 
+    // A negative spin a* is a hole spinning the other way: the metric only sees |a*|, the axis is reversed.
+    [[nodiscard]] inline glm::vec3 EffectiveSpinAxis(const glm::vec3& axis, const double spin)
+    {
+        const glm::vec3 unit = glm::length(axis) > 0.0f ? glm::normalize(axis) : glm::vec3(0.0f, 1.0f, 0.0f);
+        return spin < 0.0 ? -unit : unit;
+    }
+
+    // Holes are uploaded heaviest first: the lensing engines treat index 0 as the primary hole.
     inline void FillSceneData(RaytraceParamsGpu& params, const GPP::Scene& scene, const RenderFrame& frame)
     {
-        params.NumBlackHoles = 0;
+        std::vector<BlackHoleGpuData> holes;
         for (auto [entity, blackHole, transform] :
              scene.Registry().view<const BlackHoleComponent, const GPP::TransformComponent>().each())
         {
-            if (params.NumBlackHoles >= kMaxBlackHoles) break;
-            auto& gpu = params.BlackHoles[static_cast<std::size_t>(params.NumBlackHoles)];
+            BlackHoleGpuData gpu;
             gpu.Position = frame.ToRender(transform.Position);
             gpu.Mass = frame.GeometricMass(blackHole.Mass);
-            gpu.SpinAxis = glm::length(blackHole.SpinAxis) > 0.0f
-                               ? glm::normalize(blackHole.SpinAxis)
-                               : glm::vec3(0.0f, 1.0f, 0.0f);
-            gpu.Spin = static_cast<float>(blackHole.Spin);
-            gpu.Charge = static_cast<float>(blackHole.Charge);
+            gpu.SpinAxis = EffectiveSpinAxis(blackHole.SpinAxis, blackHole.Spin);
+            gpu.Spin = static_cast<float>(std::abs(blackHole.Spin));
+            gpu.Charge = static_cast<float>(std::abs(blackHole.Charge));
             gpu.MassSolar = static_cast<float>(blackHole.Mass / GPP::Units::kSolarMass);
-            ++params.NumBlackHoles;
+            holes.push_back(gpu);
         }
+        std::ranges::stable_sort(holes, std::greater<>{}, &BlackHoleGpuData::MassSolar);
+        params.NumBlackHoles = static_cast<std::int32_t>(std::min<std::size_t>(holes.size(), kMaxBlackHoles));
+        for (std::int32_t i = 0; i < params.NumBlackHoles; ++i) params.BlackHoles[static_cast<std::size_t>(i)] = holes[static_cast<std::size_t>(i)];
 
         params.NumSpheres = 0;
         for (auto [entity, sphere, transform] :
@@ -143,32 +156,128 @@ export namespace MoleHole
         }
     }
 
+    // What FillMetricData derives per black hole; recomputed only when one of its inputs changes.
+    struct HoleMetricResult
+    {
+        float Spin{0.0f}, Charge{0.0f}, HorizonRadius{0.0f}, IscoRadius{0.0f};
+        glm::vec4 DiskInfo{0.0f};
+        std::array<glm::vec4, kDiskProfileVec4s> DiskProfile{};
+    };
+
+    struct MetricCache
+    {
+        struct Entry
+        {
+            std::array<float, 5> Key{};
+            std::int32_t Metric{-1};
+            bool Valid{false};
+            HoleMetricResult Result;
+        };
+        std::array<Entry, kMaxBlackHoles> Entries{};
+        int Misses{0}; // recomputations so far
+    };
+
+    [[nodiscard]] inline HoleMetricResult ComputeHoleMetric(const RaytraceParamsGpu& params, const BlackHoleGpuData& hole)
+    {
+        HoleMetricResult out;
+        const auto metric = MakeKerrNewmanParams(params.MetricType, hole.Mass, hole.Spin, hole.Charge);
+        const double mass = metric.Mass > 0.0 ? metric.Mass : 1.0;
+        out.Spin = static_cast<float>(metric.SpinParameter / mass);
+        out.Charge = static_cast<float>(metric.Charge / mass);
+        out.HorizonRadius = static_cast<float>(CaptureRadius(metric));
+        out.IscoRadius = static_cast<float>(ProgradeIscoRadius(metric));
+
+        const auto disk = BuildDiskProfile(metric, hole.MassSolar, params.DiskAccretionRate, kDiskOuterRadiusM * metric.Mass);
+        out.DiskInfo = glm::vec4(static_cast<float>(disk.PeakTemperature), static_cast<float>(disk.InnerRadius),
+                                 static_cast<float>(disk.OuterRadius), 0.0f);
+        for (int v = 0; v < kDiskProfileVec4s; ++v)
+        {
+            for (int c = 0; c < 4; ++c) out.DiskProfile[static_cast<std::size_t>(v)][c] = disk.Temperature[static_cast<std::size_t>(v * 4 + c)];
+        }
+        return out;
+    }
+
     // Applies params.MetricType to every black hole and precomputes what the shaders need from the metric:
-    // horizon, ISCO and the Page–Thorne disk temperature profile (params.DiskAccretionRate must be set),
-    // so root-finding and integrals stay on the CPU.
-    inline void FillMetricData(RaytraceParamsGpu& params)
+    // horizon (or capture radius), ISCO and the Page–Thorne disk temperature profile (params.DiskAccretionRate
+    // must be set), so root-finding and integrals stay on the CPU. Results are cached per hole.
+    inline void FillMetricData(RaytraceParamsGpu& params, MetricCache& cache)
     {
         for (int i = 0; i < params.NumBlackHoles; ++i)
         {
             const auto index = static_cast<std::size_t>(i);
             auto& gpu = params.BlackHoles[index];
-            const auto metric = MakeKerrNewmanParams(params.MetricType, gpu.Mass, gpu.Spin, gpu.Charge);
-            const double mass = metric.Mass > 0.0 ? metric.Mass : 1.0;
-            gpu.Spin = static_cast<float>(metric.SpinParameter / mass);
-            gpu.Charge = static_cast<float>(metric.Charge / mass);
-            gpu.HorizonRadius = static_cast<float>(OuterHorizonRadius(metric));
-            gpu.IscoRadius = static_cast<float>(ProgradeIscoRadius(metric));
+            auto& entry = cache.Entries[index];
+            const std::array<float, 5> key{gpu.Mass, gpu.Spin, gpu.Charge, gpu.MassSolar, params.DiskAccretionRate};
+            if (!entry.Valid || entry.Metric != params.MetricType || entry.Key != key)
+            {
+                entry.Result = ComputeHoleMetric(params, gpu);
+                entry.Key = key;
+                entry.Metric = params.MetricType;
+                entry.Valid = true;
+                ++cache.Misses;
+            }
 
-            const auto disk = BuildDiskProfile(metric, gpu.MassSolar, params.DiskAccretionRate,
-                                               kDiskOuterRadiusM * metric.Mass);
-            params.DiskInfo[index] = glm::vec4(static_cast<float>(disk.PeakTemperature), static_cast<float>(disk.InnerRadius),
-                                               static_cast<float>(disk.OuterRadius), 0.0f);
+            const auto& result = entry.Result;
+            gpu.Spin = result.Spin;
+            gpu.Charge = result.Charge;
+            gpu.HorizonRadius = result.HorizonRadius;
+            gpu.IscoRadius = result.IscoRadius;
+            params.DiskInfo[index] = result.DiskInfo;
             for (int v = 0; v < kDiskProfileVec4s; ++v)
             {
-                auto& packed = params.DiskProfile[index * kDiskProfileVec4s + static_cast<std::size_t>(v)];
-                for (int c = 0; c < 4; ++c) packed[c] = disk.Temperature[static_cast<std::size_t>(v * 4 + c)];
+                params.DiskProfile[index * kDiskProfileVec4s + static_cast<std::size_t>(v)] = result.DiskProfile[static_cast<std::size_t>(v)];
             }
         }
+    }
+
+    inline void FillMetricData(RaytraceParamsGpu& params)
+    {
+        MetricCache cache;
+        FillMetricData(params, cache);
+    }
+
+    // Disk gas rotation at coordinate time `simTime` [s]; `rate` multiplies the clock (the disk.speed preview).
+    // Call after FillMetricData: the table follows the radii and the metric parameters the shader sees.
+    inline void FillDiskPhases(RaytraceParamsGpu& params, const double simTime, const double rate)
+    {
+        params.FlatPhase = 0.0f;
+        params.FlatPhaseFast = 0.0f;
+        for (int i = 0; i < params.NumBlackHoles; ++i)
+        {
+            const auto index = static_cast<std::size_t>(i);
+            const auto& gpu = params.BlackHoles[index];
+            const auto& info = params.DiskInfo[index];
+            if (!(gpu.Mass > 0.0f) || !(info.x > 0.0f)) continue;
+
+            const KerrNewmanParams unit{.Mass = 1.0, .SpinParameter = gpu.Spin, .Charge = gpu.Charge};
+            const double massKg = static_cast<double>(gpu.MassSolar) * GPP::Units::kSolarMass;
+            const double gravitationalTime = GPP::Units::GravitationalRadius(massKg) / GPP::Units::kSpeedOfLight;
+            const auto table = BuildDiskPhaseTable(unit, gravitationalTime, static_cast<double>(info.y) / gpu.Mass,
+                                                   static_cast<double>(info.z) / gpu.Mass, simTime, rate);
+            std::ranges::copy(table.Bins, params.DiskPhase.begin() + static_cast<std::ptrdiff_t>(index) * kDiskPhaseBins);
+            if (i == 0)
+            {
+                params.FlatPhase = static_cast<float>(table.InnerEdgePhase);
+                params.FlatPhaseFast = static_cast<float>(std::fmod(1.7 * table.InnerEdgePhase, 2.0 * std::numbers::pi));
+            }
+        }
+    }
+
+    // Notes about the scene that change how far the picture can be trusted; shown over the viewport.
+    [[nodiscard]] inline std::vector<std::string> CollectRenderWarnings(const GPP::Scene& scene, const Spacetime solution)
+    {
+        std::vector<std::string> warnings;
+        int holes = 0;
+        bool naked = false;
+        for (auto [entity, blackHole] : scene.Registry().view<const BlackHoleComponent>().each())
+        {
+            ++holes;
+            naked = naked || !HasHorizon(MakeKerrNewmanParams(static_cast<std::int32_t>(solution), 1.0, blackHole.Spin, blackHole.Charge));
+        }
+        if (holes > 1)
+            warnings.push_back(std::format("{} black holes: only the heaviest is lensed exactly (approximation)", holes));
+        if (naked) warnings.emplace_back("Naked singularity: not physical (no horizon, no shadow)");
+        return warnings;
     }
 
     struct GravityGridPointGpu
@@ -253,7 +362,7 @@ export namespace MoleHole
         glm::mat4 View{1.0f};
         glm::mat4 Projection{1.0f};
         glm::vec3 CameraPos{0.0f}; float _Pad0{0.0f};
-        glm::vec3 LightDir{1.0f}; float _Pad1{0.0f};
+        glm::vec3 LightDir{1.0f}; std::int32_t ToneMapping{0};
     };
     static_assert(sizeof(MeshCameraParamsGpu) == 160);
 

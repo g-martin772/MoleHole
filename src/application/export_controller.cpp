@@ -170,6 +170,19 @@ namespace MoleHole
         }
         m_RenderSettings->SetExportOverrides(request.Overrides);
 
+        m_SimStart = 0.0;
+        m_TimeScale = 1.0;
+        if (const auto runner = m_Runner())
+        {
+            if (request.TimeScale)
+            {
+                runner->EnqueueEdit([scale = *request.TimeScale](Scene& scene) { scene.SetTimeScale(scale); });
+            }
+            m_TimeScale = request.TimeScale.value_or(runner->Metadata().TimeScale);
+            if (request.SimStart) runner->SetSimTime(*request.SimStart);
+            m_SimStart = runner->AcquireSnapshot()->Clock().Time;
+        }
+
         const auto stats = m_Renderer->GetBufferTargetStats(m_BufferTargetId);
         m_MinSerial = (stats ? stats->FramesRendered : 0) + 3;
 
@@ -240,6 +253,7 @@ namespace MoleHole
                 const auto ticks = static_cast<std::uint64_t>(m_TickDebt);
                 m_TickDebt -= static_cast<double>(ticks);
                 runner->StepAndWait(ticks);
+                runner->SetSimTime(m_SimStart + static_cast<double>(m_FrameIndex + 1) * m_TimeScale / std::max(1, m_Request.Framerate));
                 ++m_UiState->ExportStepSerial;
                 m_MinSerial = readback.Serial + 3;
             }
@@ -365,6 +379,8 @@ namespace MoleHole
         info.Height = m_Request.Height;
         info.Frames = m_TotalFrames;
         info.Framerate = m_Request.Framerate;
+        info.SimStart = m_SimStart;
+        info.TimeScale = m_TimeScale;
         info.ScenePath = m_UiState->CurrentScenePath;
         info.SceneName = m_UiState->CurrentSceneName;
         if (const auto runner = m_Runner())

@@ -35,6 +35,21 @@ namespace
         return changed;
     }
 
+    std::string FormatSimTime(const double seconds)
+    {
+        const double magnitude = std::abs(seconds);
+        if (magnitude == 0.0) return "0 s";
+        if (magnitude < 1e-3) return std::format("{:.3f} us", seconds * 1e6);
+        if (magnitude < 1.0) return std::format("{:.3f} ms", seconds * 1e3);
+        if (magnitude < 60.0) return std::format("{:.3f} s", seconds);
+        constexpr double kYear = 365.25 * 86400.0;
+        if (magnitude >= kYear) return std::format("{:.4f} yr", seconds / kYear);
+        const auto whole = static_cast<long long>(seconds);
+        const auto days = whole / 86400;
+        const auto clock = std::format("{:02}:{:02}:{:02}", whole / 3600 % 24, whole / 60 % 60, whole % 60);
+        return days > 0 ? std::format("{} d {}", days, clock) : clock;
+    }
+
     struct SimulationWindowLayer final : public HotReloadableLayer
     {
         using Dependencies = std::tuple<Logger, SceneManager, UiState>;
@@ -79,6 +94,15 @@ namespace
             const auto sim = runner->GetStats();
             ImGui::Text("Status:    %s", sim.Paused ? "paused" : "running");
             ImGui::Text("Tick:      %llu", static_cast<unsigned long long>(sim.CurrentTick));
+            const auto snapshot = runner->AcquireSnapshot();
+            const auto clock = snapshot ? snapshot->Clock() : SimClock{};
+            ImGui::Text("Sim time:  %s", FormatSimTime(clock.Time).c_str());
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Coordinate time of a distant observer in physical seconds: the sum of tick time x Time Scale.\n"
+                                  "Stands still while paused, restored on Stop. Drives the disk rotation.\n"
+                                  "Simulation seconds (script clock): %.3f", clock.Elapsed);
+            }
             ImGui::Text("Target:    %.0f Hz", sim.TargetTickRate);
             if (sim.Paused)
             {

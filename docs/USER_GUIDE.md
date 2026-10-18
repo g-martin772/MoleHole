@@ -154,7 +154,7 @@ Render:
 - `sampling.governor` + `sampling.budget_ms`: while editing or playing, lowers the resolution scale (to 25 % at worst) when the frame time exceeds the budget and restores it with headroom; never in reference views or exports
 - `debug.view`: step count heat map, termination reason (sky, horizon, object, opaque disk, ran out of steps, crosshair), geodesic constraint drift and ergosphere & ISCO (Integrated only). Bloom, flare, FXAA and tone mapping are off in debug views
 - Disk physics: inner edge at the ISCO, Page-Thorne temperature from the hole's mass and `disk.accretion_rate` (Eddington ratio), Keplerian rotation of the active metric, redshift and beaming from the metric. `disk.volumetric` off = thin disk shaded where rays cross the plane, on = flared gas with radiative transfer (`disk.height` = scale height in M at r = 10 M). Background: `docs/notes/disk_rendering.md`
-- Disk look: `disk.opacity` (translucent to opaque), `disk.hot_spots`, `disk.noise_scale` / `disk.noise_lod` (turbulence), `disk.speed` (angular speed of the inner edge in rad/s). `disk.display_temperature` (K) colours the hottest gas like an exposure for colour: all temperatures scale together, so ratios and shifts stay physical; 0 = physical colour (stellar-mass holes are ~10^7 K, blue-white)
+- Disk look: `disk.opacity` (translucent to opaque), `disk.hot_spots`, `disk.noise_scale` / `disk.noise_lod` (turbulence), `disk.speed` (multiplier of the simulation clock for the disk only: 1 = the physical rotation at the scene's Time Scale, 0 = frozen). `disk.display_temperature` (K) colours the hottest gas like an exposure for colour: all temperatures scale together, so ratios and shifts stay physical; 0 = physical colour (stellar-mass holes are ~10^7 K, blue-white)
 - `post.tonemap` (None / Reinhard / ACES) with `post.exposure_mode` (Manual / Auto), `post.exposure` (EV) and `post.exposure_key`. Bloom and flare thresholds apply to the exposed image. None shows the raw tracer output like before HDR
 - `transport.gpu_precision` f64 needs `shaderFloat64`; a setting the GPU cannot run is greyed with the reason, and loaded profiles fall back to the default (shown in the Render window)
 - Mesh objects are rasterised over the traced image (not lensed, always in front). The Integrated transport does not draw spheres yet
@@ -247,9 +247,9 @@ CLI, headless. Output PNG / MP4 (needs ffmpeg).
 ./build/MoleHole --export-video out.mp4 --duration 10 --fps 60
 ```
 - GUI: Export → Export Render… (pick a render profile, default: the Export context's)
-- Flags: `--width --height --duration --fps --scene --profile NAME --set key=value --list-settings`; the older `--ray-step-size --max-ray-steps --gpu-precision --physically-accurate --metric` still work
+- Flags: `--width --height --duration --fps --scene --sim-start S --time-scale X --profile NAME --set key=value --list-settings`; the older `--ray-step-size --max-ray-steps --gpu-precision --physically-accurate --metric` still work
 - Every export writes `<output>.render.yaml` (scene hash, profile and all settings, camera, git commit, GPU, GPU ms, wall time)
-- Disk noise follows the wall clock; `--set disk.speed=0` makes an export reproducible
+- The disk follows the simulation clock `t_sim` (physical seconds, shown as Sim time in the Simulation window, frozen while paused, restored on Stop), not the wall clock: exports are reproducible. `--sim-start S` sets the first frame's `t_sim`, `--time-scale X` the physical seconds per second of video (the scene's Time Scale); frame k of a video sits at `S + k X / fps`
 - `tools/bench.py`: time every profile, keep or compare golden images
 - Full table: `docs/export-instructions.md`
 

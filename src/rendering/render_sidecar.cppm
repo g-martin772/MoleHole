@@ -18,6 +18,8 @@ export namespace MoleHole
         std::uint32_t Height = 0;
         int Frames = 1;
         int Framerate = 0;
+        double SimStart = 0.0;  // coordinate time of the first frame [s]
+        double TimeScale = 1.0; // physical seconds per video second
 
         std::string ScenePath;
         std::string SceneName;

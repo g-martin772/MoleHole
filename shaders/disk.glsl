@@ -16,9 +16,21 @@ float diskTemperature(int hole, float r) {
     return mix(a, b, f) * info.x;
 }
 
-// Disk clock in render units: u_accDiskSpeed is the angular speed of the inner edge in rad/s of wall time.
-float diskTime(Spacetime st) {
-    return u_time * u_accDiskSpeed / max(float(keplerOmega(st, st.rIsco)), 1e-6);
+// Rotation angle of the gas at radius r (render units): theta = disk.speed * Omega(r) * t_sim, built on the CPU in double
+// precision and uploaded as 256 bins per hole. turns counts the whole revolutions (modulo 2^20, exact in float), the
+// returned remainder plus f * advance is linear within a bin. Paused scenes upload the same table, so frames repeat.
+void diskPhase(int hole, float r, out float turns, out float angle) {
+    vec4 info = u_diskInfo[hole];
+    if (info.y <= 0.0) {
+        turns = 0.0;
+        angle = 0.0;
+        return;
+    }
+    float s = clamp(log(r / info.y) / log(info.z / info.y), 0.0, 1.0) * 255.0;
+    int i = clamp(int(floor(s)), 0, 254);
+    vec4 bin = u_diskPhase[hole * 256 + i];
+    turns = bin.x;
+    angle = bin.y + (s - float(i)) * bin.z;
 }
 
 float diskFbm(vec3 p, int octaves) {
@@ -37,21 +49,22 @@ float diskFbm(vec3 p, int octaves) {
 // apart are crossfaded and each is reset while invisible (flow-map technique); the period is a quarter orbit,
 // which bounds the shear to about 2.4 Delta r / r. Noise is sampled in (log r, angle, z / H), elongated along phi.
 // Returns a log-normal modulation of the dissipated flux with mean about 1.
-float diskPattern(Spacetime st, float r, float phi, float zOverH, float t) {
-    float omega = max(float(keplerOmega(st, real(r))), 1e-6);
-    float period = 0.5 * PHYS_PI / omega;
+float diskPattern(int hole, Spacetime st, float r, float phi, float zOverH) {
     int octaves = clamp(int(u_accDiskNoiseLOD + 0.5), 1, 5);
     float scale = max(u_accDiskNoiseScale, 0.05);
     float logR = log(r / float(st.rIsco));
+    float turns, theta;
+    diskPhase(hole, r, turns, theta);
 
     float value = 0.0;
     float weights = 0.0;
     for (int layer = 0; layer < 2; layer++) {
-        float shifted = t + float(layer) * 0.5 * period;
-        float cycle = floor(shifted / period);
-        float age = shifted - cycle * period;
-        float weight = 1.0 - abs(2.0 * age / period - 1.0);
-        float angle = phi - omega * age;
+        float x = (theta + float(layer) * 0.25 * PHYS_PI) / (0.5 * PHYS_PI);
+        float whole = floor(x);
+        float age = x - whole;
+        float cycle = 4.0 * turns + whole;
+        float weight = 1.0 - abs(2.0 * age - 1.0);
+        float angle = phi - age * 0.5 * PHYS_PI;
         vec3 offset = hash33(vec3(cycle, float(layer), 7.0)) * 100.0;
         vec3 q = vec3(0.9 * scale * cos(angle), 0.9 * scale * sin(angle), 3.0 * scale * logR + 0.5 * zOverH);
         value += weight * diskFbm(q + offset, octaves);
@@ -62,13 +75,15 @@ float diskPattern(Spacetime st, float r, float phi, float zOverH, float t) {
 }
 
 // Hotter clumps of gas on circular geodesics at Omega(r); returns the sum of their Gaussian profiles.
-float diskHotSpots(Spacetime st, float r, float phi, float t) {
+float diskHotSpots(int hole, Spacetime st, float r, float phi) {
     float rIn = float(st.rIsco);
     float boost = 0.0;
     for (int k = 0; k < u_diskHotSpots; k++) {
         vec3 h = 0.5 + 0.5 * hash33(vec3(float(k), 3.0, 11.0));
         float rk = rIn * (1.15 + 1.6 * h.x);
-        float phik = 2.0 * PHYS_PI * h.y + float(keplerOmega(st, real(rk))) * t;
+        float turns, theta;
+        diskPhase(hole, rk, turns, theta);
+        float phik = 2.0 * PHYS_PI * h.y + mod(theta, 2.0 * PHYS_PI);
         float dphi = mod(phi - phik + PHYS_PI, 2.0 * PHYS_PI) - PHYS_PI;
         float size = (0.3 + 0.3 * h.z) * float(st.M) * rk / rIn;
         vec2 d = vec2(r - rk, rk * dphi) / size;
@@ -86,9 +101,8 @@ float diskEdges(int hole, float r) {
 // Local gas state at (r, phi, z / H): emitted temperature and the column-density factor (turbulence and edges).
 // Turbulence modulates the dissipated flux F, so T scales with its fourth root; hot spots heat the gas.
 void diskGas(Spacetime st, int hole, float r, float phi, float zOverH, out float temperature, out float column) {
-    float t = diskTime(st);
-    float pattern = diskPattern(st, r, phi, zOverH, t);
-    float spots = diskHotSpots(st, r, phi, t);
+    float pattern = diskPattern(hole, st, r, phi, zOverH);
+    float spots = diskHotSpots(hole, st, r, phi);
     temperature = diskTemperature(hole, r) * pow(pattern, 0.25) * (1.0 + 0.35 * spots);
     column = pattern * diskEdges(hole, r);
 }

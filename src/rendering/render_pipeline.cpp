@@ -398,7 +398,7 @@ namespace MoleHole
                                 .WriteUniformBuffer(set, 1, params->GetBuffer());
                             const auto bindings = raytracePipeline->GetReflection().descriptorBindings;
                             const std::array<const VulkanImage*, 4> samplers{
-                                res->Skybox.get(), res->BlackbodyLut.get(), res->AccelerationLut.get(), res->HrDiagramLut.get()};
+                                res->Skybox.get(), res->BlackbodyLut.get(), nullptr, res->HrDiagramLut.get()};
                             for (std::uint32_t binding = 2; binding < 6; ++binding)
                             {
                                 if (std::ranges::none_of(bindings, [binding](const auto& b) { return b.set == 0 && b.binding == binding; }))
@@ -449,7 +449,6 @@ namespace MoleHole
                 params.CameraRight = camera.GetRight();
                 params.Fov = camera.GetFov();
                 params.Aspect = static_cast<float>(ctx.TraceExtent.width) / static_cast<float>(ctx.TraceExtent.height);
-                params.Time = std::chrono::duration<float>(std::chrono::steady_clock::now() - m_StartTime).count();
                 params.ViewProjection = camera.GetViewProjectionMatrix(ctx.Frame);
                 FillSceneData(params, ctx.Scene, ctx.Frame);
 
@@ -459,7 +458,8 @@ namespace MoleHole
                 params.DiskOpacity = render.DiskOpacity;
                 params.DiskDisplayTemperature = render.DiskDisplayTemperature;
                 params.DiskHotSpots = render.DiskHotSpots;
-                FillMetricData(params);
+                FillMetricData(params, m_MetricCache);
+                FillDiskPhases(params, ctx.Scene.Clock().Time, render.AccDiskSpeed);
                 params.IsPhysicallyAccurate = render.TransportMode == Transport::Integrated ? 1 : 0;
                 params.GravitationalLensingEnabled = render.Lensing() ? 1 : 0;
                 params.GravitationalRedshiftEnabled = render.GravitationalRedshift ? 1 : 0;
@@ -501,6 +501,7 @@ namespace MoleHole
             std::shared_ptr<ShaderPipeline> m_MeshPipelineF64;
             std::unique_ptr<VulkanBuffer> m_ParamsBuffer;
             MeshAccelerator m_Meshes;
+            MetricCache m_MetricCache;
         };
 
         // Meters the traced image and writes the tone mapper's exposure to a 1x1 image (always 1 without tone mapping)
@@ -1020,17 +1021,19 @@ namespace MoleHole
                 params.Projection = ctx.ViewCamera.GetProjectionMatrix();
                 params.CameraPos = ctx.Frame.ToRender(ctx.ViewCamera.GetPosition());
                 params.LightDir = glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f));
+                params.ToneMapping = static_cast<std::int32_t>(ctx.Settings.ToneMapping);
                 m_CameraBuffer->Upload(&params, sizeof(params));
 
                 const auto device = m_Res.Device;
                 const auto meshPipeline = m_Pipeline;
                 auto* cameraBuffer = m_CameraBuffer.get();
                 auto* white = m_Res.DummyWhiteTexture.get();
+                auto* exposure = m_Res.ExposureImage.get();
                 ctx.Graph.AddGraphicsPass(
                     "Meshes", {}, {},
                     {RenderGraphAttachment{.Handle = ctx.ColorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
                     RenderGraphAttachment{.Handle = ctx.DepthTarget, .LoadOp = vk::AttachmentLoadOp::eLoad},
-                    [device, meshPipeline, cameraBuffer, white, drawables = std::move(drawables)](
+                    [device, meshPipeline, cameraBuffer, white, exposure, drawables = std::move(drawables)](
                         const vk::CommandBuffer cmd, RenderGraph& g)
                     {
                         const auto pipeline = meshPipeline->GetPipeline();
@@ -1043,6 +1046,8 @@ namespace MoleHole
                             DescriptorSetWriter(device->GetDevice())
                                 .WriteUniformBuffer(set, 0, cameraBuffer->GetBuffer())
                                 .WriteCombinedImageSampler(set, 1, texture->GetImageView(), texture->GetSampler())
+                                .WriteCombinedImageSampler(set, 2, exposure->GetImageView(), exposure->GetSampler(),
+                                                           vk::ImageLayout::eGeneral)
                                 .Update();
                             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->GetLayout(), 0, set, {});
 
@@ -1154,7 +1159,6 @@ namespace MoleHole
         impl.Stages.push_back(std::make_unique<MeshStage>(res));
 
         res.BlackbodyLut = GenerateBlackbodyLut(res.Device, *res.UploadPool, queue, res.Logger);
-        res.AccelerationLut = GenerateAccelerationLut(res.Device, *res.UploadPool, queue, res.Logger);
         res.HrDiagramLut = GenerateHrDiagramLut(res.Device, *res.UploadPool, queue, res.Logger);
         res.Skybox = LoadSkyboxTexture(res.Device, *res.UploadPool, queue, res.FileSystem,
                                        "assets/backgrounds/space.hdr", res.Logger);
