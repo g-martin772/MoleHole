@@ -62,7 +62,7 @@ export namespace MoleHole
         bool LensFlare = true;
         float LensFlareIntensity = 0.3f;
         float LensFlareThreshold = 2.0f;
-        ToneMap ToneMapping = ToneMap::Aces;
+        ToneMap ToneMapping = ToneMap::None;
         ExposureMode Exposure = ExposureMode::Manual;
         float ExposureEv = 0.0f;
         float AutoExposureKey = 0.18f;

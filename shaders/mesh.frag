@@ -11,10 +11,11 @@ layout(set = 0, binding = 0, std140) uniform MeshCameraBlock
     mat4 u_view;
     mat4 u_projection;
     vec3 u_cameraPos; float _pad0;
-    vec3 u_lightDir; float _pad1;
+    vec3 u_lightDir; int u_toneMap;
 };
 
 layout(set = 0, binding = 1) uniform sampler2D u_baseColorTexture;
+layout(set = 0, binding = 2) uniform sampler2D u_exposureImage;
 
 layout(push_constant) uniform PushConstants
 {
@@ -25,6 +26,8 @@ layout(push_constant) uniform PushConstants
     int u_hasBaseColorTexture;
     float _pad2;
 };
+
+#include "output_transform.glsl"
 
 const float PI = 3.14159265359;
 
@@ -93,8 +96,5 @@ void main() {
     vec3 ambient = vec3(0.03) * baseColor.rgb;
     vec3 color = ambient + Lo;
 
-    color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0 / 2.2));
-
-    FragColor = vec4(color, baseColor.a);
+    FragColor = vec4(displayColor(color, texelFetch(u_exposureImage, ivec2(0), 0).r, u_toneMap), baseColor.a);
 }

@@ -56,9 +56,7 @@ vec3 shadeMesh(vec3 N, vec3 V, vec4 baseColor, float metallic, float roughness) 
     vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
     float NdotL = max(dot(N, L), 0.0);
 
-    vec3 color = vec3(0.03) * baseColor.rgb + (kD * baseColor.rgb / MESH_PI + specular) * NdotL;
-    color = color / (color + vec3(1.0));
-    return pow(color, vec3(1.0 / 2.2));
+    return vec3(0.03) * baseColor.rgb + (kD * baseColor.rgb / MESH_PI + specular) * NdotL;
 }
 
 bool meshBoundsHit(vec3 origin, vec3 dir, float tMax) {
