@@ -157,21 +157,6 @@ namespace MoleHole
             return ConvertToRgb(cX, cY, cZ, normalizedCy);
         }
 
-        constexpr float kAccRMin = 0.01f;
-        constexpr float kAccRMax = 50.0f;
-        constexpr float kAccAngMomMin = 0.0f;
-        constexpr float kAccAngMomMax = 100.0f;
-        constexpr int kAccWidth = 512;
-        constexpr int kAccHeight = 512;
-        constexpr float kAccEpsilon = 0.01f;
-
-        float CalculateAccelerationFactor(float angMomentumSqrd, float rSqrd)
-        {
-            const float r5 = std::pow(rSqrd, 2.5f);
-            if (r5 < kAccEpsilon) return -1.5f * angMomentumSqrd / (1.0f * kAccEpsilon);
-            return -2.0f * angMomentumSqrd / r5;
-        }
-
         constexpr float kHrMassMin = 0.08f;
         constexpr float kHrMassMax = 100.0f;
         constexpr int kHrSize = 256;
@@ -230,34 +215,6 @@ namespace MoleHole
         }
         return UploadRgba32f(device, uploadPool, queue, kBlackbodyWidth, kBlackbodyHeight, data,
                              "BlackbodyLUT", logger);
-    }
-
-    std::shared_ptr<VulkanImage> GenerateAccelerationLut(const std::shared_ptr<VulkanDevice>& device,
-                                                          VulkanCommandPool& uploadPool, vk::Queue queue,
-                                                          const std::shared_ptr<Logger>& logger)
-    {
-        std::vector<float> data;
-        data.reserve(static_cast<std::size_t>(kAccWidth) * kAccHeight * 4);
-        const float logRMin = std::log(kAccRMin);
-        const float logRMax = std::log(kAccRMax);
-        for (int y = 0; y < kAccHeight; ++y)
-        {
-            const float t = static_cast<float>(y) / static_cast<float>(kAccHeight - 1);
-            const float r = std::exp(logRMin + t * (logRMax - logRMin));
-            const float rSqrd = r * r;
-            for (int x = 0; x < kAccWidth; ++x)
-            {
-                const float s = static_cast<float>(x) / static_cast<float>(kAccWidth - 1);
-                const float angMomentumSqrd = kAccAngMomMin + s * (kAccAngMomMax - kAccAngMomMin);
-                const float factor = CalculateAccelerationFactor(angMomentumSqrd, rSqrd);
-                data.push_back(factor);
-                data.push_back(0.0f);
-                data.push_back(0.0f);
-                data.push_back(1.0f);
-            }
-        }
-        return UploadRgba32f(device, uploadPool, queue, kAccWidth, kAccHeight, data,
-                             "AccelerationLUT", logger);
     }
 
     std::shared_ptr<VulkanImage> GenerateHrDiagramLut(const std::shared_ptr<VulkanDevice>& device,
