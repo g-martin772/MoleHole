@@ -1,6 +1,9 @@
+module;
+#include <yaml-cpp/yaml.h>
 export module MoleHole:Application.SceneLoader;
 
 import std;
+import glm;
 import GPP;
 import :Simulation.Components;
 import :Rendering.Meshes;
@@ -11,6 +14,15 @@ export namespace MoleHole
     class SceneLoader
     {
     public:
+        struct EditorView
+        {
+            glm::dvec3 PositionM{0.0};
+            float Yaw = -90.0f;
+            float Pitch = 0.0f;
+            float Fov = 60.0f;
+            std::optional<double> SpeedMs;
+        };
+
         struct Result
         {
             enum class Kind { Startup, File, Template };
@@ -20,6 +32,7 @@ export namespace MoleHole
             std::string SceneName;
             std::string Error;
             std::string RenderExtension;
+            std::optional<EditorView> Editor;
         };
 
         SceneLoader(std::shared_ptr<GPP::SceneManager> scenes, std::shared_ptr<MeshCache> meshes,
@@ -67,8 +80,26 @@ export namespace MoleHole
             std::atomic<bool> InFlight{false};
         };
 
-        static void PopulateConvexHulls(GPP::Scene& scene, MeshCache& meshes)
+        // Optional `EditorCamera: {PositionM, Yaw, Pitch, Fov, SpeedMs}` scene key: where the editor camera starts
+        static std::optional<EditorView> ReadEditorView(const GPP::Scene& scene)
         {
+            const auto* node = scene.FindExtension("EditorCamera");
+            if (!node || !node->IsMap() || !(*node)["PositionM"]) return std::nullopt;
+            EditorView view;
+            view.PositionM = (*node)["PositionM"].as<glm::dvec3>();
+            view.Yaw = (*node)["Yaw"].as<float>(view.Yaw);
+            view.Pitch = (*node)["Pitch"].as<float>(view.Pitch);
+            view.Fov = (*node)["Fov"].as<float>(view.Fov);
+            if ((*node)["SpeedMs"]) view.SpeedMs = (*node)["SpeedMs"].as<double>();
+            return view;
+        }
+
+        static void LoadSceneMeshes(GPP::Scene& scene, MeshCache& meshes)
+        {
+            for (auto [entity, mesh] : scene.Registry().view<const GPP::MeshComponent>().each())
+            {
+                if (!mesh.AssetPath.empty()) meshes.GetOrLoad(mesh.AssetPath);
+            }
             for (auto [entity, mesh, collider] :
                  scene.Registry().view<const GPP::MeshComponent, GPP::ColliderComponent>().each())
             {
@@ -91,10 +122,11 @@ export namespace MoleHole
             try
             {
                 auto& scene = scenes->LoadSceneFromFile(path);
-                PopulateConvexHulls(scene, *meshes);
+                LoadSceneMeshes(scene, *meshes);
                 result.Ok = true;
                 result.SceneName = scene.Metadata().Name;
                 result.RenderExtension = RenderExtensionText(scene);
+                result.Editor = ReadEditorView(scene);
             }
             catch (const std::exception& error)
             {
