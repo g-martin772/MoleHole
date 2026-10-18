@@ -18,7 +18,7 @@ struct SphereData
     float radius;
     vec4 color;
     float mass;
-    float _pad0;
-    float _pad1;
+    float emissive;      // 1 = Star: color is the radiance at the disc centre
+    float limbDarkening;
     float _pad2;
 };

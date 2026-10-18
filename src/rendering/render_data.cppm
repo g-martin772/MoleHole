@@ -26,7 +26,8 @@ export namespace MoleHole
     {
         glm::vec3 Position{0.0f}; float Radius{0.0f};
         glm::vec4 Color{1.0f};
-        float Mass{0.0f}; float _Pad0{0.0f}; float _Pad1{0.0f}; float _Pad2{0.0f};
+        // Emissive 1 = a Star: Color is the radiance at the disc centre in image units, LimbDarkening its u
+        float Mass{0.0f}; float Emissive{0.0f}; float LimbDarkening{0.0f}; float _Pad2{0.0f};
     };
     static_assert(sizeof(SphereGpuData) == 48);
 
@@ -139,10 +140,24 @@ export namespace MoleHole
         for (std::int32_t i = 0; i < params.NumBlackHoles; ++i) params.BlackHoles[static_cast<std::size_t>(i)] = holes[static_cast<std::size_t>(i)];
 
         params.NumSpheres = 0;
+        for (auto [entity, star, transform] :
+             scene.Registry().view<const StarComponent, const GPP::TransformComponent>().each())
+        {
+            if (params.NumSpheres >= kMaxSpheres) break;
+            auto& gpu = params.Spheres[static_cast<std::size_t>(params.NumSpheres)];
+            gpu.Position = frame.ToRender(transform.Position);
+            gpu.Radius = frame.ToRenderLength(star.Radius);
+            gpu.Color = glm::vec4(StarColor(star) * static_cast<float>(StarImageRadiance(star)), 1.0f);
+            gpu.Mass = 0.0f;
+            gpu.Emissive = 1.0f;
+            gpu.LimbDarkening = std::clamp(star.LimbDarkening, 0.0f, 1.0f);
+            ++params.NumSpheres;
+        }
         for (auto [entity, sphere, transform] :
              scene.Registry().view<const SphereComponent, const GPP::TransformComponent>().each())
         {
             if (params.NumSpheres >= kMaxSpheres) break;
+            if (scene.Registry().all_of<StarComponent>(entity)) continue;
             auto& gpu = params.Spheres[static_cast<std::size_t>(params.NumSpheres)];
             gpu.Position = frame.ToRender(transform.Position);
             gpu.Radius = frame.ToRenderLength(sphere.Radius);
@@ -361,19 +376,16 @@ export namespace MoleHole
     {
         glm::mat4 View{1.0f};
         glm::mat4 Projection{1.0f};
-        glm::vec3 CameraPos{0.0f}; float _Pad0{0.0f};
-        glm::vec3 LightDir{1.0f}; std::int32_t ToneMapping{0};
+        glm::vec3 CameraPos{0.0f}; std::int32_t ToneMapping{0};
     };
-    static_assert(sizeof(MeshCameraParamsGpu) == 160);
+    static_assert(sizeof(MeshCameraParamsGpu) == 144);
 
     struct MeshPushConstantsGpu
     {
         glm::mat4 Model{1.0f};
-        glm::vec4 BaseColorFactor{1.0f};
-        float MetallicFactor{1.0f};
-        float RoughnessFactor{1.0f};
-        std::int32_t HasBaseColorTexture{0};
-        float _Pad0{0.0f};
+        std::uint64_t ExtraAddress{0};
+        std::uint32_t MaterialIndex{0};
+        std::uint32_t _Pad0{0};
     };
-    static_assert(sizeof(MeshPushConstantsGpu) == 96);
+    static_assert(sizeof(MeshPushConstantsGpu) == 80);
 }

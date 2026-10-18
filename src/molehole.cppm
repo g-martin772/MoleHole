@@ -35,6 +35,8 @@ export import :Rendering.SettingsService;
 export import :Rendering.Sidecar;
 export import :Rendering.Meshes;
 export import :Rendering.MeshTrace;
+export import :Rendering.Lighting;
+export import :Rendering.MeshScene;
 export import :Rendering.Pipeline;
 export import :Rendering.Data;
 export import :Rendering.Camera;

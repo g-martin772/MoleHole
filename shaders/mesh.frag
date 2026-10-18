@@ -1,8 +1,17 @@
-#version 450
+#version 460
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#ifdef PBR_DESCRIPTOR_INDEXING
+#extension GL_EXT_nonuniform_qualifier : require
+#endif
+#ifdef MESH_SHADOWS
+#extension GL_EXT_ray_query : require
+#endif
 
 layout(location = 0) in vec3 FragPos;
 layout(location = 1) in vec3 Normal;
 layout(location = 2) in vec2 TexCoord;
+layout(location = 3) in vec4 Tangent;
+layout(location = 4) in vec2 TexCoord1;
 
 layout(location = 0) out vec4 FragColor;
 
@@ -10,91 +19,49 @@ layout(set = 0, binding = 0, std140) uniform MeshCameraBlock
 {
     mat4 u_view;
     mat4 u_projection;
-    vec3 u_cameraPos; float _pad0;
-    vec3 u_lightDir; int u_toneMap;
+    vec3 u_cameraPos; int u_toneMap;
 };
 
-layout(set = 0, binding = 1) uniform sampler2D u_baseColorTexture;
 layout(set = 0, binding = 2) uniform sampler2D u_exposureImage;
 
 layout(push_constant) uniform PushConstants
 {
     mat4 u_model;
-    vec4 u_baseColorFactor;
-    float u_metallicFactor;
-    float u_roughnessFactor;
-    int u_hasBaseColorTexture;
-    float _pad2;
+    uint64_t u_extraAddress;
+    uint u_materialIndex;
+    uint _pad0;
 };
 
+#define MESH_BIND_MATERIALS 1
+#define MESH_BIND_TEXTURES 3
+#define MESH_BIND_LIGHTS 4
+#define MESH_BIND_LIGHT_PARAMS 5
+#define MESH_BIND_DFG 7
+#ifdef MESH_SHADOWS
+layout(set = 0, binding = 6) uniform accelerationStructureEXT u_meshScene;
+#endif
+
 #include "output_transform.glsl"
-
-const float PI = 3.14159265359;
-
-float DistributionGGX(vec3 N, vec3 H, float roughness) {
-    float a = roughness * roughness;
-    float a2 = a * a;
-    float NdotH = max(dot(N, H), 0.0);
-    float NdotH2 = NdotH * NdotH;
-    float num = a2;
-    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    denom = PI * denom * denom;
-    return num / denom;
-}
-
-float GeometrySchlickGGX(float NdotV, float roughness) {
-    float r = (roughness + 1.0);
-    float k = (r * r) / 8.0;
-    float num = NdotV;
-    float denom = NdotV * (1.0 - k) + k;
-    return num / denom;
-}
-
-float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotL = max(dot(N, L), 0.0);
-    float ggx2 = GeometrySchlickGGX(NdotV, roughness);
-    float ggx1 = GeometrySchlickGGX(NdotL, roughness);
-    return ggx1 * ggx2;
-}
-
-vec3 FresnelSchlick(float cosTheta, vec3 F0) {
-    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}
+#include "mesh_lighting.glsl"
 
 void main() {
-    vec4 baseColor = u_baseColorFactor;
-    if (u_hasBaseColorTexture == 1) {
-        baseColor *= texture(u_baseColorTexture, TexCoord);
-    }
+    GltfMaterial material = u_meshMaterials[u_materialIndex];
+    uint alphaMode = pbrAlphaMode(material);
+    bool doubleSided = pbrDoubleSided(material);
+    if (!gl_FrontFacing && !doubleSided) discard;
 
-    vec3 N = normalize(Normal);
+    PbrMaterialTexels texels = pbrSampleMaterialTexels(material, TexCoord, TexCoord1);
+    float alpha = material.baseColorFactor.a * texels.baseColor.a;
+    if (alphaMode == PBR_ALPHA_MASK && alpha < material.alphaCutoff) discard;
+    if (alphaMode == PBR_ALPHA_BLEND && alpha <= meshDitherThreshold(floor(gl_FragCoord.xy))) discard;
+
+    vec3 Ng = normalize(Normal);
     vec3 V = normalize(u_cameraPos - FragPos);
-    vec3 L = normalize(u_lightDir);
-    vec3 H = normalize(V + L);
+    if (!gl_FrontFacing) Ng = -Ng;
+    vec4 tangent = Tangent;
+    if (!gl_FrontFacing) tangent = vec4(-tangent.xyz, -tangent.w);
+    PbrMaterialSample s = pbrEvaluateMaterial(material, texels, Ng, tangent);
+    vec3 color = meshShade(FragPos, V, s.normal, Ng, s);
 
-    vec3 F0 = vec3(0.04);
-    F0 = mix(F0, baseColor.rgb, u_metallicFactor);
-
-    vec3 F = FresnelSchlick(max(dot(H, V), 0.0), F0);
-    float NDF = DistributionGGX(N, H, u_roughnessFactor);
-    float G = GeometrySmith(N, V, L, u_roughnessFactor);
-
-    vec3 numerator = NDF * G * F;
-    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
-    vec3 specular = numerator / denominator;
-
-    vec3 kS = F;
-    vec3 kD = vec3(1.0) - kS;
-    kD *= 1.0 - u_metallicFactor;
-
-    float NdotL = max(dot(N, L), 0.0);
-    vec3 radiance = vec3(1.0);
-
-    vec3 Lo = (kD * baseColor.rgb / PI + specular) * radiance * NdotL;
-
-    vec3 ambient = vec3(0.03) * baseColor.rgb;
-    vec3 color = ambient + Lo;
-
-    FragColor = vec4(displayColor(color, texelFetch(u_exposureImage, ivec2(0), 0).r, u_toneMap), baseColor.a);
+    FragColor = vec4(displayColor(color, texelFetch(u_exposureImage, ivec2(0), 0).r, u_toneMap), 1.0);
 }

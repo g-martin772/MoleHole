@@ -28,6 +28,11 @@ vec3 renderSphere(vec3 hitPoint, vec3 rayDir, int sphereIndex, vec3 lightDir) {
     vec3 baseColor = u_spheres[sphereIndex].color.rgb;
     float mass = u_spheres[sphereIndex].mass;
 
+    if (u_spheres[sphereIndex].emissive > 0.5) {
+        float mu = max(dot(normal, -rayDir), 0.0);
+        return baseColor * (1.0 - u_spheres[sphereIndex].limbDarkening * (1.0 - mu));
+    }
+
     if (mass > 0.0) {
         float temp = getTemperatureFromMass(mass);
         if (temp > 0.0) {

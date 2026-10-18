@@ -13,7 +13,7 @@ export namespace MoleHole
     enum class DebugView : int { None = 0, StepCount = 1, Termination = 2, ConstraintDrift = 3, Ergosphere = 4 };
     enum class MeshMode : int { Raster = 0, Traced = 1 };
     enum class ToneMap : int { None = 0, Reinhard = 1, Aces = 2 };
-    enum class ExposureMode : int { Manual = 0, Auto = 1 };
+    enum class ExposureMode : int { Manual = 0, Auto = 1, Physical = 2 };
 
     struct RenderSettings
     {
@@ -66,6 +66,14 @@ export namespace MoleHole
         ExposureMode Exposure = ExposureMode::Manual;
         float ExposureEv = 0.0f;
         float AutoExposureKey = 0.18f;
+        float CameraAperture = 2.8f;        // f-number N
+        float CameraShutter = 0.008f;       // s
+        float CameraIso = 100.0f;
+
+        bool DiskLight = true;
+        bool Shadows = true;
+        // Uniform sky radiance on meshes [W m^-2 sr^-1]; the default equals the old constant ambient of 0.03 image units
+        float SkyRadiance = static_cast<float>(0.03 * GPP::Radiometry::kHdrReferenceWhite / GPP::Radiometry::kLuminousEfficacyMax);
 
         bool ShowGravityGrid = false;
         bool ShowPhysicsDebug = false;
