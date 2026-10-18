@@ -10,6 +10,7 @@ import :Simulation.GraphTranspiler;
 import :Simulation.AnimationGraphExecutor;
 import :Simulation.CameraMath;
 import :Simulation.EntityPresets;
+import :Simulation.AccretionDisk;
 import std;
 import glm;
 import GPP;
@@ -18,6 +19,18 @@ namespace MoleHole
 {
     namespace
     {
+        // disk.stats(hole) -> { particles, mass [kg], mdot_measured [kg/s], mean_T [K], r_in_effective [m], absorbed [kg] }
+        // or nil when the hole has no particle disk; disk.set(hole, field, value) edits the AccretionDisk component
+        constexpr std::string_view kDiskPrelude = R"lua(
+function disk.stats(hole)
+    local particles, mass, mdot, temperature, inner, absorbed = disk.__stats(hole)
+    if particles == nil then return nil end
+    return { particles = particles, mass = mass, mdot_measured = mdot, mean_T = temperature, r_in_effective = inner,
+        absorbed = absorbed }
+end
+function disk.set(hole, field, value) return scene.set(hole, "AccretionDisk", field, value) end
+)lua";
+
         std::optional<GPP::LuauType> ToLuau(const PinType type)
         {
             switch (type)
@@ -125,6 +138,18 @@ namespace MoleHole
                 else throw std::runtime_error("render.set: '" + key + "' needs a boolean, number or string");
                 if (const auto error = Render.Set(key, text); !error.empty()) throw std::runtime_error("render.set: " + error);
                 return 0;
+            });
+            vm.Register("disk", "__stats", [](GPP::LuauNativeCall& call)
+            {
+                const auto stats = GlobalAccretionBoard().Get(call.Entity(1));
+                if (!stats || !stats->Active) return 0;
+                call.PushNumber(static_cast<double>(stats->Particles));
+                call.PushNumber(stats->Mass);
+                call.PushNumber(stats->MassRate);
+                call.PushNumber(stats->MeanTemperature);
+                call.PushNumber(stats->InnerRadius);
+                call.PushNumber(stats->AbsorbedMass);
+                return 6;
             });
             vm.Register("render", "get", [this](GPP::LuauNativeCall& call)
             {
@@ -597,6 +622,20 @@ namespace MoleHole
             return;
         }
         impl.RegisterNatives();
+        try
+        {
+            GPP::RegisterParticleBindings(impl.Vm, GlobalParticleHub());
+        }
+        catch (const std::exception& e)
+        {
+            impl.Error = e.what();
+            return;
+        }
+        if (auto disk = impl.Vm.RunTrusted(kDiskPrelude, "=disk_bindings"); !disk)
+        {
+            impl.Error = "disk prelude failed: " + disk.error().Message;
+            return;
+        }
         if (auto prelude = impl.Vm.RunTrusted(GraphRuntimePrelude(), "=graph_runtime"); !prelude)
         {
             impl.Error = "graph runtime prelude failed: " + prelude.error().Message;

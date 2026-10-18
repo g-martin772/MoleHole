@@ -20,6 +20,8 @@ export namespace MoleHole
         Camera ViewCamera;
         RenderSettings Settings;
         std::shared_ptr<GPP::PhysicsSimulationModule> Physics;
+        std::function<void(std::vector<GPP::Command>, GPP::CommandOptions)> EnqueueDiskCommands;
+        bool ExactParticles = false; // advance the particles by the whole clock step (exports), never cap it
     };
 
     struct MeshTraceFrame

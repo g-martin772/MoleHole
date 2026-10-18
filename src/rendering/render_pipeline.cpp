@@ -5,6 +5,7 @@ import :Rendering.Data;
 import :Rendering.DebugLegend;
 import :Rendering.MeshTrace;
 import :Rendering.Lut;
+import :Rendering.ParticleStage;
 import :Simulation.Components;
 import std;
 import vulkan;
@@ -1046,6 +1047,7 @@ namespace MoleHole
         const auto queue = res.Device->GetBackgroundQueue();
         res.Mesh = std::make_unique<MeshScene>(res.Device, res.Meshes, res.Logger, *res.UploadPool);
 
+        impl.Stages.push_back(std::make_unique<ParticleStage>(res));
         auto trace = std::make_unique<TraceStage>(res, impl.StartTime);
         trace->Initialize();
         impl.Stages.push_back(std::move(trace));

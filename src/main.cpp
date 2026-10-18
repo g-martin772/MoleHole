@@ -135,11 +135,42 @@ namespace
     }
 }
 
+namespace
+{
+    struct DebugParticlesArgs
+    {
+        std::string Scene;
+        std::string Png;
+        double Seconds{1.0};
+        int Frames{2};
+    };
+
+    // --debug-particles out.png --scene s.yaml [--particle-seconds T] [--particle-frames N]: headless CPU run of the
+    // scene's particle disk, scatter pictures at N+1 moments (no GUI, no GPU)
+    std::optional<DebugParticlesArgs> ParseDebugParticles(int argc, char* argv[])
+    {
+        DebugParticlesArgs args;
+        bool requested = false;
+        for (int i = 1; i < argc; ++i)
+        {
+            const std::string_view arg = argv[i];
+            const auto next = [&]() -> std::string { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
+            if (arg == "--debug-particles") { args.Png = next(); requested = true; }
+            else if (arg == "--scene") args.Scene = next();
+            else if (arg == "--particle-seconds") args.Seconds = std::atof(next().c_str());
+            else if (arg == "--particle-frames") args.Frames = std::atoi(next().c_str());
+        }
+        return requested ? std::optional(args) : std::nullopt;
+    }
+}
+
 int main(int argc, char* argv[])
 {
     EnsureRuntimeDirectories();
     SetGlobalShaderDefines(Units::ShaderDefines());
     MoleHole::RegisterComponents();
+
+    if (const auto debug = ParseDebugParticles(argc, argv)) return MoleHole::RunDebugParticles(debug->Scene, debug->Png, debug->Seconds, debug->Frames);
 
     auto cli = ParseExportArgs(argc, argv);
     if (cli && !cli->Error.empty())

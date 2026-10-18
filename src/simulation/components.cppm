@@ -87,6 +87,7 @@ export namespace MoleHole
 
 namespace MoleHole
 {
+    export void RegisterAccretionDiskComponent();
 
     export void RegisterComponents()
     {
@@ -180,6 +181,7 @@ namespace MoleHole
                                    {.Kind = GPP::FieldKind::Multiline}),
                     }});
 
+            RegisterAccretionDiskComponent();
         });
     }
 }

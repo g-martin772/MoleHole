@@ -1,0 +1,51 @@
+Scene: AccretionStream
+SchemaVersion: 2
+Entities:
+  - Guid: 7001
+    Components:
+      Metadata:
+        Guid: 7001
+        Name: BlackHole
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      BlackHole:
+        Mass: {value: 10, unit: Msun}
+        Spin: 0
+        Charge: 0
+        SpinAxis: [0, 1, 0]
+      AccretionDisk:
+        Model: Particles
+        RateMode: Mass Rate
+        MassRate: {value: 1.0e-8, unit: Msun/yr}
+        Alpha: 0.3
+        AspectRatio: 0.08
+        InnerRadius: 0
+        OuterRadius: 100
+        FeedOuterEdge: false
+        MaxParticles: 131072
+        Seed: 7
+  - Guid: 7002
+    Components:
+      Metadata:
+        Guid: 7002
+        Name: Star Stream
+        TypeTag: Empty
+      Transform:
+        Position: [1476600, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      ParticleEmitter:
+        Active: true
+        Shape: Stream
+        RateMode: Mass
+        Rate: 100000
+        MassRate: 1.0e20
+        Radius: 20000
+        Speed: 2.75e7
+        Dispersion: 1.0e5
+        Temperature: 10000
+        Seed: 11
+        TargetPosition: [0, 0, 1100000]

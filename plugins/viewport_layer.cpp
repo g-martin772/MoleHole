@@ -121,6 +121,11 @@ namespace
             inputs.ViewCamera = frameParams->ViewCamera;
             inputs.Settings = frameParams->Render;
             inputs.Physics = sim->Runner->GetModule<PhysicsSimulationModule>();
+            inputs.ExactParticles = m_UiState->ExportActive;
+            inputs.EnqueueDiskCommands = [runner = sim->Runner](std::vector<Command> commands, CommandOptions options)
+            {
+                runner->EnqueueCommands(std::move(commands), std::move(options));
+            };
             const auto sceneLock = sim->Runner->AcquireSnapshot();
             inputs.Scene = &*sceneLock;
             m_Pipeline.Build(graph, inputs);

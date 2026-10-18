@@ -322,6 +322,11 @@ export namespace MoleHole
                 [component](const int id) { return CreateSetterNode(id, component); });
         }
 
+        add("Disk Stats", "Objects", "Reads the accretion disk: particles, mass, measured mass rate, mean temperature, inner radius.",
+            {"accretion", "disk", "stats", "mdot", "particles"}, [](const int id) { return CreateGetterNode(id, "AccretionDisk"); });
+        add("Set Disk Parameter", "Objects", "Writes accretion disk parameters such as alpha, aspect ratio or mass rate.",
+            {"accretion", "disk", "alpha", "mdot", "set"}, [](const int id) { return CreateSetterNode(id, "AccretionDisk"); });
+
         add("Spawn Entity", "Entities", "Creates a new entity from a template.", {"create", "instantiate", "prefab"},
             CreateSpawnEntityNode);
         add("Clone Entity", "Entities", "Duplicates an existing entity.", {"copy", "duplicate"}, CreateCloneEntityNode);

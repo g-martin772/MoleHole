@@ -52,11 +52,12 @@ namespace
 
     struct SimulationWindowLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, SceneManager, UiState>;
+        using Dependencies = std::tuple<Logger, SceneManager, UiState, Renderer>;
 
         SimulationWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<SceneManager> scenes,
-                              std::shared_ptr<UiState> uiState)
-            : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState))
+                              std::shared_ptr<UiState> uiState, std::shared_ptr<Renderer> renderer)
+            : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState)),
+              m_Renderer(std::move(renderer))
         {
         }
 
@@ -77,6 +78,7 @@ namespace
             DrawTiming(runner);
             DrawTickRate();
             DrawPhysics(runner);
+            DrawParticles();
             DrawPrecision();
             ImGui::End();
         }
@@ -189,6 +191,43 @@ namespace
             }
         }
 
+        void DrawParticles()
+        {
+            const auto stats = GlobalAccretionBoard().Primary();
+            if (!stats.Active) return;
+            SectionHeader("PARTICLE DISK");
+            ImGui::Text("Backend:   %s", stats.Gpu ? "GPU" : "CPU");
+            ImGui::Text("Particles: %llu", static_cast<unsigned long long>(stats.Particles));
+            ImGui::Text("Absorbed:  %.3e kg", stats.AbsorbedMass);
+            ImGui::Text("Mdot:      %.3e kg/s  (measured)", stats.MassRate);
+            ImGui::Text("In disk:   %.3e kg   <T> %.3e K", stats.Mass, stats.MeanTemperature);
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Phenomenological alpha-viscosity model on a Paczynski-Wiita potential, not hydrodynamics.\n"
+                                  "Viscosity stops inside the inner radius (%.1f km), matter plunges.", stats.InnerRadius * 1e-3);
+            }
+            double gpuMs = 0.0;
+            if (const auto target = m_Renderer->GetBufferTargetStats(kViewportBufferId))
+            {
+                for (const auto& pass : target->Passes)
+                {
+                    if (pass.Name == "Particles") gpuMs = pass.Ms;
+                }
+            }
+            ImGui::Text("Pass:      %.2f ms GPU, %.2f ms record, %u macro steps", gpuMs, stats.RecordMs, stats.MacroSteps);
+            if (stats.Limited)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.6f, 0.2f, 1.0f));
+                ImGui::TextWrapped("limited: the particles cannot keep up with the time scale, simulated time is dropped");
+                ImGui::PopStyleColor();
+            }
+            if (stats.Dropped > 0)
+            {
+                ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "%llu particles dropped (raise Max Particles)",
+                                   static_cast<unsigned long long>(stats.Dropped));
+            }
+        }
+
         void DrawPrecision()
         {
             SectionHeader("PRECISION");
@@ -211,6 +250,7 @@ namespace
 
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<UiState> m_UiState;
+        std::shared_ptr<Renderer> m_Renderer;
     };
 }
 
