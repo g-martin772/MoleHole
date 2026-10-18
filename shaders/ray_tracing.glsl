@@ -383,7 +383,8 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         }
     }
 
-    rvec3 cameraBL = cartesianToBL(rvec3(toLocal * (rayOrigin - bh.position)), st.a);
+    vec3 cameraLocal = toLocal * (rayOrigin - bh.position);
+    rvec3 cameraBL = cartesianToBL(rvec3(cameraLocal), st.a);
     if (cameraBL.x <= st.rPlus) {
         g_termination = TERM_HORIZON;
         return vec3(0.0f);
@@ -415,6 +416,14 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
 
     float ergoPath = 0.0f;
     float temperature, column;
+
+    // Trails are tested once the ray has travelled TRAIL_TEST_SPACING since the last test, with one chord over those
+    // steps (shaders/trails.glsl): steps near the hole are far shorter than a line's width, and testing every one of
+    // them cost as much as the integration itself
+    bool trails = trailsEnabled();
+    vec3 trailFrom = trails ? blToCartesian(y.x, y.y, phi, st.a) : vec3(0.0f);
+    float trailTravel = 0.0f;
+    float trailSpacing = trails ? trailTestSpacing() : 0.0f;
 
     g_maxStepCount = u_maxRaySteps;
     g_termination = TERM_STEPS;
@@ -458,6 +467,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         real phi0 = phi;
         real pth0 = y.w;
         real ct0 = rcos(y.y);
+        real theta0 = y.y;
         geodesicStep(st, E, L, y, phi, -h, dy, dphi);
         r = y.x;
         if (isnan(r) || r <= st.rPlus) {
@@ -474,15 +484,39 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             }
         }
 
+        // Trails along the path since the last test, composited front to back like an opaque thin tube. The distance
+        // travelled is estimated from the coordinate changes, so most steps need no trigonometry at all.
+        if (trails) {
+            float dr = float(y.x - r0);
+            float rr = float(y.x);
+            float dTheta = float(y.y - theta0);
+            float dPhi = float(phi - phi0);
+            float sin2 = max(1.0f - float(ct0 * ct0), 0.0f);
+            trailTravel += sqrt(dr * dr + rr * rr * (dTheta * dTheta + sin2 * dPhi * dPhi));
+            if (trailTravel >= trailSpacing) {
+                vec3 here = blToCartesian(y.x, y.y, phi, st.a);
+                vec3 trailColor;
+                float coverage = trailSample(trailFrom, here, cameraLocal, trailColor);
+                colorValue += alpha * coverage * trailColor;
+                alpha *= 1.0f - coverage;
+                trailFrom = here;
+                trailTravel = 0.0f;
+            }
+        }
+
         // Equatorial-plane crossing of this step, linearly interpolated in cos(theta).
         real ct = rcos(y.y);
         bool crossed = sign(ct) != sign(ct0);
         real f = crossed ? ct0 / (ct0 - ct) : real(0.0);
         real rCross = mix(r0, y.x, f);
 
-        if (u_debugMode == 4) {
+        bool orbitOverlay = u_orbitRadii2.z > 0.5f;
+        if (orbitOverlay && crossed) colorValue += orbitRingColor(float(rCross)) * alpha;
+        if (u_debugMode == 4 || orbitOverlay) {
             real rErgo = st.M + sqrt(max(st.M * st.M - st.a * st.a * ct * ct - st.Q * st.Q, real(0.0)));
             if (r < rErgo) ergoPath += float(h);
+        }
+        if (u_debugMode == 4) {
             if (crossed && abs(rCross - st.rIsco) < real(0.1) * st.M) {
                 colorValue += ISCO_RING_COLOR * alpha;
             }
@@ -522,8 +556,18 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         }
     }
 
+    // The last stretch of path since the final trail test
+    if (trails && trailTravel > 0.0f && !isnan(y.x)) {
+        vec3 trailColor;
+        float coverage = trailSample(trailFrom, blToCartesian(y.x, y.y, phi, st.a), cameraLocal, trailColor);
+        colorValue += alpha * coverage * trailColor;
+        alpha *= 1.0f - coverage;
+    }
+
     if (u_debugMode == 4) {
         colorValue = mix(colorValue, ERGOSPHERE_TINT, 1.0f - exp(-ergoPath / mass));
+    } else if (u_orbitRadii2.z > 0.5f) {
+        colorValue = mix(colorValue, ORBIT_ERGOSPHERE_COLOR, ORBIT_ERGOSPHERE_TINT * (1.0f - exp(-ergoPath / mass)));
     }
 
     if (g_termination == TERM_HORIZON || g_termination == TERM_DISK) return colorValue;

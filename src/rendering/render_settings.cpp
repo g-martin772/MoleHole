@@ -242,6 +242,25 @@ namespace MoleHole
                 .Label = "Object path trails", .Group = "Overlays",
                 .Tooltip = "Recent world-space path of every mesh (green) and sphere (magenta) while playing.",
                 .Doc = kDoc}));
+            registry.Add(Setting("overlay.characteristic_radii", &R::ShowCharacteristicRadii, {
+                .Label = "Characteristic radii", .Group = "Overlays",
+                .Tooltip = "Every black hole's horizon (grey) and ergosphere (purple, in two meridian planes), and the\n"
+                           "equatorial photon orbit (orange), marginally bound orbit (green) and ISCO (blue).\n"
+                           "Bright: prograde orbits, dim: retrograde.\n"
+                           "Integrated transport: the tracer draws the rings where rays cross the equator, so they are\n"
+                           "lensed like the disk (with secondary images) and the ergoregion is tinted; otherwise they are\n"
+                           "plain lines, which sit inside the lensed shadow.",
+                .Doc = kDoc}));
+            registry.Add(Setting("overlay.predicted_orbits", &R::ShowPredictedOrbits, {
+                .Label = "Predicted orbits", .Group = "Overlays",
+                .Tooltip = "Where every Geodesic Body will go, integrated ahead from its current state: bright now,\n"
+                           "fading towards the end of the span. Drawn without lensing.",
+                .Doc = kDoc}));
+            registry.Add(Setting("overlay.prediction_span", &R::PredictionSpan, {
+                .Label = "Prediction span", .Group = "Orbit overlays",
+                .Tooltip = "Coordinate time to predict ahead, in M (GM/c³ of each body's black hole).",
+                .Doc = kDoc, .Min = 10.0, .Max = 100000.0, .Scale = SettingScale::Log, .Format = "%.0f M",
+                .VisibleWhen = "overlay.predicted_orbits"}));
 
             registry.Add(Setting("debug.view", &R::Debug, {
                 .Label = "Debug view", .Group = "Debug",

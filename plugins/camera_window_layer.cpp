@@ -127,7 +127,7 @@ namespace
                 }
                 else if (readout.Source != ObserverSource::Body)
                 {
-                    ImGui::Text("Proper acceleration: %.3g m/s² (%.3g g⊕)", readout.AccelerationMs2,
+                    ImGui::Text("Proper acceleration: %.3g m/s² (%.3g × Earth gravity)", readout.AccelerationMs2,
                                 readout.AccelerationMs2 / EarthSurfaceGravity());
                 }
             }

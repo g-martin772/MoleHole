@@ -10,25 +10,6 @@ namespace MoleHole
 {
     namespace
     {
-        std::optional<HoleFrame> FindHole(const GPP::Scene& scene, const std::uint64_t guid)
-        {
-            const auto& registry = scene.Registry();
-            if (guid != 0)
-            {
-                const auto entity = scene.FindByGuid(guid);
-                if (!scene.IsValid(entity)) return std::nullopt;
-                const auto* hole = registry.try_get<BlackHoleComponent>(entity);
-                const auto* transform = registry.try_get<GPP::TransformComponent>(entity);
-                if (!hole || !transform) return std::nullopt;
-                return MakeHoleFrame(*hole, transform->Position);
-            }
-            for (auto [entity, hole, transform] : registry.view<const BlackHoleComponent, const GPP::TransformComponent>().each())
-            {
-                return MakeHoleFrame(hole, transform.Position);
-            }
-            return std::nullopt;
-        }
-
         // Identifies what a body was launched with, so editing the launch settings or the hole re-launches it.
         std::uint64_t LaunchKey(const GeodesicBodyComponent& body, const HoleFrame& hole)
         {
@@ -89,7 +70,7 @@ namespace MoleHole
         auto& registry = scene.Registry();
         for (auto [entity, body, transform] : registry.view<GeodesicBodyComponent, const GPP::TransformComponent>().each())
         {
-            const auto hole = FindHole(scene, body.BlackHole);
+            const auto hole = FindHoleFrame(scene, body.BlackHole);
             if (!hole)
             {
                 body.Status = GeodesicBodyStatus::NoBlackHole;
@@ -107,7 +88,7 @@ namespace MoleHole
 
         for (auto [entity, body, transform] : registry.view<GeodesicBodyComponent, GPP::TransformComponent>().each())
         {
-            const auto hole = FindHole(scene, body.BlackHole);
+            const auto hole = FindHoleFrame(scene, body.BlackHole);
             if (!hole)
             {
                 body.Status = GeodesicBodyStatus::NoBlackHole;

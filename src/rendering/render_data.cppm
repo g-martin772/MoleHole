@@ -94,7 +94,8 @@ export namespace MoleHole
         float DiskDisplayTemperature{0.0f};
         std::int32_t DiskHotSpots{3};
 
-        // Per black hole: x = peak temperature [K], y = inner radius (ISCO), z = outer radius, both in render units
+        // Per black hole: x = peak temperature [K], y = inner radius (ISCO), z = outer radius, both in render units,
+        // w = exposure reference temperature [K] (DiskExposureReference)
         std::array<glm::vec4, kMaxBlackHoles> DiskInfo{};
         // Per black hole kDiskProfileSamples values of T / peak, log-spaced between DiskInfo.y and DiskInfo.z
         std::array<glm::vec4, kMaxBlackHoles * kDiskProfileVec4s> DiskProfile{};
@@ -102,8 +103,19 @@ export namespace MoleHole
         // Camera velocity relative to the ZAMO of the first hole along (e_r, e_theta, e_phi), in c; w = 1 unless
         // the camera is that ZAMO. Set by FillObserverData.
         glm::vec4 ObserverVelocity{0.0f};
+
+        // Characteristic radii of the first hole for the integrated tracer, which draws them where rays cross the
+        // equatorial plane (lensed like the disk). In render units: x/y photon orbit pro/retro, z/w marginally bound
+        // pro/retro; OrbitRadii2 x/y ISCO pro/retro, z = 1 when the overlay is on. Set by FillOrbitOverlayData.
+        glm::vec4 OrbitRadii{0.0f};
+        glm::vec4 OrbitRadii2{0.0f};
+
+        // Lensed trails (shaders/trails.glsl): grid half-size (render units), cells per axis, 1 = active, half-width (rad)
+        glm::vec4 TrailGrid{0.0f};
+        glm::vec4 TrailGrid2{0.0f}; // x = hash table size of the occupied trail cells
     };
-    static_assert(sizeof(RaytraceParamsGpu) == 3632);
+    static_assert(sizeof(RaytraceParamsGpu) == 3696);
+    static_assert(offsetof(RaytraceParamsGpu, OrbitRadii) == 3632);
     static_assert(offsetof(RaytraceParamsGpu, ObserverVelocity) == 3616);
     static_assert(offsetof(RaytraceParamsGpu, DiskAccretionRate) == 1424);
     static_assert(offsetof(RaytraceParamsGpu, DiskInfo) == 1440);
@@ -173,7 +185,8 @@ export namespace MoleHole
             const auto disk = BuildDiskProfile(metric, gpu.MassSolar, params.DiskAccretionRate,
                                                kDiskOuterRadiusM * metric.Mass);
             params.DiskInfo[index] = glm::vec4(static_cast<float>(disk.PeakTemperature), static_cast<float>(disk.InnerRadius),
-                                               static_cast<float>(disk.OuterRadius), 0.0f);
+                                               static_cast<float>(disk.OuterRadius),
+                                               static_cast<float>(DiskExposureReference(disk)));
             for (int v = 0; v < kDiskProfileVec4s; ++v)
             {
                 auto& packed = params.DiskProfile[index * kDiskProfileVec4s + static_cast<std::size_t>(v)];
@@ -226,6 +239,22 @@ export namespace MoleHole
                                                 static_cast<float>((*velocity)[2]), 1.0f);
         }
         return true;
+    }
+
+    // Ring radii for the in-tracer characteristic-radii overlay, in the metric the tracer integrates (after
+    // FillMetricData). Disabled (z = 0) when the overlay is off or there is no hole.
+    inline void FillOrbitOverlayData(RaytraceParamsGpu& params, const bool enabled)
+    {
+        params.OrbitRadii = glm::vec4(0.0f);
+        params.OrbitRadii2 = glm::vec4(0.0f);
+        if (!enabled || params.NumBlackHoles == 0) return;
+        const auto& hole = params.BlackHoles[0];
+        const auto m = MakeKerrNewmanParams(params.MetricType, hole.Mass, hole.Spin, hole.Charge, kExtremalHorizonParameter);
+        const auto f = [](const double r) { return static_cast<float>(r); };
+        params.OrbitRadii = glm::vec4(f(PhotonOrbitRadius(m, OrbitDirection::Prograde)), f(PhotonOrbitRadius(m, OrbitDirection::Retrograde)),
+                                      f(MarginallyBoundRadius(m, OrbitDirection::Prograde)),
+                                      f(MarginallyBoundRadius(m, OrbitDirection::Retrograde)));
+        params.OrbitRadii2 = glm::vec4(f(IscoRadius(m, OrbitDirection::Prograde)), f(IscoRadius(m, OrbitDirection::Retrograde)), 1.0f, 0.0f);
     }
 
     struct GravityGridPointGpu

@@ -375,7 +375,11 @@ export namespace MoleHole
     // logarithmically spaced between InnerRadius (the ISCO) and OuterRadius.
     struct DiskProfile
     {
-        double PeakTemperature{0.0}; // K
+        double PeakTemperature{0.0}; // K, in the rest frame of the gas
+        // K: the hottest gas as a distant face-on observer sees it, max T(r) / u^t(r) (the redshift of photons with
+        // zero angular momentum). Unlike the rest-frame peak it barely depends on spin, which keeps it out of the
+        // deep, strongly redshifted throat of a near-extremal hole.
+        double ObservedPeakTemperature{0.0};
         double InnerRadius{0.0};     // geometric units of the KerrNewmanParams
         double OuterRadius{0.0};
         std::array<float, kDiskProfileSamples> Temperature{};
@@ -411,15 +415,19 @@ export namespace MoleHole
         const double fluxScale = accretionRate * std::pow(kC, 6) / (kG * kG * massKg * massKg);
 
         double peak = 0.0;
+        double observedPeak = 0.0;
         std::array<double, kDiskProfileSamples> temperature{};
         for (int i = 0; i < kDiskProfileSamples; ++i)
         {
             const auto index = static_cast<std::size_t>(i);
             temperature[index] = std::pow(fluxScale * flux[index] / kStefanBoltzmann, 0.25);
             peak = std::max(peak, temperature[index]);
+            const double norm = CircularOrbitNorm(unit, radii[index], OrbitDirection::Prograde);
+            if (norm > 0.0) observedPeak = std::max(observedPeak, temperature[index] * std::sqrt(norm));
         }
 
         profile.PeakTemperature = peak;
+        profile.ObservedPeakTemperature = observedPeak;
         profile.InnerRadius = rIn * p.Mass;
         profile.OuterRadius = rOut * p.Mass;
         for (int i = 0; i < kDiskProfileSamples; ++i)
@@ -428,5 +436,26 @@ export namespace MoleHole
             profile.Temperature[index] = peak > 0.0 ? static_cast<float>(temperature[index] / peak) : 0.0f;
         }
         return profile;
+    }
+
+    // Disk exposure: the shaders scale disk brightness as (g T / reference)⁴. The reference is the observed peak
+    // (DiskProfile::ObservedPeakTemperature), scaled so that a Schwarzschild disk keeps the brightness it had when the
+    // reference was the rest-frame peak. With the rest-frame peak, a spinning disk was exposed for gas hidden deep in
+    // its redshifted throat and looked far too dim (about 40x at a = 0.998, 200x near-extremal).
+    // See docs/notes/near_extremal.md.
+    [[nodiscard]] inline double SchwarzschildObservedPeakRatio()
+    {
+        static const double ratio = []
+        {
+            const auto profile = BuildDiskProfile({.Mass = 1.0}, 1.0, 0.1, 20.0);
+            return profile.PeakTemperature > 0.0 ? profile.ObservedPeakTemperature / profile.PeakTemperature : 1.0;
+        }();
+        return ratio;
+    }
+
+    [[nodiscard]] inline double DiskExposureReference(const DiskProfile& profile)
+    {
+        if (!(profile.ObservedPeakTemperature > 0.0)) return profile.PeakTemperature;
+        return profile.ObservedPeakTemperature / SchwarzschildObservedPeakRatio();
     }
 }

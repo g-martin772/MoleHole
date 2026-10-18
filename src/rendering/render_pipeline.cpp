@@ -6,6 +6,7 @@ import :Rendering.DebugLegend;
 import :Rendering.MeshTrace;
 import :Rendering.Lut;
 import :Simulation.Components;
+import :Rendering.OrbitOverlays;
 import std;
 import vulkan;
 import glm;
@@ -180,6 +181,17 @@ namespace MoleHole
             }
         };
 
+        // The camera's motion when it is not the ZAMO and the tracer renders it (Integrated transport); rasterised
+        // overlays use it to stay on the aberrated image (AberrateForCamera).
+        std::optional<CameraObserverFrame> MovingCameraObserver(const RenderFrameContext& ctx)
+        {
+            if (ctx.Settings.TransportMode != Transport::Integrated) return std::nullopt;
+            return FindCameraObserver(ctx.Scene, static_cast<std::int32_t>(ctx.Settings.Solution),
+                                      static_cast<ObserverKind>(ctx.Settings.Observer),
+                                      static_cast<OrbitDirection>(ctx.Settings.ObserverOrbit), ctx.ViewCamera.GetPosition(),
+                                      ctx.Inputs.ObserverGuid);
+        }
+
         void RecordLinePass(RenderFrameContext& ctx, std::string name, const DebugLines& lines,
                             const VulkanBuffer* buffer, std::uint32_t vertexCount)
         {
@@ -351,6 +363,14 @@ namespace MoleHole
                 }
                 m_ParamsBuffer = std::make_unique<VulkanBuffer>(
                     m_Res.Device, MakeUniformBufferSpecification(sizeof(RaytraceParamsGpu)), m_Res.Logger);
+                const auto storage = [&](const std::size_t bytes)
+                {
+                    return std::make_unique<VulkanBuffer>(m_Res.Device, MakeStorageBufferSpecification(bytes, true), m_Res.Logger);
+                };
+                m_TrailSegments = storage(kMaxTracedTrailSegments * sizeof(TracedTrailSegment));
+                m_TrailCells = storage(kMaxTrailCells * sizeof(TrailCell));
+                m_TrailIndices = storage(kMaxTrailGridEntries * sizeof(std::uint32_t));
+                m_TrailCoarse = storage(kTrailCoarseWords * sizeof(std::uint32_t));
             }
 
             [[nodiscard]] std::string_view Name() const override { return "Trace"; }
@@ -381,10 +401,12 @@ namespace MoleHole
                 const auto device = m_Res.Device;
                 auto* res = &m_Res;
                 auto* params = m_ParamsBuffer.get();
+                const std::array<VulkanBuffer*, 4> trailBuffers{m_TrailSegments.get(), m_TrailCells.get(), m_TrailIndices.get(),
+                                                                m_TrailCoarse.get()};
 
                 ctx.Graph.AddBudgetedComputePass(
                     "Trace", {}, {}, ctx.GroupsX * ctx.GroupsY,
-                    [device, groupsX, raytracePipeline, res, params, meshes = m_Res.MeshTrace, set = vk::DescriptorSet{}](
+                    [device, groupsX, raytracePipeline, res, params, trailBuffers, meshes = m_Res.MeshTrace, set = vk::DescriptorSet{}](
                         const vk::CommandBuffer cmd, RenderGraph& g, const RenderGraphWorkSlice& slice) mutable
                     {
                         const auto pipeline = raytracePipeline->GetPipeline();
@@ -410,6 +432,10 @@ namespace MoleHole
                             {
                                 return std::ranges::any_of(bindings, [binding](const auto& b) { return b.set == 0 && b.binding == binding; });
                             };
+                            for (std::uint32_t binding = 9; binding < 13; ++binding)
+                            {
+                                if (has(binding)) writer.WriteStorageBuffer(set, binding, trailBuffers[binding - 9]->GetBuffer());
+                            }
                             if (meshes.Active)
                             {
                                 if (has(6)) writer.WriteAccelerationStructure(set, 6, meshes.Tlas);
@@ -465,6 +491,7 @@ namespace MoleHole
                     FillObserverData(params, static_cast<ObserverKind>(render.Observer),
                                      static_cast<OrbitDirection>(render.ObserverOrbit));
                 }
+                FillOrbitOverlayData(params, render.ShowCharacteristicRadii && render.TransportMode == Transport::Integrated);
                 params.IsPhysicallyAccurate = render.TransportMode == Transport::Integrated ? 1 : 0;
                 params.GravitationalLensingEnabled = render.Lensing() ? 1 : 0;
                 params.GravitationalRedshiftEnabled = render.GravitationalRedshift ? 1 : 0;
@@ -489,6 +516,21 @@ namespace MoleHole
                     params.NumMeshInstances = m_Res.MeshTrace.Count;
                 }
 
+                // Lensed trails prepared by OverlayGeometryStage
+                const auto& trails = m_Res.Trails;
+                if (m_Res.TrailsActive && params.IsPhysicallyAccurate == 1)
+                {
+                    m_TrailSegments->Upload(trails.Segments.data(), trails.Segments.size() * sizeof(TracedTrailSegment));
+                    m_TrailCells->Upload(trails.Cells.data(), trails.Cells.size() * sizeof(TrailCell));
+                    m_TrailCoarse->Upload(trails.Coarse.data(), trails.Coarse.size() * sizeof(std::uint32_t));
+                    if (!trails.CellSegments.empty())
+                    {
+                        m_TrailIndices->Upload(trails.CellSegments.data(), trails.CellSegments.size() * sizeof(std::uint32_t));
+                    }
+                    params.TrailGrid = glm::vec4(trails.Radius, static_cast<float>(kTrailGridCells), 1.0f, m_Res.TrailAngularHalfWidth);
+                    params.TrailGrid2 = glm::vec4(static_cast<float>(trails.Cells.size()), 0.0f, 0.0f, 0.0f);
+                }
+
                 m_ParamsBuffer->Upload(&params, sizeof(params));
             }
 
@@ -505,6 +547,10 @@ namespace MoleHole
             std::shared_ptr<ShaderPipeline> m_MeshPipeline;
             std::shared_ptr<ShaderPipeline> m_MeshPipelineF64;
             std::unique_ptr<VulkanBuffer> m_ParamsBuffer;
+            std::unique_ptr<VulkanBuffer> m_TrailSegments;
+            std::unique_ptr<VulkanBuffer> m_TrailCells;
+            std::unique_ptr<VulkanBuffer> m_TrailIndices;
+            std::unique_ptr<VulkanBuffer> m_TrailCoarse;
             MeshAccelerator m_Meshes;
         };
 
@@ -939,55 +985,163 @@ namespace MoleHole
             bool m_WasEnabled{false};
         };
 
-        class ObjectPathStage final : public IRenderStage
+        // Every rasterised overlay line of the frame (characteristic radii of non-traced holes, predicted orbits, object
+        // path trails), computed once before the trace. With the Integrated transport the parts inside the first hole's
+        // integration sphere go to the tracer instead (res.Trails), which draws them lensed; the rest stays rasterised
+        // and is aberrated for a moving camera. Predictions are integrated again only when a body's state or the span
+        // changed, so a paused scene costs nothing per frame. See docs/notes/orbit_overlays_and_nodes.md.
+        class OverlayGeometryStage final : public IRenderStage
         {
         public:
-            ObjectPathStage(RenderResources& res, DebugLines& lines, ObjectPathTracker& tracker, std::mutex& mutex)
-                : m_Res(res), m_Lines(lines), m_Tracker(tracker), m_Mutex(mutex)
+            OverlayGeometryStage(RenderResources& res, ObjectPathTracker& tracker, std::mutex& mutex)
+                : m_Res(res), m_Tracker(tracker), m_Mutex(mutex)
             {
             }
 
-            [[nodiscard]] std::string_view Name() const override { return "ObjectPaths"; }
-            [[nodiscard]] bool Enabled(const RenderSettings& settings) const override { return settings.ShowObjectPaths; }
+            [[nodiscard]] std::string_view Name() const override { return "OverlayGeometry"; }
+            [[nodiscard]] bool Enabled(const RenderSettings& settings) const override
+            {
+                return settings.ShowObjectPaths || settings.ShowCharacteristicRadii || settings.ShowPredictedOrbits;
+            }
 
             void Record(RenderFrameContext& ctx) override
             {
                 static const glm::vec3 kMeshColor{0.2f, 0.8f, 0.2f};
                 static const glm::vec3 kSphereColor{0.8f, 0.2f, 0.8f};
 
-                std::vector<float> vertices;
+                const bool integrated = ctx.Settings.TransportMode == Transport::Integrated;
+                const auto primary = integrated ? PrimaryHole(ctx.Scene) : std::nullopt;
+
+                std::vector<OverlaySegment> radii;
+                if (ctx.Settings.ShowCharacteristicRadii)
+                {
+                    // The integrated tracer draws the first hole's rings itself (orbitRingColor); other holes stay lines
+                    radii = CharacteristicRadiiOverlay(ctx.Scene, 96, primary ? primary->first : 0);
+                }
+                std::vector<OverlaySegment> trails;
+                if (ctx.Settings.ShowPredictedOrbits)
+                {
+                    UpdatePredictions(ctx.Scene, ctx.Settings.PredictionSpan, ctx.Inputs.ObserverGuid);
+                    trails = m_Predictions;
+                }
+                if (ctx.Settings.ShowObjectPaths)
                 {
                     std::scoped_lock lock(m_Mutex);
                     const auto append = [&](const auto& histories, const glm::vec3& color)
                     {
                         for (const auto& [guid, history] : histories)
                         {
-                            for (std::size_t i = 1; i < history.size(); ++i)
-                            {
-                                const glm::vec3 a = ctx.Frame.ToRender(history[i - 1]);
-                                const glm::vec3 b = ctx.Frame.ToRender(history[i]);
-                                vertices.insert(vertices.end(), {a.x, a.y, a.z, color.r, color.g, color.b,
-                                                                 b.x, b.y, b.z, color.r, color.g, color.b});
-                            }
+                            for (std::size_t i = 1; i < history.size(); ++i) trails.push_back({history[i - 1], history[i], color});
                         }
                     };
                     append(m_Tracker.MeshHistories(), kMeshColor);
                     append(m_Tracker.SphereHistories(), kSphereColor);
                 }
-                if (vertices.empty()) return;
 
+                std::vector<RenderSegment> render;
+                render.reserve(radii.size() + trails.size());
+                for (const auto& segment : radii) render.push_back({ctx.Frame.ToRender(segment.A), ctx.Frame.ToRender(segment.B), segment.Color});
+                std::vector<RenderSegment> raster = render;
+                render.clear();
+                for (const auto& segment : trails) render.push_back({ctx.Frame.ToRender(segment.A), ctx.Frame.ToRender(segment.B), segment.Color});
+                if (primary)
+                {
+                    // Object paths record a point per tick; 1 % of M is far below anything visible
+                    const auto& hole = ctx.Scene.Registry().get<const BlackHoleComponent>(ctx.Scene.FindByGuid(primary->first));
+                    render = SimplifyTrails(render, 0.01f * ctx.Frame.GeometricMass(hole.Mass));
+                }
+
+                if (primary && !render.empty())
+                {
+                    const auto entity = ctx.Scene.FindByGuid(primary->first);
+                    const auto& hole = ctx.Scene.Registry().get<const BlackHoleComponent>(entity);
+                    const glm::vec3 axis = glm::length(hole.SpinAxis) > 0.0f ? glm::normalize(hole.SpinAxis) : glm::vec3(0.0f, 1.0f, 0.0f);
+                    const glm::vec3 center = ctx.Frame.ToRender(primary->second.Position);
+                    const float radius = kTracerIntegrationRadius * ctx.Frame.GeometricMass(hole.Mass);
+                    // Line half-width: ~0.9 trace pixels, as an angle
+                    const float fov = glm::radians(ctx.ViewCamera.GetFov());
+                    const float halfWidth = 0.9f * 2.0f * std::tan(0.5f * fov) / static_cast<float>(std::max(ctx.TraceExtent.height, 1u));
+                    const float pad = halfWidth * (glm::length(center) + radius);
+                    m_Res.Trails = SplitTrailsForTracer(render, center, axis, radius, pad, raster);
+                    m_Res.TrailAngularHalfWidth = halfWidth;
+                    m_Res.TrailsActive = !m_Res.Trails.Segments.empty();
+                }
+                else
+                {
+                    raster.insert(raster.end(), render.begin(), render.end());
+                }
+
+                // A moving camera sees the traced image aberrated; the rasterised lines follow it
+                const auto observer = MovingCameraObserver(ctx);
+                const glm::dvec3 camera = ctx.ViewCamera.GetPosition();
+                const auto place = [&](const glm::vec3& point)
+                {
+                    return observer ? ctx.Frame.ToRender(AberrateForCamera(*observer, camera, ctx.Frame.ToWorld(point))) : point;
+                };
+                auto& vertices = m_Res.OverlayVertices;
+                vertices.reserve(raster.size() * 12);
+                for (const auto& segment : raster)
+                {
+                    const glm::vec3 a = place(segment.A);
+                    const glm::vec3 b = place(segment.B);
+                    const glm::vec3 c = segment.Color;
+                    vertices.insert(vertices.end(), {a.x, a.y, a.z, c.r, c.g, c.b, b.x, b.y, b.z, c.r, c.g, c.b});
+                }
+            }
+
+        private:
+            void UpdatePredictions(const GPP::Scene& scene, const float span, const std::uint64_t exclude)
+            {
+                // A re-launched body starts again at λ = 0, so position is part of the key
+                std::vector<std::array<double, 4>> key;
+                for (auto [entity, body] : scene.Registry().view<const GeodesicBodyComponent>().each())
+                {
+                    const bool moving = body.Status == GeodesicBodyStatus::FreeFall;
+                    key.push_back({static_cast<double>(scene.GuidOf(entity)), moving ? body.State.Lambda : -1.0, body.State.R,
+                                   body.State.Phi});
+                }
+                if (key == m_PredictionKey && span == m_PredictionSpan && exclude == m_PredictionExclude) return;
+                m_PredictionKey = std::move(key);
+                m_PredictionSpan = span;
+                m_PredictionExclude = exclude;
+                m_Predictions = PredictedOrbitsOverlay(scene, span, 240, exclude);
+            }
+
+            RenderResources& m_Res;
+            ObjectPathTracker& m_Tracker;
+            std::mutex& m_Mutex;
+            std::vector<OverlaySegment> m_Predictions;
+            std::vector<std::array<double, 4>> m_PredictionKey;
+            float m_PredictionSpan{0.0f};
+            std::uint64_t m_PredictionExclude{0};
+        };
+
+        // Draws the rasterised overlay lines OverlayGeometryStage prepared.
+        class OverlayLineStage final : public IRenderStage
+        {
+        public:
+            OverlayLineStage(RenderResources& res, DebugLines& lines) : m_Res(res), m_Lines(lines) {}
+
+            [[nodiscard]] std::string_view Name() const override { return "OverlayLines"; }
+            [[nodiscard]] bool Enabled(const RenderSettings& settings) const override
+            {
+                return settings.ShowObjectPaths || settings.ShowCharacteristicRadii || settings.ShowPredictedOrbits;
+            }
+
+            void Record(RenderFrameContext& ctx) override
+            {
+                const auto& vertices = m_Res.OverlayVertices;
+                if (vertices.empty()) return;
                 m_Lines.EnsurePipeline(m_Res, ctx.ColorFormat);
                 if (!m_Lines.Pipeline) return;
                 m_Lines.Upload(m_Res, m_Buffer, vertices);
                 // 6 floats (pos+color) per vertex, 2 vertices per segment
-                RecordLinePass(ctx, "ObjectPaths", m_Lines, m_Buffer.get(), static_cast<std::uint32_t>(vertices.size() / 6));
+                RecordLinePass(ctx, "OverlayLines", m_Lines, m_Buffer.get(), static_cast<std::uint32_t>(vertices.size() / 6));
             }
 
         private:
             RenderResources& m_Res;
             DebugLines& m_Lines;
-            ObjectPathTracker& m_Tracker;
-            std::mutex& m_Mutex;
             std::unique_ptr<VulkanBuffer> m_Buffer;
         };
 
@@ -1146,6 +1300,8 @@ namespace MoleHole
         res.UploadPool = std::make_unique<VulkanCommandPool>(res.Device, res.Logger, res.Device->GetQueueIndices().Graphics);
         const auto queue = res.Device->GetBackgroundQueue();
 
+        // Before the trace: it hands the lensed part of the trails to the tracer
+        impl.Stages.push_back(std::make_unique<OverlayGeometryStage>(res, impl.Paths, impl.PathMutex));
         auto trace = std::make_unique<TraceStage>(res, impl.StartTime);
         trace->Initialize();
         impl.Stages.push_back(std::move(trace));
@@ -1155,7 +1311,7 @@ namespace MoleHole
         impl.Stages.push_back(std::make_unique<CompositeStage>(res));
         impl.Stages.push_back(std::make_unique<GravityGridStage>(res));
         impl.Stages.push_back(std::make_unique<PhysicsDebugStage>(res, impl.Lines));
-        impl.Stages.push_back(std::make_unique<ObjectPathStage>(res, impl.Lines, impl.Paths, impl.PathMutex));
+        impl.Stages.push_back(std::make_unique<OverlayLineStage>(res, impl.Lines));
         impl.Stages.push_back(std::make_unique<MeshStage>(res));
 
         res.BlackbodyLut = GenerateBlackbodyLut(res.Device, *res.UploadPool, queue, res.Logger);
@@ -1209,6 +1365,8 @@ namespace MoleHole
         if (!res.ExposureImage) CreateOrResize(res, res.ExposureImage, vk::Extent3D{1, 1, 1}, "ViewportExposure");
         res.BloomResult = res.BloomBlurImages[0].get();
         res.MeshTrace = {};
+        res.TrailsActive = false;
+        res.OverlayVertices.clear();
 
         // A debug view shows the tracer's raw output: no glow, flare, smoothing or tone mapping on top of it
         RenderSettings settings = inputs.Settings;

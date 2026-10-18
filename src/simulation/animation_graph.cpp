@@ -102,8 +102,10 @@ namespace MoleHole
             case NodeSubType::And: return "And";
             case NodeSubType::Or: return "Or";
             case NodeSubType::LookAt: return "LookAt";
+            case NodeSubType::ClockRate: return "ClockRate";
             case NodeSubType::SpawnEntity: return "SpawnEntity";
             case NodeSubType::DestroyEntity: return "DestroyEntity";
+            case NodeSubType::LaunchOrbit: return "LaunchOrbit";
             case NodeSubType::CloneEntity: return "CloneEntity";
             case NodeSubType::Branch: return "Branch";
             case NodeSubType::For: return "For";
@@ -156,8 +158,10 @@ namespace MoleHole
             if (text == "And") return NodeSubType::And;
             if (text == "Or") return NodeSubType::Or;
             if (text == "LookAt") return NodeSubType::LookAt;
+            if (text == "ClockRate") return NodeSubType::ClockRate;
             if (text == "SpawnEntity") return NodeSubType::SpawnEntity;
             if (text == "DestroyEntity") return NodeSubType::DestroyEntity;
+            if (text == "LaunchOrbit") return NodeSubType::LaunchOrbit;
             if (text == "CloneEntity") return NodeSubType::CloneEntity;
             if (text == "Branch") return NodeSubType::Branch;
             if (text == "For") return NodeSubType::For;
@@ -500,6 +504,17 @@ namespace MoleHole
             node.Outputs = { Pin{OutputPinId(id, 0), "Rotation", PinType::Vec3, false} };
             return node;
         }
+        if (op == NodeSubType::ClockRate)
+        {
+            // dτ/dt of a preset observer at a world position around the first black hole (ObserverClockRateAt)
+            node.Name = "Clock Rate";
+            node.Inputs = {
+                Pin{InputPinId(id, 0), "Position", PinType::Vec3, true},
+                Pin{InputPinId(id, 1), "Observer", PinType::Int, true},
+            };
+            node.Outputs = { Pin{OutputPinId(id, 0), "Rate", PinType::Float, false} };
+            return node;
+        }
 
         const PinType pinType = IsBooleanOp(op) ? PinType::Bool : PinType::Float;
 
@@ -763,6 +778,17 @@ namespace MoleHole
     {
         Node node = MakeEntityNode(id, NodeSubType::DestroyEntity, "Destroy Entity");
         node.Inputs.push_back(Pin{InputPinId(id, 1), "Entity", PinType::Object, true});
+        return node;
+    }
+
+    // Puts a Geodesic Body on a circular equatorial orbit (LaunchCircularOrbitWrites); Radius in M of its hole.
+    Node CreateLaunchOrbitNode(const int id)
+    {
+        Node node = MakeEntityNode(id, NodeSubType::LaunchOrbit, "Launch Circular Orbit");
+        node.Inputs.push_back(Pin{InputPinId(id, 1), "Entity", PinType::Object, true});
+        node.Inputs.push_back(Pin{InputPinId(id, 2), "Radius", PinType::Float, true});
+        node.Inputs.push_back(Pin{InputPinId(id, 3), "Azimuth", PinType::Float, true});
+        node.Inputs.push_back(Pin{InputPinId(id, 4), "Retrograde", PinType::Bool, true});
         return node;
     }
 

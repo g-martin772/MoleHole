@@ -328,6 +328,16 @@ export namespace MoleHole
         add("Destroy Entity", "Entities", "Removes an entity from the scene.", {"delete", "remove", "kill"},
             CreateDestroyEntityNode);
 
+        add("Launch Circular Orbit", "Relativity",
+            "Puts a Geodesic Body on a circular equatorial orbit of its black hole. Radius in M (gravitational radii), "
+            "azimuth in radians about the spin axis; the body follows the exact geodesic from the next tick.",
+            {"orbit", "geodesic", "kerr", "launch", "circular", "relativity"}, CreateLaunchOrbitNode);
+        add("Clock Rate", "Relativity",
+            "How fast an observer's clock runs (dτ/dt) at a world position, compared with a distant observer. "
+            "Observer: 0 ZAMO, 1 Static, 2 Orbiting, 3 Raindrop. 0 where that observer cannot exist.",
+            {"time", "dilation", "proper time", "clock", "relativity", "redshift"},
+            [](const int id) { return CreateMathNode(id, NodeSubType::ClockRate); });
+
         registry.Add(NodeEntry{"Comment", "Utility", "A titled box that groups nodes; dragging it moves the nodes inside.",
                                {"group", "box", "note", "frame"},
                                [](AnimationGraphData& graph)

@@ -92,14 +92,14 @@ These are the changes:
 - **The inner disk is not drawn.** The integrated tracer captures rays at r₊ + 0.01 M, so the disk between
   the ISCO and about 1.01 M is not drawn. The light from there is redshifted by up to ~6 × 10⁴ and carries no
   visible flux anyway.
-- **The disk looks dimmer at the same exposure.** The disk shader scales brightness by (gT/T_peak)⁴, relative to
-  the hottest gas in its rest frame (`diskSourceRadiance` in `disk.glsl`). A near-extremal disk is hottest deep in
-  the throat (T_peak about 1.4× that of a Thorne-limit disk of the same mass and Eddington ratio), where its
-  light is strongly redshifted.
-  - At r ≥ 2 M both disks have nearly the same physical temperature (within 5 %; Page–Thorne computed
-    independently, with η = 0.42 against 0.32).
-  - On screen the visible near-extremal disk is still about (0.96/1.39)⁴ ≈ 0.2 as bright. This comes from the
-    exposure convention, not from the physics: raise the exposure for near-extremal scenes.
+- **Disk brightness (fixed).** The disk shader used to scale brightness by (gT/T_peak)⁴, relative to the
+  hottest gas in its rest frame. A near-extremal disk is hottest deep in the throat, where its light is
+  strongly redshifted.
+  - At r ≥ 2 M near-extremal and Thorne-limit disks have nearly the same physical temperature (within 5 %;
+    Page–Thorne computed independently, with η = 0.42 against 0.32).
+  - Even so, the near-extremal disk rendered about 4–5× dimmer.
+  - The exposure is now anchored to the hottest gas *as a distant observer sees it*, which barely depends on
+    spin, and both disks render alike. See `orbit_overlays_and_nodes.md` §5.
 - **The simulation is exact.** Bodies and observers integrate the double-precision spin, so Miller-like
   orbits at r ≈ 1.0001 M are integrated exactly. The test integrates five orbits there: r stays constant to
   10⁻⁶ of (r − M), and dτ/dt matches the closed form.

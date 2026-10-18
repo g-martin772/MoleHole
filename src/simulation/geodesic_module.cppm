@@ -63,6 +63,26 @@ export namespace MoleHole
         return hole.Position + hole.Frame * local * hole.LengthM;
     }
 
+    // The hole with this guid, or the first black hole in the scene for guid 0 (a Geodesic Body's default).
+    [[nodiscard]] inline std::optional<HoleFrame> FindHoleFrame(const GPP::Scene& scene, const std::uint64_t guid)
+    {
+        const auto& registry = scene.Registry();
+        if (guid != 0)
+        {
+            const auto entity = scene.FindByGuid(guid);
+            if (!scene.IsValid(entity)) return std::nullopt;
+            const auto* hole = registry.try_get<BlackHoleComponent>(entity);
+            const auto* transform = registry.try_get<GPP::TransformComponent>(entity);
+            if (!hole || !transform) return std::nullopt;
+            return MakeHoleFrame(*hole, transform->Position);
+        }
+        for (auto [entity, hole, transform] : registry.view<const BlackHoleComponent, const GPP::TransformComponent>().each())
+        {
+            return MakeHoleFrame(hole, transform.Position);
+        }
+        return std::nullopt;
+    }
+
     // Geodesic starting at `world` with the body's launch settings; nullopt where that start is impossible
     // (inside the horizon, static inside the ergosphere, orbiting inside the photon orbit, faster than light).
     [[nodiscard]] inline std::optional<GeodesicState<double>> LaunchGeodesic(const HoleFrame& hole, const glm::dvec3& world,

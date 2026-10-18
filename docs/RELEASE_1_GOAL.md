@@ -63,7 +63,7 @@ Celestial bodies need surface appearance. The shader work already done for the d
   - the clock rate dτ/dt (and "1 h here = X out there")
   - the proper acceleration the observer needs (zero in free fall)
   - when the requested observer cannot exist at the camera position and the view fell back to the ZAMO
-- **Consistent overlays.** The gravity grid, paths, debug lines, gizmos, raster meshes and mouse picking use the same aberrated camera rays as the tracer, or are hidden while a moving observer is active.
+- **Consistent overlays.** The gravity grid, paths, debug lines, gizmos, raster meshes and mouse picking use the same aberrated camera rays as the tracer, or are hidden while a moving observer is active. *(M1: the orbit overlays are aberrated for moving cameras; the gravity grid, object paths, debug lines, gizmos, raster meshes and picking still use the plain camera.)*
 - **Observer time.** Scene animation (disk rotation, hot spots, other bodies) runs on the observer's proper time, so a slow clock deep in the well sees the outside universe speed up.
 - **Sky shifts.** The background sky is a spectral source, for example stars with blackbody temperatures instead of an RGB image. It gets:
   - gravitational blueshift for observers deep in the well (frequency × 1/α, brightness × (1/α)⁴ for a ZAMO)

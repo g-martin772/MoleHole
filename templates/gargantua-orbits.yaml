@@ -1,8 +1,5 @@
 Scene: Gargantua orbits (geodesic bodies)
 SchemaVersion: 2
-# One second of runner time is 6000 s of coordinate time; Gargantua's GM/c³ is about 490 s.
-# The camera rides a geodesic orbit; the animation graph "Camera looks at Gargantua" turns it towards the hole
-# every tick (Tick -> Look At(camera position, hole position) -> Transform.Rotation).
 TimeScale: 6000
 Entities:
   - Guid: 7710000000000000001
@@ -15,11 +12,26 @@ Entities:
         Position: [0, 0, 0]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
+      RigidBody:
+        Type: Static
+        Mass: 1
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: false
+      Collider:
+        Shape: Sphere
+        HalfExtents: [0.5, 0.5, 0.5]
+        Radius: 295325007610.0249
+        HalfHeight: 0.5
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: true
       BlackHole:
-        Mass: {value: 1.0e8, unit: Msun}
-        SpinRange: NearExtremal
+        Mass: 1.9884098706980505e+38
+        SpinRange: ThorneLimit
+        Spin: 0.968
         SpinGap: 1.3e-14
-        Spin: 0.998
         Charge: 0
         SpinAxis: [0, 1, 0]
   - Guid: 7710000000000000002
@@ -29,14 +41,15 @@ Entities:
         Name: Inner orbit (6 M)
         TypeTag: Sphere
       Transform:
-        Position: {value: [6.0, 0, 0], unit: AU}
+        Position: [897587224200, 0, 0]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Sphere:
-        Radius: {value: 0.25, unit: AU}
+        Radius: 37399467675
         Spin: 0
         Color: [0.9, 0.55, 0.3]
         SpinAxis: [0, 1, 0]
+        TexturePath: ""
       GeodesicBody:
         BlackHole: 0
         Launch: Orbiting
@@ -49,14 +62,15 @@ Entities:
         Name: Raindrop
         TypeTag: Sphere
       Transform:
-        Position: {value: [-3.0, 2.0, -9.0], unit: AU}
+        Position: [-448793612100, 299195741400, -1346380836300]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Sphere:
-        Radius: {value: 0.25, unit: AU}
+        Radius: 37399467675
         Spin: 0
-        Color: [0.4, 0.7, 1.0]
+        Color: [0.4, 0.7, 1]
         SpinAxis: [0, 1, 0]
+        TexturePath: ""
       GeodesicBody:
         BlackHole: 0
         Launch: Raindrop
@@ -69,13 +83,13 @@ Entities:
         Name: Camera (orbiting, 15 M)
         TypeTag: Camera
       Transform:
-        Position: {value: [0, 4.0, 14.0], unit: AU}
+        Position: [0, 598391482800, 2094370189800]
         Rotation: [-0.138701, 0, 0, 0.990334]
         Scale: [1, 1, 1]
       Camera:
         Fov: 70
-        NearPlane: 1.0e6
-        FarPlane: {value: 1000, unit: AU}
+        NearPlane: 1000000
+        FarPlane: 149597870700000
         Primary: true
       GeodesicBody:
         BlackHole: 0
@@ -90,8 +104,7 @@ Graphs:
       Entity: 0
       Graph:
         NextId: 15
-        Variables:
-          []
+        Variables: []
         Nodes:
           - Id: 1
             Name: Tick
@@ -102,8 +115,7 @@ Graphs:
             ConstantValue:
               T: None
             Position: [-80, 0]
-            Inputs:
-              []
+            Inputs: []
             Outputs:
               - Id: 1500
                 Name: Out
@@ -122,8 +134,7 @@ Graphs:
             ConstantValue:
               T: None
             Position: [-520, 140]
-            Inputs:
-              []
+            Inputs: []
             Outputs:
               - Id: 2500
                 Name: Entity
@@ -165,8 +176,7 @@ Graphs:
             ConstantValue:
               T: None
             Position: [-520, 320]
-            Inputs:
-              []
+            Inputs: []
             Outputs:
               - Id: 4500
                 Name: Entity

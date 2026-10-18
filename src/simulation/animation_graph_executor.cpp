@@ -471,6 +471,13 @@ namespace MoleHole
             }
             break;
         }
+        case NodeSubType::ClockRate:
+        {
+            const Value position = EvaluatePinValue(in[0].Id, ctx);
+            if (!std::holds_alternative<glm::vec3>(position)) break;
+            const int observer = GetValueAs<int>(EvaluatePinValue(in[1].Id, ctx), 0);
+            return static_cast<float>(ObserverClockRateAt(ctx.Scene, glm::dvec3(std::get<glm::vec3>(position)), observer));
+        }
         case NodeSubType::And:
         {
             const bool a = GetValueAs<bool>(EvaluatePinValue(in[0].Id, ctx), false);
@@ -637,6 +644,20 @@ namespace MoleHole
             }
             ctx.Spawned.erase(guid);
             ctx.Writes.push_back(GPP::DestroyEntityCommand{guid});
+        }
+        else if (node->SubType == NodeSubType::LaunchOrbit && node->Inputs.size() >= 5)
+        {
+            const std::uint64_t guid = asGuid(EvaluatePinValue(node->Inputs[1].Id, ctx));
+            const float radius = GetValueAs<float>(EvaluatePinValue(node->Inputs[2].Id, ctx), 0.0f);
+            const float azimuth = GetValueAs<float>(EvaluatePinValue(node->Inputs[3].Id, ctx), 0.0f);
+            const bool retrograde = GetValueAs<bool>(EvaluatePinValue(node->Inputs[4].Id, ctx), false);
+            const auto writes = LaunchCircularOrbitWrites(ctx.Scene, guid, radius, azimuth, retrograde);
+            if (!writes)
+            {
+                Report(node, TraceSeverity::Warning, writes.error());
+                return;
+            }
+            for (const auto& write : *writes) ctx.Writes.push_back(write);
         }
         else if (node->SubType == NodeSubType::CloneEntity && node->Inputs.size() >= 3)
         {

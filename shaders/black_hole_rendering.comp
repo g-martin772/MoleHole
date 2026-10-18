@@ -19,6 +19,7 @@ const float EPSILON = 0.00005f;
 #ifdef GPP_MESH_TRACE
 #include "mesh_trace.glsl"
 #endif
+#include "trails.glsl"
 #include "ray_tracing.glsl"
 
 void main() {

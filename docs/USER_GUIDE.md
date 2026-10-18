@@ -159,6 +159,11 @@ Render:
 - `post.tonemap` (None / Reinhard / ACES) with `post.exposure_mode` (Manual / Auto), `post.exposure` (EV) and `post.exposure_key`. Bloom and flare thresholds apply to the exposed image. None shows the raw tracer output like before HDR
 - `transport.gpu_precision` f64 needs `shaderFloat64`; a setting the GPU cannot run is greyed with the reason, and loaded profiles fall back to the default (shown in the Render window)
 - Mesh objects are rasterised over the traced image (not lensed, always in front). The Integrated transport does not draw spheres yet
+- `overlay.characteristic_radii`: every black hole's horizon (grey), ergosphere (purple, in two meridian planes), equatorial photon orbit (orange), marginally bound orbit (green) and ISCO (blue). Bright = prograde, dim = retrograde With the Integrated transport the tracer draws the rings itself, lensed like the disk (the plain lines would sit inside the lensed shadow); object path trails and predicted orbits are traced too inside 50 M of the hole (lensed, with secondary images and Einstein-ring arcs) and are plain aberrated lines further out.
+- `overlay.predicted_orbits`: each Geodesic Body's future path, integrated ahead from its current state. Bright now, dim later, stops at the horizon
+- `overlay.prediction_span`: how far ahead to predict, as coordinate time in M = GM/c³ of the body's hole
+- Like the other overlays, these are rasterised: not lensed or aberrated
+- Disk brightness: exposure is anchored to the hottest gas as seen from far away (face-on), not to its rest-frame peak. Schwarzschild disks look as before; spinning disks are brighter (about 1.4× at a* = 0.5, 3× at 0.9, 20× at 0.998) and near-extremal disks look like Thorne-limit ones. Lower `post.exposure` for old high-spin scenes if needed. Background: `docs/notes/near_extremal.md`, `docs/notes/orbit_overlays_and_nodes.md`
 
 ### Environment
 - `GPP_GPU=<name part>`: choose the GPU by name instead of the highest score
@@ -203,6 +208,7 @@ Render:
 - Flow Control: Branch, For Loop, Sequence, Do Once, Gate, Switch, While, For Each Entity
 - Latent: Delay, Wait Until, Wait For Event, Interpolate (Luau only)
 - Entities: Spawn, Clone, Destroy
+- Relativity: Launch Circular Orbit, Clock Rate
 - Objects: Get / Decompose / Set per component (auto-generated for every component)
 - Math: add, sub, mul, div, min, max, lerp, clamp, sin, cos, sqrt, length, distance, look-at…
 - Variables: typed, per graph
@@ -218,6 +224,12 @@ Premade, prewired groups. Add menu → Combos, fill few fields.
 - Fade Property
 - On Start Set Property
 - Save selection as combo → your own library (`combos/*.yaml`)
+
+### Relativity nodes
+- Launch Circular Orbit: inputs Entity (with a Geodesic Body), Radius (M of its hole), Azimuth (rad about the spin axis), Retrograde. Puts the body on a circular equatorial orbit; the simulation follows it from the next tick. Warns when impossible (inside the photon orbit, no Geodesic Body)
+- Clock Rate: inputs world Position and Observer (0 ZAMO, 1 Static, 2 Orbiting, 3 Raindrop). Outputs dτ/dt against a distant observer; 0 where that observer cannot exist
+- Both behave identically in the interpreter and the Luau runtime
+- A Geodesic Body's Proper time, Clock rate and Speed are readable with the regular Get / Decompose Geodesic Body nodes
 
 ### Debugging
 - Executing wires highlight
@@ -284,3 +296,5 @@ Graphs: ...
 ```
 - Templates in `templates/`
 - 
+- `templates/m1-orbits.yaml`: milestone M1 demo. Kerr hole (10^6 Msun, a* = 0.9), prograde and retrograde circular orbits at 10 M (frame dragging: different periods), an inclined eccentric orbit (periapsis and nodal precession), a raindrop, and a scene camera riding its own orbit with an animation graph that keeps the hole in view. Its "M1 Orbits" render profile turns on both orbit overlays
+- `templates/gargantua-orbits.yaml`: near-extremal Gargantua with orbiting bodies and an orbiting camera

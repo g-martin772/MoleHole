@@ -218,6 +218,31 @@ namespace MoleHole
                 call.PushValue(GPP::LookAtEulerDegrees(std::get<glm::vec3>(from), std::get<glm::vec3>(target)));
                 return 1;
             });
+            vm.Register("host", "clockrate", [this](GPP::LuauNativeCall& call)
+            {
+                const Value position = call.ToValue(1, GPP::LuauType::Vec3);
+                if (!std::holds_alternative<glm::vec3>(position)) return 0;
+                const int observer = static_cast<int>(call.Number(2));
+                call.PushValue(static_cast<float>(ObserverClockRateAt(*Scene, glm::dvec3(std::get<glm::vec3>(position)), observer)));
+                return 1;
+            });
+            vm.Register("host", "launchorbit", [this](GPP::LuauNativeCall& call)
+            {
+                const int node = static_cast<int>(call.Number(1));
+                const std::uint64_t guid = call.IsEntity(2) ? call.Entity(2) : 0;
+                const float radius = call.IsNil(3) ? 0.0f : static_cast<float>(call.Number(3));
+                const float azimuth = call.IsNil(4) ? 0.0f : static_cast<float>(call.Number(4));
+                const GPP::LuauValue flag = call.ToValue(5, GPP::LuauType::Bool);
+                const bool retrograde = std::holds_alternative<bool>(flag) && std::get<bool>(flag);
+                const auto writes = LaunchCircularOrbitWrites(*Scene, guid, radius, azimuth, retrograde);
+                if (!writes)
+                {
+                    Report(node, TraceSeverity::Warning, writes.error());
+                    return 0;
+                }
+                for (const auto& write : *writes) Writes->push_back(write);
+                return 0;
+            });
             vm.Register("host", "entity", [this](GPP::LuauNativeCall& call)
             {
                 const int node = static_cast<int>(call.Number(1));

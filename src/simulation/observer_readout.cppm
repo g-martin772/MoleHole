@@ -82,6 +82,41 @@ export namespace MoleHole
         return ZamoVelocity(primary->second.Metric, body->State);
     }
 
+    // The camera observer exactly as the integrated renderer applies it (FillObserverFromBody, FillObserverData):
+    // its velocity relative to the ZAMO of the first hole, and that hole's frame in the metric used for it (the
+    // render metric for presets, the full metric for a ridden body). nullopt when the camera is the ZAMO itself or
+    // there is no hole.
+    struct CameraObserverFrame
+    {
+        Vector3 Velocity{};
+        HoleFrame Hole{};
+    };
+
+    [[nodiscard]] inline std::optional<CameraObserverFrame> FindCameraObserver(const GPP::Scene& scene, const std::int32_t metricType,
+                                                                          const ObserverKind kind, const OrbitDirection direction,
+                                                                          const glm::dvec3& cameraPositionM,
+                                                                          const std::uint64_t observerGuid)
+    {
+        const auto primary = PrimaryHole(scene);
+        if (!primary) return std::nullopt;
+        const auto entity = observerGuid != 0 ? scene.FindByGuid(observerGuid) : decltype(scene.FindByGuid(0)){};
+        if (observerGuid != 0 && scene.IsValid(entity) && scene.Registry().all_of<GeodesicBodyComponent>(entity))
+        {
+            const auto velocity = BodyObserverVelocity(scene, observerGuid);
+            if (!velocity) return std::nullopt;
+            return CameraObserverFrame{*velocity, primary->second};
+        }
+        if (kind == ObserverKind::Zamo) return std::nullopt;
+        const auto& component = scene.Registry().get<const BlackHoleComponent>(scene.FindByGuid(primary->first));
+        const auto physical = BlackHoleMetric(component);
+        HoleFrame view = primary->second;
+        view.Metric = MakeKerrNewmanParams(metricType, 1.0, physical.SpinParameter, physical.Charge, kExtremalHorizonParameter);
+        const auto bl = WorldToBoyerLindquist(view, cameraPositionM);
+        const auto velocity = ObserverVelocity(view.Metric, kind, bl.x, bl.y, direction);
+        if (!velocity) return std::nullopt;
+        return CameraObserverFrame{*velocity, view};
+    }
+
     [[nodiscard]] inline std::string_view ObserverName(const ObserverKind kind)
     {
         switch (kind)

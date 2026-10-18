@@ -53,9 +53,10 @@ export namespace MoleHole
         Clamp,
         And, Or,
         LookAt,
+        ClockRate,
 
         // Entity
-        SpawnEntity, DestroyEntity, CloneEntity,
+        SpawnEntity, DestroyEntity, CloneEntity, LaunchOrbit,
 
         // Control
         Branch,
@@ -204,6 +205,7 @@ export namespace MoleHole
     [[nodiscard]] Node CreateRerouteNode(int id, PinType type);
     [[nodiscard]] Node CreateSpawnEntityNode(int id);
     [[nodiscard]] Node CreateDestroyEntityNode(int id);
+    [[nodiscard]] Node CreateLaunchOrbitNode(int id);
     [[nodiscard]] Node CreateCloneEntityNode(int id);
 
     [[nodiscard]] Node CreateDelayNode(int id);
