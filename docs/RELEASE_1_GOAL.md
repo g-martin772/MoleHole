@@ -69,7 +69,6 @@ Celestial bodies need surface appearance. The shader work already done for the d
 - Bound, unbound and plunging orbits, the ISCO, the photon sphere and the marginally bound orbit, all visible as overlays.
 - Relativistic effects: periapsis precession, frame dragging (Lense–Thirring), and prograde/retrograde differences.
 - Orbit prediction trail for any body or ship, with a patched-conic style planner for transfers such as the slingshot around Gargantua's intermediate-mass black hole used in the film.
-- Spin of Gargantua near maximal (a/M ≈ 0.99999…) must be supported without numerical breakdown.
 
 ## Cross-cutting requirements
 

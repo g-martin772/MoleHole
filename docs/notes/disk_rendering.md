@@ -141,7 +141,7 @@ geodesics at Ω(r_k), so their period and their flickering redshift are physical
 observed orbiting near the ISCO of Sgr A*.
 
 - Balbus, S. A. & Hawley, J. F. (1991). *A powerful local shear instability in weakly magnetized disks. I.* ApJ 376, 214.
-- Broderick, A. E. & Loeb, A. (2006). *Imaging bright-spots in the accretion flow near the black hole horizon of Sgr A\*.* MNRAS 367, 905.
+- Broderick, A. E. & Loeb, A. (2006). *Imaging optically-thin hotspots near the black hole horizon of Sgr A\* at radio and near-infrared wavelengths.* MNRAS 367, 905. doi:10.1111/j.1365-2966.2006.10152.x
 - GRAVITY Collaboration (2018). *Detection of orbital motions near the last stable circular orbit of the massive black hole SgrA\*.* A&A 618, L10.
 - Gustavson, S. (2005). *Simplex noise demystified.* Linköping University technical note.
 

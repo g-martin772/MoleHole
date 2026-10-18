@@ -84,31 +84,49 @@ export namespace MoleHole
         };
     }
 
-    // Angular velocity dφ/dt of a prograde circular equatorial geodesic at Boyer–Lindquist radius r.
-    // Reduces to 1 / (r^{3/2} / √M + a) for Kerr.
-    [[nodiscard]] inline double ProgradeOrbitalFrequency(const KerrNewmanParams& p, const double r)
+    // Prograde orbits co-rotate with the hole (L > 0 for a > 0), retrograde ones counter-rotate.
+    enum class OrbitDirection : std::int32_t { Prograde = 0, Retrograde = 1 };
+
+    // Angular velocity dφ/dt of a circular equatorial geodesic at Boyer–Lindquist radius r.
+    // Reduces to ±1 / (r^{3/2} / √M ± a) for Kerr.
+    [[nodiscard]] inline double OrbitalFrequency(const KerrNewmanParams& p, const double r, const OrbitDirection direction)
     {
         const auto g = EvaluateEquatorialMetric(p, r);
         const double discriminant = g.DGtphi * g.DGtphi - g.DGtt * g.DGphiphi;
         if (discriminant < 0.0 || g.DGphiphi == 0.0) return std::numeric_limits<double>::quiet_NaN();
-        return (-g.DGtphi + std::sqrt(discriminant)) / g.DGphiphi;
+        const double root = direction == OrbitDirection::Prograde ? std::sqrt(discriminant) : -std::sqrt(discriminant);
+        return (-g.DGtphi + root) / g.DGphiphi;
     }
 
-    // Specific energy -u_t of the prograde circular orbit at r; +inf where no timelike orbit exists
-    // (at or inside the photon orbit).
-    [[nodiscard]] inline double CircularOrbitEnergy(const KerrNewmanParams& p, const double r)
+    [[nodiscard]] inline double ProgradeOrbitalFrequency(const KerrNewmanParams& p, const double r)
     {
-        const double omega = ProgradeOrbitalFrequency(p, r);
-        if (!std::isfinite(omega)) return std::numeric_limits<double>::infinity();
+        return OrbitalFrequency(p, r, OrbitDirection::Prograde);
+    }
+
+    // -u_t u^t / (u^t)^2 of the circular orbit at r: positive where the orbit is timelike, zero on the photon orbit.
+    [[nodiscard]] inline double CircularOrbitNorm(const KerrNewmanParams& p, const double r, const OrbitDirection direction)
+    {
+        const double omega = OrbitalFrequency(p, r, direction);
+        if (!std::isfinite(omega)) return std::numeric_limits<double>::quiet_NaN();
         const auto g = EvaluateEquatorialMetric(p, r);
-        const double norm = -(g.Gtt + 2.0 * g.Gtphi * omega + g.Gphiphi * omega * omega);
+        return -(g.Gtt + 2.0 * g.Gtphi * omega + g.Gphiphi * omega * omega);
+    }
+
+    // Specific energy -u_t of the circular orbit at r; +inf where no timelike orbit exists
+    // (at or inside the photon orbit).
+    [[nodiscard]] inline double CircularOrbitEnergy(const KerrNewmanParams& p, const double r,
+                                                    const OrbitDirection direction = OrbitDirection::Prograde)
+    {
+        const double norm = CircularOrbitNorm(p, r, direction);
         if (!(norm > 0.0)) return std::numeric_limits<double>::infinity();
+        const double omega = OrbitalFrequency(p, r, direction);
+        const auto g = EvaluateEquatorialMetric(p, r);
         return -(g.Gtt + g.Gtphi * omega) / std::sqrt(norm);
     }
 
-    // Innermost stable circular orbit (prograde): the minimum of E(r) over the circular orbits.
+    // Innermost stable circular orbit: the minimum of E(r) over the circular orbits.
     // Solved numerically so it covers charge as well, where no closed form like Bardeen–Press–Teukolsky's exists.
-    [[nodiscard]] inline double ProgradeIscoRadius(const KerrNewmanParams& p)
+    [[nodiscard]] inline double IscoRadius(const KerrNewmanParams& p, const OrbitDirection direction)
     {
         if (p.Mass <= 0.0) return 0.0;
 
@@ -121,7 +139,7 @@ export namespace MoleHole
         for (int i = 0; i <= kSamples; ++i)
         {
             const double r = rLow + (rHigh - rLow) * static_cast<double>(i) / kSamples;
-            const double energy = CircularOrbitEnergy(p, r);
+            const double energy = CircularOrbitEnergy(p, r, direction);
             if (energy < bestEnergy)
             {
                 bestEnergy = energy;
@@ -138,20 +156,57 @@ export namespace MoleHole
         {
             const double x1 = hi - kInvPhi * (hi - lo);
             const double x2 = lo + kInvPhi * (hi - lo);
-            if (CircularOrbitEnergy(p, x1) < CircularOrbitEnergy(p, x2)) hi = x2;
+            if (CircularOrbitEnergy(p, x1, direction) < CircularOrbitEnergy(p, x2, direction)) hi = x2;
             else lo = x1;
         }
         return 0.5 * (lo + hi);
     }
 
-    // Specific angular momentum u_phi of the prograde circular orbit at r.
-    [[nodiscard]] inline double CircularOrbitAngularMomentum(const KerrNewmanParams& p, const double r)
+    [[nodiscard]] inline double ProgradeIscoRadius(const KerrNewmanParams& p)
     {
-        const double omega = ProgradeOrbitalFrequency(p, r);
+        return IscoRadius(p, OrbitDirection::Prograde);
+    }
+
+    // Specific angular momentum u_phi of the circular orbit at r.
+    [[nodiscard]] inline double CircularOrbitAngularMomentum(const KerrNewmanParams& p, const double r,
+                                                             const OrbitDirection direction = OrbitDirection::Prograde)
+    {
+        const double norm = CircularOrbitNorm(p, r, direction);
+        if (!(norm > 0.0)) return std::numeric_limits<double>::quiet_NaN();
+        const double omega = OrbitalFrequency(p, r, direction);
         const auto g = EvaluateEquatorialMetric(p, r);
-        const double norm = -(g.Gtt + 2.0 * g.Gtphi * omega + g.Gphiphi * omega * omega);
-        if (!std::isfinite(omega) || !(norm > 0.0)) return std::numeric_limits<double>::quiet_NaN();
         return (g.Gtphi + g.Gphiphi * omega) / std::sqrt(norm);
+    }
+
+    // Bisection for the boundary of a predicate that is false at lo and true at hi.
+    [[nodiscard]] inline double BisectBoundary(double lo, double hi, const std::function<bool(double)>& isAbove)
+    {
+        for (int i = 0; i < 200 && hi - lo > 1e-15 * hi; ++i)
+        {
+            const double mid = 0.5 * (lo + hi);
+            if (isAbove(mid)) hi = mid;
+            else lo = mid;
+        }
+        return 0.5 * (lo + hi);
+    }
+
+    // Circular photon orbit in the equatorial plane: where circular orbits stop being timelike. Every circular
+    // orbit further out is timelike, every one further in (down to the horizon) is spacelike.
+    // Kerr: 2M (1 + cos(2/3 arccos(∓a/M))); Reissner–Nordström: (3M + √(9M² − 8Q²)) / 2.
+    [[nodiscard]] inline double PhotonOrbitRadius(const KerrNewmanParams& p, const OrbitDirection direction)
+    {
+        if (p.Mass <= 0.0) return 0.0;
+        return BisectBoundary(OuterHorizonRadius(p), 12.0 * p.Mass,
+                              [&](const double r) { return CircularOrbitNorm(p, r, direction) > 0.0; });
+    }
+
+    // Marginally bound circular orbit, E = 1: a particle falling in from rest at infinity can reach it but no
+    // closer without being captured. Kerr: 2M ∓ a + 2 √M √(M ∓ a).
+    [[nodiscard]] inline double MarginallyBoundRadius(const KerrNewmanParams& p, const OrbitDirection direction)
+    {
+        if (p.Mass <= 0.0) return 0.0;
+        return BisectBoundary(PhotonOrbitRadius(p, direction), IscoRadius(p, direction),
+                              [&](const double r) { return CircularOrbitEnergy(p, r, direction) < 1.0; });
     }
 
     // Fraction of rest-mass energy radiated by gas spiralling down to the ISCO: 1 - E_isco.

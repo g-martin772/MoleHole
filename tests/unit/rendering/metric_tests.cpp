@@ -16,6 +16,14 @@ namespace
         const double z2 = std::sqrt(3.0 * chi * chi + z1 * z1);
         return 3.0 + z2 - std::sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
     }
+
+    // Same equation, lower sign: retrograde ISCO.
+    double BardeenPressTeukolskyRetrogradeIsco(const double chi)
+    {
+        const double z1 = 1.0 + std::cbrt(1.0 - chi * chi) * (std::cbrt(1.0 + chi) + std::cbrt(1.0 - chi));
+        const double z2 = std::sqrt(3.0 * chi * chi + z1 * z1);
+        return 3.0 + z2 + std::sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
+    }
 }
 
 TEST_CASE("Metric type zeroes the parameters it does not model", "[rendering][metric]")
@@ -79,6 +87,44 @@ TEST_CASE("ISCO matches Bardeen-Press-Teukolsky for Kerr", "[rendering][metric]"
         CHECK(ProgradeIscoRadius({.Mass = 1.0, .SpinParameter = chi}) ==
               Approx(BardeenPressTeukolskyIsco(chi)).epsilon(1e-5));
     }
+}
+
+TEST_CASE("Retrograde orbits match the Kerr closed forms", "[rendering][metric]")
+{
+    for (const double a : {0.0, 0.5, 0.9})
+    {
+        const KerrNewmanParams p{.Mass = 1.0, .SpinParameter = a};
+        for (const double r : {10.0, 15.0})
+        {
+            CHECK(OrbitalFrequency(p, r, OrbitDirection::Retrograde) == Approx(-1.0 / (std::pow(r, 1.5) - a)));
+        }
+        CHECK(CircularOrbitAngularMomentum(p, 10.0, OrbitDirection::Retrograde) < 0.0);
+    }
+    for (const double chi : {0.3, 0.7, 0.998})
+    {
+        CHECK(IscoRadius({.Mass = 1.0, .SpinParameter = chi}, OrbitDirection::Retrograde) ==
+              Approx(BardeenPressTeukolskyRetrogradeIsco(chi)).epsilon(1e-5));
+    }
+}
+
+TEST_CASE("Photon orbit and marginally bound orbit match Bardeen-Press-Teukolsky", "[rendering][metric]")
+{
+    for (const double a : {0.0, 0.5, 0.9, 0.998})
+    {
+        INFO(a);
+        const KerrNewmanParams p{.Mass = 1.0, .SpinParameter = a};
+        CHECK(PhotonOrbitRadius(p, OrbitDirection::Prograde) ==
+              Approx(2.0 * (1.0 + std::cos(2.0 / 3.0 * std::acos(-a)))).epsilon(1e-9));
+        CHECK(PhotonOrbitRadius(p, OrbitDirection::Retrograde) ==
+              Approx(2.0 * (1.0 + std::cos(2.0 / 3.0 * std::acos(a)))).epsilon(1e-9));
+        CHECK(MarginallyBoundRadius(p, OrbitDirection::Prograde) ==
+              Approx(2.0 - a + 2.0 * std::sqrt(1.0 - a)).epsilon(1e-8));
+        CHECK(MarginallyBoundRadius(p, OrbitDirection::Retrograde) ==
+              Approx(2.0 + a + 2.0 * std::sqrt(1.0 + a)).epsilon(1e-8));
+    }
+    // Reissner-Nordstrom photon sphere (3M + sqrt(9M^2 - 8Q^2)) / 2
+    CHECK(PhotonOrbitRadius({.Mass = 1.0, .Charge = 0.8}, OrbitDirection::Prograde) ==
+          Approx((3.0 + std::sqrt(9.0 - 8.0 * 0.64)) / 2.0).epsilon(1e-9));
 }
 
 TEST_CASE("ISCO of extremal Reissner-Nordstrom is 4M", "[rendering][metric]")
