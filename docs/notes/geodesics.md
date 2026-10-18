@@ -76,7 +76,8 @@ Sources:
 ## 3. Horizon and coordinate singularities
 
 - **Horizon.** Boyer–Lindquist coordinates are singular at r₊ = M + √(M² − a² − Q²). A geodesic is reported
-  as `Captured` once r < r₊ + `HorizonMargin`·M (default 10⁻³ M).
+  as `Captured` once r < r₊ + `HorizonMargin` · max(√(M² − a² − Q²), 10⁻⁶ M). The default margin of 10⁻³
+  gives 10⁻³ M for Schwarzschild and shrinks for near-extremal holes (`near_extremal.md` §3).
 - **Proper time stays finite.** The infall itself is regular in proper time. The radial-plunge test checks
   τ against the exact cycloid all the way down to the margin.
 - **Coordinate time diverges.** dt/dλ ∝ 1/Δ, so a distant observer never sees the crossing. In
@@ -131,11 +132,14 @@ Sources:
 
 ## 6. Spin limit
 
-Spin and charge are clamped to √(a² + Q²) ≤ 0.998 M (`kMaxHorizonParameter`). This is Thorne's limit for
-the spin that disk accretion can produce, because the radiation the hole captures from the disk
-counteracts further spin-up. It also keeps every scene away from near-extremal holes, where Δ becomes tiny
-outside the horizon and the integration becomes stiff. The release goal deliberately keeps Gargantua at
-this limit.
+By default, spin and charge are clamped to √(a² + Q²) ≤ 0.998 M (`kMaxHorizonParameter`). This is Thorne's
+limit for the spin that disk accretion can produce, because the radiation the hole captures from the disk
+counteracts further spin-up.
+
+A black hole can instead be set to the near-extremal spin range, with a/M up to 1 − 10⁻¹⁵, for
+*Interstellar*'s Gargantua. In that range Δ is far below the size of its terms near the horizon. The
+integrator therefore evaluates Δ as (r − r₊)(r − r₋), and the capture margin shrinks with the horizon gap.
+Details and tests are in `near_extremal.md`.
 
 - Thorne, K. S. (1974). *Disk-accretion onto a black hole. II. Evolution of the hole.* ApJ 191, 507. doi:10.1086/152991
 

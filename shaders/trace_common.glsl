@@ -60,6 +60,10 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
 
     vec4 u_diskInfo[8];      // x = peak temperature [K], y = inner radius (ISCO), z = outer radius
     vec4 u_diskProfile[128]; // per hole 64 samples of T / peak, log-spaced between u_diskInfo.y and .z
+
+    // Camera velocity relative to the local ZAMO of the first hole along (e_r, e_theta, e_phi), in c;
+    // w = 1 when it is not the ZAMO itself (src/physics/observer.cppm)
+    vec4 u_observerVelocity;
 };
 
 layout(set = 0, binding = 2) uniform sampler2D u_skyboxTexture;

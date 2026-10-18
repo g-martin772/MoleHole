@@ -166,6 +166,17 @@ void launchPhoton(Spacetime st, real r, real theta, vec3 n, out real E, out real
     pth = sqrt(Sigma) * real(n.y);
 }
 
+// Aberration and Doppler shift between co-located frames (BoostPhoton in src/physics/observer.cppm). k is the
+// photon's unit propagation direction in a frame moving with velocity v through the target frame; returns its
+// direction in the target frame and energyRatio = eps_target / eps_source = gamma (1 + v . k).
+// (gamma - 1) / v^2 is written as gamma^2 / (gamma + 1), which does not cancel at low speed.
+void boostPhoton(vec3 v, vec3 k, out vec3 kTarget, out float energyRatio) {
+    float gamma = inversesqrt(max(1.0f - dot(v, v), 1e-12f));
+    float along = dot(v, k);
+    energyRatio = gamma * (1.0f + along);
+    kTarget = (k + (gamma * gamma / (gamma + 1.0f) * along + gamma) * v) / energyRatio;
+}
+
 // Angular velocity of a prograde circular equatorial orbit at radius r (see ProgradeOrbitalFrequency).
 real keplerOmega(Spacetime st, real r) {
     real a = st.a;

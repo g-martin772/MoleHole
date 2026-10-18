@@ -350,6 +350,21 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     mat3 frame = spinFrame(bh.spinAxis);
     mat3 toLocal = transpose(frame);
 
+    // A moving camera (not the ZAMO) sees the sky aberrated and the disk Doppler-shifted. Its pixel direction is
+    // turned into the direction the ZAMO at the camera sees the same photon from, and the energy ratio between the
+    // two frames is kept for the disk colour. See docs/notes/observers.md.
+    float observerShift = 1.0f;
+    if (u_observerVelocity.w > 0.5f) {
+        rvec3 observerBL = cartesianToBL(rvec3(toLocal * (rayOrigin - bh.position)), st.a);
+        vec3 er, eTheta, ePhi;
+        blBasis(observerBL.x, observerBL.y, observerBL.z, st.a, er, eTheta, ePhi);
+        vec3 look = toLocal * dir;
+        vec3 k = -vec3(dot(look, er), dot(look, eTheta), dot(look, ePhi));
+        vec3 kZamo;
+        boostPhoton(u_observerVelocity.xyz, k, kZamo, observerShift);
+        dir = normalize(frame * -(kZamo.x * er + kZamo.y * eTheta + kZamo.z * ePhi));
+    }
+
     float influenceRadius = INTEGRATION_RADIUS_M * mass;
     vec3 marchOrigin = rayOrigin;
     {
@@ -387,7 +402,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     // Frequencies are measured relative to the launch ZAMO; refer them to the camera's ZAMO instead.
     real cameraAlpha, cameraOmega;
     zamo(st, cameraBL.x, cameraBL.y, cameraAlpha, cameraOmega);
-    float cameraEnergy = float((E - cameraOmega * L) / max(cameraAlpha, real(1e-6)));
+    float cameraEnergy = float((E - cameraOmega * L) / max(cameraAlpha, real(1e-6))) / observerShift;
 
     rvec4 y = rvec4(startBL.x, startBL.y, pr, pth);
     real phi = startBL.z;

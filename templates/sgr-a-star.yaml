@@ -1,6 +1,5 @@
 Scene: Sgr A* (scale test)
 SchemaVersion: 2
-TimeScale: 1
 Entities:
   - Guid: 7700000000000000001
     Components:
@@ -9,14 +8,29 @@ Entities:
         Name: Sgr A*
         TypeTag: BlackHole
       Transform:
-        Position: [0, 0, 0]
+        Position: [2432397769.023712, 7163951281.128586, 2015768179.9552612]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
+      RigidBody:
+        Type: Static
+        Mass: 1
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: false
+      Collider:
+        Shape: Sphere
+        HalfExtents: [0.5, 0.5, 0.5]
+        Radius: 12690115577.002771
+        HalfHeight: 0.5
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: true
       BlackHole:
-        Mass: {value: 4.297e6, unit: Msun}
-        Spin: 0.5
+        Mass: 8.544197214389523e+36
+        Spin: 0.728
         Charge: 0
-        SpinAxis: [0, 1, 0]
+        SpinAxis: [-0.1, 1, -0.22]
   - Guid: 7700000000000000002
     Components:
       Metadata:
@@ -24,11 +38,58 @@ Entities:
         Name: Camera
         TypeTag: Camera
       Transform:
-        Position: {value: [0, 0.4, 1.2], unit: AU}
+        Position: [0, 59839148280, 179517444840]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Camera:
         Fov: 60
-        NearPlane: 1.0e6
-        FarPlane: {value: 100, unit: AU}
+        NearPlane: 1000000
+        FarPlane: 14959787070000
         Primary: true
+Render:
+  Version: 1
+  Contexts:
+    Edit: Interstellar
+    Play: Legacy
+    Reference: Reference
+    Export: Legacy
+  Profiles:
+    - Name: Legacy
+      Description: Render settings from before profiles existed.
+      Base: Lensed
+      Set:
+        transport.step_size: 0.0335
+        transport.max_steps: 112044
+        transport.adaptive_rate: 0.52
+        disk.volumetric: true
+        disk.height: 0.832
+        disk.speed: 0.04
+        disk.noise_scale: 5
+        disk.noise_lod: 3.751
+        camera.third_person_height: 20.8
+        post.bloom_threshold: 0.68
+        post.bloom_passes: 7
+        post.bloom_intensity: 8.932
+        post.lens_flare: false
+        post.flare_intensity: 0
+        post.flare_threshold: 5
+    - Name: Interstellar
+      Description: Geodesic integration at reference tolerance with the volumetric disk. For final renders.
+      Base: Reference
+      Set:
+        spacetime.solution: KerrNewman
+        transport.step_size: 0.0504
+        transport.max_steps: 50479
+        disk.height: 0.184
+        disk.speed: 0.391
+        disk.noise_scale: 0.847
+        disk.noise_lod: 6.212
+        disk.accretion_rate: 0.1785
+        disk.opacity: 0.62
+        disk.display_temperature: 5031
+        disk.hot_spots: 4
+        camera.observer_orbit: Retrograde
+        sampling.resolution_scale: 125
+        post.exposure: 0.3
+        post.bloom_threshold: 0.592
+        post.bloom_intensity: 18.711

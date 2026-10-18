@@ -150,6 +150,7 @@ Render:
 
 ### Settings worth knowing
 - `transport.mode`: Straight / Analytic lens / Integrated. Only Integrated evaluates the spacetime (`spacetime.solution`: Schwarzschild, Kerr, Reissner-Nordstrom, Kerr-Newman; spin a* and charge q* come from each black hole)
+- `camera.observer`: ZAMO (default) / Static / Orbiting / Raindrop (free fall). Sets how the camera moves relative to the black hole, Integrated transport only. A moving camera sees the sky aberrated (shifted towards its direction of motion) and the disk Doppler shifted; the sky background itself is not colour- or brightness-shifted. Where the observer cannot exist (Static inside the ergosphere, Orbiting inside the photon orbit) the camera falls back to the ZAMO. `camera.observer_orbit` (Prograde / Retrograde) picks the direction for Orbiting. Background: `docs/notes/observers.md`
 - `sampling.resolution_scale` (25-200 %): the tracer renders at that share of the viewport and the image is scaled. Bloom width is kept the same on screen
 - `sampling.governor` + `sampling.budget_ms`: while editing or playing, lowers the resolution scale (to 25 % at worst) when the frame time exceeds the budget and restores it with headroom; never in reference views or exports
 - `debug.view`: step count heat map, termination reason (sky, horizon, object, opaque disk, ran out of steps, crosshair), geodesic constraint drift and ergosphere & ISCO (Integrated only). Bloom, flare, FXAA and tone mapping are off in debug views
@@ -167,14 +168,29 @@ Render:
 | Component | Fields |
 |---|---|
 | Transform | position, rotation, scale |
-| BlackHole | mass (kg), spin a*, charge q*, spin axis; derived r_g, horizon, ISCO |
+| BlackHole | mass (kg), spin range, spin a*, spin gap, charge q*, spin axis; derived r_g, horizon, ISCO, effective a* |
 | Sphere | radius (m), spin, color, spin axis, texture |
 | Mesh | mesh asset, metres per model unit |
+| Geodesic Body | launch mode, retrograde, launch velocity; readouts status, proper time, clock rate, speed vs ZAMO, r/M |
 | Camera | FOV, near, far, primary |
 | RigidBody / Collider / Velocity | physics |
 | Scripts | list of script components + props |
 - Add via inspector → Add Component
 - Add Mesh: browse file, optional convex-hull collider
+
+### Black hole spin range
+- `Spin range` ThorneLimit (default): a* is capped at 0.998, the most disk accretion can spin a hole up to (Thorne 1974)
+- `Spin range` NearExtremal: the `Spin a*` field is ignored and a* = 1 - `Spin gap`. The gap (1 - a*) runs from 1e-15 to 0.002, default 1.3e-14 (Interstellar's Gargantua, about one part in 100 trillion from maximal)
+- The inspector shows `Effective a*` and `dt/dτ at the ISCO` (about 10.8 at a* = 0.998, about 62 000 at 1 - 1.3e-14: one hour there is about 7 years far away)
+- The film itself rendered Gargantua with a = 0.6 for visual reasons. The renderer handles near-extremal holes, but the disk inside about 1.01 M is not drawn (rays are captured there)
+- Background: `docs/notes/near_extremal.md`
+
+### Geodesic Body
+- A body in free fall along an exact geodesic of one black hole. `Launch` picks how it starts: Zamo, Static, Orbiting (with `Retrograde`), Raindrop or Velocity (`Velocity (r, θ, φ) / c`)
+- Readouts: `Status`, `Proper time`, `Clock rate dτ/dt`, `Speed vs ZAMO`, `r/M`
+- Simulation time is the distant observer's coordinate time, scaled by the scene TimeScale
+- Moving the body in the editor relaunches it
+- Background: `docs/notes/geodesic_bodies.md`
 
 ## Animation Graph
 - One scene can hold many named graphs (tabs/dropdown)

@@ -18,14 +18,26 @@ export namespace MoleHole
         Real M{1};
         Real A{0};
         Real Q{0};
-        Real HorizonRadius{2};
+        Real HorizonRadius{2};      // r+
+        Real InnerHorizonRadius{0}; // r-
     };
+
+    // Δ = r² - 2Mr + a² + Q² as (r - r+)(r - r-), which keeps its precision close to the horizon of a near-extremal
+    // hole (see HorizonDelta in src/rendering/metric.cppm).
+    template <typename Real>
+    [[nodiscard]] Real HorizonDelta(const KerrNewmanSpacetime<Real>& st, const Real r)
+    {
+        return (r - st.HorizonRadius) * (r - st.InnerHorizonRadius);
+    }
 
     template <typename Real>
     [[nodiscard]] KerrNewmanSpacetime<Real> MakeSpacetime(const KerrNewmanParams& p)
     {
-        return {.M = static_cast<Real>(p.Mass), .A = static_cast<Real>(p.SpinParameter),
-                .Q = static_cast<Real>(p.Charge), .HorizonRadius = static_cast<Real>(OuterHorizonRadius(p))};
+        const Real m = static_cast<Real>(p.Mass);
+        const Real a = static_cast<Real>(p.SpinParameter);
+        const Real q = static_cast<Real>(p.Charge);
+        const Real root = std::sqrt(std::max((m - a) * (m + a) - q * q, Real(0)));
+        return {.M = m, .A = a, .Q = q, .HorizonRadius = m + root, .InnerHorizonRadius = m - root};
     }
 
     // Momenta are covariant and per unit rest mass, so along a timelike geodesic the affine parameter is the
@@ -51,7 +63,10 @@ export namespace MoleHole
     {
         double Relative{1e-10};
         double Absolute{1e-12};
-        double HorizonMargin{1e-3}; // captured once r < r+ + margin * M; BL coordinates are singular at r+
+        // Captured once r < r+ + margin · max(√(M² - a² - Q²), 1e-6 M): 1e-3 M for Schwarzschild, shrinking with the
+        // horizon gap so the ISCO of a near-extremal hole (1.00004 M for a = 1 - 1.3e-14) stays outside it.
+        // BL coordinates are singular at r+.
+        double HorizonMargin{1e-3};
         std::int64_t MaxSteps{10'000'000};
     };
 
@@ -90,7 +105,7 @@ export namespace MoleHole
         const Real ct = std::cos(y[1]);
 
         const Real sigma = r * r + a2 * ct * ct;
-        const Real delta = r * r - Real(2) * st.M * r + a2 + st.Q * st.Q;
+        const Real delta = HorizonDelta(st, r);
         const Real p = (r * r + a2) * energy - a * angularMomentum;
         const Real t = angularMomentum / s - a * energy * s;
         const Real k = delta * pr * pr + pth * pth + t * t - p * p / delta;
@@ -146,7 +161,7 @@ export namespace MoleHole
         const Real s = SafeSin(std::sin(state.Theta));
         const Real ct = std::cos(state.Theta);
         const Real sigma = r * r + a2 * ct * ct;
-        const Real delta = r * r - Real(2) * st.M * r + a2 + st.Q * st.Q;
+        const Real delta = HorizonDelta(st, r);
         const Real p = (r * r + a2) * state.Energy - st.A * state.AngularMomentum;
         const Real t = state.AngularMomentum / s - st.A * state.Energy * s;
         const Real k = delta * state.Pr * state.Pr + state.Ptheta * state.Ptheta + t * t - p * p / delta;
@@ -191,7 +206,7 @@ export namespace MoleHole
         const Real s = SafeSin(std::sin(static_cast<Real>(theta)));
         const Real ct = std::cos(static_cast<Real>(theta));
         const Real sigma = rr * rr + a2 * ct * ct;
-        const Real delta = rr * rr - Real(2) * st.M * rr + a2 + st.Q * st.Q;
+        const Real delta = HorizonDelta(st, rr);
         if (!(delta > Real(0))) return std::nullopt;
 
         const Real p = (rr * rr + a2) * e - st.A * l;
@@ -230,7 +245,7 @@ export namespace MoleHole
         const Real s = SafeSin(std::sin(static_cast<Real>(theta)));
         const Real ct = std::cos(static_cast<Real>(theta));
         const Real sigma = rr * rr + a2 * ct * ct;
-        const Real delta = rr * rr - Real(2) * st.M * rr + a2 + st.Q * st.Q;
+        const Real delta = HorizonDelta(st, rr);
         const Real big = (rr * rr + a2) * (rr * rr + a2) - delta * a2 * s * s;
         const Real alpha = std::sqrt(std::max(sigma * delta / big, Real(0)));
         const Real omega = st.A * (Real(2) * st.M * rr - st.Q * st.Q) / big;
@@ -356,7 +371,9 @@ export namespace MoleHole
     {
         if (state.Status != GeodesicStatus::Ok) return;
         const auto st = MakeSpacetime<Real>(params);
-        const Real capture = st.HorizonRadius + static_cast<Real>(tolerance.HorizonMargin) * st.M;
+        const Real halfGap = std::max(static_cast<Real>(0.5) * (st.HorizonRadius - st.InnerHorizonRadius),
+                                      static_cast<Real>(1e-6) * st.M);
+        const Real capture = st.HorizonRadius + static_cast<Real>(tolerance.HorizonMargin) * halfGap;
         const Real epsilon = std::numeric_limits<Real>::epsilon();
         auto y = ToVector(state);
         if (!(state.Step > Real(0))) state.Step = static_cast<Real>(1e-2) * std::max(std::abs(state.R), st.M);

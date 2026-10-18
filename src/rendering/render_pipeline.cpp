@@ -460,6 +460,11 @@ namespace MoleHole
                 params.DiskDisplayTemperature = render.DiskDisplayTemperature;
                 params.DiskHotSpots = render.DiskHotSpots;
                 FillMetricData(params);
+                if (!FillObserverFromBody(params, ctx.Scene, ctx.Inputs.ObserverGuid))
+                {
+                    FillObserverData(params, static_cast<ObserverKind>(render.Observer),
+                                     static_cast<OrbitDirection>(render.ObserverOrbit));
+                }
                 params.IsPhysicallyAccurate = render.TransportMode == Transport::Integrated ? 1 : 0;
                 params.GravitationalLensingEnabled = render.Lensing() ? 1 : 0;
                 params.GravitationalRedshiftEnabled = render.GravitationalRedshift ? 1 : 0;

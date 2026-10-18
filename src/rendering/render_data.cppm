@@ -8,6 +8,8 @@ import GPP;
 import :Simulation.Components;
 import :Rendering.Metric;
 import :Rendering.Frame;
+import :Physics.Observer;
+import :Simulation.ObserverReadout;
 
 export namespace MoleHole
 {
@@ -96,8 +98,13 @@ export namespace MoleHole
         std::array<glm::vec4, kMaxBlackHoles> DiskInfo{};
         // Per black hole kDiskProfileSamples values of T / peak, log-spaced between DiskInfo.y and DiskInfo.z
         std::array<glm::vec4, kMaxBlackHoles * kDiskProfileVec4s> DiskProfile{};
+
+        // Camera velocity relative to the ZAMO of the first hole along (e_r, e_theta, e_phi), in c; w = 1 unless
+        // the camera is that ZAMO. Set by FillObserverData.
+        glm::vec4 ObserverVelocity{0.0f};
     };
-    static_assert(sizeof(RaytraceParamsGpu) == 3616);
+    static_assert(sizeof(RaytraceParamsGpu) == 3632);
+    static_assert(offsetof(RaytraceParamsGpu, ObserverVelocity) == 3616);
     static_assert(offsetof(RaytraceParamsGpu, DiskAccretionRate) == 1424);
     static_assert(offsetof(RaytraceParamsGpu, DiskInfo) == 1440);
     static_assert(offsetof(RaytraceParamsGpu, DiskProfile) == 1568);
@@ -119,8 +126,10 @@ export namespace MoleHole
             gpu.SpinAxis = glm::length(blackHole.SpinAxis) > 0.0f
                                ? glm::normalize(blackHole.SpinAxis)
                                : glm::vec3(0.0f, 1.0f, 0.0f);
-            gpu.Spin = static_cast<float>(blackHole.Spin);
-            gpu.Charge = static_cast<float>(blackHole.Charge);
+            // Clamped here, where the hole's spin range is known; FillMetricData only applies the metric type
+            const auto metric = BlackHoleMetric(blackHole);
+            gpu.Spin = static_cast<float>(metric.SpinParameter);
+            gpu.Charge = static_cast<float>(metric.Charge);
             gpu.MassSolar = static_cast<float>(blackHole.Mass / GPP::Units::kSolarMass);
             ++params.NumBlackHoles;
         }
@@ -143,7 +152,8 @@ export namespace MoleHole
         }
     }
 
-    // Applies params.MetricType to every black hole and precomputes what the shaders need from the metric:
+    // Applies params.MetricType to every black hole and precomputes what the shaders need from the metric
+    // (spin and charge arrive already clamped to each hole's spin range by FillSceneData):
     // horizon, ISCO and the Page–Thorne disk temperature profile (params.DiskAccretionRate must be set),
     // so root-finding and integrals stay on the CPU.
     inline void FillMetricData(RaytraceParamsGpu& params)
@@ -152,7 +162,8 @@ export namespace MoleHole
         {
             const auto index = static_cast<std::size_t>(i);
             auto& gpu = params.BlackHoles[index];
-            const auto metric = MakeKerrNewmanParams(params.MetricType, gpu.Mass, gpu.Spin, gpu.Charge);
+            const auto metric = MakeKerrNewmanParams(params.MetricType, gpu.Mass, gpu.Spin, gpu.Charge,
+                                                     kExtremalHorizonParameter);
             const double mass = metric.Mass > 0.0 ? metric.Mass : 1.0;
             gpu.Spin = static_cast<float>(metric.SpinParameter / mass);
             gpu.Charge = static_cast<float>(metric.Charge / mass);
@@ -169,6 +180,52 @@ export namespace MoleHole
                 for (int c = 0; c < 4; ++c) packed[c] = disk.Temperature[static_cast<std::size_t>(v * 4 + c)];
             }
         }
+    }
+
+    // Boyer–Lindquist (r, theta) of a point relative to a hole with spin axis `spinAxis`; mirrors cartesianToBL in
+    // shaders/kerr.glsl (oblate spheroidal coordinates for a != 0).
+    [[nodiscard]] inline glm::dvec2 BoyerLindquistRadiusTheta(const glm::dvec3& relative, const glm::dvec3& spinAxis,
+                                                              const double a)
+    {
+        const double height = glm::dot(relative, glm::normalize(spinAxis));
+        const double w = glm::dot(relative, relative) - a * a;
+        const double r = std::sqrt(std::max(0.5 * (w + std::sqrt(w * w + 4.0 * a * a * height * height)), 1e-12));
+        return {r, std::acos(std::clamp(height / r, -1.0, 1.0))};
+    }
+
+    // Camera observer of the integrated transport: its velocity relative to the ZAMO of the first hole at the camera
+    // position. Call after FillMetricData, which clamps spin and charge. Falls back to the ZAMO (w = 0) where the
+    // chosen observer cannot exist.
+    inline void FillObserverData(RaytraceParamsGpu& params, const ObserverKind kind, const OrbitDirection direction)
+    {
+        params.ObserverVelocity = glm::vec4(0.0f);
+        if (kind == ObserverKind::Zamo || params.NumBlackHoles == 0) return;
+        const auto& hole = params.BlackHoles[0];
+        const auto metric = MakeKerrNewmanParams(params.MetricType, hole.Mass, hole.Spin, hole.Charge,
+                                                 kExtremalHorizonParameter);
+        const auto bl = BoyerLindquistRadiusTheta(glm::dvec3(params.CameraPos - hole.Position), glm::dvec3(hole.SpinAxis),
+                                                  metric.SpinParameter);
+        const auto velocity = ObserverVelocity(metric, kind, bl.x, bl.y, direction);
+        if (!velocity) return;
+        params.ObserverVelocity = glm::vec4(static_cast<float>((*velocity)[0]), static_cast<float>((*velocity)[1]),
+                                            static_cast<float>((*velocity)[2]), 1.0f);
+    }
+
+    // Camera riding a Geodesic Body (the possessed scene camera): its velocity relative to the ZAMO of the first hole
+    // replaces the preset observer. A body that cannot provide one (captured, following another hole) gives the ZAMO,
+    // as ComputeObserverReadout reports. Returns false when `guid` is no Geodesic Body, so the preset applies.
+    inline bool FillObserverFromBody(RaytraceParamsGpu& params, const GPP::Scene& scene, const std::uint64_t guid)
+    {
+        if (guid == 0) return false;
+        const auto entity = scene.FindByGuid(guid);
+        if (!scene.IsValid(entity) || !scene.Registry().all_of<GeodesicBodyComponent>(entity)) return false;
+        params.ObserverVelocity = glm::vec4(0.0f);
+        if (const auto velocity = BodyObserverVelocity(scene, guid))
+        {
+            params.ObserverVelocity = glm::vec4(static_cast<float>((*velocity)[0]), static_cast<float>((*velocity)[1]),
+                                                static_cast<float>((*velocity)[2]), 1.0f);
+        }
+        return true;
     }
 
     struct GravityGridPointGpu

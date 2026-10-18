@@ -145,6 +145,25 @@ namespace MoleHole
             registry.Add(Setting("camera.third_person_height", &R::ThirdPersonHeight, {
                 .Label = "Height", .Group = "Camera", .Doc = kDoc, .Min = 0.0, .Max = 50.0,
                 .VisibleWhen = "camera.third_person"}));
+            registry.Add(Setting("camera.observer", &R::Observer, {
+                .Label = "Observer", .Group = "Camera",
+                .Tooltip = "Motion of the camera relative to the black hole, for the Integrated transport.\n"
+                           "Its velocity aberrates the sky and Doppler-shifts the disk.\n"
+                           "ZAMO: zero angular momentum, dragged along by the hole's rotation. Exists everywhere.\n"
+                           "Static: at rest relative to the distant stars. Impossible inside the ergosphere.\n"
+                           "Orbiting: circles the spin axis at the angular velocity of a circular orbit.\n"
+                           "Raindrop: falling freely from rest at infinity.\n"
+                           "Where the chosen observer cannot exist the camera falls back to the ZAMO.",
+                .Doc = kDoc,
+                .Options = {"Zamo", "Static", "Orbiting", "Raindrop"},
+                .OptionLabels = {"ZAMO", "Static", "Orbiting", "Raindrop (free fall)"},
+                .VisibleWhen = "transport.mode>=2"}));
+            registry.Add(Setting("camera.observer_orbit", &R::ObserverOrbit, {
+                .Label = "Orbit direction", .Group = "Camera",
+                .Tooltip = "Prograde orbits turn with the black hole, retrograde ones against it.",
+                .Doc = kDoc,
+                .Options = {"Prograde", "Retrograde"},
+                .VisibleWhen = "transport.mode>=2 & camera.observer=2"}));
             registry.Add(Setting("camera.length_unit", &R::LengthUnit, {
                 .Label = "Render length unit", .Group = "Camera",
                 .Tooltip = "Unit of the geometrized render space (G = c = 1). Ray step size and the third-person\n"

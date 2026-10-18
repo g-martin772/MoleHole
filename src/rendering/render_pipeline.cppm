@@ -19,6 +19,7 @@ export namespace MoleHole
         Camera ViewCamera;
         RenderSettings Settings;
         std::shared_ptr<GPP::PhysicsSimulationModule> Physics;
+        std::uint64_t ObserverGuid = 0; // entity whose world line the camera rides (possessed scene camera), 0 = none
     };
 
     struct MeshTraceFrame

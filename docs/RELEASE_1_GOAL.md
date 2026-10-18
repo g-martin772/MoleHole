@@ -55,10 +55,25 @@ Celestial bodies need surface appearance. The shader work already done for the d
   - Ship models as assets, with rigid-body physics through PhysX.
 - Input via mouse and keyboard, with gamepad support as a stretch goal.
 
+**Observer frames.** Viewing the scene from an observer (ZAMO, static, orbiting, free fall, or any body or ship) must change everything that physically depends on the observer, not only the image:
+
+- **World line.** The camera moves with its observer. Orbiting and free-falling observers are integrated along their geodesics. A free fall ends in a defined horizon-crossing state instead of freezing.
+- **Readout.** A HUD shows:
+  - the speed relative to the ZAMO and γ
+  - the clock rate dτ/dt (and "1 h here = X out there")
+  - the proper acceleration the observer needs (zero in free fall)
+  - when the requested observer cannot exist at the camera position and the view fell back to the ZAMO
+- **Consistent overlays.** The gravity grid, paths, debug lines, gizmos, raster meshes and mouse picking use the same aberrated camera rays as the tracer, or are hidden while a moving observer is active.
+- **Observer time.** Scene animation (disk rotation, hot spots, other bodies) runs on the observer's proper time, so a slow clock deep in the well sees the outside universe speed up.
+- **Sky shifts.** The background sky is a spectral source, for example stars with blackbody temperatures instead of an RGB image. It gets:
+  - gravitational blueshift for observers deep in the well (frequency × 1/α, brightness × (1/α)⁴ for a ZAMO)
+  - Doppler shift and beaming from the observer's motion. For example, a free faller sees the sky straight behind redshifted down to ½ at the horizon, while the sky around the shadow is blueshifted.
+- **Camera controls.** Free-fly and first-person movement are offsets in the observer's local frame (its tetrad), not in Boyer–Lindquist coordinates.
+
 ### 5. General Relativity time scales
 
 - Separate **coordinate time**, **proper time** of each observer and **ship time**. The UI shows all of them.
-- Gravitational and kinematic time dilation computed from the metric. The Miller's planet scenario has to show roughly 1 hour on the surface equal to 7 years elsewhere, driven by the physics and not by a scripted factor.
+- Gravitational and kinematic time dilation computed from the metric. The Miller's planet scenario has to show roughly 1 hour on the surface equal to 7 years elsewhere, driven by the physics and not by a scripted factor. This needs Gargantua in the near-extremal spin range (a/M ≈ 1 − 1.3 × 10⁻¹⁴); the default Thorne limit of 0.998 allows at most about 11×.
 - A simulation clock that can run each frame at a user-chosen ratio of proper time to wall time, with a lock to a chosen observer.
 - Light-travel delay: observers see events as they are received, not as they happen.
 - Time-dilation HUD and a plot of elapsed time per observer.
