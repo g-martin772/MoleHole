@@ -497,6 +497,14 @@ namespace
                     m_Logger->Info("ViewportLayer: loaded scene '{}'", result->SceneName);
                 }
                 m_RenderSettings->LoadScene(result->RenderExtension, m_UiState->CurrentScenePath);
+                if (const auto& view = result->Editor)
+                {
+                    m_UiState->CameraPositionM = view->PositionM;
+                    m_UiState->CameraYaw = view->Yaw;
+                    m_UiState->CameraPitch = view->Pitch;
+                    m_UiState->CameraFov = view->Fov;
+                    if (view->SpeedMs) m_UiState->CameraSpeedMs = *view->SpeedMs;
+                }
                 for (const auto& warning : m_RenderSettings->Warnings()) m_Logger->Warn("ViewportLayer: {}", warning);
                 StartSimulationFor(result->SceneName);
             }
