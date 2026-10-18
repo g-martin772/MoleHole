@@ -13,6 +13,9 @@ namespace
     struct Gb
     {
         AnimationGraphData G;
+        // Setter/Getter pins come from the registered components, so they must exist before the first node is
+        // built; without this, a test running first in a random order gets pin-less setters.
+        bool Registered = (RegisterComponents(), true);
 
         int Add(Node node)
         {
