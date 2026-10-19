@@ -1,0 +1,123 @@
+Scene: X-ray binary
+SchemaVersion: 2
+TimeScale: 0.1
+Entities:
+  - Guid: 9001
+    Components:
+      Metadata: {Guid: 9001, Name: Black Hole, TypeTag: BlackHole}
+      Transform: {Position: [0, 0, 0], Rotation: [0, 0, 0, 1], Scale: [1, 1, 1]}
+      BlackHole:
+        Mass: {value: 10, unit: Msun}
+        Spin: 0
+        Charge: 0
+        SpinAxis: [0, 1, 0]
+      AccretionDisk:
+        Model: Particles
+        RateMode: Mass Rate
+        MassRate: 3300000000000000.0
+        Alpha: 1.0
+        AspectRatio: 0.05
+        InnerRadius: 0
+        OuterRadius: 32
+        TruncationRadius: 30
+        ViewRadius: 66
+        ShockDamping: 60
+        Opacity: 0.0034
+        FeedOuterEdge: false
+        SeedMass: 300000000000000.0
+        SeedInner: 0
+        SeedOuter: 28
+        SeedParticles: 300000
+        MaxParticles: 900000
+        Seed: 7
+  - Guid: 9002
+    Components:
+      Metadata: {Guid: 9002, Name: Donor Star, TypeTag: Star}
+      Transform: {Position: [-561117.5, 0.0, 428221.25], Rotation: [0, 0, 0, 1], Scale: [1, 1, 1]}
+      Star: {Teff: 4200.0, Radius: 17000.0, Mass: {value: 1.0, unit: Msun}, LimbDarkening: 0.6}
+  - Guid: 9003
+    Components:
+      Metadata: {Guid: 9003, Name: Stream, TypeTag: Empty}
+      Transform: {Position: [-546927.620258, 0.0, 417392.13125], Rotation: [0, 0, 0, 1], Scale: [1, 1, 1]}
+      ParticleEmitter:
+        Active: true
+        Shape: Stream
+        RateMode: Mass
+        Rate: 2200000.0
+        MassRate: 3300000000000000.0
+        Radius: 2500
+        Speed: 31478208.09
+        Dispersion: 100000.0
+        Temperature: 3000000.0
+        Seed: 11
+        TargetPosition: [3702625.971690929, 0.0, 3052025.743187538]
+  - Guid: 9004
+    Components:
+      Metadata: {Guid: 9004, Name: Starship, TypeTag: Mesh}
+      Transform: {Position: [1210832.5, 265792.5, 738312.5], Rotation: [0.042296, -0.829628, 0.063444, 0.553085], Scale: [1, 1, 1]}
+      Mesh:
+        AssetPath: assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 2203.2
+  - Guid: 9005
+    Components:
+      Metadata: {Guid: 9005, Name: Camera, TypeTag: Camera}
+      Transform: {Position: [649715.0, 590650.0, 1417560.0], Rotation: [-0.169338, 0.241893, 0.042917, 0.954448], Scale: [1, 1, 1]}
+      Camera: {Fov: 48, NearPlane: 20, FarPlane: 1.0e9, Primary: true}
+  - Guid: 9006
+    Components:
+      Metadata: {Guid: 9006, Name: Director, TypeTag: Empty}
+      Transform: {Position: [0, 0, 0], Rotation: [0, 0, 0, 1], Scale: [1, 1, 1]}
+      Scripts:
+        - Name: xrb_director
+          Props:
+            Ship: 9004
+            Camera: 9005
+            ShipSpeed: 2800000.0
+            ShipYaw: 180
+EditorCamera:
+  PositionM: [649715.0, 590650.0, 1417560.0]
+  Yaw: -118.443
+  Pitch: -20.121
+  Fov: 48
+  SpeedMs: 20000
+Render:
+  Version: 1
+  Contexts:
+    Edit: Showcase Live
+    Play: Showcase Live
+    Reference: Showcase
+    Export: Showcase
+  Profiles:
+    - Name: Showcase
+      Description: Exact geodesics (Traced), 256 cube particle grids, Aces, exposure set for the physical star with the disk and sky gains raised to match, bloom on, no lens flare.
+      Base: Traced
+      Set:
+        disk.volumetric: false
+        disk.particle_grid: 256
+        disk.particle_disk_grid: 1024
+        disk.plane_smoothing: 24
+        radiometry.band: Bolometric
+        radiometry.sky_gain: 12.0
+        radiometry.disk_gain: 10.5
+        post.tonemap: Aces
+        post.exposure: -12.0
+        post.bloom: true
+        post.lens_flare: false
+        lighting.sky_radiance: 400.0
+    - Name: Showcase Live
+      Description: The same look with the analytic lens and 128 cube grids for editing and Play. The analytic lens streaks the sky when the camera is close to the hole looking away.
+      Base: Lensed
+      Set:
+        disk.volumetric: false
+        disk.particle_grid: 128
+        disk.particle_disk_grid: 1024
+        disk.plane_smoothing: 24
+        radiometry.band: Bolometric
+        radiometry.sky_gain: 12.0
+        radiometry.disk_gain: 10.5
+        post.tonemap: Aces
+        post.exposure: -12.0
+        post.bloom: true
+        post.lens_flare: false
+        lighting.sky_radiance: 400.0

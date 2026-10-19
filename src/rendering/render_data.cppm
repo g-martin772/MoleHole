@@ -77,7 +77,7 @@ export namespace MoleHole
         float AdaptiveStepRate{0.8f};
         std::int32_t NumBlackHoles{0};
         std::int32_t NumSpheres{0};
-        float _Pad0{0.0f};
+        float DiskBand{0.0f}; // 0 bolometric, 1 visible (550 nm)
 
         std::array<BlackHoleGpuData, kMaxBlackHoles> BlackHoles{};
         std::array<SphereGpuData, kMaxSpheres> Spheres{};
@@ -86,8 +86,8 @@ export namespace MoleHole
 
         glm::vec4 MeshBounds{0.0f};
         std::int32_t NumMeshInstances{0};
-        float _MeshPad0{0.0f};
-        float _MeshPad1{0.0f};
+        float SkyGain{1.0f};  // linear gain of the sky (2^EV)
+        float DiskGain{1.0f}; // linear gain of the disk radiance (2^EV)
         float _MeshPad2{0.0f};
 
         float DiskAccretionRate{0.1f};

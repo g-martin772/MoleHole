@@ -749,3 +749,162 @@ TEST_CASE("Disk hooks match the shader constants of the force parameters", "[acc
     CHECK(a.z == Approx(reference.z));
     CHECK(hooks.Potential(x, setup.Force) < 0.0f);
 }
+
+namespace
+{
+    struct KernelParticle
+    {
+        glm::vec3 Position;
+        glm::vec3 Velocity;
+        float Weight{1.0f};
+        float Temperature{1.0e4f};
+        float Age{0.0f};
+
+        explicit KernelParticle(const glm::vec3& position, const glm::vec3& velocity) : Position(position), Velocity(velocity) {}
+
+        void Relax(const AccretionDiskComponent& disk, const BlackHoleComponent& hole, const double seconds)
+        {
+            const auto units = ParticleUnits::Geometrized(hole.Mass);
+            const auto setup = MakeDiskSetup(disk, hole, units);
+            ParticleView view{Position, Velocity, Weight, Temperature, Age, 0u, 0u, 1u};
+            MakeDiskHooks().PostMacroStep(view, static_cast<float>(seconds / units.Time), setup.Force);
+        }
+    };
+
+    // Angular momentum about the +y axis per unit mass
+    float AngularMomentum(const KernelParticle& p)
+    {
+        return p.Position.z * p.Velocity.x - p.Position.x * p.Velocity.z;
+    }
+}
+
+TEST_CASE("The tidal torque takes angular momentum from circular gas beyond the truncation radius only", "[accretion][particles][physics]")
+{
+    auto disk = Disk();
+    disk.Alpha = 0.5;
+    const auto hole = Hole();
+    const float R = 30.0f;
+    const float vK = std::sqrt(R) / (R - 2.0f);
+    const glm::vec3 position(R, 0.0f, 0.0f);
+    const double step = 1000.0 * ParticleUnits::Geometrized(hole.Mass).Time;
+
+    KernelParticle without(position, glm::vec3(0.0f, 0.0f, -vK));
+    without.Relax(disk, hole, step);
+    const float reference = AngularMomentum(without);
+
+    disk.TruncationRadius = 20.0;
+    KernelParticle circular(position, glm::vec3(0.0f, 0.0f, -vK));
+    circular.Relax(disk, hole, step);
+    CHECK(AngularMomentum(circular) < 0.9f * reference);
+
+    // Gas well inside the truncation radius is untouched
+    disk.TruncationRadius = 45.0;
+    KernelParticle inside(position, glm::vec3(0.0f, 0.0f, -vK));
+    inside.Relax(disk, hole, step);
+    CHECK(AngularMomentum(inside) == Approx(reference).epsilon(1e-6));
+
+    // A stream falling in (half the circular speed, mostly radial) keeps its angular momentum while it is far from circular
+    disk.TruncationRadius = 20.0;
+    const glm::vec3 infall(-0.6f * vK, 0.0f, -0.4f * vK);
+    KernelParticle streamA(position, infall);
+    KernelParticle streamB(position, infall);
+    auto none = disk;
+    none.TruncationRadius = 0.0;
+    streamA.Relax(disk, hole, step);
+    streamB.Relax(none, hole, step);
+    CHECK(AngularMomentum(streamA) == Approx(AngularMomentum(streamB)).epsilon(1e-6));
+}
+
+TEST_CASE("Shock damping circularises eccentric gas faster and leaves circular gas alone", "[accretion][particles][physics]")
+{
+    auto disk = Disk();
+    disk.Alpha = 0.5;
+    const auto hole = Hole();
+    const float R = 25.0f;
+    const float vK = std::sqrt(R) / (R - 2.0f);
+    const double step = 400.0 * ParticleUnits::Geometrized(hole.Mass).Time;
+    const glm::vec3 position(R, 0.0f, 0.0f);
+
+    const auto radialSpeed = [&](const glm::vec3& velocity, const double shock)
+    {
+        auto d = disk;
+        d.ShockDamping = shock;
+        KernelParticle p(position, velocity);
+        p.Relax(d, hole, step);
+        return std::abs(p.Velocity.x);
+    };
+    const glm::vec3 eccentric(-0.5f * vK, 0.0f, -0.8f * vK);
+    CHECK(radialSpeed(eccentric, 40.0) < 0.5f * radialSpeed(eccentric, 0.0));
+    const glm::vec3 nearly(-0.02f * vK, 0.0f, -vK);
+    CHECK(radialSpeed(nearly, 40.0) == Approx(radialSpeed(nearly, 0.0)).epsilon(1e-6));
+}
+
+TEST_CASE("The warm start releases the requested mass in near circular rings with a steady disk profile", "[accretion][scene]")
+{
+    auto disk = Disk();
+    disk.SeedMass = 4.0e14;
+    disk.SeedParticles = 120000;
+    disk.SeedOuter = 30.0;
+    const auto hole = Hole();
+    const auto units = ParticleUnits::Geometrized(hole.Mass);
+    const auto setup = MakeDiskSetup(disk, hole, units);
+    const auto rings = MakeDiskSeed(disk, hole, setup, units, glm::dvec3(0.0));
+    REQUIRE(rings.size() == kDiskSeedRings);
+
+    std::uint64_t particles = 0;
+    std::vector<double> radii;
+    std::vector<double> counts;
+    for (const auto& ring : rings)
+    {
+        const auto& p = ring.Params;
+        particles += static_cast<std::uint64_t>(p.Burst);
+        CHECK(p.Shape == ParticleEmitterShape::Ring);
+        CHECK(p.VelocityMode == ParticleVelocityMode::Azimuthal);
+        CHECK(p.Rate == 0.0);
+        CHECK(p.ParticleMass * disk.SeedParticles == Approx(disk.SeedMass).epsilon(1e-12));
+        const double R = p.Radius / units.Length;
+        CHECK(p.Speed / units.Velocity() == Approx(PwCircularSpeed(R, setup.Force.Mu, setup.Force.SchwarzschildRadius)).epsilon(1e-9));
+        radii.push_back(R);
+        counts.push_back(static_cast<double>(p.Burst));
+    }
+    CHECK(particles == Approx(static_cast<double>(disk.SeedParticles)).epsilon(2e-3));
+    CHECK(radii.front() > 1.15 * setup.InnerRadius);
+    CHECK(radii.back() < 30.0);
+    CHECK(std::ranges::is_sorted(radii));
+    // Particles per ring follow Sigma ~ R^-1/2 (1 - sqrt(r_in / R)) times the area of the ring
+    double total = 0.0;
+    std::vector<double> expected;
+    for (const auto& ring : rings)
+    {
+        const double R = ring.Params.Radius / units.Length;
+        const double width = ring.Params.Thickness / units.Length;
+        const double weight = std::max(1.0 - std::sqrt(setup.InnerRadius / R), 0.02) / std::sqrt(R) * 2.0 * std::numbers::pi * R * width;
+        expected.push_back(weight);
+        total += weight;
+    }
+    for (std::size_t k = 0; k < rings.size(); ++k)
+    {
+        CHECK(counts[k] == Approx(expected[k] / total * disk.SeedParticles).margin(1.0));
+    }
+    CHECK(MakeDiskSeed(Disk(), hole, setup, units, glm::dvec3(0.0)).empty());
+}
+
+TEST_CASE("The new disk parameters round-trip through YAML and the shader's user slots", "[accretion][scene]")
+{
+    auto disk = Disk();
+    disk.TruncationRadius = 28.0;
+    disk.ViewRadius = 70.0;
+    disk.ShockDamping = 55.0;
+    disk.SeedMass = 3.0e14;
+    disk.SeedOuter = 26.0;
+    disk.SeedParticles = 5000;
+    const auto hole = Hole();
+    const auto setup = MakeDiskSetup(disk, hole, ParticleUnits::Geometrized(hole.Mass));
+    const double rg = Units::GravitationalRadius(hole.Mass) / ParticleUnits::Geometrized(hole.Mass).Length;
+    CHECK(setup.Force.User[kDiskTruncation] == Approx(static_cast<float>(28.0 * rg)));
+    CHECK(setup.Force.User[kDiskTidal] > 0.0f);
+    CHECK(setup.Force.User[kDiskShock] == Approx(55.0f));
+    const auto plain = MakeDiskSetup(Disk(), hole, ParticleUnits::Geometrized(hole.Mass));
+    CHECK(plain.Force.User[kDiskTruncation] == 0.0f);
+    CHECK(plain.Force.User[kDiskShock] == 0.0f);
+}

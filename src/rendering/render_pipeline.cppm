@@ -36,7 +36,7 @@ export namespace MoleHole
     {
         bool Active = false;
         vk::Buffer Block{};
-        std::array<std::shared_ptr<GPP::VulkanImage>, 4> Textures;
+        std::array<std::shared_ptr<GPP::VulkanImage>, 6> Textures;
     };
 
     struct RenderResources

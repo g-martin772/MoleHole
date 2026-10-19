@@ -40,7 +40,7 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
     float u_adaptiveStepRate;
     int u_numBlackHoles;
     int u_numSpheres;
-    float _pad0;
+    float u_diskBand;      // 0 bolometric, 1 visible (550 nm)
 
     BlackHoleData u_blackHoles[8];
     SphereData u_spheres[16];
@@ -49,8 +49,8 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
 
     vec4 u_meshBounds;
     int u_numMeshInstances;
-    float _meshPad0;
-    float _meshPad1;
+    float u_skyGain;  // linear gain of the sky
+    float u_diskGain; // linear gain of the disk radiance
     float _meshPad2;
 
     float u_diskAccretionRate;     // Eddington ratio
@@ -75,10 +75,17 @@ layout(push_constant) uniform SlicePushBlock
 
 const float FAR_DEPTH = 0.999999f;
 
+vec3 skyTexel(vec2 uv) {
+    return texture(u_skyboxTexture, uv).rgb * u_skyGain;
+}
+
+ivec2 g_pixel = ivec2(0); // pixel of this invocation, independent of how the dispatch is sliced
+
 bool traceTexel(out ivec2 texCoords) {
     uint workgroup = u_firstWorkgroup + gl_WorkGroupID.x;
     uvec2 workgroupCoords = uvec2(workgroup % u_workgroupsPerRow, workgroup / u_workgroupsPerRow);
     texCoords = ivec2(workgroupCoords * 16u + gl_LocalInvocationID.xy);
+    g_pixel = texCoords;
     ivec2 imageSize = imageSize(l_outputImage);
     return texCoords.x < imageSize.x && texCoords.y < imageSize.y;
 }

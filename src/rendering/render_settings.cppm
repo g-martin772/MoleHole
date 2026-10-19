@@ -12,6 +12,7 @@ export namespace MoleHole
     enum class Transport : int { Straight = 0, AnalyticLens = 1, Integrated = 2 };
     enum class DebugView : int { None = 0, StepCount = 1, Termination = 2, ConstraintDrift = 3, Ergosphere = 4, ParticleDensity = 5 };
     enum class MeshMode : int { Raster = 0, Traced = 1 };
+    enum class DiskBand : int { Bolometric = 0, Visible = 1 };
     enum class ToneMap : int { None = 0, Reinhard = 1, Aces = 2 };
     enum class ExposureMode : int { Manual = 0, Auto = 1, Physical = 2 };
 
@@ -27,6 +28,9 @@ export namespace MoleHole
 
         bool GravitationalRedshift = true;
         bool DopplerBeaming = true;
+        DiskBand Band = DiskBand::Bolometric; // how the brightness of thermal gas follows its temperature
+        float SkyGainEv = 0.0f;               // EV gain of the sky against the physical sources (meshes, Stars)
+        float DiskGainEv = 0.0f;              // the same for the disk and the disk light
 
         bool AccretionDisk = true;
         bool AccretionDiskVolumetric = false;
@@ -40,6 +44,10 @@ export namespace MoleHole
         int DiskHotSpots = 3;
         int ParticleGridResolution = 128;    // voxels per axis of each level of the particle disk grid
         float ParticleOpacityScale = 1.0f;   // multiplies AccretionDisk.Opacity of the particle disk
+        int ParticleDiskGrid = 1024;         // cells per axis of the 2D grid of disk gas (0 = all gas in the 3D grids)
+        float ParticleSmoothing = 0.0f;      // particles per 3D cell the density estimate asks for; 0 = fixed kernel
+        float ParticlePlaneSmoothing = 16.0f; // the same for the 2D disk grid
+        bool ParticleJitter = true;          // random start offset of the particle march (hides step banding)
 
         bool RenderBlackHoles = true;
         bool RenderSpheres = true;

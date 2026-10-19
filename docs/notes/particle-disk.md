@@ -69,6 +69,36 @@ gradient is the same. Differences that remain are physical: the particle disk ha
 its accretion rate is the component's, not `disk.accretion_rate`. `disk.display_temperature` rescales by T_ref.
 `disk.particle_opacity_scale` multiplies kappa.
 
+## 3b. Disk plane grid, adaptive smoothing (W3)
+
+Root causes of the blobby look of the first renderer: (1) the splat stood on 3D voxels of 0.5 to 2.5 r_g while the viscous layer is
+H = h R = 0.4 to 3 r_g thick, so a thin disk was a few voxels deep and every particle a cubic kernel; (2) 1e5 particles over a
+disk of 1e3 r_g^2 is a few per cell, shot noise; (3) the templates held 1e-6 M_sun, tau of 1e6 per r_g; (4) a 1e4 K stream next to
+a 1e6 K reference is black in a T^4 brightness; (5) the "white blob" is the Doppler-boosted approaching inner disk (g^4), not an
+artefact.
+
+- **Plane grid.** Gas that is near circular (radial speed < 0.2 v_K, azimuthal within 0.5 v_K of circular, 4 to 6 H) is weighted
+  into a 2D grid in the plane of the disk (`disk.particle_disk_grid` = 1024 cells over +-1.6 R_out, TSC + [1 2 1] filter, same
+  fixed point atomics, `ParticleDiskWeight`), column density per area; the tracer multiplies it by the Gaussian profile of
+  H = h R. Everything else (streams, plunging gas, the thick tails) stays in the 3D grids. The share is smooth, mass is conserved
+  (test). Mixed gas uses the emission weighted temperature (mean of T^4).
+- **Adaptive kernel.** `disk.plane_smoothing` / `disk.particle_smoothing` = particles per cell: the density read at mip 2 says how
+  many particles a cell holds, the sample is taken at the finest mip that holds the target (box-filter mip chains of the 3D and
+  plane grids, `particle_mips*.comp`, trilinear). Dense gas keeps full resolution, sparse gas is smoothed instead of blocky.
+- **Jitter** (`disk.particle_jitter`): the sample inside each march step is offset by interleaved gradient noise per pixel.
+- **Band** (`radiometry.band`): Bolometric = T^4 (the 0.25 calibration), Visible = Planck at 550 nm relative to the peak, so
+  gas far below the peak (streams, outer disk) stays visible. `radiometry.sky_gain` / `disk_gain` (EV) put the display
+  referred sky and disk back into the picture when exposure is lowered for physical stars (post.exposure -12 for the Sun-like
+  radiance on meshes).
+- **Dynamics for a binary** (`AccretionDisk`): `SeedMass/SeedInner/SeedOuter/SeedParticles` warm start (32 rings, steady-state
+  profile), `TruncationRadius` (tidal torque outside it, not on near circular gas...), `ShockDamping` (extra radial damping of
+  non-circular gas: a stream circularises on its angular momentum), `ViewRadius` (grid half width). Export macro step is 8 GM/c^3
+  again (64 let the inner disk drift visibly).
+- **Disk light of a particle disk** uses the component's own accretion rate and the PW efficiency 1/16 (it used the analytic
+  `disk.accretion_rate` before).
+- Cost (RTX 3060, Debug): splat 5 ms at 128^3 + 1024^2 plane, 25 ms at 256^3; Trace 100 to 150 ms at 1080p (Lensed, 0.4 to 1e6
+  particles), unchanged by the plane grid. `templates/xray-binary.yaml`: 3.5 to 8 s per 1920x1080 export.
+
 ## 4. Exports
 
 `--sim-start T` advances the particle system synchronously from t = 0 to T (before, a reset started the particles at T). Exports
@@ -83,8 +113,8 @@ request by less than one macro step (64 GM/c^3, 3 ms at 10 M_sun). Two exports w
   dynamics (Paczynski-Wiita), but the metric of the tracer is the selected one.
 - The PW coordinate velocity is used as dx/dt of the Boyer-Lindquist metric; PW is not a geodesic flow.
 - Super-thick matter (the templates `accretion-ring`/`accretion-stream` hold 1e-6 M_sun and more: tau of 1e6 per r_g in a voxel
-  that holds 1e-3 of one particle) is opaque wherever the kernel reaches, so its surface is the cubic kernel support, and cold
-  thick gas shows as black. A camera inside such gas sees only its surface.
+  that holds 1e-3 of one particle) is opaque wherever the kernel reaches. Scale the mass rate and `Opacity` (kappa 0.0034 m2/kg
+  and 3e15 kg/s give tau_half 5 to 40 for a 10 M_sun hole, see `templates/xray-binary.yaml`) instead of using such masses.
 - The grid is rebuilt every frame (no temporal filtering); outside the coarse box there is no gas; no light-travel time (fast light).
 - The raster mesh overlay does not see the disk's opacity (only traced meshes are occluded, as with the analytic disk).
 - Cost: the Lensed kernel at 1920x1080 takes about 50 ms with the particle disk against 9 ms analytic; Traced 50 ms against 17 ms;

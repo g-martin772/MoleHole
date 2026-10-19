@@ -39,9 +39,60 @@ namespace MoleHole
         return fixed;
     }
 
+    ParticleDiskGrid MakeParticleDiskGrid(const glm::vec3& normal, const double outerRadius, const float aspect,
+                                          const float innerRadius, const float diskOuterRadius, const float schwarzschild,
+                                          const int resolution)
+    {
+        ParticleDiskGrid grid;
+        if (resolution < 8 || !(aspect > 0.0f)) return grid;
+        grid.Resolution = std::clamp(resolution, 8, 4096);
+        const double half = kParticleGridCoarseHalf * std::max(outerRadius, 4.0);
+        grid.Cell = static_cast<float>(2.0 * half / grid.Resolution);
+        grid.Min = static_cast<float>(-half);
+        grid.Aspect = aspect;
+        grid.Inner = innerRadius;
+        grid.Outer = std::min(diskOuterRadius, static_cast<float>(half));
+        grid.Schwarzschild = schwarzschild;
+        grid.Normal = glm::length(normal) > 0.0f ? glm::normalize(normal) : glm::vec3(0.0f, 1.0f, 0.0f);
+        const glm::vec3 helper = std::abs(grid.Normal.y) < 0.9f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+        grid.E1 = glm::normalize(glm::cross(helper, grid.Normal));
+        grid.E2 = glm::cross(grid.Normal, grid.E1);
+        return grid;
+    }
+
+    float ParticleDiskWeight(const ParticleDiskGrid& disk, const glm::vec3& position, const glm::vec3& velocity, float& s2)
+    {
+        s2 = 0.0f;
+        if (disk.Resolution <= 0 || !(disk.Aspect > 0.0f)) return 0.0f;
+        const float z = glm::dot(position, disk.Normal);
+        const glm::vec3 inPlane = position - z * disk.Normal;
+        const float R = glm::length(inPlane);
+        if (R < disk.Inner || R > disk.Outer || !(R > 0.0f)) return 0.0f;
+        const glm::vec3 radial = inPlane / R;
+        const glm::vec3 azimuth = glm::cross(disk.Normal, radial);
+        const float rs = disk.Schwarzschild;
+        const float vK = std::sqrt(R) / std::max(R - rs, 0.002f * rs);
+        const float vr = glm::dot(velocity, radial);
+        const float vphi = glm::dot(velocity, azimuth);
+        const float vz = glm::dot(velocity, disk.Normal);
+        const float radial2 = vr * vr / (vK * vK);
+        const float shear2 = (vphi - vK) * (vphi - vK) / (vK * vK);
+        const float zh = z / (disk.Aspect * R);
+        const float vh = vz / (disk.Aspect * vK);
+        s2 = zh * zh;
+        const float vertical = zh * zh + vh * vh;
+        const auto smooth = [](const float a, const float b, const float x)
+        {
+            const float t = std::clamp((x - a) / (b - a), 0.0f, 1.0f);
+            return t * t * (3.0f - 2.0f * t);
+        };
+        return (1.0f - smooth(0.05f, 0.25f, radial2)) * (1.0f - smooth(0.25f, 0.64f, shear2))
+               * (1.0f - smooth(16.0f, 36.0f, vertical));
+    }
+
     ParticleGridBlockGpu MakeParticleGridBlock(const ParticleGridLayout& layout, const float kappa,
                                                const float referenceTemperature, const int holeIndex, const double lengthM,
-                                               const SplatFixedPoint& fixed, const bool fixedPoint)
+                                               const SplatFixedPoint& fixed, const bool fixedPoint, const ParticleBlockExtras& extras)
     {
         ParticleGridBlockGpu block;
         for (int level = 0; level < kParticleGridLevels; ++level)
@@ -50,12 +101,25 @@ namespace MoleHole
             block.Min[level] = glm::vec4(source.Min, source.Voxel);
         }
         block.Info = glm::vec4(static_cast<float>(layout.Resolution), kappa, referenceTemperature, static_cast<float>(holeIndex));
-        block.Frame = glm::vec4(static_cast<float>(lengthM), fixedPoint ? fixed.InverseUnit : 0.0f, fixedPoint ? fixed.Unit : 0.0f, 0.0f);
+        block.Frame = glm::vec4(static_cast<float>(lengthM), fixedPoint ? fixed.InverseUnit : 0.0f, fixedPoint ? fixed.Unit : 0.0f, extras.MeanMass);
+        const int mips = ParticleGridMipCount(layout.Resolution);
+        block.Smooth = glm::vec4(extras.Target3D, static_cast<float>(mips - 1), extras.Jitter ? 1.0f : 0.0f, extras.TargetDisk);
+        const auto& disk = extras.Disk;
+        if (disk.Resolution > 0)
+        {
+            block.PlaneNormal = glm::vec4(disk.Normal, disk.Aspect);
+            block.PlaneE1 = glm::vec4(disk.E1, disk.Inner);
+            block.PlaneE2 = glm::vec4(disk.E2, disk.Outer);
+            block.PlaneGrid = glm::vec4(disk.Min, disk.Cell, static_cast<float>(disk.Resolution),
+                                        static_cast<float>(std::min(ParticleDiskMipCount(disk.Resolution) - 1, kParticleDiskMaxLod)));
+            block.PlaneInfo = glm::vec4(disk.Schwarzschild, 0.0f, 0.0f, 0.0f);
+        }
         return block;
     }
 
     std::vector<float> SplatReference(const ParticleArrays& particles, const ParticleGridLayout& layout,
-                                      const float referenceTemperature, const SplatFixedPoint* fixed)
+                                      const float referenceTemperature, const SplatFixedPoint* fixed,
+                                      const ParticleDiskGrid* diskGrid, std::vector<float>* diskWords)
     {
         const std::size_t nodes = layout.NodeCount();
         const std::size_t words = static_cast<std::size_t>(kParticleGridLevels) * nodes * kParticleGridChannels;
@@ -111,6 +175,51 @@ namespace MoleHole
             }
         };
 
+        const int diskRes = diskGrid ? diskGrid->Resolution : 0;
+        const std::size_t diskCells = static_cast<std::size_t>(diskRes) * diskRes;
+        std::vector<double> diskSum(fixed ? 0 : diskCells * kParticleDiskChannels, 0.0);
+        std::vector<std::int32_t> diskCounts(fixed ? diskCells * kParticleDiskChannels : 0, 0);
+        const auto addDisk = [&](const std::size_t index, const float value, const float scale)
+        {
+            if (fixed)
+            {
+                const auto rounded = static_cast<std::int32_t>(std::nearbyint(value * fixed->InverseUnit * scale));
+                diskCounts[index] = static_cast<std::int32_t>(static_cast<std::uint32_t>(diskCounts[index]) + static_cast<std::uint32_t>(rounded));
+            }
+            else diskSum[index] += static_cast<double>(value);
+        };
+        const auto depositDisk = [&](const glm::vec3& position, const float mass, const glm::vec3& velocity, const float temperature, const float s2)
+        {
+            const auto& g = *diskGrid;
+            const glm::vec3 inPlane = position - glm::dot(position, g.Normal) * g.Normal;
+            const glm::vec2 cell = (glm::vec2(glm::dot(inPlane, g.E1), glm::dot(inPlane, g.E2)) - g.Min) / g.Cell;
+            const glm::ivec2 nearest(std::floor(cell.x), std::floor(cell.y));
+            const glm::vec2 d = cell - glm::vec2(nearest) - 0.5f;
+            const glm::vec2 w0 = 0.5f * (0.5f - d) * (0.5f - d);
+            const glm::vec2 w1 = 0.75f - d * d;
+            const glm::vec2 w2 = 0.5f * (0.5f + d) * (0.5f + d);
+            for (int j = 0; j < 3; ++j)
+            {
+                const int y = nearest.y + j - 1;
+                if (y < 0 || y >= diskRes) continue;
+                const float wy = j == 0 ? w0.y : (j == 1 ? w1.y : w2.y);
+                for (int i = 0; i < 3; ++i)
+                {
+                    const int x = nearest.x + i - 1;
+                    if (x < 0 || x >= diskRes) continue;
+                    const float wx = i == 0 ? w0.x : (i == 1 ? w1.x : w2.x);
+                    const float m = mass * wx * wy;
+                    const std::size_t node = (static_cast<std::size_t>(y) * diskRes + x) * kParticleDiskChannels;
+                    addDisk(node, m, 1.0f);
+                    addDisk(node + 1, m * temperature, 1.0f / static_cast<float>(kParticleTemperatureUnits));
+                    addDisk(node + 2, m * velocity.x, 1.0f);
+                    addDisk(node + 3, m * velocity.y, 1.0f);
+                    addDisk(node + 4, m * velocity.z, 1.0f);
+                    addDisk(node + 5, m * s2, 1.0f / static_cast<float>(kParticleDiskSpreadUnits));
+                }
+            }
+        };
+
         for (std::size_t i = 0; i < particles.Size(); ++i)
         {
             if (!ParticleArrays::Alive(particles.Meta[i])) continue;
@@ -118,8 +227,24 @@ namespace MoleHole
             const float mass = particles.PosMass[i].w;
             const glm::vec3 velocity(particles.VelTemp[i]);
             const float temperature = particles.VelTemp[i].w / std::max(referenceTemperature, 1e-6f);
-            deposit(1, position, mass, velocity, temperature);
-            if (glm::all(glm::lessThan(glm::abs(position), glm::vec3(layout.Half(0))))) deposit(0, position, mass, velocity, temperature);
+            float s2 = 0.0f;
+            const float disk = diskGrid ? ParticleDiskWeight(*diskGrid, position, velocity, s2) : 0.0f;
+            if (disk > 0.0f) depositDisk(position, mass * disk, velocity, temperature, s2);
+            const float gas = mass * (1.0f - disk);
+            if (!(gas > 0.0f)) continue;
+            deposit(1, position, gas, velocity, temperature);
+            if (glm::all(glm::lessThan(glm::abs(position), glm::vec3(layout.Half(0))))) deposit(0, position, gas, velocity, temperature);
+        }
+        if (diskWords)
+        {
+            diskWords->assign(diskCells * kParticleDiskChannels, 0.0f);
+            for (std::size_t i = 0; i < diskWords->size(); ++i)
+            {
+                const std::size_t c = i % kParticleDiskChannels;
+                const float scale = c == 1 ? static_cast<float>(kParticleTemperatureUnits)
+                                    : c == 5 ? static_cast<float>(kParticleDiskSpreadUnits) : 1.0f;
+                (*diskWords)[i] = fixed ? static_cast<float>(diskCounts[i]) * fixed->Unit * scale : static_cast<float>(diskSum[i]);
+            }
         }
 
         std::vector<float> out(words);
@@ -143,11 +268,46 @@ namespace MoleHole
             std::unique_ptr<VulkanPipeline> Pipeline;
         };
 
+        // One single-level storage view per mip level of every texture; destroyed with the textures' lifetime
+        struct MipViews
+        {
+            std::shared_ptr<VulkanDevice> Device;
+            std::array<std::vector<vk::ImageView>, 6> Views;
+            MipViews() = default;
+            MipViews(const MipViews&) = delete;
+            MipViews& operator=(const MipViews&) = delete;
+            MipViews(MipViews&& other) noexcept : Device(std::move(other.Device)), Views(std::move(other.Views)) { other.Views = {}; }
+            MipViews& operator=(MipViews&& other) noexcept
+            {
+                if (this != &other)
+                {
+                    Release();
+                    Device = std::move(other.Device);
+                    Views = std::move(other.Views);
+                    other.Views = {};
+                }
+                return *this;
+            }
+            ~MipViews() { Release(); }
+            void Release()
+            {
+                if (!Device) return;
+                for (auto& list : Views)
+                {
+                    for (const auto view : list) Device->GetDevice().destroyImageView(view);
+                    list.clear();
+                }
+            }
+        };
+
         struct Resources
         {
             int Resolution{0};
+            int DiskResolution{0};
             std::shared_ptr<VulkanBuffer> Accumulator;
-            std::array<std::shared_ptr<VulkanImage>, 4> Textures;
+            std::shared_ptr<VulkanBuffer> DiskAccumulator;
+            std::array<std::shared_ptr<VulkanImage>, 6> Textures; // 3D level 0 A, B, level 1 A, B, disk A, B
+            MipViews Mips;
         };
 
         Options Opt;
@@ -158,7 +318,9 @@ namespace MoleHole
         std::deque<std::pair<std::uint64_t, Resources>> Retired;
         std::uint64_t Frame{0};
         bool AtomicFloat{false};
-        std::array<Variant, 4> Variants; // pass * 2 + float
+        std::array<Variant, 6> Variants; // pass * 2 + float
+        Variant MipVariant;
+        Variant MipVariant2D;
         std::optional<std::string> Error;
 
         explicit Impl(Options options)
@@ -169,18 +331,20 @@ namespace MoleHole
             BlockBuffer = std::make_shared<VulkanBuffer>(Opt.Device, MakeUniformBufferSpecification(sizeof(ParticleGridBlockGpu), false), Opt.Log);
         }
 
-        std::shared_ptr<VulkanImage> MakeImage(const int resolution, const vk::Format format, std::string name) const
+        std::shared_ptr<VulkanImage> MakeImage(const int resolution, const vk::Format format, std::string name, const bool plane = false) const
         {
             const auto n = static_cast<std::uint32_t>(resolution);
+            const auto mips = static_cast<std::uint32_t>(plane ? ParticleDiskMipCount(resolution) : ParticleGridMipCount(resolution));
             return std::make_shared<VulkanImage>(
                 Opt.Device,
                 VulkanImageSpecification{
-                    .extent = {n, n, n},
+                    .extent = {n, n, plane ? 1u : n},
                     .format = format,
-                    .type = vk::ImageType::e3D,
-                    .viewType = vk::ImageViewType::e3D,
+                    .type = plane ? vk::ImageType::e2D : vk::ImageType::e3D,
+                    .viewType = plane ? vk::ImageViewType::e2D : vk::ImageViewType::e3D,
                     .usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
                     .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .mipLevels = mips,
                     .createSampler = true,
                     .samplerFilter = vk::Filter::eLinear,
                     .samplerAddressMode = vk::SamplerAddressMode::eClampToEdge,
@@ -202,6 +366,26 @@ namespace MoleHole
             variant.Compiled = Compiler.Compile(source, compile);
             variant.Pipeline = std::make_unique<VulkanPipeline>(Opt.Device, variant.Compiled);
             return variant;
+        }
+
+        Variant& GetMips(const bool plane)
+        {
+            auto& variant = plane ? MipVariant2D : MipVariant;
+            if (variant.Pipeline) return variant;
+            ShaderSource source{.path = Opt.ShaderDirectory / (plane ? "particle_mips2d.comp" : "particle_mips.comp"),
+                                .stage = ShaderStage::Compute, .entryPoint = "main"};
+            ShaderCompileOptions compile;
+            compile.cacheDirectory = Opt.CacheDirectory;
+            compile.includeDirectories.push_back(Opt.ShaderDirectory);
+            variant.Compiled = Compiler.Compile(source, compile);
+            variant.Pipeline = std::make_unique<VulkanPipeline>(Opt.Device, variant.Compiled);
+            return variant;
+        }
+
+        static vk::Format TextureFormat(const std::size_t index)
+        {
+            if (index < 4) return index % 2 == 0 ? vk::Format::eR32G32B32A32Sfloat : vk::Format::eR32Sfloat;
+            return index == 4 ? vk::Format::eR32G32B32A32Sfloat : vk::Format::eR32G32Sfloat;
         }
 
         static bool Has(const CompiledShader& shader, const std::uint32_t binding)
@@ -252,12 +436,22 @@ namespace MoleHole
         return m_Impl->BlockBuffer->GetBuffer();
     }
 
+    int ParticleSplatter::DiskResolution() const noexcept
+    {
+        return m_Impl->Current.DiskResolution;
+    }
+
     vk::Buffer ParticleSplatter::Accumulator() const
     {
         return m_Impl->Current.Accumulator->GetBuffer();
     }
 
-    std::array<std::shared_ptr<VulkanImage>, 4> ParticleSplatter::Textures() const
+    vk::Buffer ParticleSplatter::DiskAccumulator() const
+    {
+        return m_Impl->Current.DiskAccumulator->GetBuffer();
+    }
+
+    std::array<std::shared_ptr<VulkanImage>, 6> ParticleSplatter::Textures() const
     {
         return m_Impl->Current.Textures;
     }
@@ -279,32 +473,53 @@ namespace MoleHole
         while (!impl.Retired.empty() && impl.Frame - impl.Retired.front().first > 6) impl.Retired.pop_front();
     }
 
-    void ParticleSplatter::Configure(const int resolution)
+    void ParticleSplatter::Configure(const int resolution, const int diskResolution)
     {
         auto& impl = *m_Impl;
         const int n = std::max(resolution, 1);
-        if (impl.Current.Resolution == n) return;
+        const int plane = std::max(diskResolution, 1);
+        if (impl.Current.Resolution == n && impl.Current.DiskResolution == plane) return;
         if (impl.Current.Resolution > 0) impl.Retired.emplace_back(impl.Frame, std::move(impl.Current));
 
         Impl::Resources next;
         next.Resolution = n;
+        next.DiskResolution = plane;
         const auto nodes = static_cast<vk::DeviceSize>(n) * n * n;
         auto spec = MakeStorageBufferSpecification(nodes * kParticleGridChannels * kParticleGridLevels * sizeof(std::uint32_t), false);
         spec.usage |= vk::BufferUsageFlagBits::eTransferSrc;
         next.Accumulator = std::make_shared<VulkanBuffer>(impl.Opt.Device, spec, impl.Opt.Log);
+        auto diskSpec = MakeStorageBufferSpecification(static_cast<vk::DeviceSize>(plane) * plane * kParticleDiskChannels * sizeof(std::uint32_t), false);
+        diskSpec.usage |= vk::BufferUsageFlagBits::eTransferSrc;
+        next.DiskAccumulator = std::make_shared<VulkanBuffer>(impl.Opt.Device, diskSpec, impl.Opt.Log);
         for (int level = 0; level < kParticleGridLevels; ++level)
         {
-            next.Textures[static_cast<std::size_t>(level) * 2] = impl.MakeImage(n, vk::Format::eR32G32B32A32Sfloat, std::format("ParticleGrid{}A", level));
-            next.Textures[static_cast<std::size_t>(level) * 2 + 1] = impl.MakeImage(n, vk::Format::eR32Sfloat, std::format("ParticleGrid{}B", level));
+            next.Textures[static_cast<std::size_t>(level) * 2] = impl.MakeImage(n, Impl::TextureFormat(0), std::format("ParticleGrid{}A", level));
+            next.Textures[static_cast<std::size_t>(level) * 2 + 1] = impl.MakeImage(n, Impl::TextureFormat(1), std::format("ParticleGrid{}B", level));
         }
+        next.Textures[4] = impl.MakeImage(plane, Impl::TextureFormat(4), "ParticleDiskA", true);
+        next.Textures[5] = impl.MakeImage(plane, Impl::TextureFormat(5), "ParticleDiskB", true);
+        const auto mipCount = [&](const std::size_t i) { return i < 4 ? ParticleGridMipCount(n) : ParticleDiskMipCount(plane); };
         ImmediateSubmit(*impl.Pool, impl.Opt.Device->GetBackgroundQueue(), [&](const vk::CommandBuffer cmd)
         {
             for (std::size_t i = 0; i < next.Textures.size(); ++i)
             {
-                const auto format = i % 2 == 0 ? vk::Format::eR32G32B32A32Sfloat : vk::Format::eR32Sfloat;
-                TransitionImageLayout(cmd, next.Textures[i]->GetImage(), format, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
+                TransitionImageLayout(cmd, next.Textures[i]->GetImage(), Impl::TextureFormat(i), vk::ImageLayout::eUndefined,
+                                      vk::ImageLayout::eGeneral, static_cast<std::uint32_t>(mipCount(i)));
             }
         });
+        next.Mips.Device = impl.Opt.Device;
+        for (std::size_t i = 0; i < next.Textures.size(); ++i)
+        {
+            for (int mip = 0; mip < mipCount(i); ++mip)
+            {
+                vk::ImageViewCreateInfo info{};
+                info.image = next.Textures[i]->GetImage();
+                info.viewType = i < 4 ? vk::ImageViewType::e3D : vk::ImageViewType::e2D;
+                info.format = Impl::TextureFormat(i);
+                info.subresourceRange = {vk::ImageAspectFlagBits::eColor, static_cast<std::uint32_t>(mip), 1, 0, 1};
+                next.Mips.Views[i].push_back(impl.Opt.Device->GetDevice().createImageView(info));
+            }
+        }
         impl.Current = std::move(next);
     }
 
@@ -327,12 +542,15 @@ namespace MoleHole
     {
         auto& impl = *m_Impl;
         const bool useFloat = UsesFloatAtomics(fixedPoint);
+        const bool disk = impl.Current.DiskResolution > 1 && block.PlaneNormal.w > 0.0f;
         Impl::Variant* splat = nullptr;
         Impl::Variant* resolve = nullptr;
+        Impl::Variant* diskResolve = nullptr;
         try
         {
             splat = &impl.Get(0, useFloat);
             resolve = &impl.Get(1, useFloat);
+            if (disk) diskResolve = &impl.Get(2, useFloat);
         }
         catch (const std::exception& error)
         {
@@ -343,8 +561,10 @@ namespace MoleHole
         if (!particles.PosMass || impl.Current.Resolution <= 1) return;
 
         const auto accumulator = impl.Current.Accumulator->GetBuffer();
+        const auto diskAccumulator = impl.Current.DiskAccumulator->GetBuffer();
         impl.WriteBlockCommand(cmd, block);
         cmd.fillBuffer(accumulator, 0, vk::WholeSize, 0u);
+        if (disk) cmd.fillBuffer(diskAccumulator, 0, vk::WholeSize, 0u);
         impl.Barrier(cmd, vk::PipelineStageFlagBits::eTransfer, vk::AccessFlagBits::eTransferWrite);
 
         const auto bind = [&](Impl::Variant& variant)
@@ -360,10 +580,15 @@ namespace MoleHole
             buffer(2, particles.Meta);
             buffer(3, particles.State);
             buffer(4, accumulator);
+            buffer(10, diskAccumulator);
             if (Impl::Has(variant.Compiled, 5)) writer.WriteUniformBuffer(set, 5, impl.BlockBuffer->GetBuffer());
             for (std::uint32_t i = 0; i < 4; ++i)
             {
-                if (Impl::Has(variant.Compiled, 6 + i)) writer.WriteStorageImage(set, 6 + i, impl.Current.Textures[i]->GetImageView());
+                if (Impl::Has(variant.Compiled, 6 + i)) writer.WriteStorageImage(set, 6 + i, impl.Current.Mips.Views[i][0]);
+            }
+            for (std::uint32_t i = 0; i < 2; ++i)
+            {
+                if (Impl::Has(variant.Compiled, 11 + i)) writer.WriteStorageImage(set, 11 + i, impl.Current.Mips.Views[4 + i][0]);
             }
             writer.Update();
             cmd.bindPipeline(vk::PipelineBindPoint::eCompute, variant.Pipeline->GetPipeline());
@@ -381,6 +606,65 @@ namespace MoleHole
             cmd.pushConstants(resolve->Pipeline->GetLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(level), &level);
             cmd.dispatch(groups, groups, groups);
         }
+        if (disk)
+        {
+            bind(*diskResolve);
+            const auto g = (static_cast<std::uint32_t>(impl.Current.DiskResolution) + 7u) / 8u;
+            cmd.dispatch(g, g, 1);
+        }
+
+        const int mips = ParticleGridMipCount(impl.Current.Resolution);
+        const int diskMips = disk ? ParticleDiskMipCount(impl.Current.DiskResolution) : 1;
+        if (mips <= 1 && diskMips <= 1) return;
+        Impl::Variant* mipVariant = nullptr;
+        Impl::Variant* mipVariant2D = nullptr;
+        try
+        {
+            mipVariant = &impl.GetMips(false);
+            if (diskMips > 1) mipVariant2D = &impl.GetMips(true);
+        }
+        catch (const std::exception& error)
+        {
+            impl.Error = std::format("particle mip shader failed to compile: {}", error.what());
+            if (impl.Opt.Log) impl.Opt.Log->Error("{}", *impl.Error);
+            return;
+        }
+        impl.Barrier(cmd, vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderWrite);
+        const auto chain = [&](Impl::Variant& variant, const std::size_t first, const int count, const int size, const bool plane)
+        {
+            cmd.bindPipeline(vk::PipelineBindPoint::eCompute, variant.Pipeline->GetPipeline());
+            for (int mip = 0; mip + 1 < count; ++mip)
+            {
+                const auto set = allocate(variant.Pipeline->GetDescriptorSetLayouts()[0]);
+                DescriptorSetWriter writer(impl.Opt.Device->GetDevice());
+                const auto& a = impl.Current.Textures[first];
+                const auto& b = impl.Current.Textures[first + 1];
+                writer.WriteCombinedImageSampler(set, 0, a->GetImageView(), a->GetSampler(), vk::ImageLayout::eGeneral);
+                writer.WriteCombinedImageSampler(set, 1, b->GetImageView(), b->GetSampler(), vk::ImageLayout::eGeneral);
+                writer.WriteStorageImage(set, 2, impl.Current.Mips.Views[first][static_cast<std::size_t>(mip + 1)]);
+                writer.WriteStorageImage(set, 3, impl.Current.Mips.Views[first + 1][static_cast<std::size_t>(mip + 1)]);
+                writer.Update();
+                cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, variant.Pipeline->GetLayout(), 0, set, {});
+                const std::int32_t push[3]{mip, std::max(size >> (mip + 1), 1), std::max(size >> mip, 1)};
+                cmd.pushConstants(variant.Pipeline->GetLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(push), push);
+                if (plane)
+                {
+                    const auto g = (static_cast<std::uint32_t>(push[1]) + 7u) / 8u;
+                    cmd.dispatch(g, g, 1);
+                }
+                else
+                {
+                    const auto g = (static_cast<std::uint32_t>(push[1]) + 3u) / 4u;
+                    cmd.dispatch(g, g, g);
+                }
+                impl.Barrier(cmd, vk::PipelineStageFlagBits::eComputeShader, vk::AccessFlagBits::eShaderWrite);
+            }
+        };
+        for (std::size_t level = 0; level < kParticleGridLevels && mips > 1; ++level)
+        {
+            chain(*mipVariant, level * 2, mips, impl.Current.Resolution, false);
+        }
+        if (mipVariant2D) chain(*mipVariant2D, 4, diskMips, impl.Current.DiskResolution, true);
     }
 
     struct ParticleSplatStage::CpuUpload
@@ -462,14 +746,24 @@ namespace MoleHole
         }
         m_IdleFrames = 0;
 
-        const auto layout = MakeParticleGridLayout(data.OuterRadius, context.Settings.ParticleGridResolution);
-        m_Splatter->Configure(layout.Resolution);
+        const double gridOuter = data.ViewRadius > 0.0f ? data.ViewRadius / kParticleGridCoarseHalf : data.OuterRadius;
+        const auto layout = MakeParticleGridLayout(gridOuter, context.Settings.ParticleGridResolution);
+        const auto diskGrid = MakeParticleDiskGrid(data.Normal, gridOuter, data.AspectRatio, data.InnerRadius * 0.95f,
+                                                   kParticleDiskGasReach * data.OuterRadius, data.SchwarzschildRadius,
+                                                   context.Settings.ParticleDiskGrid);
+        m_Splatter->Configure(layout.Resolution, std::max(diskGrid.Resolution, 1));
 
         const auto& stats = m_Particles.Module().Stats();
-        const double meanMass = stats.Particles > 0 ? stats.Mass / static_cast<double>(stats.Particles) : static_cast<double>(data.ReferenceMass);
+        // Exact exports must not depend on a reduction the GPU may order differently: take the emitters' weight
+        const double meanMass = (!context.Inputs.ExactParticles && stats.Particles > 0) ? stats.Mass / static_cast<double>(stats.Particles)
+                                                                                         : static_cast<double>(data.ReferenceMass);
         const bool fixedPoint = context.Inputs.ExactParticles;
         const auto block = MakeParticleGridBlock(layout, data.Opacity * context.Settings.ParticleOpacityScale, data.PeakTemperature,
-                                                 hole, data.LengthM, MakeSplatFixedPoint(meanMass), fixedPoint || !m_Splatter->UsesFloatAtomics(false));
+                                                 hole, data.LengthM, MakeSplatFixedPoint(meanMass), fixedPoint || !m_Splatter->UsesFloatAtomics(false),
+                                                 ParticleBlockExtras{.MeanMass = static_cast<float>(meanMass),
+                                                                     .Target3D = context.Settings.ParticleSmoothing,
+                                                                     .TargetDisk = context.Settings.ParticlePlaneSmoothing,
+                                                                     .Jitter = context.Settings.ParticleJitter, .Disk = diskGrid});
         m_BlockActive = true;
         grid = {true, m_Splatter->Block(), m_Splatter->Textures()};
 

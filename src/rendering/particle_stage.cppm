@@ -24,8 +24,10 @@ export namespace MoleHole
         double LengthM{1.0};       // metres per simulation length (r_g of the epoch)
         double TimeS{1.0};         // seconds per simulation time
         glm::vec3 Normal{0.0f, 1.0f, 0.0f};
+        float AspectRatio{0.0f};   // H / R of the viscous layer
         float InnerRadius{0.0f};   // simulation lengths
         float OuterRadius{0.0f};
+        float ViewRadius{0.0f};    // half width of the coarse grids, 0 = 1.6 outer radii
         float SchwarzschildRadius{2.0f};
         float Opacity{0.0f};       // m^2/kg
         float PeakTemperature{0.0f}; // K, maximum of the Novikov-Thorne profile of the disk: the colour/brightness reference
@@ -46,7 +48,7 @@ export namespace MoleHole
         static constexpr std::uint32_t kInteractiveMacroSteps = 48;
         static constexpr double kBaseStepGeometric = 8.0; // macro step in units of GM/c^3
         // Exports: the block-step scheduler subdivides for fast particles, the outer disk does not need 8
-        static constexpr double kExportBaseStepGeometric = 64.0;
+        static constexpr double kExportBaseStepGeometric = 8.0;
         static constexpr std::uint32_t kBatchMacroSteps = 240; // per command buffer of a synchronous advance (ring holds 256)
 
         ParticleDiskModule(AccretionBoard& board, std::shared_ptr<GPP::ParticleHub> hub, BackendFactory factory = {},

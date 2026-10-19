@@ -67,6 +67,26 @@ namespace MoleHole
                 .Label = "Doppler beaming", .Group = "Radiometry",
                 .Tooltip = "Brighten the approaching side of the disk and dim the receding side.", .Doc = kDoc}));
 
+            registry.Add(Setting("radiometry.band", &R::Band, {
+                .Label = "Brightness band", .Group = "Radiometry",
+                .Tooltip = "Bolometric: brightness of thermal gas follows T^4 (all wavelengths), as the 0.25 calibration of the disk assumes.\n"
+                           "Visible: spectral radiance at 550 nm (Planck, relative to the hottest gas): ~T for gas hotter than 26 000 K, falling\n"
+                           "exponentially below. Cooler outer gas and streams of a stellar-mass disk (10^6-10^7 K) stay visible, as they do to a camera.",
+                .Doc = kDoc,
+                .Options = {"Bolometric", "Visible"}}));
+
+            registry.Add(Setting("radiometry.sky_gain", &R::SkyGainEv, {
+                .Label = "Sky gain (EV)", .Group = "Radiometry",
+                .Tooltip = "Meshes and Stars are radiometric (watts per square metre); the sky is display-referred. A physical star lights a ship\n"
+                           "with thousands of W/m2, so exposing for it (negative post.exposure) would black out the sky: raise this gain by the\n"
+                           "same number of stops to keep it in the picture.",
+                .Doc = kDoc, .Min = -20.0, .Max = 30.0, .Format = "%+.1f EV"}));
+            registry.Add(Setting("radiometry.disk_gain", &R::DiskGainEv, {
+                .Label = "Disk gain (EV)", .Group = "Radiometry",
+                .Tooltip = "The same for the accretion disk and the light it casts on meshes: the hottest gas shows 0.25 at EV 0 and 0 gain.\n"
+                           "Raise it to make the disk glow past white, lower it to keep detail in the hot gas.",
+                .Doc = kDoc, .Min = -20.0, .Max = 30.0, .Format = "%+.1f EV"}));
+
             registry.Add(Setting("disk.enabled", &R::AccretionDisk, {
                 .Label = "Accretion disk", .Group = "Disk",
                 .Tooltip = "Thin disk in each black hole's equatorial plane.\n"
@@ -129,6 +149,27 @@ namespace MoleHole
                            "Thick gas looks the same at any value; thin gas gets brighter in proportion.",
                 .Doc = kDoc, .Min = 1e-3, .Max = 1e3, .Scale = SettingScale::Log, .Format = "%.3f",
                 .VisibleWhen = "disk.enabled"}));
+
+            registry.Add(Setting("disk.particle_disk_grid", &R::ParticleDiskGrid, {
+                .Label = "Disk plane grid", .Group = "Disk",
+                .Tooltip = "Cells per axis of the 2D grid that holds the gas of the viscous layer (near circular, inside H = h R) as column\n"
+                           "densities with an analytic vertical Gaussian. 0 splats all gas into the 3D grids (noisy, blocky for thin disks).",
+                .Doc = kDoc, .Min = 0, .Max = 2048, .Cost = 1, .VisibleWhen = "disk.enabled"}));
+            registry.Add(Setting("disk.particle_smoothing", &R::ParticleSmoothing, {
+                .Label = "Particle smoothing", .Group = "Disk",
+                .Tooltip = "Particles per cell the density estimate of the particle disk asks for. Sparse gas is read from coarser mips\n"
+                           "of the grid (adaptive kernel), dense gas keeps the full resolution. 0 = fixed kernel (blocky where sparse).",
+                .Doc = kDoc, .Min = 0.0, .Max = 256.0, .Cost = 1, .Format = "%.0f", .VisibleWhen = "disk.enabled"}));
+            registry.Add(Setting("disk.plane_smoothing", &R::ParticlePlaneSmoothing, {
+                .Label = "Disk plane smoothing", .Group = "Disk",
+                .Tooltip = "Particles per cell the density estimate of the 2D disk grid asks for (adaptive kernel in the plane).\n"
+                           "0 = fixed kernel: every particle is a visible column of gas.",
+                .Doc = kDoc, .Min = 0.0, .Max = 256.0, .Cost = 1, .Format = "%.0f", .VisibleWhen = "disk.enabled"}));
+            registry.Add(Setting("disk.particle_jitter", &R::ParticleJitter, {
+                .Label = "Particle march jitter", .Group = "Disk",
+                .Tooltip = "Start the ray march through the particle grid at a random offset within the first step (per pixel, fixed pattern):\n"
+                           "trades step banding for fine noise.",
+                .Doc = kDoc, .VisibleWhen = "disk.enabled"}));
 
             registry.Add(Setting("objects.black_holes", &R::RenderBlackHoles, {
                 .Label = "Black holes", .Group = "Objects", .Doc = kDoc}));

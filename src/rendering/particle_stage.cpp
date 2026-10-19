@@ -21,6 +21,8 @@ namespace MoleHole
             return hash;
         }
 
+        void PrintDiskProfile(const ParticleArrays& particles, const ParticleRenderData& data, const DiskStats& stats);
+
         std::uint64_t RingKey(const AccretionDiskComponent& disk)
         {
             std::uint64_t hash = 1469598103934665603ull;
@@ -28,6 +30,12 @@ namespace MoleHole
             hash = Mix(hash, std::bit_cast<std::uint64_t>(disk.RingEccentricity));
             hash = Mix(hash, std::bit_cast<std::uint64_t>(disk.RingMass));
             hash = Mix(hash, static_cast<std::uint64_t>(disk.RingParticles));
+            hash = Mix(hash, std::bit_cast<std::uint64_t>(disk.TruncationRadius));
+            hash = Mix(hash, std::bit_cast<std::uint64_t>(disk.ShockDamping));
+            hash = Mix(hash, std::bit_cast<std::uint64_t>(disk.SeedMass));
+            hash = Mix(hash, std::bit_cast<std::uint64_t>(disk.SeedInner));
+            hash = Mix(hash, std::bit_cast<std::uint64_t>(disk.SeedOuter));
+            hash = Mix(hash, static_cast<std::uint64_t>(disk.SeedParticles));
             hash = Mix(hash, static_cast<std::uint64_t>(disk.Seed));
             hash = Mix(hash, static_cast<std::uint64_t>(disk.MaxParticles));
             hash = Mix(hash, static_cast<std::uint64_t>(disk.FeedOuterEdge));
@@ -162,6 +170,7 @@ namespace MoleHole
         auto state = GatherParticleScene(scene, frame, m_Epoch, 0, &snapshot);
         state.Sinks.push_back(MakeDiskSink(*hole, position));
         if (ring) state.Emitters.push_back(std::move(*ring));
+        for (auto& seed : MakeDiskSeed(*disk, *hole, setup, m_Units, position)) state.Emitters.push_back(std::move(seed));
         if (feed) state.Emitters.push_back(std::move(*feed));
         if (!m_System || m_Capacity != static_cast<std::uint32_t>(std::max(disk->MaxParticles, 1024)))
         {
@@ -211,8 +220,10 @@ namespace MoleHole
         m_Data.LengthM = m_Units.Length;
         m_Data.TimeS = m_Units.Time;
         m_Data.Normal = glm::vec3(setup.Normal);
+        m_Data.AspectRatio = static_cast<float>(setup.AspectRatio);
         m_Data.InnerRadius = static_cast<float>(setup.InnerRadius);
         m_Data.OuterRadius = static_cast<float>(setup.OuterRadius);
+        m_Data.ViewRadius = disk->ViewRadius > 0.0 ? static_cast<float>(disk->ViewRadius * Units::GravitationalRadius(hole->Mass) / m_Units.Length) : 0.0f;
         m_Data.SchwarzschildRadius = setup.Force.SchwarzschildRadius;
         m_Data.Opacity = static_cast<float>(disk->Opacity);
         m_Data.PeakTemperature = static_cast<float>(DiskPeakTemperature(setup));
@@ -391,6 +402,12 @@ namespace MoleHole
         if (!m_Module.UsesGpu() || context.Inputs.ExactParticles)
         {
             m_Module.AdvanceNow();
+            if (context.Inputs.ExactParticles && m_Module.System() && std::getenv("MOLEHOLE_DISK_PROFILE"))
+            {
+                ParticleArrays particles;
+                m_Module.System()->Backend().Download(particles);
+                PrintDiskProfile(particles, m_Module.Data(), m_Module.Stats());
+            }
             return;
         }
         const std::uint32_t slot = m_Frame++ % m_Module.Slots();
@@ -459,6 +476,60 @@ namespace MoleHole
         return stbi_write_png(path.c_str(), width, size, 3, pixels.data(), width * 3) != 0;
     }
 
+    namespace
+    {
+        // Cylindrical radial profile of the particle disk in the hole frame: counts, column density, vertical optical
+        // depth to the mid-plane, mass weighted temperature, rms height over radius, mean speed
+        void PrintDiskProfile(const ParticleArrays& particles, const ParticleRenderData& data, const DiskStats& stats)
+        {
+            std::println("stats: alive {} mass {:.4g} kg, absorbed {:.4g} kg, measured mdot {:.4g} kg/s, dropped {}, sim {:.4g} s, limited {}",
+                         stats.Particles, stats.Mass, stats.AbsorbedMass, stats.MassRate, stats.Dropped, stats.SimTime, stats.Limited);
+            const double inner = std::max<double>(data.InnerRadius, 1.0);
+            const double outer = std::max<double>(data.OuterRadius, inner * 2.0);
+            constexpr int kBins = 14;
+            const double lo = inner * 0.7;
+            const double hi = outer * 1.6;
+            struct Bin { double Count{0}, Mass{0}, MassT{0}, Z2{0}, Speed{0}; };
+            std::array<Bin, kBins> bins{};
+            double massSum = 0.0;
+            std::size_t alive = 0;
+            const glm::vec3 normal = data.Normal;
+            for (std::size_t i = 0; i < particles.Size(); ++i)
+            {
+                if (!ParticleArrays::Alive(particles.Meta[i])) continue;
+                ++alive;
+                const glm::vec3 p(particles.PosMass[i]);
+                const double mass = particles.PosMass[i].w;
+                massSum += mass;
+                const float z = glm::dot(p, normal);
+                const double R = glm::length(p - z * normal);
+                if (R < lo || R >= hi) continue;
+                const int b = static_cast<int>(std::log(R / lo) / std::log(hi / lo) * kBins);
+                auto& bin = bins[static_cast<std::size_t>(std::clamp(b, 0, kBins - 1))];
+                bin.Count += 1.0;
+                bin.Mass += mass;
+                bin.MassT += mass * particles.VelTemp[i].w;
+                bin.Z2 += mass * z * z / (R * R);
+                bin.Speed += mass * glm::length(glm::vec3(particles.VelTemp[i]));
+            }
+            std::println("particles alive {} mean mass {:.4g} kg, r_g = {:.5g} m, kappa = {:.3g} m2/kg, T_ref = {:.4g} K",
+                         alive, alive ? massSum / static_cast<double>(alive) : 0.0, data.LengthM, data.Opacity, data.PeakTemperature);
+            std::println("   R [rg]      N   Sigma [kg/m2]  tau_half   T [K]   h_rms   v/c   N per rg2");
+            for (int b = 0; b < kBins; ++b)
+            {
+                const auto& bin = bins[static_cast<std::size_t>(b)];
+                if (bin.Count == 0) continue;
+                const double r0 = lo * std::pow(hi / lo, static_cast<double>(b) / kBins);
+                const double r1 = lo * std::pow(hi / lo, static_cast<double>(b + 1) / kBins);
+                const double area = std::numbers::pi * (r1 * r1 - r0 * r0);
+                const double sigma = bin.Mass / (area * data.LengthM * data.LengthM);
+                std::println("{:6.1f}-{:5.1f} {:7.0f} {:12.4g} {:10.3g} {:9.4g} {:6.3f} {:6.3f} {:8.1f}", r0, r1, bin.Count, sigma,
+                             0.5 * sigma * data.Opacity, bin.MassT / bin.Mass, std::sqrt(bin.Z2 / bin.Mass),
+                             bin.Speed / bin.Mass, bin.Count / area);
+            }
+        }
+    }
+
     int RunDebugParticles(const std::string& scenePath, const std::string& pngPath, const double seconds, const int frames)
     {
         std::ifstream file(scenePath);
@@ -503,6 +574,18 @@ namespace MoleHole
             std::println("frame {} t={:.4g} s particles={} mass={:.4g} kg absorbed={:.4g} kg mdot={:.4g} kg/s T={:.4g} K {}",
                          k, seconds * k / count, stats.Particles, stats.Mass, stats.AbsorbedMass, stats.MassRate,
                          stats.MeanTemperature, ok ? name.string() : "write failed");
+            if (k == count) PrintDiskProfile(particles, data, module.Stats());
+            if (k == count && std::getenv("MOLEHOLE_DUMP"))
+            {
+                std::ofstream dump(std::getenv("MOLEHOLE_DUMP"));
+                for (std::size_t i = 0; i < particles.Size(); ++i)
+                {
+                    if (!ParticleArrays::Alive(particles.Meta[i])) continue;
+                    dump << particles.PosMass[i].x << ' ' << particles.PosMass[i].y << ' ' << particles.PosMass[i].z << ' '
+                         << particles.VelTemp[i].x << ' ' << particles.VelTemp[i].y << ' ' << particles.VelTemp[i].z << ' '
+                         << particles.VelTemp[i].w << ' ' << particles.Meta[i].w << '\n';
+                }
+            }
         }
         return 0;
     }

@@ -395,6 +395,9 @@ namespace MoleHole
                 params.RenderBlackHoles = render.RenderBlackHoles ? 1 : 0;
                 params.RenderSpheres = render.RenderSpheres ? 1 : 0;
                 params.DopplerBeamingEnabled = render.DopplerBeaming ? 1.0f : 0.0f;
+                params.DiskBand = render.Band == DiskBand::Visible ? 1.0f : 0.0f;
+                params.SkyGain = std::exp2(render.SkyGainEv);
+                params.DiskGain = std::exp2(render.DiskGainEv);
                 params.AccDiskHeight = render.AccDiskHeight;
                 params.AccDiskSpeed = render.AccDiskSpeed;
                 params.AccDiskNoiseScale = render.AccDiskNoiseScale;

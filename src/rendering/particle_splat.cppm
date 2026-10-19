@@ -41,14 +41,71 @@ export namespace MoleHole
 
     [[nodiscard]] ParticleGridLayout MakeParticleGridLayout(double outerRadius, int resolution);
 
+    // Disk gas (near circular, inside the Gaussian layer H = h R) is splatted into a 2D grid of column densities in the
+    // plane of the disk; its vertical profile is analytic. Everything else stays in the 3D grids.
+    struct ParticleDiskGrid
+    {
+        int Resolution{0};       // cells per axis, 0 = no disk grid (all gas in the 3D grids)
+        float Min{0.0f};         // minimum corner of both axes [r_g]
+        float Cell{1.0f};        // [r_g]
+        float Aspect{0.0f};      // H / R
+        float Inner{0.0f};       // [r_g] no disk gas inside
+        float Outer{0.0f};       // [r_g] no disk gas outside
+        float Schwarzschild{2.0f};
+        glm::vec3 Normal{0.0f, 1.0f, 0.0f};
+        glm::vec3 E1{1.0f, 0.0f, 0.0f};
+        glm::vec3 E2{0.0f, 0.0f, 1.0f};
+    };
+
+    inline constexpr int kParticleDiskChannels = 6; // m, m T / T_ref, m v_x, m v_y, m v_z, m s2 with s2 = (z / (h R))^2
+    inline constexpr int kParticleDiskSpreadUnits = 16;
+    inline constexpr int kParticleDiskMaxLod = 3; // coarsest mip the density estimate may use: 8 cells
+
+    [[nodiscard]] inline int ParticleDiskMipCount(const int resolution)
+    {
+        if (resolution < 32) return 1;
+        return std::clamp(static_cast<int>(std::bit_width(static_cast<unsigned>(resolution))) - 5, 1, 7);
+    }
+
+    // The plane grid spans +-1.6 outer radii like the coarse 3D level
+    // Gas beyond this many outer radii stays in the 3D grids (streams, tidal tails)
+    inline constexpr float kParticleDiskGasReach = 1.25f;
+
+    [[nodiscard]] ParticleDiskGrid MakeParticleDiskGrid(const glm::vec3& normal, double outerRadius, float aspect, float innerRadius,
+                                                        float diskOuterRadius, float schwarzschild, int resolution);
+
+    // What the density estimate and the tracers need besides the layout
+    struct ParticleBlockExtras
+    {
+        float MeanMass{0.0f};   // kg, mean particle mass
+        float Target3D{0.0f};   // particles per cell asked of the 3D grids (0 = no adaptive smoothing)
+        float TargetDisk{0.0f}; // the same for the disk grid
+        bool Jitter{false};     // random offset of the march samples inside a step
+        ParticleDiskGrid Disk;
+    };
+
     // std140 block shared with shaders/particle_grid.glsl
     struct ParticleGridBlockGpu
     {
         glm::vec4 Min[kParticleGridLevels]{};
         glm::vec4 Info{0.0f, 0.0f, 0.0f, -1.0f};  // voxels per axis, kappa, reference temperature, tracer hole index
-        glm::vec4 Frame{0.0f};                    // r_g in metres, fixed-point units per kg (0 = float atomics), kg per unit
+        glm::vec4 Frame{0.0f};                    // r_g in metres, fixed-point units per kg (0 = float atomics), kg per unit, mean particle mass
+        glm::vec4 Smooth{0.0f};                   // particles per 3D cell asked of the density estimate (0 = off), coarsest mip, step jitter, particles per disk cell
+        glm::vec4 PlaneNormal{0.0f, 1.0f, 0.0f, 0.0f}; // disk normal, aspect ratio (0 = no disk grid)
+        glm::vec4 PlaneE1{1.0f, 0.0f, 0.0f, 0.0f};     // plane axis, inner radius of disk gas
+        glm::vec4 PlaneE2{0.0f, 0.0f, 1.0f, 0.0f};     // plane axis, outer radius of disk gas
+        glm::vec4 PlaneGrid{0.0f, 1.0f, 0.0f, 0.0f};   // minimum corner, cell, cells per axis, coarsest mip
+        glm::vec4 PlaneInfo{2.0f, 0.0f, 0.0f, 0.0f};   // Schwarzschild radius
     };
-    static_assert(sizeof(ParticleGridBlockGpu) == 64);
+    static_assert(sizeof(ParticleGridBlockGpu) == 160);
+
+    inline constexpr int kParticleGridMips = 5; // mip 0 is the resolved grid, 1.. are 2x2x2 box averages (adaptive smoothing)
+
+    [[nodiscard]] inline int ParticleGridMipCount(const int resolution)
+    {
+        if (resolution < 8) return 1;
+        return std::clamp(static_cast<int>(std::bit_width(static_cast<unsigned>(resolution))) - 3, 1, kParticleGridMips);
+    }
 
     struct SplatFixedPoint
     {
@@ -61,12 +118,17 @@ export namespace MoleHole
 
     [[nodiscard]] ParticleGridBlockGpu MakeParticleGridBlock(const ParticleGridLayout& layout, float kappa,
                                                              float referenceTemperature, int holeIndex, double lengthM,
-                                                             const SplatFixedPoint& fixed, bool fixedPoint);
+                                                             const SplatFixedPoint& fixed, bool fixedPoint,
+                                                             const ParticleBlockExtras& extras = {});
 
     // The splat on the CPU: kParticleGridLevels * N^3 * 5 values in the layout of the shader's accumulator, decoded to
     // kg. With `fixed` it quantises like the shader's integer atomics.
     [[nodiscard]] std::vector<float> SplatReference(const GPP::ParticleArrays& particles, const ParticleGridLayout& layout,
-                                                    float referenceTemperature, const SplatFixedPoint* fixed);
+                                                    float referenceTemperature, const SplatFixedPoint* fixed,
+                                                    const ParticleDiskGrid* disk = nullptr, std::vector<float>* diskWords = nullptr);
+
+    // Share of a particle that is disk gas (the shader's diskWeight) and its squared height in units of H
+    [[nodiscard]] float ParticleDiskWeight(const ParticleDiskGrid& disk, const glm::vec3& position, const glm::vec3& velocity, float& s2);
 
     // Column density D = rho r_g [kg/m^2] of a node holding `mass` kg
     [[nodiscard]] inline double ParticleColumnDensity(const double mass, const float voxel, const double lengthM)
@@ -95,8 +157,8 @@ export namespace MoleHole
         ParticleSplatter(const ParticleSplatter&) = delete;
         ParticleSplatter& operator=(const ParticleSplatter&) = delete;
 
-        // Allocates the accumulators and textures for N voxels per axis (1 = placeholders); a no-op when unchanged
-        void Configure(int resolution);
+        // Allocates the accumulators and textures for N voxels per axis and M plane cells per axis (1 = placeholders); a no-op when unchanged
+        void Configure(int resolution, int diskResolution = 1);
         // Call once per frame: releases resources replaced by Configure once the GPU cannot use them any more
         void Tick();
 
@@ -109,10 +171,13 @@ export namespace MoleHole
         void WriteBlock(const ParticleGridBlockGpu& block);
 
         [[nodiscard]] int Resolution() const noexcept;
+        [[nodiscard]] int DiskResolution() const noexcept;
         [[nodiscard]] bool UsesFloatAtomics(bool fixedPoint) const noexcept;
         [[nodiscard]] vk::Buffer Block() const;
         [[nodiscard]] vk::Buffer Accumulator() const;
-        [[nodiscard]] std::array<std::shared_ptr<GPP::VulkanImage>, 4> Textures() const;
+        [[nodiscard]] vk::Buffer DiskAccumulator() const;
+        // 3D level 0 A, B, level 1 A, B, then the disk grid A, B
+        [[nodiscard]] std::array<std::shared_ptr<GPP::VulkanImage>, 6> Textures() const;
         [[nodiscard]] bool Ready() const noexcept;
         [[nodiscard]] std::optional<std::string> Failure() const;
 

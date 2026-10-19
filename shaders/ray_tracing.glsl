@@ -159,7 +159,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
             float temperature, column;
 
             if (particleDisk) {
-                vec3 relativeMid = relativePos + newDirection * (0.5 * currentStepSize);
+                vec3 relativeMid = relativePos + newDirection * (particleJitter() * currentStepSize);
                 float D, gasTemperature;
                 vec3 gasVelocity;
                 if (particleGas(relativeMid, bh.mass, D, gasTemperature, gasVelocity)
@@ -322,13 +322,13 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
                 continue;
             }
 
-            color += alpha * texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
+            color += alpha * skyTexel(directionToSpherical(currentDir));
             return color;
         }
     }
 
     g_termination = TERM_STEPS;
-    color += alpha * texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
+    color += alpha * skyTexel(directionToSpherical(currentDir));
     return color;
 }
 
@@ -377,7 +377,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
 
     if (u_numBlackHoles == 0 || u_blackHoles[0].mass <= 0.0f) {
         if (objects && segmentObjectHit(rayOrigin, dir, 1e10f, objectColor, hitPoint, hitSolid)) return objectColor;
-        return texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
+        return skyTexel(directionToSpherical(dir));
     }
 
     BlackHoleData bh = u_blackHoles[0];
@@ -397,7 +397,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             float disc = b * b - (dot(rel, rel) - enterRadius * enterRadius);
             if (b >= 0.0f || disc < 0.0f) {
                 if (objects && segmentObjectHit(rayOrigin, dir, 1e10f, objectColor, hitPoint, hitSolid)) return objectColor;
-                return texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
+                return skyTexel(directionToSpherical(dir));
             }
             float entry = -b - sqrt(disc);
             if (objects && segmentObjectHit(rayOrigin, dir, entry, objectColor, hitPoint, hitSolid)) return objectColor;
@@ -520,7 +520,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             float gLaunch;
             if (particleDisk) {
                 vec3 chordEnd = blToCartesian(y.x, y.y, phi, st.a);
-                vec3 midLocal = 0.5f * (chordStart + chordEnd);
+                vec3 midLocal = mix(chordStart, chordEnd, particleJitter());
                 float D, gasTemperature;
                 vec3 gasVelocity;
                 if (particleGas(frame * midLocal, mass, D, gasTemperature, gasVelocity)
@@ -584,5 +584,5 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         return colorValue + alpha * objectColor;
     }
 
-    return colorValue + alpha * texture(u_skyboxTexture, directionToSpherical(skyDirection)).rgb;
+    return colorValue + alpha * skyTexel(directionToSpherical(skyDirection));
 }

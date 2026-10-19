@@ -6,6 +6,7 @@ import std;
 import glm;
 import GPP;
 import :Simulation.Components;
+import :Simulation.AccretionDisk;
 import :Rendering.Frame;
 import :Rendering.Settings;
 import :Rendering.Metric;
@@ -103,11 +104,60 @@ export namespace MoleHole
 
     // Point source at the primary hole radiating the disk luminosity as a flat Lambertian emitter (I ~ |cos theta|
     // about the spin axis). Approximation L2, see the notes.
+    // Luminosity, colour reference and peak of a particle disk (Paczynski-Wiita efficiency 1/16, Novikov-Thorne peak
+    // temperature of the component's own accretion rate): the analytic settings do not describe it.
+    struct ParticleDiskLight
+    {
+        double Efficiency{0.0};
+        double AccretionRateKgPerS{0.0};
+        double PeakTemperatureK{0.0};
+        double InnerRadiusM{0.0};
+        double HorizonRadiusM{0.0};
+    };
+
+    [[nodiscard]] inline std::optional<ParticleDiskLight> MakeParticleDiskLight(const AccretionDiskComponent& disk,
+                                                                                const BlackHoleComponent& hole)
+    {
+        if (disk.Model != DiskModel::Particles) return std::nullopt;
+        const auto units = GPP::ParticleUnits::Geometrized(hole.Mass);
+        const auto setup = MakeDiskSetup(disk, hole, units);
+        ParticleDiskLight out;
+        out.Efficiency = kDiskRadiativeEfficiency;
+        out.AccretionRateKgPerS = setup.MassRate;
+        out.PeakTemperatureK = DiskPeakTemperature(setup);
+        out.InnerRadiusM = setup.InnerRadius * units.Length;
+        out.HorizonRadiusM = 2.0 * GPP::Units::GravitationalRadius(hole.Mass);
+        if (!(out.AccretionRateKgPerS > 0.0) || !(out.PeakTemperatureK > 0.0)) return std::nullopt;
+        return out;
+    }
+
     [[nodiscard]] inline DiskLightInfo ComputeDiskLight(const BlackHoleComponent& hole, const glm::dvec3& positionM,
-                                                        const RenderSettings& settings, DiskLightCache& cache)
+                                                        const RenderSettings& settings, DiskLightCache& cache,
+                                                        const std::optional<ParticleDiskLight>& particles = std::nullopt)
     {
         DiskLightInfo out;
         using namespace GPP::Units;
+        if (particles)
+        {
+            if (hole.Mass <= 0.0) return out;
+            out.Efficiency = particles->Efficiency;
+            out.AccretionRateKgPerS = particles->AccretionRateKgPerS;
+            out.LuminosityW = DiskLuminosityW(out.Efficiency, out.AccretionRateKgPerS);
+            out.PeakTemperatureK = particles->PeakTemperatureK;
+            out.ColorTemperatureK = settings.DiskDisplayTemperature > 0.0f ? settings.DiskDisplayTemperature : out.PeakTemperatureK;
+            out.InnerRadiusM = particles->InnerRadiusM;
+            out.HorizonRadiusM = particles->HorizonRadiusM;
+            const double t2 = out.PeakTemperatureK * out.PeakTemperatureK;
+            out.Calibration = kDiskReferenceLuminance * static_cast<double>(Pi()) / (kStefanBoltzmann * t2 * t2)
+                              * std::exp2(static_cast<double>(settings.DiskGainEv));
+            out.Color = GPP::Radiometry::BlackbodyColor(out.ColorTemperatureK);
+            out.PositionM = positionM;
+            out.Axis = EffectiveSpinAxis(hole.SpinAxis, hole.Spin);
+            const double peak = out.LuminosityW / (2.0 * static_cast<double>(Pi()));
+            out.PeakIntensity = static_cast<float>(peak * out.Calibration / RadianceToImage());
+            out.Valid = true;
+            return out;
+        }
         const auto metric = MakeKerrNewmanParams(static_cast<std::int32_t>(settings.Solution), 1.0, hole.Spin, hole.Charge);
         if (hole.Mass <= 0.0 || settings.DiskAccretionRate <= 0.0 || !HasHorizon(metric)) return out;
 
@@ -139,7 +189,8 @@ export namespace MoleHole
         out.InnerRadiusM = entry.InnerRadiusG * gravitationalRadius;
         out.HorizonRadiusM = entry.HorizonRadiusG * gravitationalRadius;
         const double t2 = entry.PeakTemperatureK * entry.PeakTemperatureK;
-        out.Calibration = kDiskReferenceLuminance * static_cast<double>(Pi()) / (kStefanBoltzmann * t2 * t2);
+        out.Calibration = kDiskReferenceLuminance * static_cast<double>(Pi()) / (kStefanBoltzmann * t2 * t2)
+                          * std::exp2(static_cast<double>(settings.DiskGainEv));
         out.Color = GPP::Radiometry::BlackbodyColor(out.ColorTemperatureK);
         out.PositionM = positionM;
         out.Axis = EffectiveSpinAxis(hole.SpinAxis, hole.Spin);
@@ -198,6 +249,7 @@ export namespace MoleHole
         if (settings.DiskLight)
         {
             const BlackHoleComponent* primary = nullptr;
+            const AccretionDiskComponent* primaryDisk = nullptr;
             glm::dvec3 position{0.0};
             for (const auto [entity, hole, transform] :
                  registry.view<const BlackHoleComponent, const GPP::TransformComponent>().each())
@@ -206,11 +258,13 @@ export namespace MoleHole
                 {
                     primary = &hole;
                     position = transform.Position;
+                    primaryDisk = registry.try_get<AccretionDiskComponent>(entity);
                 }
             }
             if (primary)
             {
-                out.Disk = ComputeDiskLight(*primary, position, settings, cache);
+                const auto particles = primaryDisk ? MakeParticleDiskLight(*primaryDisk, *primary) : std::nullopt;
+                out.Disk = ComputeDiskLight(*primary, position, settings, cache, particles);
                 if (out.Disk.Valid)
                 {
                     GPP::LightGpu light;

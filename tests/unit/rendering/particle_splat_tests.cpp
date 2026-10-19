@@ -205,7 +205,7 @@ TEST_CASE("The grid layout nests two levels around the disk and the block matche
     CHECK(layout.Levels[0].Min.x == Approx(-32.0f));
     CHECK(MakeParticleGridLayout(100.0, 4).Resolution == 8);
     CHECK(MakeParticleGridLayout(100.0, 4096).Resolution == 256);
-    CHECK(sizeof(ParticleGridBlockGpu) == 64);
+    CHECK(sizeof(ParticleGridBlockGpu) == 160);
 
     const auto fixed = MakeSplatFixedPoint(2.0e20);
     CHECK(fixed.Unit * fixed.InverseUnit == Approx(1.0f));
@@ -350,6 +350,236 @@ TEST_CASE("The GPU splat conserves the particle mass (V-P8) and matches the CPU 
     }
 }
 
+namespace
+{
+    // Particles of a thin disk in the XZ plane (normal +y): circular orbits in a Gaussian layer of H = h R, plus a stream
+    // of radially infalling gas far from the plane
+    struct DiskCloud
+    {
+        ParticleArrays Particles;
+        double DiskMass{0.0};
+        double StreamMass{0.0};
+    };
+
+    DiskCloud MakeDiskCloud(const std::size_t disk, const std::size_t stream, const float aspect, const std::uint32_t seed)
+    {
+        std::mt19937 rng(seed);
+        std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+        std::normal_distribution<float> normal(0.0f, 1.0f);
+        DiskCloud cloud;
+        cloud.Particles.Resize(disk + stream);
+        const float mass = 1.0e20f;
+        for (std::size_t i = 0; i < disk; ++i)
+        {
+            const float R = 8.0f + 12.0f * unit(rng);
+            const float phi = 6.2831853f * unit(rng);
+            const float z = aspect * R * normal(rng);
+            const float vK = std::sqrt(R) / (R - 2.0f);
+            cloud.Particles.PosMass[i] = glm::vec4(R * std::cos(phi), z, R * std::sin(phi), mass);
+            cloud.Particles.VelTemp[i] = glm::vec4(vK * std::sin(phi), aspect * vK * normal(rng), -vK * std::cos(phi), 3.0e5f);
+            cloud.Particles.Meta[i] = glm::uvec4(0u, 1u, 0u, static_cast<std::uint32_t>(i));
+            cloud.DiskMass += mass;
+        }
+        for (std::size_t i = disk; i < disk + stream; ++i)
+        {
+            const float R = 10.0f + 8.0f * unit(rng);
+            const float phi = 6.2831853f * unit(rng);
+            const float vK = std::sqrt(R) / (R - 2.0f);
+            cloud.Particles.PosMass[i] = glm::vec4(R * std::cos(phi), 0.2f * normal(rng), R * std::sin(phi), mass);
+            cloud.Particles.VelTemp[i] = glm::vec4(-0.7f * vK * std::cos(phi), 0.0f, -0.7f * vK * std::sin(phi), 1.0e6f);
+            cloud.Particles.Meta[i] = glm::uvec4(0u, 1u, 0u, static_cast<std::uint32_t>(i));
+            cloud.StreamMass += mass;
+        }
+        return cloud;
+    }
+
+    double DiskMassOf(const std::vector<float>& words, const ParticleDiskGrid& grid)
+    {
+        double sum = 0.0;
+        const std::size_t cells = static_cast<std::size_t>(grid.Resolution) * grid.Resolution;
+        for (std::size_t c = 0; c < cells; ++c) sum += words[c * kParticleDiskChannels];
+        return sum;
+    }
+}
+
+TEST_CASE("The disk grid spans the coarse level with an orthonormal plane basis", "[rendering][splat][disk]")
+{
+    const auto grid = MakeParticleDiskGrid(glm::vec3(0.3f, 1.0f, -0.2f), 50.0, 0.05f, 6.0f, 62.5f, 2.0f, 1024);
+    CHECK(grid.Resolution == 1024);
+    CHECK(grid.Min == Approx(-80.0f));
+    CHECK(grid.Cell * static_cast<float>(grid.Resolution) == Approx(160.0f));
+    CHECK(glm::length(grid.Normal) == Approx(1.0f));
+    CHECK(glm::dot(grid.E1, grid.Normal) == Approx(0.0f).margin(1e-6));
+    CHECK(glm::dot(grid.E2, grid.Normal) == Approx(0.0f).margin(1e-6));
+    CHECK(glm::dot(grid.E1, grid.E2) == Approx(0.0f).margin(1e-6));
+    CHECK(glm::length(grid.E1) == Approx(1.0f));
+    CHECK(glm::length(grid.E2) == Approx(1.0f));
+    CHECK(grid.Outer == Approx(62.5f));
+    CHECK(MakeParticleDiskGrid(glm::vec3(0.0f, 1.0f, 0.0f), 50.0, 0.0f, 6.0f, 62.5f, 2.0f, 1024).Resolution == 0);
+    CHECK(MakeParticleDiskGrid(glm::vec3(0.0f, 1.0f, 0.0f), 50.0, 0.05f, 6.0f, 62.5f, 2.0f, 4).Resolution == 0);
+    CHECK(MakeParticleDiskGrid(glm::vec3(0.0f, 1.0f, 0.0f), 50.0, 0.05f, 6.0f, 62.5f, 2.0f, 100000).Resolution == 4096);
+
+    CHECK(ParticleGridMipCount(128) == 5);
+    CHECK(ParticleGridMipCount(32) == 3);
+    CHECK(ParticleDiskMipCount(1024) == 6);
+    CHECK(ParticleDiskMipCount(16) == 1);
+}
+
+TEST_CASE("Gas on circular orbits in the thin layer is disk gas, streams and plunging matter are not", "[rendering][splat][disk]")
+{
+    const auto grid = MakeParticleDiskGrid(glm::vec3(0.0f, 1.0f, 0.0f), 50.0, 0.05f, 6.0f, 62.5f, 2.0f, 512);
+    const float R = 15.0f;
+    const float vK = std::sqrt(R) / (R - 2.0f);
+    float s2 = 0.0f;
+    CHECK(ParticleDiskWeight(grid, glm::vec3(R, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -vK), s2) == Approx(1.0f));
+    CHECK(ParticleDiskWeight(grid, glm::vec3(R, 0.05f * R, 0.0f), glm::vec3(0.0f, 0.02f * vK, -vK), s2) == Approx(1.0f));
+    CHECK(s2 == Approx(1.0f).margin(1e-5));
+    // Slow radial drift of the viscous layer stays disk gas
+    CHECK(ParticleDiskWeight(grid, glm::vec3(R, 0.0f, 0.0f), glm::vec3(-0.05f * vK, 0.0f, -vK), s2) == Approx(1.0f));
+    // A stream falling in at half the circular speed
+    CHECK(ParticleDiskWeight(grid, glm::vec3(R, 0.0f, 0.0f), glm::vec3(-0.6f * vK, 0.0f, -0.5f * vK), s2) == Approx(0.0f).margin(1e-6));
+    // Far above the layer (4 to 6 H are the hand-over)
+    CHECK(ParticleDiskWeight(grid, glm::vec3(R, 0.5f * R, 0.0f), glm::vec3(0.0f, 0.0f, -vK), s2) == Approx(0.0f).margin(1e-6));
+    // Inside the inner radius and beyond the disk gas reach
+    CHECK(ParticleDiskWeight(grid, glm::vec3(3.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.6f), s2) == 0.0f);
+    CHECK(ParticleDiskWeight(grid, glm::vec3(70.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -0.1f), s2) == 0.0f);
+    // Without a disk grid everything is 3D gas
+    CHECK(ParticleDiskWeight(ParticleDiskGrid{}, glm::vec3(R, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -vK), s2) == 0.0f);
+}
+
+TEST_CASE("The CPU splat splits the mass between the 3D grids and the disk grid without losing any", "[rendering][splat][disk]")
+{
+    const auto layout = MakeParticleGridLayout(30.0, 64);
+    const auto grid = MakeParticleDiskGrid(glm::vec3(0.0f, 1.0f, 0.0f), 30.0, 0.05f, 6.0f, 37.5f, 2.0f, 512);
+    const auto cloud = MakeDiskCloud(3000, 1000, 0.05f, 5);
+    const auto fixed = MakeSplatFixedPoint(1.0e20);
+    for (const bool useFixed : {false, true})
+    {
+        std::vector<float> diskWords;
+        const auto words = SplatReference(cloud.Particles, layout, 1.0e6f, useFixed ? &fixed : nullptr, &grid, &diskWords);
+        const double coarse = LevelSums(words, layout, 1)[0];
+        const double disk = DiskMassOf(diskWords, grid);
+        INFO("fixed point " << useFixed << ": 3D " << coarse << ", disk " << disk);
+        CHECK(coarse + disk == Approx(cloud.DiskMass + cloud.StreamMass).epsilon(1e-4));
+        CHECK(disk == Approx(cloud.DiskMass).epsilon(0.02));
+        CHECK(coarse == Approx(cloud.StreamMass).epsilon(0.05));
+    }
+}
+
+TEST_CASE("The GPU disk grid matches the CPU reference, conserves mass through the mips and repeats bit for bit", "[rendering][splat][disk][gpu]")
+{
+    auto* rig = SplatRig::Get();
+    if (!rig) SKIP("no Vulkan device");
+    auto splatter = MakeSplatter(*rig);
+    constexpr int kPlane = 128;
+    splatter->Configure(kResolution, kPlane);
+
+    const auto layout = MakeParticleGridLayout(30.0, kResolution);
+    const auto grid = MakeParticleDiskGrid(glm::vec3(0.2f, 1.0f, 0.1f), 30.0, 0.06f, 6.0f, 37.5f, 2.0f, kPlane);
+    auto cloud = MakeDiskCloud(4000, 1500, 0.06f, 9);
+    // The orbits of MakeDiskCloud lie in the XZ plane, so tilt the cloud into the plane of this grid
+    const glm::vec3 up(0.0f, 1.0f, 0.0f);
+    const glm::vec3 axis = glm::normalize(glm::cross(up, grid.Normal));
+    const float angle = std::acos(glm::dot(up, grid.Normal));
+    const auto tilt = [&](const glm::vec3& v)
+    {
+        return v * std::cos(angle) + glm::cross(axis, v) * std::sin(angle) + axis * glm::dot(axis, v) * (1.0f - std::cos(angle));
+    };
+    for (std::size_t i = 0; i < cloud.Particles.Size(); ++i)
+    {
+        cloud.Particles.PosMass[i] = glm::vec4(tilt(glm::vec3(cloud.Particles.PosMass[i])), cloud.Particles.PosMass[i].w);
+        cloud.Particles.VelTemp[i] = glm::vec4(tilt(glm::vec3(cloud.Particles.VelTemp[i])), cloud.Particles.VelTemp[i].w);
+    }
+    const auto buffers = Upload(*rig, cloud.Particles);
+    const auto units = MakeSplatFixedPoint((cloud.DiskMass + cloud.StreamMass) / 5500.0);
+    const double lengthM = 14766.0;
+    ParticleBlockExtras extras;
+    extras.MeanMass = 1.0e20f;
+    extras.Disk = grid;
+    const auto block = MakeParticleGridBlock(layout, 0.034f, 1.0e6f, 0, lengthM, units, true, extras);
+
+    const auto run = [&]
+    {
+        VulkanDescriptorAllocator descriptors(rig->Device, 64);
+        rig->Submit([&](const vk::CommandBuffer cmd)
+        {
+            splatter->Record(cmd, [&](const vk::DescriptorSetLayout layoutSet) { return descriptors.Allocate(layoutSet); }, buffers.View, block, true);
+        });
+        const std::size_t words = static_cast<std::size_t>(kPlane) * kPlane * kParticleDiskChannels;
+        auto raw = rig->ReadBuffer<std::uint32_t>(splatter->DiskAccumulator(), words);
+        std::vector<float> out(words);
+        for (std::size_t i = 0; i < words; ++i)
+        {
+            const std::size_t c = i % kParticleDiskChannels;
+            const float scale = c == 1 ? static_cast<float>(kParticleTemperatureUnits) : c == 5 ? static_cast<float>(kParticleDiskSpreadUnits) : 1.0f;
+            out[i] = static_cast<float>(static_cast<std::int32_t>(raw[i])) * units.Unit * scale;
+        }
+        return out;
+    };
+    const auto gpu = run();
+
+    std::vector<float> cpuDisk;
+    const auto cpu3d = SplatReference(cloud.Particles, layout, 1.0e6f, &units, &grid, &cpuDisk);
+    const double gpuMass = DiskMassOf(gpu, grid);
+    const double cpuMass = DiskMassOf(cpuDisk, grid);
+    INFO("disk mass " << gpuMass << " (GPU), " << cpuMass << " (CPU), thin layer " << cloud.DiskMass);
+    CHECK(gpuMass == Approx(cpuMass).epsilon(1e-5));
+    CHECK(gpuMass + LevelSums(cpu3d, layout, 1)[0] == Approx(cloud.DiskMass + cloud.StreamMass).epsilon(1e-4));
+    double worst = 0.0;
+    double scale = 0.0;
+    for (std::size_t i = 0; i < gpu.size(); i += kParticleDiskChannels) scale = std::max<double>(scale, std::abs(cpuDisk[i]));
+    for (std::size_t i = 0; i < gpu.size(); ++i) worst = std::max<double>(worst, std::abs(gpu[i] - cpuDisk[i]));
+    CHECK(worst < 1e-3 * scale);
+
+    // Resolved texture: mass per plane area times the cell area gives the mass back (binomial filter, no edge loss here)
+    const auto textures = splatter->Textures();
+    const auto readPlane = [&](const std::size_t index, const std::uint32_t channels, const std::uint32_t size)
+    {
+        const auto bytes = static_cast<std::size_t>(size) * size * channels * sizeof(float);
+        VulkanBuffer staging(rig->Device, MakeReadbackBufferSpecification(bytes), rig->Log);
+        rig->Submit([&](const vk::CommandBuffer cmd)
+        {
+            CopyImageToBuffer(cmd, textures[index]->GetImage(), staging.GetBuffer(), {size, size, 1}, vk::ImageLayout::eGeneral);
+        });
+        std::vector<float> out(bytes / sizeof(float));
+        staging.Read(out.data(), bytes);
+        return out;
+    };
+    const auto resolved = readPlane(4, 4, kPlane);
+    double texMass = 0.0;
+    for (std::size_t c = 0; c < static_cast<std::size_t>(kPlane) * kPlane; ++c) texMass += resolved[c * 4];
+    texMass *= static_cast<double>(grid.Cell) * grid.Cell * lengthM * lengthM;
+    CHECK(texMass == Approx(gpuMass).epsilon(2e-3));
+
+    // Every mip level is a box average, so the mean density is the same on all of them
+    for (int mip = 1; mip < ParticleDiskMipCount(kPlane); ++mip)
+    {
+        const auto size = static_cast<std::uint32_t>(kPlane >> mip);
+        const auto bytes = static_cast<std::size_t>(size) * size * 4 * sizeof(float);
+        VulkanBuffer staging(rig->Device, MakeReadbackBufferSpecification(bytes), rig->Log);
+        rig->Submit([&](const vk::CommandBuffer cmd)
+        {
+            vk::BufferImageCopy copy{};
+            copy.imageSubresource = {vk::ImageAspectFlagBits::eColor, static_cast<std::uint32_t>(mip), 0, 1};
+            copy.imageExtent = vk::Extent3D{size, size, 1};
+            cmd.copyImageToBuffer(textures[4]->GetImage(), vk::ImageLayout::eGeneral, staging.GetBuffer(), copy);
+        });
+        std::vector<float> level(bytes / sizeof(float));
+        staging.Read(level.data(), bytes);
+        double mean = 0.0;
+        for (std::size_t c = 0; c < static_cast<std::size_t>(size) * size; ++c) mean += level[c * 4];
+        mean /= static_cast<double>(size) * size;
+        double reference = 0.0;
+        for (std::size_t c = 0; c < static_cast<std::size_t>(kPlane) * kPlane; ++c) reference += resolved[c * 4];
+        reference /= static_cast<double>(kPlane) * kPlane;
+        INFO("mip " << mip);
+        CHECK(mean == Approx(reference).epsilon(1e-4));
+    }
+
+    const auto again = run();
+    CHECK(std::memcmp(gpu.data(), again.data(), gpu.size() * sizeof(float)) == 0);
+}
+
 TEST_CASE("The transfer through a uniform slab is the closed form and does not depend on the step", "[rendering][transfer][gpu]")
 {
     auto* rig = SplatRig::Get();
@@ -406,7 +636,7 @@ TEST_CASE("The splat and tracer kernels compile with the grid bindings", "[rende
         return std::ranges::any_of(shader.reflection.descriptorBindings, [&](const auto& b) { return b.set == 0 && b.binding == binding; });
     };
 
-    for (const int pass : {0, 1})
+    for (const int pass : {0, 1, 2})
     {
         for (const bool floatAtomics : {false, true})
         {
@@ -415,9 +645,9 @@ TEST_CASE("The splat and tracer kernels compile with the grid bindings", "[rende
             const auto shader = compiler.Compile(ShaderSource{.path = kRoot / "shaders" / "particle_splat.comp", .stage = ShaderStage::Compute, .defines = defines}, options);
             INFO("pass " << pass << " float " << floatAtomics);
             REQUIRE_FALSE(shader.spirv.empty());
-            CHECK(has(shader, 4));
+            CHECK(has(shader, pass == 2 ? 10 : 4));
             CHECK(has(shader, 5));
-            CHECK(has(shader, pass == 0 ? 0 : 6));
+            CHECK(has(shader, pass == 0 ? 0 : pass == 1 ? 6 : 11));
         }
     }
 
@@ -432,7 +662,7 @@ TEST_CASE("The splat and tracer kernels compile with the grid bindings", "[rende
             const auto shader = compiler.Compile(ShaderSource{.path = kRoot / "shaders" / file, .stage = ShaderStage::Compute, .defines = defines}, options);
             INFO(file << " f64 " << f64);
             REQUIRE_FALSE(shader.spirv.empty());
-            for (const std::uint32_t binding : {13u, 14u, 15u, 16u, 17u}) CHECK(has(shader, binding));
+            for (const std::uint32_t binding : {13u, 14u, 15u, 16u, 17u, 18u, 19u}) CHECK(has(shader, binding));
         }
     }
 }

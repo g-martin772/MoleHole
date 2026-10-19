@@ -81,7 +81,7 @@ namespace
     }
 
     std::unique_ptr<Pair> MakePair(GpuRig& rig, const std::uint32_t capacity, const int count, const double eccentricity,
-                                   const double ringRadius)
+                                   const double ringRadius, const double shock = 0.0, const double truncation = 0.0)
     {
         auto pair = std::make_unique<Pair>();
         pair->Hole.Mass = 10.0 * Units::kSolarMass;
@@ -96,6 +96,8 @@ namespace
         disk.RingMass = 1.0e20;
         disk.RingParticles = count;
         disk.Seed = 3;
+        disk.ShockDamping = shock;
+        disk.TruncationRadius = truncation;
         pair->Units = ParticleUnits::Geometrized(pair->Hole.Mass);
         pair->Setup = MakeDiskSetup(disk, pair->Hole, pair->Units);
 
@@ -193,6 +195,25 @@ TEST_CASE("The GPU kernels run the same disk physics as the CPU hooks", "[accret
     const auto cpu = *pair->Cpu->Board()->Sink(kDiskSinkId);
     const auto gpu = *pair->Gpu->Board()->Sink(kDiskSinkId);
     CHECK(gpu.Count == cpu.Count);
+}
+
+TEST_CASE("The GPU kernels run the shock damping and the tidal torque like the CPU hooks", "[accretion][gpu][parity]")
+{
+    auto* rig = GpuRig::Get();
+    if (!rig) SKIP("no Vulkan device");
+    auto pair = MakePair(*rig, 1u << 13, 3000, 0.5, 25.0, 40.0, 18.0);
+    pair->Cpu->Advance(4.0 * pair->Units.Time);
+    pair->Gpu->Advance(4.0 * pair->Units.Time);
+    const auto one = Compare(Snapshot(*pair->Cpu), Snapshot(*pair->Gpu));
+    INFO("one macro step: position " << one.Position << ", velocity " << one.Velocity);
+    CHECK(one.Position < 1e-5);
+    CHECK(one.Velocity < 1e-4);
+    pair->Cpu->Advance(400.0 * pair->Units.Time);
+    pair->Gpu->Advance(400.0 * pair->Units.Time);
+    const auto many = Compare(Snapshot(*pair->Cpu), Snapshot(*pair->Gpu));
+    INFO("a hundred macro steps: position " << many.Position << ", velocity " << many.Velocity);
+    CHECK(many.Position < 5e-3);
+    CHECK(many.Velocity < 5e-2);
 }
 
 TEST_CASE("The GPU disk plunges matter into the sink and books its energy like the CPU", "[accretion][gpu][bookkeeping]")

@@ -24,6 +24,9 @@ export namespace MoleHole
         double AspectRatio{0.1};
         double InnerRadius{0.0}; // r_g, 0 = ISCO
         double OuterRadius{100.0}; // r_g
+        double TruncationRadius{0.0}; // r_g, 0 = none: beyond it a tidal torque of the companion takes angular momentum from the gas
+        double ViewRadius{0.0};    // r_g, half width of the coarse particle grids, 0 = 1.6 OuterRadius
+        double ShockDamping{0.0};  // factor on the radial damping of gas with eccentric orbits (streams shock and circularise on their angular momentum), 0 = none
         double Opacity{0.034};     // m^2/kg
         int MaxParticles{1 << 18};
         DiskIntegrator Integrator{DiskIntegrator::PaczynskiWiita};
@@ -33,6 +36,12 @@ export namespace MoleHole
         double RingEccentricity{0.0};
         double RingMass{0.0};      // kg
         int RingParticles{20000};
+        // Warm start: a disk of near circular rings between SeedInner and SeedOuter (r_g, 0 = from 1.15 r_in) with the
+        // steady-state profile Sigma ~ R^-1/2 (1 - sqrt(r_in / R)), released once at the start
+        double SeedMass{0.0};      // kg, 0 = no seed
+        double SeedInner{0.0};
+        double SeedOuter{0.0};     // 0 = OuterRadius
+        int SeedParticles{100000};
         int Seed{1};
     };
 
@@ -41,12 +50,18 @@ export namespace MoleHole
     inline constexpr std::size_t kDiskInner = 2;
     inline constexpr std::size_t kDiskNormal = 3;
     inline constexpr std::size_t kDiskTemperature = 6;
+    inline constexpr std::size_t kDiskTruncation = 7; // R_t in simulation lengths, 0 = none
+    inline constexpr std::size_t kDiskTidal = 8;      // strength of the tidal torque in orbital rates
+    inline constexpr std::size_t kDiskShock = 9;      // extra radial damping of non-circular gas
+    inline constexpr float kDiskTidalStrength = 4.0f;
     inline constexpr double kDiskRadiativeEfficiency = 1.0 / 16.0; // Paczynski-Wiita binding energy at the ISCO
     inline constexpr double kMaxAccretionSpin = 0.998;
     inline constexpr double kDiskSinkRadius = 1.5; // in r_s: the PW force diverges at r_s and the energy booked there is garbage
     inline constexpr std::uint64_t kDiskSinkId = 0x4D6F6C65486F6C01ull;
     inline constexpr std::uint64_t kDiskRingId = 0x4D6F6C65486F6C02ull;
     inline constexpr std::uint64_t kDiskFeedId = 0x4D6F6C65486F6C03ull;
+    inline constexpr std::uint64_t kDiskSeedId = 0x4D6F6C65486F6C10ull; // + ring index
+    inline constexpr int kDiskSeedRings = 32;
 
     struct DiskStats
     {
@@ -173,6 +188,12 @@ export namespace MoleHole
         force.User[kDiskInner] = static_cast<float>(setup.InnerRadius);
         for (int i = 0; i < 3; ++i) force.User[kDiskNormal + i] = static_cast<float>(setup.Normal[i]);
         force.User[kDiskTemperature] = static_cast<float>(coefficient);
+        force.User[kDiskShock] = static_cast<float>(std::max(disk.ShockDamping, 0.0));
+        if (disk.TruncationRadius > 0.0)
+        {
+            force.User[kDiskTruncation] = static_cast<float>(disk.TruncationRadius * rg);
+            force.User[kDiskTidal] = kDiskTidalStrength;
+        }
         return setup;
     }
 
@@ -265,6 +286,62 @@ export namespace MoleHole
         return def;
     }
 
+    // Warm start: kDiskSeedRings thin rings, particles per ring proportional to the steady-state mass of the ring, every
+    // particle the same mass, circular speed and the viscous layer's velocity dispersion.
+    [[nodiscard]] inline std::vector<GPP::ParticleEmitterDef> MakeDiskSeed(
+        const AccretionDiskComponent& disk, const BlackHoleComponent& hole, const DiskSetup& setup,
+        const GPP::ParticleUnits& units, const glm::dvec3& position)
+    {
+        std::vector<GPP::ParticleEmitterDef> out;
+        if (!(disk.SeedMass > 0.0) || disk.SeedParticles <= 0) return out;
+        const double inner = disk.SeedInner > 0.0 ? disk.SeedInner * GPP::Units::GravitationalRadius(hole.Mass) / units.Length
+                                                  : 1.15 * setup.InnerRadius;
+        const double outer = disk.SeedOuter > 0.0 ? disk.SeedOuter * GPP::Units::GravitationalRadius(hole.Mass) / units.Length
+                                                  : setup.OuterRadius;
+        if (!(outer > inner)) return out;
+        const double edge = setup.InnerRadius;
+        std::array<double, kDiskSeedRings> weight{};
+        std::array<double, kDiskSeedRings + 1> bounds{};
+        double total = 0.0;
+        for (int k = 0; k <= kDiskSeedRings; ++k) bounds[k] = inner * std::pow(outer / inner, static_cast<double>(k) / kDiskSeedRings);
+        for (int k = 0; k < kDiskSeedRings; ++k)
+        {
+            const double R = std::sqrt(bounds[k] * bounds[k + 1]);
+            const double sigma = std::max(1.0 - std::sqrt(edge / R), 0.02) / std::sqrt(R);
+            weight[k] = sigma * 2.0 * std::numbers::pi * R * (bounds[k + 1] - bounds[k]);
+            total += weight[k];
+        }
+        const double particleMass = disk.SeedMass / disk.SeedParticles;
+        for (int k = 0; k < kDiskSeedRings; ++k)
+        {
+            const int count = static_cast<int>(std::llround(weight[k] / total * disk.SeedParticles));
+            if (count <= 0) continue;
+            const double R = std::sqrt(bounds[k] * bounds[k + 1]);
+            const double circular = PwCircularSpeed(R, setup.Force.Mu, setup.Force.SchwarzschildRadius) * units.Velocity();
+            const double fourth = setup.Force.User[kDiskTemperature] * std::max(1.0 - std::sqrt(edge / R), 0.0) / (R * R * R);
+            GPP::ParticleEmitterDef def;
+            def.Id = kDiskSeedId + static_cast<std::uint64_t>(k);
+            def.Position = position;
+            def.Rotation = FaceAxis(setup.Normal);
+            auto& p = def.Params;
+            p.Active = true;
+            p.Shape = GPP::ParticleEmitterShape::Ring;
+            p.Rate = 0.0;
+            p.RateMode = GPP::ParticleRateMode::ParticleRate;
+            p.ParticleMass = particleMass;
+            p.Burst = count;
+            p.Seed = static_cast<std::uint64_t>(disk.Seed) * 0x9E3779B97F4A7C15ull + 101 + static_cast<std::uint64_t>(k);
+            p.Radius = R * units.Length;
+            p.Thickness = (bounds[k + 1] - bounds[k]) * units.Length;
+            p.VelocityMode = GPP::ParticleVelocityMode::Azimuthal;
+            p.Speed = circular;
+            p.Dispersion = setup.AspectRatio * circular;
+            p.Temperature = std::max(std::sqrt(std::sqrt(fourth)), 1.0e4);
+            out.push_back(std::move(def));
+        }
+        return out;
+    }
+
     // Matter entering at the outer edge on circular orbits, at the component's mass rate.
     [[nodiscard]] inline std::optional<GPP::ParticleEmitterDef> MakeDiskFeed(
         const AccretionDiskComponent& disk, const BlackHoleComponent& hole, const DiskSetup& setup,
@@ -344,7 +421,18 @@ export namespace MoleHole
             float vphi = glm::dot(p.Velocity, azimuth);
             float vz = glm::dot(p.Velocity, normal);
 
-            vr *= std::exp(-rate * dt);
+            const float shock = f.User[kDiskShock];
+            float vrRate = rate;
+            float circular = 1.0f;
+            {
+                const float dv = vphi - keplerSpeed;
+                const float e2 = (vr * vr + dv * dv) / (keplerSpeed * keplerSpeed);
+                const float t = std::clamp((e2 - 0.04f) / (0.25f - 0.04f), 0.0f, 1.0f);
+                const float s = t * t * (3.0f - 2.0f * t);
+                if (shock > 0.0f) vrRate = rate * (1.0f + shock * s);
+                circular = 1.0f - s;
+            }
+            vr *= std::exp(-vrRate * dt);
 
             const float edge = std::max(1.0f - std::sqrt(inner / R), 0.04f);
             const float drift = 1.5f * rate * R / edge;
@@ -352,6 +440,12 @@ export namespace MoleHole
             float l = R * vphi;
             const float loss = drift * gradient * dt;
             l = l >= 0.0f ? std::max(l - loss, 0.0f) : std::min(l + loss, 0.0f);
+            const float truncation = f.User[kDiskTruncation];
+            if (truncation > 0.0f && R > truncation)
+            {
+                const float x = R / truncation - 1.0f;
+                l *= std::exp(-f.User[kDiskTidal] * omega * x * x * circular * dt);
+            }
             vphi = l / R;
 
             const auto bits = GPP::ParticleRng::Philox4x32(

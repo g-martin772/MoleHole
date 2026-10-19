@@ -105,6 +105,16 @@ namespace MoleHole
                 m_AwaitPlay = false;
                 m_LastProgress = std::chrono::steady_clock::now();
                 m_Stepping = runner != nullptr;
+                if (runner)
+                {
+                    // One tick so scripts run for the first frame; the clock is set one tick early and ends on the start time
+                    const double tick = m_TimeScale / std::max(runner->GetTickRate(), 1.0);
+                    runner->SetSimTime(m_SimStart - tick);
+                    runner->StepAndWait(1);
+                    ++m_UiState->ExportStepSerial;
+                    const auto stats = m_Renderer->GetBufferTargetStats(m_BufferTargetId);
+                    m_MinSerial = (stats ? stats->FramesRendered : 0) + 3;
+                }
                 m_UiState->ExportStepDelta = 1.0f / static_cast<float>(std::max(1, m_Request.Framerate));
             }
             else
@@ -189,7 +199,8 @@ namespace MoleHole
         m_Stepping = false;
         m_StartedPlay = false;
         m_TickDebt = 0.0;
-        if (const auto runner = m_Runner(); request.RequestKind == ExportRequest::Kind::Video && runner)
+        // Videos play the scene; so do images that name a start time, so scripts (ships, cameras) show the pose of that moment
+        if (const auto runner = m_Runner(); (request.RequestKind == ExportRequest::Kind::Video || request.SimStart) && runner)
         {
             runner->SetManualStepping(true);
             if (runner->IsPaused())

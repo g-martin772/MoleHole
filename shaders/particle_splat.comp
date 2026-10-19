@@ -15,11 +15,16 @@
 #include "particle_grid.glsl"
 
 const uint TEMPERATURE_UNITS = 4u;
+// s2 = (z / (h R))^2 is accumulated in sixteenths (disk gas has s2 < 16)
+const uint SPREAD_UNITS = 16u;
+const uint DISK_CHANNELS = 6u; // m, m T / T_ref, m v_x, m v_y, m v_z, m s2
 
 #ifdef PS_ATOMIC_FLOAT
 layout(std430, set = 0, binding = 4) buffer Accumulator { float accumulator[]; };
+layout(std430, set = 0, binding = 10) buffer DiskAccumulator { float diskAccumulator[]; };
 #else
 layout(std430, set = 0, binding = 4) buffer Accumulator { uint accumulator[]; };
+layout(std430, set = 0, binding = 10) buffer DiskAccumulator { uint diskAccumulator[]; };
 #endif
 
 #if PS_PASS == 0
@@ -37,6 +42,75 @@ void add(uint index, float value, float scale) {
 #else
     atomicAdd(accumulator[index], uint(int(roundEven(value * u_particleFrame.y * scale))));
 #endif
+}
+
+void addDisk(uint index, float value, float scale) {
+#ifdef PS_ATOMIC_FLOAT
+    atomicAdd(diskAccumulator[index], value);
+#else
+    atomicAdd(diskAccumulator[index], uint(int(roundEven(value * u_particleFrame.y * scale))));
+#endif
+}
+
+// Share of a particle that is disk gas: not streaming (radial speed below ~0.4 v_K, azimuthal speed within ~0.6 v_K of
+// the circular one) and inside the Gaussian layer of
+// H = h R (4 to 6 sigma in the combined height and vertical velocity: the wings are the photosphere, they belong to the
+// analytic profile). Smooth, so the two grids hand over gradually.
+// Also returns the squared height in units of H.
+float diskWeight(vec3 position, vec3 velocity, out float s2) {
+    s2 = 0.0;
+    float h = u_planeNormal.w;
+    if (h <= 0.0) return 0.0;
+    vec3 n = u_planeNormal.xyz;
+    float z = dot(position, n);
+    vec3 inPlane = position - z * n;
+    float R = length(inPlane);
+    if (R < u_planeE1.w || R > u_planeE2.w) return 0.0;
+    vec3 radial = inPlane / R;
+    vec3 azimuth = cross(n, radial);
+    float rs = u_planeInfo.x;
+    float vK = sqrt(R) / max(R - rs, 0.002 * rs);
+    float vr = dot(velocity, radial);
+    float vphi = dot(velocity, azimuth);
+    float vz = dot(velocity, n);
+    float radial2 = vr * vr / (vK * vK);
+    float shear2 = (vphi - vK) * (vphi - vK) / (vK * vK);
+    float zh = z / (h * R);
+    float vh = vz / (h * vK);
+    s2 = zh * zh;
+    float vertical = zh * zh + vh * vh;
+    return (1.0 - smoothstep(0.05, 0.25, radial2)) * (1.0 - smoothstep(0.25, 0.64, shear2))
+         * (1.0 - smoothstep(16.0, 36.0, vertical));
+}
+
+void depositDisk(vec3 position, float mass, vec3 velocity, float temperature, float s2) {
+    uint res = uint(u_planeGrid.z);
+    vec3 n = u_planeNormal.xyz;
+    vec3 inPlane = position - dot(position, n) * n;
+    vec2 cell = (vec2(dot(inPlane, u_planeE1.xyz), dot(inPlane, u_planeE2.xyz)) - u_planeGrid.x) / u_planeGrid.y;
+    ivec2 nearest = ivec2(floor(cell));
+    vec2 d = cell - vec2(nearest) - 0.5;
+    vec2 w0 = 0.5 * (0.5 - d) * (0.5 - d);
+    vec2 w1 = 0.75 - d * d;
+    vec2 w2 = 0.5 * (0.5 + d) * (0.5 + d);
+    for (int j = 0; j < 3; ++j) {
+        int y = nearest.y + j - 1;
+        if (y < 0 || y >= int(res)) continue;
+        float wy = j == 0 ? w0.y : (j == 1 ? w1.y : w2.y);
+        for (int i = 0; i < 3; ++i) {
+            int x = nearest.x + i - 1;
+            if (x < 0 || x >= int(res)) continue;
+            float wx = i == 0 ? w0.x : (i == 1 ? w1.x : w2.x);
+            float m = mass * wx * wy;
+            uint node = (uint(y) * res + uint(x)) * DISK_CHANNELS;
+            addDisk(node, m, 1.0);
+            addDisk(node + 1u, m * temperature, 1.0 / float(TEMPERATURE_UNITS));
+            addDisk(node + 2u, m * velocity.x, 1.0);
+            addDisk(node + 3u, m * velocity.y, 1.0);
+            addDisk(node + 4u, m * velocity.z, 1.0);
+            addDisk(node + 5u, m * s2, 1.0 / float(SPREAD_UNITS));
+        }
+    }
 }
 
 void deposit(int level, vec3 position, float mass, vec3 velocity, float temperature) {
@@ -79,11 +153,16 @@ void main() {
     vec4 pm = posMass[i];
     vec4 vt = velTemp[i];
     float temperature = vt.w / max(u_particleInfo.z, 1e-6);
-    deposit(1, pm.xyz, pm.w, vt.xyz, temperature);
-    if (all(lessThan(abs(pm.xyz), vec3(-u_particleMin[0].x)))) deposit(0, pm.xyz, pm.w, vt.xyz, temperature);
+    float s2;
+    float disk = diskWeight(pm.xyz, vt.xyz, s2);
+    float gas = pm.w * (1.0 - disk);
+    if (disk > 0.0) depositDisk(pm.xyz, pm.w * disk, vt.xyz, temperature, s2);
+    if (gas <= 0.0) return;
+    deposit(1, pm.xyz, gas, vt.xyz, temperature);
+    if (all(lessThan(abs(pm.xyz), vec3(-u_particleMin[0].x)))) deposit(0, pm.xyz, gas, vt.xyz, temperature);
 }
 
-#else
+#elif PS_PASS == 1
 
 layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 
@@ -142,6 +221,51 @@ void main() {
         imageStore(u_gridA1, voxel, a);
         imageStore(u_gridB1, voxel, vec4(b));
     }
+}
+
+#else
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 11, rgba32f) uniform writeonly image2D u_diskA;
+layout(set = 0, binding = 12, rg32f) uniform writeonly image2D u_diskB;
+
+float readDisk(uint index, float scale) {
+#ifdef PS_ATOMIC_FLOAT
+    return diskAccumulator[index];
+#else
+    return float(int(diskAccumulator[index])) * u_particleFrame.z * scale;
+#endif
+}
+
+const float TAPS2[3] = float[3](0.25, 0.5, 0.25);
+
+// Same [1 2 1] / 4 filter as the 3D grid, in the plane; extensive quantities per plane area
+void main() {
+    int res = int(u_planeGrid.z);
+    ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(texel, ivec2(res)))) return;
+    float m = 0.0;
+    float mt = 0.0;
+    vec3 p = vec3(0.0);
+    float spread = 0.0;
+    for (int j = -1; j <= 1; ++j) {
+        int y = texel.y + j;
+        if (y < 0 || y >= res) continue;
+        for (int i = -1; i <= 1; ++i) {
+            int x = texel.x + i;
+            if (x < 0 || x >= res) continue;
+            float w = TAPS2[i + 1] * TAPS2[j + 1];
+            uint node = (uint(y) * uint(res) + uint(x)) * DISK_CHANNELS;
+            m += w * readDisk(node, 1.0);
+            mt += w * readDisk(node + 1u, float(TEMPERATURE_UNITS));
+            p += w * vec3(readDisk(node + 2u, 1.0), readDisk(node + 3u, 1.0), readDisk(node + 4u, 1.0));
+            spread += w * readDisk(node + 5u, float(SPREAD_UNITS));
+        }
+    }
+    float perArea = 1.0 / (u_planeGrid.y * u_planeGrid.y * u_particleFrame.x * u_particleFrame.x);
+    imageStore(u_diskA, texel, vec4(m, mt, p.x, p.y) * perArea);
+    imageStore(u_diskB, texel, vec4(p.z, spread, 0.0, 0.0) * perArea);
 }
 
 #endif

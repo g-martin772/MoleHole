@@ -1,0 +1,35 @@
+#version 460
+
+// Mip chain of the particle grids: every voxel of mip k+1 is the mean of its 2x2x2 children of mip k. The grids hold
+// extensive densities (D, D T, D v), so the mean is the density over the larger cell. Notes: docs/notes/particle-disk.md
+
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+layout(set = 0, binding = 0) uniform sampler3D u_srcA;
+layout(set = 0, binding = 1) uniform sampler3D u_srcB;
+layout(set = 0, binding = 2, rgba32f) uniform writeonly image3D u_dstA;
+layout(set = 0, binding = 3, r32f) uniform writeonly image3D u_dstB;
+
+layout(push_constant) uniform Push { int srcLod; int dstSize; int srcSize; };
+
+void main() {
+    ivec3 v = ivec3(gl_GlobalInvocationID);
+    if (any(greaterThanEqual(v, ivec3(dstSize)))) return;
+    vec4 a = vec4(0.0);
+    float b = 0.0;
+    float count = 0.0;
+    for (int dz = 0; dz < 2; ++dz) {
+        for (int dy = 0; dy < 2; ++dy) {
+            for (int dx = 0; dx < 2; ++dx) {
+                ivec3 s = v * 2 + ivec3(dx, dy, dz);
+                if (any(greaterThanEqual(s, ivec3(srcSize)))) continue;
+                a += texelFetch(u_srcA, s, srcLod);
+                b += texelFetch(u_srcB, s, srcLod).r;
+                count += 1.0;
+            }
+        }
+    }
+    float inv = count > 0.0 ? 1.0 / count : 0.0;
+    imageStore(u_dstA, v, a * inv);
+    imageStore(u_dstB, v, vec4(b * inv));
+}

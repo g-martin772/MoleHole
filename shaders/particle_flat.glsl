@@ -26,7 +26,7 @@ void flatParticleDisk(int hole, vec3 rayOrigin, vec3 rayDir, float tMax, inout v
         vec3 rel = rayOrigin + rayDir * t - centre;
         float step = max(0.5 * particleVoxel(rel / mass) * mass, 1e-4 * mass);
         float ds = min(step, t1 - t);
-        vec3 mid = rayOrigin + rayDir * (t + 0.5 * ds) - centre;
+        vec3 mid = rayOrigin + rayDir * (t + particleJitter() * ds) - centre;
         t += ds;
         float D, DT;
         vec3 Dv;

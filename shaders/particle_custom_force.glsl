@@ -1,6 +1,6 @@
 // Paczynski-Wiita point mass plus the alpha-disk relaxation of AccretionDisk; the maths is mirrored in
 // src/simulation/accretion_disk.cppm (DiskKernel::PostMacro). User parameters: 0 alpha, 1 aspect ratio H/R, 2 inner
-// radius, 3-5 disk normal, 6 temperature coefficient.
+// radius, 3-5 disk normal, 6 temperature coefficient, 7 tidal truncation radius, 8 its strength, 9 radial damping boost of non-circular gas.
 
 #define PF_HAS_POST_MACRO
 
@@ -49,7 +49,18 @@ void pfPostMacro(inout Particle p, float dt, ForceParams f)
     float vphi = dot(p.vel, azimuth);
     float vz = dot(p.vel, normal);
 
-    vr *= exp(-rate * dt);
+    float shock = f.user[9];
+    float vrRate = rate;
+    float circular = 1.0;
+    {
+        float dv = vphi - keplerSpeed;
+        float e2 = (vr * vr + dv * dv) / (keplerSpeed * keplerSpeed);
+        float t = clamp((e2 - 0.04) / (0.25 - 0.04), 0.0, 1.0);
+        float s = t * t * (3.0 - 2.0 * t);
+        if (shock > 0.0) vrRate = rate * (1.0 + shock * s);
+        circular = 1.0 - s;
+    }
+    vr *= exp(-vrRate * dt);
 
     float edge = max(1.0 - sqrt(inner / R), 0.04);
     float drift = 1.5 * rate * R / edge;
@@ -57,6 +68,12 @@ void pfPostMacro(inout Particle p, float dt, ForceParams f)
     float l = R * vphi;
     float loss = drift * gradient * dt;
     l = l >= 0.0 ? max(l - loss, 0.0) : min(l + loss, 0.0);
+    float truncation = f.user[7];
+    if (truncation > 0.0 && R > truncation)
+    {
+        float x = R / truncation - 1.0;
+        l *= exp(-f.user[8] * omega * x * x * circular * dt);
+    }
     vphi = l / R;
 
     uvec4 bits = pfPhilox(uvec4(p.serial, floatBitsToUint(p.age), p.species, 0u), uvec2(0xD15C0001u, floatBitsToUint(dt)));
