@@ -17,7 +17,7 @@ bool isInInfluenceZone(vec3 pos, out int closestBHIndex, out float distanceToBH,
         vec3 relativePos = pos - u_blackHoles[j].position;
         float dist = length(relativePos);
         float r_s = calculateEventHorizonRadius(u_blackHoles[j].mass);
-        float r_i = calculateInfluenceRadius(r_s);
+        float r_i = particleInfluenceRadius(j, calculateInfluenceRadius(r_s));
 
         if (dist < r_i && dist < distanceToBH) {
             closestBHIndex = j;
@@ -133,6 +133,13 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
 
         // Adaptive step size
         float currentStepSize = stepSize * u_blackHoles[closestBH].mass * min(adaptiveStepRate, distToBH / r_s);
+        bool particleDisk = particleDiskActive(closestBH);
+        if (particleDisk) {
+            // Far from the hole the bending is weak: let the step grow with the distance, but never past half a voxel
+            float holeMass = u_blackHoles[closestBH].mass;
+            float voxelStep = 0.5 * particleVoxel(relativePos / holeMass) * holeMass;
+            currentStepSize = max(currentStepSize, min(currentStepSize * max(1.0, distToBH / (8.0 * r_s)), voxelStep));
+        }
 
         if (u_gravitationalLensingEnabled == 1) {
             vec3 acceleration = calculateAcceleration(angMomSqrd, relativePos, u_blackHoles[closestBH].mass);
@@ -151,7 +158,17 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
             diskInfo.y = max(diskInfo.y, 1.5 * r_s);
             float temperature, column;
 
-            if (u_accretionDiskVolumetric == 1) {
+            if (particleDisk) {
+                vec3 relativeMid = relativePos + newDirection * (0.5 * currentStepSize);
+                float D, gasTemperature;
+                vec3 gasVelocity;
+                if (particleGas(relativeMid, bh.mass, D, gasTemperature, gasVelocity)
+                    && u_particleInfo.y * D * currentStepSize / bh.mass > 1e-9) {
+                    float gLaunch;
+                    float g = particleGasGLensed(st, toLocal, relativeMid, newDirection, gasVelocity, gLaunch);
+                    particleAccumulate(D, gasTemperature, g, currentStepSize / max(gLaunch, 1e-6), bh.mass, color, alpha);
+                }
+            } else if (u_accretionDiskVolumetric == 1) {
                 float r = length(relativePos);
                 vec3 localPos = toLocal * relativePos;
                 float H = diskScaleHeight(st, r);
@@ -276,7 +293,7 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
                     vec3 toCenter = u_blackHoles[j].position - currentOrigin;
                     float distToCenter = length(toCenter);
                     float r_s = calculateEventHorizonRadius(u_blackHoles[j].mass);
-                    float r_i = calculateInfluenceRadius(r_s);
+                    float r_i = particleInfluenceRadius(j, calculateInfluenceRadius(r_s));
 
                     float distToInfluence = abs(distToCenter - r_i);
                     minDistToInfluence = min(minDistToInfluence, distToInfluence);
@@ -369,7 +386,8 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     mat3 frame = spinFrame(bh.spinAxis);
     mat3 toLocal = transpose(frame);
 
-    float influenceRadius = INTEGRATION_RADIUS_M * mass;
+    bool particleDisk = particleDiskActive(0);
+    float influenceRadius = particleInfluenceRadius(0, INTEGRATION_RADIUS_M * mass);
     vec3 marchOrigin = rayOrigin;
     {
         vec3 rel = rayOrigin - bh.position;
@@ -413,9 +431,9 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
 
     real rEscape = real(influenceRadius);
     vec4 diskInfo = u_diskInfo[0];
-    real diskOuter = real(diskInfo.z);
+    real diskOuter = particleDisk ? real(particleExtent() * mass) : real(diskInfo.z);
     real maxStep = real(10.0f * u_rayStepSize * mass);
-    bool volumetricDisk = u_accretionDiskEnabled == 1 && u_accretionDiskVolumetric == 1;
+    bool volumetricDisk = u_accretionDiskEnabled == 1 && u_accretionDiskVolumetric == 1 && !particleDisk;
 
     float ergoPath = 0.0f;
     float temperature, column;
@@ -457,10 +475,16 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             if (abs(float(r * rcos(y.y))) < 5.0f * H) h = min(h, real(0.25f * H));
         }
 
-        vec3 chordStart = objects ? blToCartesian(y.x, y.y, phi, st.a) : vec3(0.0f);
+        vec3 chordStart = (objects || particleDisk) ? blToCartesian(y.x, y.y, phi, st.a) : vec3(0.0f);
+        if (particleDisk) {
+            // The chord of a step must not exceed about half a voxel of the grid it lies in
+            h = min(h, real(0.4f * mass * particleVoxel(frame * chordStart / mass)));
+        }
         real r0 = y.x;
         real phi0 = phi;
+        real pr0 = y.z;
         real pth0 = y.w;
+        real th0 = y.y;
         real ct0 = rcos(y.y);
         geodesicStep(st, E, L, y, phi, -h, dy, dphi);
         r = y.x;
@@ -494,7 +518,24 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
 
         if (u_accretionDiskEnabled == 1) {
             float gLaunch;
-            if (volumetricDisk) {
+            if (particleDisk) {
+                vec3 chordEnd = blToCartesian(y.x, y.y, phi, st.a);
+                vec3 midLocal = 0.5f * (chordStart + chordEnd);
+                float D, gasTemperature;
+                vec3 gasVelocity;
+                if (particleGas(frame * midLocal, mass, D, gasTemperature, gasVelocity)
+                    && u_particleInfo.y * D * float(h) / mass > 1e-9) {
+                    real rMid = real(0.5) * (r0 + y.x);
+                    real thetaMid = real(0.5) * (th0 + y.y);
+                    real phiMid = real(0.5) * (phi0 + phi);
+                    real prMid = real(0.5) * (pr0 + y.z);
+                    real pthMid = real(0.5) * (pth0 + y.w);
+                    float g = particleGasG(st, rMid, thetaMid, phiMid, toLocal * gasVelocity,
+                                           E, L, prMid, pthMid, cameraEnergy, float(cameraAlpha), gLaunch);
+                    // Proper length through the gas: ds = (-p . u) dlambda.
+                    particleAccumulate(D, gasTemperature, g, float(h) / max(gLaunch, 1e-6f), mass, colorValue, alpha);
+                }
+            } else if (volumetricDisk) {
                 if (r >= real(diskInfo.y) && r <= diskOuter) {
                     vec3 localPos = blToCartesian(r, y.y, phi, st.a);
                     float H = diskScaleHeight(st, float(r));

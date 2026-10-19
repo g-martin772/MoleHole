@@ -30,6 +30,15 @@ export namespace MoleHole
         MeshSceneFrame Scene;
     };
 
+    // The particle disk grid of this frame, filled by ParticleSplatStage and bound by the tracer. The textures are
+    // always valid (1^3 placeholders while no disk is active); the block says whether the tracer should sample them.
+    struct ParticleGridFrame
+    {
+        bool Active = false;
+        vk::Buffer Block{};
+        std::array<std::shared_ptr<GPP::VulkanImage>, 4> Textures;
+    };
+
     struct RenderResources
     {
         std::shared_ptr<GPP::Renderer> Renderer;
@@ -55,6 +64,7 @@ export namespace MoleHole
         GPP::VulkanImage* BloomResult = nullptr;
 
         MeshTraceFrame MeshTrace;
+        ParticleGridFrame ParticleGrid;
     };
 
     struct RenderFrameContext

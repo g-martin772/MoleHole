@@ -1,0 +1,18 @@
+#version 460
+
+layout(local_size_x = 1) in;
+
+#include "disk_transfer.glsl"
+
+layout(std430, set = 0, binding = 0) readonly buffer Cases { vec4 cases[]; }; // x: steps, y: total optical depth, z: source
+layout(std430, set = 0, binding = 1) buffer Results { vec4 results[]; };      // rgb: radiance, a: transmittance
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    int steps = int(cases[i].x);
+    float dTau = cases[i].y / float(steps);
+    vec3 color = vec3(0.0);
+    float alpha = 1.0;
+    for (int k = 0; k < steps; ++k) diskAccumulateStable(dTau, vec3(cases[i].z), color, alpha);
+    results[i] = vec4(color, alpha);
+}

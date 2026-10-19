@@ -80,6 +80,11 @@ export namespace MoleHole
     inline constexpr std::string_view kConstraintDriftNote = "Colour = log10 of the largest |2H| / E^2 along the ray. Light paths have H = 0; "
                                                              "drift near the horizon is expected and harmless.";
 
+    inline constexpr std::string_view kParticleDensityLowLabel = "1e-8 /r_g";
+    inline constexpr std::string_view kParticleDensityHighLabel = "1e8 /r_g";
+    inline constexpr std::string_view kParticleDensityNote = "Colour = log10 of kappa rho r_g, the optical depth per r_g, where a straight ray crosses the "
+                                                             "equatorial plane of the particle disk's hole. Black: no grid there.";
+
     // ERGOSPHERE_TINT / ISCO_RING_COLOR in shaders/debug_view.glsl
     inline constexpr std::array<LegendEntry, 2> kMetricStructureLegend{{
         {"ERGOSPHERE_TINT", "Ergosphere", "inside it nothing can stay at rest; tint grows with the path length inside", {0.6f, 0.0f, 0.8f}},

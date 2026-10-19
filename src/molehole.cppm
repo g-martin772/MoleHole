@@ -39,6 +39,7 @@ export import :Rendering.MeshTrace;
 export import :Rendering.Lighting;
 export import :Rendering.MeshScene;
 export import :Rendering.ParticleStage;
+export import :Rendering.ParticleSplat;
 export import :Rendering.Pipeline;
 export import :Rendering.Data;
 export import :Rendering.Camera;

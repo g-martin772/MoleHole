@@ -201,6 +201,9 @@ export namespace MoleHole
         case DebugView::ConstraintDrift:
             DrawHeatLegend(kConstraintDriftLowLabel, kConstraintDriftHighLabel, kConstraintDriftNote);
             break;
+        case DebugView::ParticleDensity:
+            DrawHeatLegend(kParticleDensityLowLabel, kParticleDensityHighLabel, kParticleDensityNote);
+            break;
         case DebugView::Ergosphere: for (const auto& entry : kMetricStructureLegend) DrawLegendEntry(entry); break;
         default: for (const auto& entry : kTerminationLegend) DrawLegendEntry(entry); break;
         }

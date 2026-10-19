@@ -633,7 +633,7 @@ TEST_CASE("Stop and play restore the initial ring and a paused disk stays put", 
     module.AdvanceNow();
     const auto played = hash();
     CHECK(played != initial);
-    CHECK(module.System()->SimTime() == Approx(3000.0 * tg).epsilon(1e-3));
+    CHECK(module.System()->SimTime() == Approx(3000.0 * tg).margin(ParticleDiskModule::kExportBaseStepGeometric * tg));
 
     scene.SetSimTime(3000.0 * tg);
     module.Prepare(scene, {}, true);

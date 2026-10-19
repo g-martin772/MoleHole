@@ -10,7 +10,7 @@ export namespace MoleHole
 {
     enum class Spacetime : int { Schwarzschild = 0, Kerr = 1, ReissnerNordstrom = 2, KerrNewman = 3 };
     enum class Transport : int { Straight = 0, AnalyticLens = 1, Integrated = 2 };
-    enum class DebugView : int { None = 0, StepCount = 1, Termination = 2, ConstraintDrift = 3, Ergosphere = 4 };
+    enum class DebugView : int { None = 0, StepCount = 1, Termination = 2, ConstraintDrift = 3, Ergosphere = 4, ParticleDensity = 5 };
     enum class MeshMode : int { Raster = 0, Traced = 1 };
     enum class ToneMap : int { None = 0, Reinhard = 1, Aces = 2 };
     enum class ExposureMode : int { Manual = 0, Auto = 1, Physical = 2 };
@@ -38,6 +38,8 @@ export namespace MoleHole
         float DiskOpacity = 2.0f;            // vertical optical depth
         float DiskDisplayTemperature = 0.0f; // K of the hottest gas on screen; 0 = physical
         int DiskHotSpots = 3;
+        int ParticleGridResolution = 128;    // voxels per axis of each level of the particle disk grid
+        float ParticleOpacityScale = 1.0f;   // multiplies AccretionDisk.Opacity of the particle disk
 
         bool RenderBlackHoles = true;
         bool RenderSpheres = true;

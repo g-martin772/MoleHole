@@ -118,6 +118,18 @@ namespace MoleHole
                 .Tooltip = "Hotter clumps of gas on circular geodesics of the metric.",
                 .Doc = kDoc, .Min = 0, .Max = 8, .VisibleWhen = "disk.enabled & transport.mode>=1"}));
 
+            registry.Add(Setting("disk.particle_grid", &R::ParticleGridResolution, {
+                .Label = "Particle grid", .Group = "Disk",
+                .Tooltip = "Voxels per axis of each of the two nested grids the particle disk is splatted into.\n"
+                           "Only used when an AccretionDisk is in Particles mode. Memory and splat cost grow with the cube.",
+                .Doc = kDoc, .Min = 32, .Max = 256, .Cost = 1, .VisibleWhen = "disk.enabled"}));
+            registry.Add(Setting("disk.particle_opacity_scale", &R::ParticleOpacityScale, {
+                .Label = "Particle opacity scale", .Group = "Disk",
+                .Tooltip = "Multiplies the opacity kappa [m^2/kg] of the AccretionDisk component when its particles are drawn.\n"
+                           "Thick gas looks the same at any value; thin gas gets brighter in proportion.",
+                .Doc = kDoc, .Min = 1e-3, .Max = 1e3, .Scale = SettingScale::Log, .Format = "%.3f",
+                .VisibleWhen = "disk.enabled"}));
+
             registry.Add(Setting("objects.black_holes", &R::RenderBlackHoles, {
                 .Label = "Black holes", .Group = "Objects", .Doc = kDoc}));
             registry.Add(Setting("objects.spheres", &R::RenderSpheres, {
@@ -262,11 +274,12 @@ namespace MoleHole
                            "Step count: heat map of ray march steps per pixel.\n"
                            "Termination: why each ray ended (sky, horizon, object, disk, ran out of steps).\n"
                            "Constraint drift (integrated only): how far each ray strays from a light path.\n"
-                           "Ergosphere & ISCO (integrated only): ergosphere tinted, innermost stable orbit as a ring.",
+                           "Ergosphere & ISCO (integrated only): ergosphere tinted, innermost stable orbit as a ring.\n"
+                           "Particle density slice: absorption per r_g in the equatorial plane of the particle disk's hole.",
                 .Doc = kDoc,
-                .Options = {"None", "StepCount", "Termination", "ConstraintDrift", "Ergosphere"},
+                .Options = {"None", "StepCount", "Termination", "ConstraintDrift", "Ergosphere", "ParticleDensity"},
                 .OptionLabels = {"Off", "Step count heat map", "Termination reason", "Geodesic constraint drift",
-                                 "Ergosphere & ISCO"}}));
+                                 "Ergosphere & ISCO", "Particle density slice"}}));
 
             return registry;
         }

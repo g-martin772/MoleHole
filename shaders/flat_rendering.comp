@@ -16,6 +16,7 @@ const float EPSILON = 0.00005f;
 #include "crosshair.glsl"
 #include "lut_loader.glsl"
 #include "sphere.glsl"
+#include "particle_flat.glsl"
 #include "debug_view.glsl"
 
 // Display temperature of the inner edge (K) and its fall-off with radius: spreads the blackbody LUT over the annulus
@@ -178,7 +179,19 @@ void main() {
         float candidateT[16];
         float glow[8];
         for (int i = 0; i < u_numBlackHoles; i++) {
-            candidateT[2 * i] = disks ? diskHit(i, rayOrigin, rayDir) : -1.0f;
+            bool particles = disks && int(u_particleInfo.w) == i;
+            if (particles) {
+                float tHalf = -1.0f;
+                float tLimit = solid ? tOpaque : 1e30f;
+                flatParticleDisk(i, rayOrigin, rayDir, tLimit, color, transmittance, tHalf);
+                g_stepCount++;
+                if (tHalf >= 0.0f && !diskDepth) {
+                    diskDepth = true;
+                    depthT = tHalf;
+                    g_termination = TERM_DISK;
+                }
+            }
+            candidateT[2 * i] = disks && !particles ? diskHit(i, rayOrigin, rayDir) : -1.0f;
             candidateT[2 * i + 1] = ringHit(i, rayOrigin, rayDir, pixelAngle, glow[i]);
         }
         vec3 ringColor = getBlackbodyColorLUT(FLAT_DISK_TEMP_INNER, 1.0f) * FLAT_DISK_GAIN * (disks ? 1.0f : 0.4f);
@@ -212,6 +225,9 @@ void main() {
     }
     color += transmittance * background;
 
+    if (u_debugMode == 5) {
+        color = debugParticleSlice(particleSliceDepth(rayOrigin, rayDir));
+    }
     color = debugViewColor(color);
 
     // third person: the ray origin sits behind the view camera, hits next to or behind it are in front of every mesh

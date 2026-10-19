@@ -28,6 +28,8 @@ export namespace MoleHole
         float OuterRadius{0.0f};
         float SchwarzschildRadius{2.0f};
         float Opacity{0.0f};       // m^2/kg
+        float PeakTemperature{0.0f}; // K, maximum of the Novikov-Thorne profile of the disk: the colour/brightness reference
+        float ReferenceMass{0.0f}; // kg, heaviest emitter weight
         std::uint64_t Epoch{0};
         double SimTime{0.0};       // particle clock, seconds
         std::uint64_t HoleGuid{0};
@@ -38,9 +40,14 @@ export namespace MoleHole
     {
     public:
         using BackendFactory = std::function<std::unique_ptr<GPP::IParticleBackend>(const GPP::ParticleSettings&)>;
+        // Runs the recorder in a command buffer and waits for it
+        using SubmitFunction = std::function<void(const std::function<void(vk::CommandBuffer)>&)>;
 
         static constexpr std::uint32_t kInteractiveMacroSteps = 48;
         static constexpr double kBaseStepGeometric = 8.0; // macro step in units of GM/c^3
+        // Exports: the block-step scheduler subdivides for fast particles, the outer disk does not need 8
+        static constexpr double kExportBaseStepGeometric = 64.0;
+        static constexpr std::uint32_t kBatchMacroSteps = 240; // per command buffer of a synchronous advance (ring holds 256)
 
         ParticleDiskModule(AccretionBoard& board, std::shared_ptr<GPP::ParticleHub> hub, BackendFactory factory = {},
                            std::shared_ptr<GPP::Logger> logger = nullptr);
@@ -52,6 +59,7 @@ export namespace MoleHole
         // CPU backend, exports and tests: the same without a command buffer (a GPU backend submits every step itself)
         void AdvanceNow();
 
+        void SetSubmit(SubmitFunction submit) { m_Submit = std::move(submit); }
         [[nodiscard]] bool Active() const noexcept { return m_Active; }
         [[nodiscard]] bool UsesGpu() const noexcept { return m_Gpu != nullptr; }
         [[nodiscard]] const ParticleRenderData& Data() const noexcept { return m_Data; }
@@ -75,6 +83,7 @@ export namespace MoleHole
         AccretionBoard& m_Board;
         std::shared_ptr<GPP::ParticleHub> m_Hub;
         BackendFactory m_Factory;
+        SubmitFunction m_Submit;
         std::shared_ptr<GPP::Logger> m_Logger;
 
         std::unique_ptr<GPP::ParticleSystem> m_System;
@@ -127,6 +136,7 @@ export namespace MoleHole
     private:
         RenderResources& m_Resources;
         ParticleDiskModule m_Module;
+        std::unique_ptr<GPP::VulkanCommandPool> m_Pool;
         std::uint32_t m_Frame{0};
     };
 

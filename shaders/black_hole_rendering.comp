@@ -15,6 +15,7 @@ const float EPSILON = 0.00005f;
 #include "lut_loader.glsl"
 #include "sphere.glsl"
 #include "disk.glsl"
+#include "particle_disk.glsl"
 #include "debug_view.glsl"
 #ifdef GPP_MESH_TRACE
 #include "mesh_trace.glsl"
@@ -42,6 +43,9 @@ void main() {
         color = hybridRayTrace(rayOrigin, rayDir, hitPoint, hitSolid);
     }
 
+    if (u_debugMode == 5) {
+        color = debugParticleSlice(particleSliceDepth(rayOrigin, rayDir));
+    }
     color = debugViewColor(color);
 
     float depth = hitSolid ? hitDepth(hitPoint) : FAR_DEPTH;

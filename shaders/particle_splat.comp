@@ -1,0 +1,147 @@
+#version 460
+
+// Particle disk grid: PS_PASS 0 deposits the particles into the nested grids with a triangular-shaped-cloud kernel
+// (quadratic B-spline, support 3 voxels, weights sum to 1), PS_PASS 1 turns the accumulators into the textures the
+// tracers sample. Accumulator layout: level * N^3 * 5 words, node-major, channels m, m v_x, m v_y, m v_z, m T / T_ref.
+// Float atomics when PS_ATOMIC_FLOAT, otherwise signed fixed point in uint words (order independent, so exports repeat
+// bit for bit). Notes: docs/notes/particle-disk.md
+
+#ifdef PS_ATOMIC_FLOAT
+#extension GL_EXT_shader_atomic_float : require
+#endif
+
+#define PARTICLE_GRID_BINDING 5
+#define PARTICLE_GRID_NO_TEXTURES
+#include "particle_grid.glsl"
+
+const uint TEMPERATURE_UNITS = 4u;
+
+#ifdef PS_ATOMIC_FLOAT
+layout(std430, set = 0, binding = 4) buffer Accumulator { float accumulator[]; };
+#else
+layout(std430, set = 0, binding = 4) buffer Accumulator { uint accumulator[]; };
+#endif
+
+#if PS_PASS == 0
+
+layout(local_size_x = 64) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer PosMass { vec4 posMass[]; };
+layout(std430, set = 0, binding = 1) readonly buffer VelTemp { vec4 velTemp[]; };
+layout(std430, set = 0, binding = 2) readonly buffer Meta { uvec4 meta[]; };
+layout(std430, set = 0, binding = 3) readonly buffer State { uint state[]; };
+
+void add(uint index, float value, float scale) {
+#ifdef PS_ATOMIC_FLOAT
+    atomicAdd(accumulator[index], value);
+#else
+    atomicAdd(accumulator[index], uint(int(roundEven(value * u_particleFrame.y * scale))));
+#endif
+}
+
+void deposit(int level, vec3 position, float mass, vec3 velocity, float temperature) {
+    uint res = uint(u_particleInfo.x);
+    vec3 cell = (position - u_particleMin[level].xyz) / u_particleMin[level].w;
+    ivec3 nearest = ivec3(floor(cell));
+    vec3 d = cell - vec3(nearest) - 0.5;
+    vec3 w0 = 0.5 * (0.5 - d) * (0.5 - d);
+    vec3 w1 = 0.75 - d * d;
+    vec3 w2 = 0.5 * (0.5 + d) * (0.5 + d);
+    uint base = uint(level) * res * res * res;
+    for (int k = 0; k < 3; ++k) {
+        int z = nearest.z + k - 1;
+        if (z < 0 || z >= int(res)) continue;
+        float wz = k == 0 ? w0.z : (k == 1 ? w1.z : w2.z);
+        for (int j = 0; j < 3; ++j) {
+            int y = nearest.y + j - 1;
+            if (y < 0 || y >= int(res)) continue;
+            float wy = j == 0 ? w0.y : (j == 1 ? w1.y : w2.y);
+            for (int i = 0; i < 3; ++i) {
+                int x = nearest.x + i - 1;
+                if (x < 0 || x >= int(res)) continue;
+                float wx = i == 0 ? w0.x : (i == 1 ? w1.x : w2.x);
+                float m = mass * wx * wy * wz;
+                uint node = (base + (uint(z) * res + uint(y)) * res + uint(x)) * 5u;
+                add(node, m, 1.0);
+                add(node + 1u, m * velocity.x, 1.0);
+                add(node + 2u, m * velocity.y, 1.0);
+                add(node + 3u, m * velocity.z, 1.0);
+                add(node + 4u, m * temperature, 1.0 / float(TEMPERATURE_UNITS));
+            }
+        }
+    }
+}
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= state[0]) return;
+    if ((meta[i].y & 1u) == 0u) return;
+    vec4 pm = posMass[i];
+    vec4 vt = velTemp[i];
+    float temperature = vt.w / max(u_particleInfo.z, 1e-6);
+    deposit(1, pm.xyz, pm.w, vt.xyz, temperature);
+    if (all(lessThan(abs(pm.xyz), vec3(-u_particleMin[0].x)))) deposit(0, pm.xyz, pm.w, vt.xyz, temperature);
+}
+
+#else
+
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+layout(set = 0, binding = 6, rgba32f) uniform writeonly image3D u_gridA0;
+layout(set = 0, binding = 7, r32f) uniform writeonly image3D u_gridB0;
+layout(set = 0, binding = 8, rgba32f) uniform writeonly image3D u_gridA1;
+layout(set = 0, binding = 9, r32f) uniform writeonly image3D u_gridB1;
+
+layout(push_constant) uniform Push { uint level; };
+
+float read(uint index, float scale) {
+#ifdef PS_ATOMIC_FLOAT
+    return accumulator[index];
+#else
+    return float(int(accumulator[index])) * u_particleFrame.z * scale;
+#endif
+}
+
+// Binomial [1 2 1] / 4 filter per axis on top of the kernel: smooths the shot noise of a sparse particle set while the
+// weights still sum to 1 (mass is conserved away from the grid edge)
+const float TAPS[3] = float[3](0.25, 0.5, 0.25);
+
+void main() {
+    uint res = uint(u_particleInfo.x);
+    if (any(greaterThanEqual(gl_GlobalInvocationID, uvec3(res)))) return;
+    ivec3 voxel = ivec3(gl_GlobalInvocationID);
+    uint base = uint(level) * res * res * res;
+    float m = 0.0;
+    float mt = 0.0;
+    vec3 p = vec3(0.0);
+    for (int k = -1; k <= 1; ++k) {
+        int z = voxel.z + k;
+        if (z < 0 || z >= int(res)) continue;
+        for (int j = -1; j <= 1; ++j) {
+            int y = voxel.y + j;
+            if (y < 0 || y >= int(res)) continue;
+            for (int i = -1; i <= 1; ++i) {
+                int x = voxel.x + i;
+                if (x < 0 || x >= int(res)) continue;
+                float w = TAPS[i + 1] * TAPS[j + 1] * TAPS[k + 1];
+                uint node = (base + (uint(z) * res + uint(y)) * res + uint(x)) * 5u;
+                m += w * read(node, 1.0);
+                p += w * vec3(read(node + 1u, 1.0), read(node + 2u, 1.0), read(node + 3u, 1.0));
+                mt += w * read(node + 4u, float(TEMPERATURE_UNITS));
+            }
+        }
+    }
+    float voxelLength = u_particleMin[level].w;
+    float perArea = 1.0 / (voxelLength * voxelLength * voxelLength * u_particleFrame.x * u_particleFrame.x);
+    vec4 a = vec4(m, mt, p.x, p.y) * perArea;
+    float b = p.z * perArea;
+    if (level == 0u) {
+        imageStore(u_gridA0, voxel, a);
+        imageStore(u_gridB0, voxel, vec4(b));
+    } else {
+        imageStore(u_gridA1, voxel, a);
+        imageStore(u_gridB1, voxel, vec4(b));
+    }
+}
+
+#endif

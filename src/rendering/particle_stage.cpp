@@ -143,7 +143,7 @@ namespace MoleHole
             m_Units = ParticleUnits::Geometrized(hole->Mass);
             m_Guid = guid;
             m_RingKey = ringKey;
-            m_LastTime = now;
+            m_LastTime = unlimited ? 0.0 : now;
             m_History.clear();
             m_AppliedDelta = {};
             m_NeedPrime = true;
@@ -179,13 +179,14 @@ namespace MoleHole
             m_NeedPrime = true;
         }
 
+        if (reset || m_NeedPrime) m_System->SetBaseStep((unlimited ? kExportBaseStepGeometric : kBaseStepGeometric) * m_Units.Time);
         m_System->Consume(state);
         m_System->SetForce(setup.Force);
         if (m_NeedPrime)
         {
             m_System->Prime();
             m_NeedPrime = false;
-            m_LastTime = now;
+            m_LastTime = unlimited ? 0.0 : now;
             m_History.clear();
             m_AppliedDelta = {};
             UpdateBoard();
@@ -214,6 +215,8 @@ namespace MoleHole
         m_Data.OuterRadius = static_cast<float>(setup.OuterRadius);
         m_Data.SchwarzschildRadius = setup.Force.SchwarzschildRadius;
         m_Data.Opacity = static_cast<float>(disk->Opacity);
+        m_Data.PeakTemperature = static_cast<float>(DiskPeakTemperature(setup));
+        m_Data.ReferenceMass = static_cast<float>(m_ReferenceWeight);
         m_Data.Epoch = state.Epoch;
         m_Data.HoleGuid = guid;
         return true;
@@ -223,7 +226,26 @@ namespace MoleHole
     {
         const auto start = std::chrono::steady_clock::now();
         m_LastMacroSteps = 0;
-        if (m_Planned > 0.0)
+        if (m_Planned > 0.0 && synchronous && m_Gpu && m_Submit)
+        {
+            // Many macro steps per submission: one fence per step would dominate a long advance
+            const double chunk = kBatchMacroSteps * m_System->Config().BaseStep;
+            double remaining = m_Planned;
+            while (remaining > 0.0)
+            {
+                const double seconds = std::min(remaining, chunk);
+                m_Submit([&](const vk::CommandBuffer cmd)
+                {
+                    m_Gpu->BeginRecording(cmd, 0);
+                    const auto report = m_System->Advance(seconds);
+                    m_LastMacroSteps += report.MacroSteps;
+                    m_Gpu->EndRecording();
+                });
+                m_Gpu->CollectCompleted(0);
+                remaining -= seconds;
+            }
+        }
+        else if (m_Planned > 0.0)
         {
             const auto report = m_System->Advance(m_Planned);
             m_LastMacroSteps = report.MacroSteps;
@@ -356,6 +378,15 @@ namespace MoleHole
 
     void ParticleStage::Record(RenderFrameContext& context)
     {
+        if (!m_Pool && m_Resources.Device)
+        {
+            m_Pool = std::make_unique<VulkanCommandPool>(m_Resources.Device, m_Resources.Logger,
+                                                         m_Resources.Device->GetQueueIndices().Graphics);
+            m_Module.SetSubmit([this](const std::function<void(vk::CommandBuffer)>& record)
+            {
+                ImmediateSubmit(*m_Pool, m_Resources.Device->GetGraphicsQueue(), record);
+            });
+        }
         if (!m_Module.Prepare(context.Scene, context.Inputs.EnqueueDiskCommands, context.Inputs.ExactParticles)) return;
         if (!m_Module.UsesGpu() || context.Inputs.ExactParticles)
         {

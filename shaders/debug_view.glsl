@@ -19,6 +19,12 @@ vec3 debugHeat(float t) {
     return clamp(vec3(1.5 * t - 0.25, 1.5 - abs(3.0 * t - 1.5), 1.25 - 1.5 * t), 0.0, 1.0);
 }
 
+// Debug view 5: log10 of the absorption per r_g in the slice of the particle grid, 1e-8 -> 0, 1e8 -> 1; black without data.
+vec3 debugParticleSlice(float absorptionPerRg) {
+    if (absorptionPerRg < 0.0) return vec3(0.0);
+    return debugHeat((log(max(absorptionPerRg, 1e-12)) / log(10.0) + 8.0) / 16.0);
+}
+
 vec3 debugViewColor(vec3 shaded) {
     if (u_debugMode == 1) {
         return debugHeat(sqrt(float(g_stepCount) / float(max(g_maxStepCount, 1))));

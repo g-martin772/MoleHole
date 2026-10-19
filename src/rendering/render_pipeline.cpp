@@ -6,6 +6,7 @@ import :Rendering.DebugLegend;
 import :Rendering.MeshTrace;
 import :Rendering.Lut;
 import :Rendering.ParticleStage;
+import :Rendering.ParticleSplat;
 import :Simulation.Components;
 import std;
 import vulkan;
@@ -301,6 +302,7 @@ namespace MoleHole
                 auto* res = &m_Res;
                 auto* params = m_ParamsBuffer.get();
                 const auto& traced = m_Res.MeshTrace;
+                const ParticleGridFrame particleGrid = m_Res.ParticleGrid;
                 TracedMeshBindings bindings{.Active = traced.Active, .Tlas = traced.Scene.Tlas,
                                             .Instances = traced.Scene.Instances, .Materials = traced.Scene.Materials,
                                             .Lights = traced.Scene.Lights, .LightParams = traced.Scene.LightParams, .Dfg = traced.Scene.Dfg,
@@ -308,7 +310,7 @@ namespace MoleHole
 
                 ctx.Graph.AddBudgetedComputePass(
                     "Trace", {}, {}, ctx.GroupsX * ctx.GroupsY,
-                    [device, groupsX, raytracePipeline, res, params, meshes = std::move(bindings), set = vk::DescriptorSet{}](
+                    [device, groupsX, raytracePipeline, res, params, particleGrid, meshes = std::move(bindings), set = vk::DescriptorSet{}](
                         const vk::CommandBuffer cmd, RenderGraph& g, const RenderGraphWorkSlice& slice) mutable
                     {
                         const auto pipeline = raytracePipeline->GetPipeline();
@@ -334,6 +336,13 @@ namespace MoleHole
                             {
                                 return std::ranges::any_of(bindings, [binding](const auto& b) { return b.set == 0 && b.binding == binding; });
                             };
+                            if (has(13) && particleGrid.Block) writer.WriteUniformBuffer(set, 13, particleGrid.Block);
+                            for (std::uint32_t i = 0; i < particleGrid.Textures.size(); ++i)
+                            {
+                                if (has(14 + i) && particleGrid.Textures[i])
+                                    writer.WriteCombinedImageSampler(set, 14 + i, particleGrid.Textures[i]->GetImageView(),
+                                                                     particleGrid.Textures[i]->GetSampler(), vk::ImageLayout::eGeneral);
+                            }
                             if (meshes.Active)
                             {
                                 if (has(6)) writer.WriteAccelerationStructure(set, 6, meshes.Tlas);
@@ -1047,7 +1056,10 @@ namespace MoleHole
         const auto queue = res.Device->GetBackgroundQueue();
         res.Mesh = std::make_unique<MeshScene>(res.Device, res.Meshes, res.Logger, *res.UploadPool);
 
-        impl.Stages.push_back(std::make_unique<ParticleStage>(res));
+        auto particles = std::make_unique<ParticleStage>(res);
+        auto* particleStage = particles.get();
+        impl.Stages.push_back(std::move(particles));
+        impl.Stages.push_back(std::make_unique<ParticleSplatStage>(res, *particleStage));
         auto trace = std::make_unique<TraceStage>(res, impl.StartTime);
         trace->Initialize();
         impl.Stages.push_back(std::move(trace));

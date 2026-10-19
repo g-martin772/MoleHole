@@ -176,6 +176,16 @@ export namespace MoleHole
         return setup;
     }
 
+    // Maximum of the Novikov-Thorne effective temperature T^4 = c (1 - sqrt(r_in / R)) / R^3 over R, in K: at R = 49/36 r_in
+    [[nodiscard]] inline double DiskPeakTemperature(const DiskSetup& setup)
+    {
+        const double coefficient = setup.Force.User[kDiskTemperature];
+        if (!(coefficient > 0.0) || !(setup.InnerRadius > 0.0)) return 0.0;
+        const double s = 6.0 / 7.0;
+        const double inner = setup.InnerRadius;
+        return std::pow(coefficient * (1.0 - s) * std::pow(s, 6) / (inner * inner * inner), 0.25);
+    }
+
     // Time for matter to drift from the outer to the inner edge at v_r = 3 nu / (2 R) (simulation time units).
     [[nodiscard]] inline double DiskDriftTime(const DiskSetup& setup)
     {
