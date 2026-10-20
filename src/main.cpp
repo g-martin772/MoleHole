@@ -222,6 +222,8 @@ int main(int argc, char* argv[])
                .SetWindowTarget("main");
         builder.AddHotReloadableLayer("tutorial-overlay", "molehole_tutorial_overlay_layer.so")
                .SetWindowTarget("main");
+        builder.AddHotReloadableLayer("log-window", "molehole_log_window_layer.so").SetWindowTarget("main");
+        builder.AddHotReloadableLayer("notifications", "molehole_notifications_layer.so").SetWindowTarget("main");
     }
 
     if (exportArgs)

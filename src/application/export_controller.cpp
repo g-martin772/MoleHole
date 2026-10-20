@@ -57,9 +57,18 @@ namespace MoleHole
                                  m_UiState->ExportActive ? m_UiState->ExportStatus : "waiting for the scene"));
     }
 
+    void ExportController::SyncTask()
+    {
+        if (!m_Task) return;
+        m_Task->SetFraction(m_UiState->ExportProgress);
+        m_Task->SetDetail(m_UiState->ExportStatus);
+    }
+
     void ExportController::Abort(const int exitCode, const std::string& reason)
     {
         m_Logger->Error("Export failed: {}", reason);
+        if (m_Task) std::exchange(m_Task, nullptr)->Finish(false);
+        m_Logger->Notifications()->Post(GPP::NotificationKind::Error, "Export failed", reason, 0.0f, "export");
         m_UiState->ExportExitCode = exitCode;
         m_UiState->ExportStatus = "Failed: " + reason;
         m_UiState->ExportActive = false;
@@ -150,6 +159,10 @@ namespace MoleHole
         m_UiState->ExportActive = true;
         m_UiState->ExportProgress = 0.0f;
         m_UiState->ExportStatus = "Starting export...";
+        m_Task = m_Logger->Notifications()->BeginTask(
+            std::format("Exporting {}", request.RequestKind == ExportRequest::Kind::Video ? "video" : "image"));
+        m_Task->SetFraction(0.0f);
+        m_Task->SetDetail(std::filesystem::path(request.OutputPath).filename().string());
         m_FrameIndex = 0;
         m_TotalFrames = request.RequestKind == ExportRequest::Kind::Video
                             ? std::max(1, static_cast<int>(request.DurationSeconds * request.Framerate))
@@ -304,6 +317,7 @@ namespace MoleHole
         m_UiState->ExportStatus = m_Request.RequestKind == ExportRequest::Kind::Video
                                       ? std::format("Rendering frame {}/{}", m_FrameIndex, m_TotalFrames)
                                       : "Rendering...";
+        SyncTask();
 
         LogProgress();
 
@@ -320,6 +334,7 @@ namespace MoleHole
             m_LastProgress = std::chrono::steady_clock::now();
         }
         m_UiState->ExportProgress = static_cast<float>(written) / static_cast<float>(m_TotalFrames);
+        SyncTask();
 
         if (written < m_TotalFrames && m_Job->WritesInFlight.load() > 0)
         {
@@ -420,16 +435,23 @@ namespace MoleHole
         }
         m_UiState->ExportActive = false;
         m_UiState->ExportProgress = 1.0f;
+        if (m_Task) std::exchange(m_Task, nullptr)->Finish(!failed);
         if (failed)
         {
             m_UiState->ExportExitCode = 5;
             m_UiState->ExportStatus = m_Job->EncodeFailed.load() ? "Failed: ffmpeg encoding error"
                                                                  : "Failed: could not write image";
+            m_Logger->Notifications()->Post(GPP::NotificationKind::Error, "Export failed",
+                                            m_UiState->ExportStatus, 0.0f, "export");
         }
         else
         {
             m_UiState->ExportStatus = "Complete";
             m_Logger->Info("Export complete: {}", m_Request.OutputPath);
+            m_Logger->Notifications()->Post(
+                GPP::NotificationKind::Success,
+                m_Request.RequestKind == ExportRequest::Kind::Video ? "Video export finished" : "Image export finished",
+                m_Request.OutputPath, 8.0f, "export");
             m_AppState->NotifyExported(m_Request.OutputPath);
         }
 

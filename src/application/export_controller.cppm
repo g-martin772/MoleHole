@@ -39,6 +39,7 @@ export namespace MoleHole
         void WriteSidecar();
         void Abort(int exitCode, const std::string& reason);
         void CheckWatchdog();
+        void SyncTask();
 
         std::shared_ptr<GPP::Renderer> m_Renderer;
         std::shared_ptr<UiState> m_UiState;
@@ -69,6 +70,7 @@ export namespace MoleHole
         double m_TickDebt{0.0};
         double m_SimStart{0.0};
         double m_TimeScale{1.0};
+        std::shared_ptr<GPP::ProgressTask> m_Task;
         std::shared_ptr<Job> m_Job = std::make_shared<Job>();
         std::filesystem::path m_TempDir;
         std::string m_ProfileName;

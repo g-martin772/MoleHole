@@ -186,6 +186,7 @@ namespace
             {
                 ImGui::MenuItem("Camera", nullptr, &m_UiState->ShowCameraWindow);
                 ImGui::MenuItem("System", nullptr, &m_UiState->ShowSystemWindow);
+                ImGui::MenuItem("Log", nullptr, &m_UiState->ShowLogWindow);
                 ImGui::MenuItem("Scene", nullptr, &m_UiState->ShowSceneWindow);
                 ImGui::MenuItem("Render", nullptr, &m_UiState->ShowRenderWindow);
                 ImGui::MenuItem("Simulation", nullptr, &m_UiState->ShowSimulationWindow);

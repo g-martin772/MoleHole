@@ -98,6 +98,7 @@ namespace MoleHole
                 if (const auto v = ui["IntroEnabled"]) m_UiState->IntroEnabled = v.as<bool>();
                 if (const auto v = ui["ShowCameraWindow"]) m_UiState->ShowCameraWindow = v.as<bool>();
                 if (const auto v = ui["ShowSystemWindow"]) m_UiState->ShowSystemWindow = v.as<bool>();
+                if (const auto v = ui["ShowLogWindow"]) m_UiState->ShowLogWindow = v.as<bool>();
                 if (const auto v = ui["ShowSceneWindow"]) m_UiState->ShowSceneWindow = v.as<bool>();
                 if (const auto v = ui["ShowSimulationWindow"]) m_UiState->ShowSimulationWindow = v.as<bool>();
                 if (const auto v = ui["ShowRenderWindow"]) m_UiState->ShowRenderWindow = v.as<bool>();
@@ -212,6 +213,7 @@ namespace MoleHole
             root["UI"]["IntroEnabled"] = m_UiState->IntroEnabled;
             root["UI"]["ShowCameraWindow"] = m_UiState->ShowCameraWindow;
             root["UI"]["ShowSystemWindow"] = m_UiState->ShowSystemWindow;
+            root["UI"]["ShowLogWindow"] = m_UiState->ShowLogWindow;
             root["UI"]["ShowSceneWindow"] = m_UiState->ShowSceneWindow;
             root["UI"]["ShowSimulationWindow"] = m_UiState->ShowSimulationWindow;
             root["UI"]["ShowRenderWindow"] = m_UiState->ShowRenderWindow;

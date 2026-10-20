@@ -94,6 +94,7 @@ export namespace MoleHole
         ScriptStatusBoard ScriptStatuses;
         bool ShowCameraWindow = false;
         bool ShowSystemWindow = false;
+        bool ShowLogWindow = false;
         bool ShowSceneWindow = true;
         bool ShowSimulationWindow = false;
         bool ShowRenderWindow = false;

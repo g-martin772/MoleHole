@@ -7,6 +7,7 @@ Open from sidebar or View menu.
 | Scene | outliner, add objects, inspector |
 | Camera | FOV, speed, sensitivity, reset, scene-camera options |
 | System | tick rate, perf, system info |
+| Log | console |
 | Render | render profiles, every render setting, stats, GPU capabilities |
 | Debug | display units, CPU precision, overlays, debug view |
 | Viewport HUD | stats overlay |
