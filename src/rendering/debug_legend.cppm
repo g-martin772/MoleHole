@@ -116,9 +116,25 @@ export namespace MoleHole
         {"PX_ANG_VELOCITY", "Angular velocity", "arrow along the axis of rotation", PhysicsDebugColor(0x000000u)},
     }};
 
-    inline constexpr std::array<OverlayLegend, 3> kOverlayLegends{{
+    // Colours of src/rendering/orbit_overlays.cppm; retrograde rings are drawn at half brightness
+    inline constexpr std::array<LegendEntry, 5> kCharacteristicRadiiLegend{{
+        {"kHorizonOverlayColor", "Event horizon", "outer horizon r+ (equator and two meridians)", {0.85f, 0.85f, 0.85f}},
+        {"kErgosphereOverlayColor", "Ergosphere", "static limit, in two meridian planes", {0.65f, 0.35f, 1.0f}},
+        {"kPhotonOrbitOverlayColor", "Photon orbit", "circular light orbit; dim ring: retrograde", {1.0f, 0.6f, 0.15f}},
+        {"kMarginallyBoundOverlayColor", "Marginally bound", "circular orbit with E = 1; dim ring: retrograde", {0.35f, 0.9f, 0.4f}},
+        {"kIscoOverlayColor", "ISCO", "innermost stable circular orbit; dim ring: retrograde", {0.2f, 0.75f, 1.0f}},
+    }};
+
+    inline constexpr std::array<LegendEntry, 2> kPredictedOrbitLegend{{
+        {"kPredictionNearColor", "Now", "where a geodesic body goes next", {1.0f, 0.9f, 0.3f}},
+        {"kPredictionFarColor", "End of span", "where it is after the prediction span", {0.35f, 0.25f, 0.05f}},
+    }};
+
+    inline constexpr std::array<OverlayLegend, 5> kOverlayLegends{{
         {"overlay.gravity_grid", kGravityGridLegend},
         {"overlay.physics_colliders", kColliderLegend},
         {"overlay.object_paths", kObjectPathLegend},
+        {"overlay.characteristic_radii", kCharacteristicRadiiLegend},
+        {"overlay.predicted_orbits", kPredictedOrbitLegend},
     }};
 }

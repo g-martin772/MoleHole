@@ -61,6 +61,20 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
     vec4 u_diskInfo[8];      // x = peak temperature [K], y = inner radius (ISCO), z = outer radius
     vec4 u_diskProfile[128]; // per hole 64 samples of T / peak, log-spaced between u_diskInfo.y and .z
     vec4 u_diskPhase[2048];  // per hole 256 bins of the gas rotation angle: x whole turns, y remainder, z advance to the next bin
+
+    // Camera velocity relative to the local ZAMO of the first hole along (e_r, e_theta, e_phi), in c;
+    // w = 1 when it is not the ZAMO itself (src/physics/observer.cppm)
+    vec4 u_observerVelocity;
+
+    // Characteristic radii of the first hole (FillOrbitOverlayData): photon orbit pro/retro, marginally bound
+    // pro/retro; ISCO pro/retro, z = 1 when the overlay is on
+    vec4 u_orbitRadii;
+    vec4 u_orbitRadii2;
+
+    // Lensed trails (shaders/trails.glsl): x = grid half-size (integration radius, render units), y = cells per axis,
+    // z = 1 when there are traced trails, w = line half-width in radians
+    vec4 u_trailGrid;
+    vec4 u_trailGrid2; // x = hash table size (power of two)
 };
 
 layout(set = 0, binding = 2) uniform sampler2D u_skyboxTexture;

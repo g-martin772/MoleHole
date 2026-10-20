@@ -108,7 +108,8 @@ export namespace MoleHole
     {
         DiskLightInfo out;
         using namespace GPP::Units;
-        const auto metric = MakeKerrNewmanParams(static_cast<std::int32_t>(settings.Solution), 1.0, hole.Spin, hole.Charge);
+        const auto physical = BlackHoleMetric(hole);
+        const auto metric = MakeKerrNewmanParams(static_cast<std::int32_t>(settings.Solution), 1.0, physical.SpinParameter, physical.Charge);
         if (hole.Mass <= 0.0 || settings.DiskAccretionRate <= 0.0 || !HasHorizon(metric)) return out;
 
         const std::array<double, 5> key{hole.Mass, metric.SpinParameter, metric.Charge,
@@ -142,7 +143,7 @@ export namespace MoleHole
         out.Calibration = kDiskReferenceLuminance * static_cast<double>(Pi()) / (kStefanBoltzmann * t2 * t2);
         out.Color = GPP::Radiometry::BlackbodyColor(out.ColorTemperatureK);
         out.PositionM = positionM;
-        out.Axis = EffectiveSpinAxis(hole.SpinAxis, hole.Spin);
+        out.Axis = EffectiveSpinAxis(hole.SpinAxis, BlackHoleSignedSpin(hole));
         const double peakPhysical = out.LuminosityW / (2.0 * static_cast<double>(Pi()));
         out.PeakIntensity = static_cast<float>(peakPhysical * out.Calibration / RadianceToImage());
         out.Valid = true;

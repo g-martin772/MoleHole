@@ -126,6 +126,26 @@ export namespace MoleHole
         return state.IconFont;
     }
 
+    // ImGui's built-in default font only covers ASCII and Latin-1, so Greek letters, sub/superscripts and math symbols
+    // in labels (τ, γ, θ, ⁴, ≈, √, …) came out as '?'. Roboto (font/) is merged into the active default font as a
+    // fallback: the default font keeps every glyph it has, Roboto fills in the rest. Checked every frame because the
+    // default font changes with the UI font preference; merging is cheap and done once per font.
+    // Returns the font it merged into, or nullptr when there was nothing (more) to do.
+    inline ImFont* EnsureSymbolFallback(const char* path = "font/Roboto-Regular.ttf")
+    {
+        static std::unordered_set<const ImFont*> merged;
+        auto& io = ImGui::GetIO();
+        ImFont* target = io.FontDefault ? io.FontDefault : (io.Fonts->Fonts.Size > 0 ? io.Fonts->Fonts[0] : nullptr);
+        if (!target || merged.contains(target)) return nullptr;
+        merged.insert(target);
+        if (!std::filesystem::exists(path)) return nullptr; // ImGui asserts on a missing font file
+        ImFontConfig config;
+        config.MergeMode = true;
+        config.DstFont = target;
+        config.FontDataOwnedByAtlas = true;
+        return io.Fonts->AddFontFromFileTTF(path, 0.0f, &config) ? target : nullptr;
+    }
+
     // Smoothly chases a 0..1 target keyed by widget id; frame-rate independent.
     inline float HoverLerp(ImGuiID id, bool target, float rate = 16.0f)
     {

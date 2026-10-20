@@ -16,6 +16,14 @@ namespace
         const double z2 = std::sqrt(3.0 * chi * chi + z1 * z1);
         return 3.0 + z2 - std::sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
     }
+
+    // Same equation, lower sign: retrograde ISCO.
+    double BardeenPressTeukolskyRetrogradeIsco(const double chi)
+    {
+        const double z1 = 1.0 + std::cbrt(1.0 - chi * chi) * (std::cbrt(1.0 + chi) + std::cbrt(1.0 - chi));
+        const double z2 = std::sqrt(3.0 * chi * chi + z1 * z1);
+        return 3.0 + z2 + std::sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
+    }
 }
 
 TEST_CASE("Metric type zeroes the parameters it does not model", "[rendering][metric]")
@@ -100,6 +108,44 @@ TEST_CASE("ISCO matches Bardeen-Press-Teukolsky for Kerr", "[rendering][metric]"
         CHECK(ProgradeIscoRadius({.Mass = 1.0, .SpinParameter = chi}) ==
               Approx(BardeenPressTeukolskyIsco(chi)).epsilon(1e-5));
     }
+}
+
+TEST_CASE("Retrograde orbits match the Kerr closed forms", "[rendering][metric]")
+{
+    for (const double a : {0.0, 0.5, 0.9})
+    {
+        const KerrNewmanParams p{.Mass = 1.0, .SpinParameter = a};
+        for (const double r : {10.0, 15.0})
+        {
+            CHECK(OrbitalFrequency(p, r, OrbitDirection::Retrograde) == Approx(-1.0 / (std::pow(r, 1.5) - a)));
+        }
+        CHECK(CircularOrbitAngularMomentum(p, 10.0, OrbitDirection::Retrograde) < 0.0);
+    }
+    for (const double chi : {0.3, 0.7, 0.998})
+    {
+        CHECK(IscoRadius({.Mass = 1.0, .SpinParameter = chi}, OrbitDirection::Retrograde) ==
+              Approx(BardeenPressTeukolskyRetrogradeIsco(chi)).epsilon(1e-5));
+    }
+}
+
+TEST_CASE("Photon orbit and marginally bound orbit match Bardeen-Press-Teukolsky", "[rendering][metric]")
+{
+    for (const double a : {0.0, 0.5, 0.9, 0.998})
+    {
+        INFO(a);
+        const KerrNewmanParams p{.Mass = 1.0, .SpinParameter = a};
+        CHECK(PhotonOrbitRadius(p, OrbitDirection::Prograde) ==
+              Approx(2.0 * (1.0 + std::cos(2.0 / 3.0 * std::acos(-a)))).epsilon(1e-9));
+        CHECK(PhotonOrbitRadius(p, OrbitDirection::Retrograde) ==
+              Approx(2.0 * (1.0 + std::cos(2.0 / 3.0 * std::acos(a)))).epsilon(1e-9));
+        CHECK(MarginallyBoundRadius(p, OrbitDirection::Prograde) ==
+              Approx(2.0 - a + 2.0 * std::sqrt(1.0 - a)).epsilon(1e-8));
+        CHECK(MarginallyBoundRadius(p, OrbitDirection::Retrograde) ==
+              Approx(2.0 + a + 2.0 * std::sqrt(1.0 + a)).epsilon(1e-8));
+    }
+    // Reissner-Nordstrom photon sphere (3M + sqrt(9M^2 - 8Q^2)) / 2
+    CHECK(PhotonOrbitRadius({.Mass = 1.0, .Charge = 0.8}, OrbitDirection::Prograde) ==
+          Approx((3.0 + std::sqrt(9.0 - 8.0 * 0.64)) / 2.0).epsilon(1e-9));
 }
 
 TEST_CASE("ISCO of extremal Reissner-Nordstrom is 4M", "[rendering][metric]")
@@ -261,4 +307,49 @@ TEST_CASE("FillMetricData writes the disk profile in render units", "[rendering]
     CHECK(info.y == Approx(12.0f));
     CHECK(info.z == Approx(static_cast<float>(kDiskOuterRadiusM) * 2.0f));
     CHECK(params.DiskProfile[0].x == Approx(0.0f).margin(1e-6f));
+}
+
+TEST_CASE("Disk exposure is anchored to the observed peak, leaving Schwarzschild unchanged", "[rendering][metric][disk]")
+{
+    const auto at = [](const DiskProfile& profile, const double r)
+    {
+        // Nearest log-spaced sample of T / peak
+        const double t = std::log(r / profile.InnerRadius) / std::log(profile.OuterRadius / profile.InnerRadius);
+        const auto index = static_cast<std::size_t>(std::lround(t * (kDiskProfileSamples - 1)));
+        return profile.Temperature[index] * profile.PeakTemperature;
+    };
+
+    // Schwarzschild: reference = rest-frame peak, as before; the observed peak is 0.839 of it (independent check)
+    const auto schwarzschild = BuildDiskProfile({.Mass = 1.0}, 10.0, 0.1, 20.0);
+    CHECK(DiskExposureReference(schwarzschild) == Approx(schwarzschild.PeakTemperature).epsilon(1e-12));
+    CHECK(schwarzschild.ObservedPeakTemperature / schwarzschild.PeakTemperature == Approx(0.839).epsilon(0.01));
+
+    // Spinning holes: the rest-frame peak runs away into the redshifted throat, the observed one does not
+    const auto thorne = BuildDiskProfile({.Mass = 1.0, .SpinParameter = 0.998}, 10.0, 0.1, 20.0);
+    const auto gargantua = BuildDiskProfile(BlackHoleMetric(BlackHoleComponent{.SpinRange = BlackHoleSpinRange::NearExtremal}),
+                                            10.0, 0.1, 20.0);
+    CHECK(thorne.ObservedPeakTemperature / thorne.PeakTemperature == Approx(0.390).epsilon(0.02));
+    CHECK(gargantua.ObservedPeakTemperature / thorne.ObservedPeakTemperature == Approx(0.950).epsilon(0.02));
+
+    // Visible gas at 6 M now looks about as bright for both, as its physical temperature is nearly the same
+    const auto brightness = [&](const DiskProfile& p) { return std::pow(at(p, 6.0) / DiskExposureReference(p), 4.0); };
+    CHECK(brightness(gargantua) / brightness(thorne) == Approx(1.0).margin(0.15));
+    // With the old rest-frame reference the near-extremal disk was several times dimmer
+    const auto old = [&](const DiskProfile& p) { return std::pow(at(p, 6.0) / p.PeakTemperature, 4.0); };
+    CHECK(old(gargantua) / old(thorne) < 0.3);
+}
+
+TEST_CASE("FillMetricData writes the disk exposure reference", "[rendering][metric][disk]")
+{
+    RaytraceParamsGpu params{};
+    params.NumBlackHoles = 1;
+    params.MetricType = static_cast<std::int32_t>(MetricKind::Kerr);
+    params.DiskAccretionRate = 0.1f;
+    params.BlackHoles[0].Mass = 1.0f;
+    params.BlackHoles[0].Spin = 0.9f;
+    params.BlackHoles[0].MassSolar = 10.0f;
+    FillMetricData(params);
+    const auto profile = BuildDiskProfile({.Mass = 1.0, .SpinParameter = static_cast<double>(0.9f)}, 10.0, 0.1, 20.0);
+    CHECK(params.DiskInfo[0].w == Approx(static_cast<float>(DiskExposureReference(profile))));
+    CHECK(params.DiskInfo[0].w > params.DiskInfo[0].x * 0.5f);
 }

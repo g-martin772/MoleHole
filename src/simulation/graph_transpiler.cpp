@@ -102,6 +102,7 @@ namespace MoleHole
             case NodeSubType::And: return "land";
             case NodeSubType::Or: return "lor";
             case NodeSubType::LookAt: return "lookat";
+            case NodeSubType::ClockRate: return "clockrate";
             default: return nullptr;
             }
         }
@@ -894,6 +895,11 @@ namespace MoleHole
                 {
                     Add(out, 0, std::format("{}({}, {})", Host("destroy"), id, PinExpr(fn, node, 1)), id);
                 }
+                else if (node.SubType == NodeSubType::LaunchOrbit && node.Inputs.size() >= 5)
+                {
+                    Add(out, 0, std::format("{}({}, {}, {}, {}, {})", Host("launchorbit"), id, PinExpr(fn, node, 1),
+                                            PinExpr(fn, node, 2), PinExpr(fn, node, 3), PinExpr(fn, node, 4)), id);
+                }
                 else if (node.SubType == NodeSubType::CloneEntity && node.Inputs.size() >= 3)
                 {
                     produce(std::format("{}({}, {}, {})", Host("clone"), id, PinExpr(fn, node, 1), PinExpr(fn, node, 2)));
@@ -1338,6 +1344,11 @@ function rt.lor(a, b) return rt.bool(a) or rt.bool(b) end
 
 function rt.lookat(a, b)
     if type(a) == "vector" and type(b) == "vector" then return host.lookat(a, b) end
+    return nil
+end
+
+function rt.clockrate(p, o)
+    if type(p) == "vector" then return host.clockrate(p, rt.int(o)) end
     return nil
 end
 

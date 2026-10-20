@@ -14,6 +14,9 @@ export namespace MoleHole
     enum class MeshMode : int { Raster = 0, Traced = 1 };
     enum class ToneMap : int { None = 0, Reinhard = 1, Aces = 2 };
     enum class ExposureMode : int { Manual = 0, Auto = 1, Physical = 2 };
+    // Mirrors ObserverKind (src/physics/observer.cppm) and OrbitDirection (src/rendering/metric.cppm).
+    enum class CameraObserver : int { Zamo = 0, Static = 1, Orbiting = 2, Raindrop = 3 };
+    enum class CameraOrbit : int { Prograde = 0, Retrograde = 1 };
 
     struct RenderSettings
     {
@@ -47,6 +50,8 @@ export namespace MoleHole
         bool ThirdPerson = false;
         float ThirdPersonDistance = 10.0f;
         float ThirdPersonHeight = 3.0f;
+        CameraObserver Observer = CameraObserver::Zamo;
+        CameraOrbit ObserverOrbit = CameraOrbit::Prograde;
         FrameMode LengthUnit = FrameMode::PrimaryBlackHole;
 
         float ResolutionScale = 100.0f;
@@ -78,6 +83,9 @@ export namespace MoleHole
         bool ShowGravityGrid = false;
         bool ShowPhysicsDebug = false;
         bool ShowObjectPaths = false;
+        bool ShowCharacteristicRadii = false;
+        bool ShowPredictedOrbits = false;
+        float PredictionSpan = 300.0f; // coordinate time ahead, in M of each body's hole
 
         DebugView Debug = DebugView::None;
 

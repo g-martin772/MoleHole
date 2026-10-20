@@ -11,6 +11,7 @@ import :Rendering.Meshes;
 import :Rendering.MeshTrace;
 import :Rendering.MeshScene;
 import :Simulation.ObjectPaths;
+import :Rendering.OrbitOverlays;
 
 export namespace MoleHole
 {
@@ -20,6 +21,7 @@ export namespace MoleHole
         Camera ViewCamera;
         RenderSettings Settings;
         std::shared_ptr<GPP::PhysicsSimulationModule> Physics;
+        std::uint64_t ObserverGuid = 0; // entity whose world line the camera rides (possessed scene camera), 0 = none
     };
 
     struct MeshTraceFrame
@@ -53,6 +55,13 @@ export namespace MoleHole
         GPP::VulkanImage* BloomResult = nullptr;
 
         MeshTraceFrame MeshTrace;
+
+        // Overlay lines of this frame, from OverlayGeometryStage: rasterised vertices (pos + colour, render units) and
+        // the trails the integrated tracer draws lensed
+        std::vector<float> OverlayVertices;
+        TracedTrails Trails;
+        float TrailAngularHalfWidth{0.0f};
+        bool TrailsActive{false};
     };
 
     struct RenderFrameContext

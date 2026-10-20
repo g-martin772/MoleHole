@@ -1,0 +1,295 @@
+Scene: Gargantua orbits (geodesic bodies)
+SchemaVersion: 2
+TimeScale: 6000
+Entities:
+  - Guid: 7710000000000000001
+    Components:
+      Metadata:
+        Guid: 7710000000000000001
+        Name: Gargantua
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      RigidBody:
+        Type: Static
+        Mass: 1
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: false
+      Collider:
+        Shape: Sphere
+        HalfExtents: [0.5, 0.5, 0.5]
+        Radius: 295325007610.0249
+        HalfHeight: 0.5
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: true
+      BlackHole:
+        Mass: 1.9884098706980505e+38
+        SpinRange: ThorneLimit
+        Spin: 0.968
+        SpinGap: 1.3e-14
+        Charge: 0
+        SpinAxis: [0, 1, 0]
+  - Guid: 7710000000000000002
+    Components:
+      Metadata:
+        Guid: 7710000000000000002
+        Name: Inner orbit (6 M)
+        TypeTag: Sphere
+      Transform:
+        Position: [897587224200, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Sphere:
+        Radius: 37399467675
+        Spin: 0
+        Color: [0.9, 0.55, 0.3]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+      GeodesicBody:
+        BlackHole: 0
+        Launch: Orbiting
+        Retrograde: false
+        LaunchVelocity: [0, 0, 0]
+  - Guid: 7710000000000000003
+    Components:
+      Metadata:
+        Guid: 7710000000000000003
+        Name: Raindrop
+        TypeTag: Sphere
+      Transform:
+        Position: [-448793612100, 299195741400, -1346380836300]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Sphere:
+        Radius: 37399467675
+        Spin: 0
+        Color: [0.4, 0.7, 1]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+      GeodesicBody:
+        BlackHole: 0
+        Launch: Raindrop
+        Retrograde: false
+        LaunchVelocity: [0, 0, 0]
+  - Guid: 7710000000000000004
+    Components:
+      Metadata:
+        Guid: 7710000000000000004
+        Name: Camera (orbiting, 15 M)
+        TypeTag: Camera
+      Transform:
+        Position: [0, 598391482800, 2094370189800]
+        Rotation: [-0.138701, 0, 0, 0.990334]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 70
+        NearPlane: 1000000
+        FarPlane: 149597870700000
+        Primary: true
+      GeodesicBody:
+        BlackHole: 0
+        Launch: Orbiting
+        Retrograde: false
+        LaunchVelocity: [0, 0, 0]
+Graphs:
+  Version: 3
+  Items:
+    - Name: Camera looks at Gargantua
+      Enabled: true
+      Entity: 0
+      Graph:
+        NextId: 15
+        Variables: []
+        Nodes:
+          - Id: 1
+            Name: Tick
+            Type: Event
+            SubType: Tick
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue:
+              T: None
+            Position: [-80, 0]
+            Inputs: []
+            Outputs:
+              - Id: 1500
+                Name: Out
+                Type: Flow
+                IsInput: false
+              - Id: 1501
+                Name: DeltaTime
+                Type: Float
+                IsInput: false
+          - Id: 2
+            Name: Get Transform
+            Type: Getter
+            SubType: Transform
+            VariableName: ""
+            TargetGuid: 7710000000000000004
+            ConstantValue:
+              T: None
+            Position: [-520, 140]
+            Inputs: []
+            Outputs:
+              - Id: 2500
+                Name: Entity
+                Type: Object
+                IsInput: false
+          - Id: 3
+            Name: Decompose Transform
+            Type: Decomposer
+            SubType: Transform
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue:
+              T: None
+            Position: [-300, 140]
+            Inputs:
+              - Id: 3001
+                Name: Entity
+                Type: Object
+                IsInput: true
+            Outputs:
+              - Id: 3500
+                Name: Position
+                Type: Vec3
+                IsInput: false
+              - Id: 3501
+                Name: Rotation
+                Type: Vec3
+                IsInput: false
+              - Id: 3502
+                Name: Scale
+                Type: Vec3
+                IsInput: false
+          - Id: 4
+            Name: Get Transform
+            Type: Getter
+            SubType: Transform
+            VariableName: ""
+            TargetGuid: 7710000000000000001
+            ConstantValue:
+              T: None
+            Position: [-520, 320]
+            Inputs: []
+            Outputs:
+              - Id: 4500
+                Name: Entity
+                Type: Object
+                IsInput: false
+          - Id: 5
+            Name: Decompose Transform
+            Type: Decomposer
+            SubType: Transform
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue:
+              T: None
+            Position: [-300, 320]
+            Inputs:
+              - Id: 5001
+                Name: Entity
+                Type: Object
+                IsInput: true
+            Outputs:
+              - Id: 5500
+                Name: Position
+                Type: Vec3
+                IsInput: false
+              - Id: 5501
+                Name: Rotation
+                Type: Vec3
+                IsInput: false
+              - Id: 5502
+                Name: Scale
+                Type: Vec3
+                IsInput: false
+          - Id: 6
+            Name: Look At
+            Type: Function
+            SubType: LookAt
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue:
+              T: None
+            Position: [-80, 220]
+            Inputs:
+              - Id: 6001
+                Name: From
+                Type: Vec3
+                IsInput: true
+              - Id: 6002
+                Name: Target
+                Type: Vec3
+                IsInput: true
+            Outputs:
+              - Id: 6500
+                Name: Rotation
+                Type: Vec3
+                IsInput: false
+          - Id: 7
+            Name: Set Transform
+            Type: Setter
+            SubType: Transform
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue:
+              T: None
+            Position: [160, 60]
+            Inputs:
+              - Id: 7001
+                Name: In
+                Type: Flow
+                IsInput: true
+              - Id: 7002
+                Name: Entity
+                Type: Object
+                IsInput: true
+              - Id: 7003
+                Name: Position
+                Type: Vec3
+                IsInput: true
+              - Id: 7004
+                Name: Rotation
+                Type: Vec3
+                IsInput: true
+              - Id: 7005
+                Name: Scale
+                Type: Vec3
+                IsInput: true
+            Outputs:
+              - Id: 7500
+                Name: Out
+                Type: Flow
+                IsInput: false
+              - Id: 7501
+                Name: Entity
+                Type: Object
+                IsInput: false
+        Links:
+          - Id: 8
+            StartPinId: 1500
+            EndPinId: 7001
+          - Id: 9
+            StartPinId: 2500
+            EndPinId: 3001
+          - Id: 10
+            StartPinId: 2500
+            EndPinId: 7002
+          - Id: 11
+            StartPinId: 4500
+            EndPinId: 5001
+          - Id: 12
+            StartPinId: 3500
+            EndPinId: 6001
+          - Id: 13
+            StartPinId: 5500
+            EndPinId: 6002
+          - Id: 14
+            StartPinId: 6500
+            EndPinId: 7004

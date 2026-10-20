@@ -19,6 +19,7 @@ export namespace MoleHole
         float Fov{60.0f};
         double NearPlaneM{0.1};
         double FarPlaneM{1000.0};
+        std::uint64_t Guid{0}; // camera entity
     };
 
     [[nodiscard]] inline SceneCameraView MakeSceneCameraView(const GPP::TransformComponent& transform,
@@ -47,7 +48,10 @@ export namespace MoleHole
         for (auto [entity, camera, transform] :
              scene.Registry().view<const GPP::CameraComponent, const GPP::TransformComponent>().each())
         {
-            if (camera.Primary) return MakeSceneCameraView(transform, camera);
+            if (!camera.Primary) continue;
+            auto view = MakeSceneCameraView(transform, camera);
+            view.Guid = scene.GuidOf(entity);
+            return view;
         }
         return std::nullopt;
     }

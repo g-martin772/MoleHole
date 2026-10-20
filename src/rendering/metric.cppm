@@ -10,6 +10,12 @@ export namespace MoleHole
 {
     enum class MetricKind : std::int32_t { Schwarzschild = 0, Kerr = 1, ReissnerNordstrom = 2, KerrNewman = 3 };
 
+    // Thorne (1974) limit: the spin disk accretion can bring a hole to, and the edge of the default spin range.
+    constexpr double kMaxHorizonParameter = 0.998;
+    // Near-extremal holes, beyond the Thorne limit (Interstellar's Gargantua: a/M = 1 - 1.3e-14), may come up to
+    // 1 - kMinExtremalGap. Closer to 1 the gap is no longer resolved by double precision near r = M.
+    constexpr double kMinExtremalGap = 1e-15;
+    constexpr double kExtremalHorizonParameter = 1.0 - kMinExtremalGap;
     // Radius (in M) the integrator treats as captured when there is no horizon; numerical, not physical.
     constexpr double kNakedCaptureRadiusM = 0.05;
 
@@ -22,7 +28,7 @@ export namespace MoleHole
 
     // `spin` and `charge` are the dimensionless BlackHoleComponent fields a/M and Q/M. The metric type zeroes the
     // parameters it does not model. Nothing is clamped: a² + Q² > M² is a naked singularity (HasHorizon is false).
-    // Only |a| and |Q| enter the metric; a negative spin is handled by reversing the spin axis (SpinAxisFor).
+    // Only |a| and |Q| enter the metric; a negative spin is handled by reversing the spin axis (BlackHoleSignedSpin).
     [[nodiscard]] inline KerrNewmanParams MakeKerrNewmanParams(const std::int32_t metricType, const double mass,
                                                                 const double spin, const double charge)
     {
@@ -30,24 +36,44 @@ export namespace MoleHole
         const bool rotating = kind == MetricKind::Kerr || kind == MetricKind::KerrNewman;
         const bool charged = kind == MetricKind::ReissnerNordstrom || kind == MetricKind::KerrNewman;
 
+        // a* = 1 exactly is the degenerate limit (ISCO on the horizon); the closest the metric resolves is used instead
+        double a = rotating ? std::abs(spin) : 0.0;
+        if (a > kExtremalHorizonParameter && a <= 1.0) a = kExtremalHorizonParameter;
+
         const double m = std::max(mass, 0.0);
-        return KerrNewmanParams{.Mass = m, .SpinParameter = rotating ? std::abs(spin) * m : 0.0,
-                                .Charge = charged ? std::abs(charge) * m : 0.0};
+        return KerrNewmanParams{.Mass = m, .SpinParameter = a * m, .Charge = charged ? std::abs(charge) * m : 0.0};
+    }
+
+    // M² - a² - Q², written so that it keeps its relative precision for near-extremal holes, where it is tiny.
+    [[nodiscard]] inline double HorizonDiscriminant(const KerrNewmanParams& p)
+    {
+        return (p.Mass - p.SpinParameter) * (p.Mass + p.SpinParameter) - p.Charge * p.Charge;
     }
 
     [[nodiscard]] inline bool HasHorizon(const KerrNewmanParams& p)
     {
-        return p.SpinParameter * p.SpinParameter + p.Charge * p.Charge <= p.Mass * p.Mass * (1.0 + 1e-12);
+        return HorizonDiscriminant(p) >= -1e-12 * p.Mass * p.Mass;
     }
 
     // Larger root of Δ = 0; 0 for a naked singularity (no horizon).
     [[nodiscard]] inline double OuterHorizonRadius(const KerrNewmanParams& p)
     {
         if (!HasHorizon(p)) return 0.0;
-        const double m = p.Mass;
-        const double a = p.SpinParameter;
-        const double q = p.Charge;
-        return m + std::sqrt(std::max(m * m - a * a - q * q, 0.0));
+        return p.Mass + std::sqrt(std::max(HorizonDiscriminant(p), 0.0));
+    }
+
+    [[nodiscard]] inline double InnerHorizonRadius(const KerrNewmanParams& p)
+    {
+        if (!HasHorizon(p)) return 0.0;
+        return p.Mass - std::sqrt(std::max(HorizonDiscriminant(p), 0.0));
+    }
+
+    // Δ = r² - 2Mr + a² + Q². With a horizon it is evaluated in the factored form (r - r+)(r - r-): the expanded
+    // form loses all precision close to the horizon of a near-extremal hole, where Δ is far below its terms.
+    [[nodiscard]] inline double HorizonDelta(const KerrNewmanParams& p, const double r)
+    {
+        if (!HasHorizon(p)) return r * r - 2.0 * p.Mass * r + p.SpinParameter * p.SpinParameter + p.Charge * p.Charge;
+        return (r - OuterHorizonRadius(p)) * (r - InnerHorizonRadius(p));
     }
 
     // Radius inside which the integrators stop a ray: the horizon, or a small numerical radius around a naked singularity.
@@ -60,10 +86,8 @@ export namespace MoleHole
     [[nodiscard]] inline double ErgosphereRadius(const KerrNewmanParams& p, const double theta)
     {
         const double m = p.Mass;
-        const double a = p.SpinParameter;
-        const double q = p.Charge;
-        const double cosTheta = std::cos(theta);
-        return m + std::sqrt(std::max(m * m - a * a * cosTheta * cosTheta - q * q, 0.0));
+        const double ac = p.SpinParameter * std::cos(theta);
+        return m + std::sqrt(std::max((m - ac) * (m + ac) - p.Charge * p.Charge, 0.0));
     }
 
     struct EquatorialMetric
@@ -89,35 +113,121 @@ export namespace MoleHole
         };
     }
 
-    // Angular velocity dφ/dt of a prograde circular equatorial geodesic at Boyer–Lindquist radius r.
-    // Reduces to 1 / (r^{3/2} / √M + a) for Kerr.
-    [[nodiscard]] inline double ProgradeOrbitalFrequency(const KerrNewmanParams& p, const double r)
+    // Prograde orbits co-rotate with the hole (L > 0 for a > 0), retrograde ones counter-rotate.
+    enum class OrbitDirection : std::int32_t { Prograde = 0, Retrograde = 1 };
+
+    // Circular equatorial orbits of Kerr (Q = 0) in the closed forms of Bardeen, Press & Teukolsky (1972), eqs.
+    // 2.12-2.16, with x = √(r/M) and â = a/M. The combinations that cancel near r = M are factored, using
+    // x - 1 and 1 - â computed directly, so the results keep their precision for near-extremal holes, where the ISCO
+    // approaches r = M (for â = 1 - 1.3e-14 it lies at 1.00004 M and u^t ≈ 6e4).
+    struct KerrCircularOrbit
     {
+        double Omega{0.0};       // dφ/dt
+        double Denominator{0.0}; // x³ - 3x ± 2â: positive outside the photon orbit
+        double Ut{0.0};          // dt/dτ; NaN where Denominator ≤ 0
+        double Energy{0.0};      // -u_t
+        double AngularMomentum{0.0};
+    };
+
+    [[nodiscard]] inline KerrCircularOrbit EvaluateKerrCircularOrbit(const KerrNewmanParams& p, const double r,
+                                                                     const OrbitDirection direction)
+    {
+        const double m = p.Mass;
+        const double spin = p.SpinParameter / m;
+        const double gap = (m - p.SpinParameter) / m; // 1 - â
+        const bool prograde = direction == OrbitDirection::Prograde;
+        const double s = prograde ? 1.0 : -1.0;
+        const double x = std::sqrt(r / m);
+        const double xMinusOne = (r - m) / m / (x + 1.0);
+        const double x3 = x * x * x;
+        // x³ - 3x ± 2â, x³ - 2x ± â and x² ∓ â
+        const double denominator = prograde ? xMinusOne * xMinusOne * (x + 2.0) - 2.0 * gap
+                                            : (x + 1.0) * (x + 1.0) * (x - 2.0) + 2.0 * gap;
+        const double energyNumerator = prograde ? xMinusOne * (x * x + x - 1.0) - gap
+                                                : (x + 1.0) * (x * x - x - 1.0) + gap;
+        const double squareMinusSpin = prograde ? xMinusOne * (x + 1.0) + gap : x * x + spin;
+        // x⁴ ∓ 2âx + â² = (x² ∓ â)² ± 2âx (x - 1)
+        const double angularNumerator = squareMinusSpin * squareMinusSpin + 2.0 * s * spin * x * xMinusOne;
+        const double root = x * std::sqrt(x) * std::sqrt(denominator);
+        return KerrCircularOrbit{
+            .Omega = s / (m * (x3 + s * spin)),
+            .Denominator = denominator,
+            .Ut = (x3 + s * spin) / root,
+            .Energy = energyNumerator / root,
+            .AngularMomentum = s * m * angularNumerator / root,
+        };
+    }
+
+    // Charged holes have no closed forms like these; they take the general path through the equatorial metric.
+    [[nodiscard]] inline bool UsesKerrClosedForms(const KerrNewmanParams& p) { return p.Charge == 0.0 && p.Mass > 0.0; }
+
+    // Angular velocity dφ/dt of a circular equatorial geodesic at Boyer–Lindquist radius r.
+    // Reduces to ±1 / (r^{3/2} / √M ± a) for Kerr.
+    [[nodiscard]] inline double OrbitalFrequency(const KerrNewmanParams& p, const double r, const OrbitDirection direction)
+    {
+        if (UsesKerrClosedForms(p)) return EvaluateKerrCircularOrbit(p, r, direction).Omega;
         const auto g = EvaluateEquatorialMetric(p, r);
         const double discriminant = g.DGtphi * g.DGtphi - g.DGtt * g.DGphiphi;
         if (discriminant < 0.0 || g.DGphiphi == 0.0) return std::numeric_limits<double>::quiet_NaN();
-        return (-g.DGtphi + std::sqrt(discriminant)) / g.DGphiphi;
+        const double root = direction == OrbitDirection::Prograde ? std::sqrt(discriminant) : -std::sqrt(discriminant);
+        return (-g.DGtphi + root) / g.DGphiphi;
     }
 
-    // Specific energy -u_t of the prograde circular orbit at r; +inf where no timelike orbit exists
-    // (at or inside the photon orbit).
-    [[nodiscard]] inline double CircularOrbitEnergy(const KerrNewmanParams& p, const double r)
+    [[nodiscard]] inline double ProgradeOrbitalFrequency(const KerrNewmanParams& p, const double r)
     {
-        const double omega = ProgradeOrbitalFrequency(p, r);
-        if (!std::isfinite(omega)) return std::numeric_limits<double>::infinity();
+        return OrbitalFrequency(p, r, OrbitDirection::Prograde);
+    }
+
+    // (dτ/dt)² = -(g_tt + 2 g_tφ Ω + g_φφ Ω²) of the circular orbit at r: positive where the orbit is timelike,
+    // zero on the photon orbit, negative inside it.
+    [[nodiscard]] inline double CircularOrbitNorm(const KerrNewmanParams& p, const double r, const OrbitDirection direction)
+    {
+        if (UsesKerrClosedForms(p))
+        {
+            const auto orbit = EvaluateKerrCircularOrbit(p, r, direction);
+            if (!(orbit.Denominator > 0.0)) return orbit.Denominator;
+            return 1.0 / (orbit.Ut * orbit.Ut);
+        }
+        const double omega = OrbitalFrequency(p, r, direction);
+        if (!std::isfinite(omega)) return std::numeric_limits<double>::quiet_NaN();
         const auto g = EvaluateEquatorialMetric(p, r);
-        const double norm = -(g.Gtt + 2.0 * g.Gtphi * omega + g.Gphiphi * omega * omega);
+        return -(g.Gtt + 2.0 * g.Gtphi * omega + g.Gphiphi * omega * omega);
+    }
+
+    // Specific energy -u_t of the circular orbit at r; +inf where no timelike orbit exists
+    // (at or inside the photon orbit).
+    [[nodiscard]] inline double CircularOrbitEnergy(const KerrNewmanParams& p, const double r,
+                                                    const OrbitDirection direction = OrbitDirection::Prograde)
+    {
+        if (UsesKerrClosedForms(p))
+        {
+            const auto orbit = EvaluateKerrCircularOrbit(p, r, direction);
+            return orbit.Denominator > 0.0 ? orbit.Energy : std::numeric_limits<double>::infinity();
+        }
+        const double norm = CircularOrbitNorm(p, r, direction);
         if (!(norm > 0.0)) return std::numeric_limits<double>::infinity();
+        const double omega = OrbitalFrequency(p, r, direction);
+        const auto g = EvaluateEquatorialMetric(p, r);
         return -(g.Gtt + g.Gtphi * omega) / std::sqrt(norm);
     }
 
-    // Innermost stable circular orbit (prograde): the minimum of the circular-orbit energy E(r), found by walking
-    // inwards from 12 M while E keeps falling. Solved numerically so it covers charge as well, where no closed
-    // form like Bardeen–Press–Teukolsky's exists. Without a horizon the walk also stops where E turns non-positive
+    // Innermost stable circular orbit: the minimum of the circular-orbit energy E(r). Kerr uses the closed form of
+    // Bardeen, Press & Teukolsky (1972), eq. 2.21; with charge there is none, so E(r) is found numerically by walking
+    // inwards from 12 M while E keeps falling. Without a horizon the walk also stops where E turns non-positive
     // or undefined (the orbit branch ends there) and the last good sample is returned.
-    [[nodiscard]] inline double ProgradeIscoRadius(const KerrNewmanParams& p)
+    [[nodiscard]] inline double IscoRadius(const KerrNewmanParams& p, const OrbitDirection direction)
     {
         if (p.Mass <= 0.0) return 0.0;
+        if (UsesKerrClosedForms(p))
+        {
+            const double spin = p.SpinParameter / p.Mass;
+            const double gap = (p.Mass - p.SpinParameter) / p.Mass;
+            // 1 - â² = (1 - â)(1 + â)
+            const double z1 = 1.0 + std::cbrt(gap * (1.0 + spin)) * (std::cbrt(1.0 + spin) + std::cbrt(gap));
+            const double z2 = std::sqrt(3.0 * spin * spin + z1 * z1);
+            const double root = std::sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
+            return p.Mass * (3.0 + z2 + (direction == OrbitDirection::Prograde ? -root : root));
+        }
 
         const double rLow = CaptureRadius(p) * (1.0 + 1e-6);
         const double rHigh = 12.0 * p.Mass;
@@ -126,12 +236,12 @@ export namespace MoleHole
         const auto radius = [&](const int i) { return rLow + step * static_cast<double>(i); };
 
         int best = kSamples;
-        double bestEnergy = CircularOrbitEnergy(p, rHigh);
+        double bestEnergy = CircularOrbitEnergy(p, rHigh, direction);
         if (!std::isfinite(bestEnergy)) return 6.0 * p.Mass;
         bool minimum = false;
         for (int i = kSamples - 1; i >= 0; --i)
         {
-            const double energy = CircularOrbitEnergy(p, radius(i));
+            const double energy = CircularOrbitEnergy(p, radius(i), direction);
             if (!std::isfinite(energy) || energy <= 0.0) break;
             if (energy > bestEnergy)
             {
@@ -150,20 +260,73 @@ export namespace MoleHole
         {
             const double x1 = hi - kInvPhi * (hi - lo);
             const double x2 = lo + kInvPhi * (hi - lo);
-            if (CircularOrbitEnergy(p, x1) < CircularOrbitEnergy(p, x2)) hi = x2;
+            if (CircularOrbitEnergy(p, x1, direction) < CircularOrbitEnergy(p, x2, direction)) hi = x2;
             else lo = x1;
         }
         return 0.5 * (lo + hi);
     }
 
-    // Specific angular momentum u_phi of the prograde circular orbit at r.
-    [[nodiscard]] inline double CircularOrbitAngularMomentum(const KerrNewmanParams& p, const double r)
+    [[nodiscard]] inline double ProgradeIscoRadius(const KerrNewmanParams& p)
     {
-        const double omega = ProgradeOrbitalFrequency(p, r);
+        return IscoRadius(p, OrbitDirection::Prograde);
+    }
+
+    // Specific angular momentum u_phi of the circular orbit at r.
+    [[nodiscard]] inline double CircularOrbitAngularMomentum(const KerrNewmanParams& p, const double r,
+                                                             const OrbitDirection direction = OrbitDirection::Prograde)
+    {
+        if (UsesKerrClosedForms(p))
+        {
+            const auto orbit = EvaluateKerrCircularOrbit(p, r, direction);
+            return orbit.Denominator > 0.0 ? orbit.AngularMomentum : std::numeric_limits<double>::quiet_NaN();
+        }
+        const double norm = CircularOrbitNorm(p, r, direction);
+        if (!(norm > 0.0)) return std::numeric_limits<double>::quiet_NaN();
+        const double omega = OrbitalFrequency(p, r, direction);
         const auto g = EvaluateEquatorialMetric(p, r);
-        const double norm = -(g.Gtt + 2.0 * g.Gtphi * omega + g.Gphiphi * omega * omega);
-        if (!std::isfinite(omega) || !(norm > 0.0)) return std::numeric_limits<double>::quiet_NaN();
         return (g.Gtphi + g.Gphiphi * omega) / std::sqrt(norm);
+    }
+
+    // Bisection for the boundary of a predicate that is false at lo and true at hi.
+    [[nodiscard]] inline double BisectBoundary(double lo, double hi, const std::function<bool(double)>& isAbove)
+    {
+        for (int i = 0; i < 200 && hi - lo > 1e-15 * hi; ++i)
+        {
+            const double mid = 0.5 * (lo + hi);
+            if (isAbove(mid)) hi = mid;
+            else lo = mid;
+        }
+        return 0.5 * (lo + hi);
+    }
+
+    // Circular photon orbit in the equatorial plane: where circular orbits stop being timelike. Every circular
+    // orbit further out is timelike, every one further in (down to the horizon) is spacelike.
+    // Kerr: 2M (1 + cos(2/3 arccos(∓a/M))) (BPT eq. 2.18); Reissner–Nordström: (3M + √(9M² − 8Q²)) / 2.
+    [[nodiscard]] inline double PhotonOrbitRadius(const KerrNewmanParams& p, const OrbitDirection direction)
+    {
+        if (p.Mass <= 0.0) return 0.0;
+        if (UsesKerrClosedForms(p))
+        {
+            const double spin = p.SpinParameter / p.Mass;
+            const double sign = direction == OrbitDirection::Prograde ? -1.0 : 1.0;
+            return 2.0 * p.Mass * (1.0 + std::cos(2.0 / 3.0 * std::acos(sign * spin)));
+        }
+        return BisectBoundary(CaptureRadius(p), 12.0 * p.Mass,
+                              [&](const double r) { return CircularOrbitNorm(p, r, direction) > 0.0; });
+    }
+
+    // Marginally bound circular orbit, E = 1: a particle falling in from rest at infinity can reach it but no
+    // closer without being captured. Kerr: 2M ∓ a + 2 √M √(M ∓ a) (BPT eq. 2.19).
+    [[nodiscard]] inline double MarginallyBoundRadius(const KerrNewmanParams& p, const OrbitDirection direction)
+    {
+        if (p.Mass <= 0.0) return 0.0;
+        if (UsesKerrClosedForms(p))
+        {
+            const double a = direction == OrbitDirection::Prograde ? p.SpinParameter : -p.SpinParameter;
+            return 2.0 * p.Mass - a + 2.0 * std::sqrt(p.Mass) * std::sqrt(p.Mass - a);
+        }
+        return BisectBoundary(PhotonOrbitRadius(p, direction), IscoRadius(p, direction),
+                              [&](const double r) { return CircularOrbitEnergy(p, r, direction) < 1.0; });
     }
 
     // Fraction of rest-mass energy radiated by gas spiralling down to the ISCO: 1 - E_isco.
@@ -228,7 +391,11 @@ export namespace MoleHole
     // logarithmically spaced between InnerRadius (the ISCO) and OuterRadius.
     struct DiskProfile
     {
-        double PeakTemperature{0.0}; // K
+        double PeakTemperature{0.0}; // K, in the rest frame of the gas
+        // K: the hottest gas as a distant face-on observer sees it, max T(r) / u^t(r) (the redshift of photons with
+        // zero angular momentum). Unlike the rest-frame peak it barely depends on spin, which keeps it out of the
+        // deep, strongly redshifted throat of a near-extremal hole.
+        double ObservedPeakTemperature{0.0};
         double InnerRadius{0.0};     // geometric units of the KerrNewmanParams
         double OuterRadius{0.0};
         std::array<float, kDiskProfileSamples> Temperature{};
@@ -264,15 +431,19 @@ export namespace MoleHole
         const double fluxScale = accretionRate * std::pow(kC, 6) / (kG * kG * massKg * massKg);
 
         double peak = 0.0;
+        double observedPeak = 0.0;
         std::array<double, kDiskProfileSamples> temperature{};
         for (int i = 0; i < kDiskProfileSamples; ++i)
         {
             const auto index = static_cast<std::size_t>(i);
             temperature[index] = std::pow(fluxScale * flux[index] / kStefanBoltzmann, 0.25);
             peak = std::max(peak, temperature[index]);
+            const double norm = CircularOrbitNorm(unit, radii[index], OrbitDirection::Prograde);
+            if (norm > 0.0) observedPeak = std::max(observedPeak, temperature[index] * std::sqrt(norm));
         }
 
         profile.PeakTemperature = peak;
+        profile.ObservedPeakTemperature = observedPeak;
         profile.InnerRadius = rIn * p.Mass;
         profile.OuterRadius = rOut * p.Mass;
         for (int i = 0; i < kDiskProfileSamples; ++i)
@@ -281,5 +452,26 @@ export namespace MoleHole
             profile.Temperature[index] = peak > 0.0 ? static_cast<float>(temperature[index] / peak) : 0.0f;
         }
         return profile;
+    }
+
+    // Disk exposure: the shaders scale disk brightness as (g T / reference)⁴. The reference is the observed peak
+    // (DiskProfile::ObservedPeakTemperature), scaled so that a Schwarzschild disk keeps the brightness it had when the
+    // reference was the rest-frame peak. With the rest-frame peak, a spinning disk was exposed for gas hidden deep in
+    // its redshifted throat and looked far too dim (about 40x at a = 0.998, 200x near-extremal).
+    // See docs/notes/near_extremal.md.
+    [[nodiscard]] inline double SchwarzschildObservedPeakRatio()
+    {
+        static const double ratio = []
+        {
+            const auto profile = BuildDiskProfile({.Mass = 1.0}, 1.0, 0.1, 20.0);
+            return profile.PeakTemperature > 0.0 ? profile.ObservedPeakTemperature / profile.PeakTemperature : 1.0;
+        }();
+        return ratio;
+    }
+
+    [[nodiscard]] inline double DiskExposureReference(const DiskProfile& profile)
+    {
+        if (!(profile.ObservedPeakTemperature > 0.0)) return profile.PeakTemperature;
+        return profile.ObservedPeakTemperature / SchwarzschildObservedPeakRatio();
     }
 }

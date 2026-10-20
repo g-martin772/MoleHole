@@ -145,6 +145,25 @@ namespace MoleHole
             registry.Add(Setting("camera.third_person_height", &R::ThirdPersonHeight, {
                 .Label = "Height", .Group = "Camera", .Doc = kDoc, .Min = 0.0, .Max = 50.0,
                 .VisibleWhen = "camera.third_person"}));
+            registry.Add(Setting("camera.observer", &R::Observer, {
+                .Label = "Observer", .Group = "Camera",
+                .Tooltip = "Motion of the camera relative to the black hole, for the Integrated transport.\n"
+                           "Its velocity aberrates the sky and Doppler-shifts the disk.\n"
+                           "ZAMO: zero angular momentum, dragged along by the hole's rotation. Exists everywhere.\n"
+                           "Static: at rest relative to the distant stars. Impossible inside the ergosphere.\n"
+                           "Orbiting: circles the spin axis at the angular velocity of a circular orbit.\n"
+                           "Raindrop: falling freely from rest at infinity.\n"
+                           "Where the chosen observer cannot exist the camera falls back to the ZAMO.",
+                .Doc = kDoc,
+                .Options = {"Zamo", "Static", "Orbiting", "Raindrop"},
+                .OptionLabels = {"ZAMO", "Static", "Orbiting", "Raindrop (free fall)"},
+                .VisibleWhen = "transport.mode>=2"}));
+            registry.Add(Setting("camera.observer_orbit", &R::ObserverOrbit, {
+                .Label = "Orbit direction", .Group = "Camera",
+                .Tooltip = "Prograde orbits turn with the black hole, retrograde ones against it.",
+                .Doc = kDoc,
+                .Options = {"Prograde", "Retrograde"},
+                .VisibleWhen = "transport.mode>=2 & camera.observer=2"}));
             registry.Add(Setting("camera.length_unit", &R::LengthUnit, {
                 .Label = "Render length unit", .Group = "Camera",
                 .Tooltip = "Unit of the geometrized render space (G = c = 1). Ray step size and the third-person\n"
@@ -255,6 +274,25 @@ namespace MoleHole
                 .Label = "Object path trails", .Group = "Overlays",
                 .Tooltip = "Recent world-space path of every mesh (green) and sphere (magenta) while playing.",
                 .Doc = kDoc}));
+            registry.Add(Setting("overlay.characteristic_radii", &R::ShowCharacteristicRadii, {
+                .Label = "Characteristic radii", .Group = "Overlays",
+                .Tooltip = "Every black hole's horizon (grey) and ergosphere (purple, in two meridian planes), and the\n"
+                           "equatorial photon orbit (orange), marginally bound orbit (green) and ISCO (blue).\n"
+                           "Bright: prograde orbits, dim: retrograde.\n"
+                           "Integrated transport: the tracer draws the rings where rays cross the equator, so they are\n"
+                           "lensed like the disk (with secondary images) and the ergoregion is tinted; otherwise they are\n"
+                           "plain lines, which sit inside the lensed shadow.",
+                .Doc = kDoc}));
+            registry.Add(Setting("overlay.predicted_orbits", &R::ShowPredictedOrbits, {
+                .Label = "Predicted orbits", .Group = "Overlays",
+                .Tooltip = "Where every Geodesic Body will go, integrated ahead from its current state: bright now,\n"
+                           "fading towards the end of the span. Drawn without lensing.",
+                .Doc = kDoc}));
+            registry.Add(Setting("overlay.prediction_span", &R::PredictionSpan, {
+                .Label = "Prediction span", .Group = "Orbit overlays",
+                .Tooltip = "Coordinate time to predict ahead, in M (GM/c³ of each body's black hole).",
+                .Doc = kDoc, .Min = 10.0, .Max = 100000.0, .Scale = SettingScale::Log, .Format = "%.0f M",
+                .VisibleWhen = "overlay.predicted_orbits"}));
 
             registry.Add(Setting("debug.view", &R::Debug, {
                 .Label = "Debug view", .Group = "Debug",

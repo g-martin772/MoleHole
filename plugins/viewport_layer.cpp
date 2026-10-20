@@ -26,6 +26,7 @@ namespace
     {
         Camera ViewCamera;
         RenderSettings Render;
+        std::uint64_t ObserverGuid = 0; // possessed scene camera entity, for a camera riding a Geodesic Body
     };
 
     struct SimBinding
@@ -101,7 +102,8 @@ namespace
             }
             auto render = m_RenderSettings->Effective();
             render.ResolutionScale *= m_UiState->RenderGovernorScale;
-            m_FrameParams.Publish(ViewportFrameParams{m_Camera, std::move(render)});
+            PublishObserverReadout(render);
+            m_FrameParams.Publish(ViewportFrameParams{m_Camera, std::move(render), m_ObserverGuid});
         }
 
         void OnRender() override
@@ -121,6 +123,7 @@ namespace
             inputs.ViewCamera = frameParams->ViewCamera;
             inputs.Settings = frameParams->Render;
             inputs.Physics = sim->Runner->GetModule<PhysicsSimulationModule>();
+            inputs.ObserverGuid = frameParams->ObserverGuid;
             const auto sceneLock = sim->Runner->AcquireSnapshot();
             inputs.Scene = &*sceneLock;
             m_Pipeline.Build(graph, inputs);
@@ -531,8 +534,9 @@ namespace
             gravity->SetGravityMultiplier(m_UiState->GravityMultiplier);
             SimulationOptions options;
             options.FixedTimestep = std::chrono::duration<float>(1.0f / std::max(m_UiState->SimulationTickRate, 1.0f));
+            auto geodesics = std::make_shared<GeodesicSimulationModule>(m_Logger);
             auto runner = m_Scenes->CreateSimulation(
-                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravity, physics}, options);
+                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravity, physics, geodesics}, options);
             runner->Start();
             runner->SetPaused(true);
             m_Sim.Publish(SimBinding{runner});
@@ -722,6 +726,7 @@ namespace
         bool UpdateSceneCamera()
         {
             m_UiState->SceneCameraActive = false;
+            m_ObserverGuid = 0;
             const auto sim = m_Sim.Load();
             if (!sim->Runner) return false;
             const bool playing = !sim->Runner->IsPaused();
@@ -740,8 +745,22 @@ namespace
             m_Camera.SetClipPlanes(frame.ToRenderLength(view->NearPlaneM), frame.ToRenderLength(view->FarPlaneM));
             m_HasLastMouse = false;
             m_UiState->SceneCameraActive = true;
+            m_ObserverGuid = view->Guid;
             PublishView();
             return true;
+        }
+
+        // What the camera's observer measures, for the camera window; the renderer applies the same observer.
+        void PublishObserverReadout(const RenderSettings& render)
+        {
+            const auto sim = m_Sim.Load();
+            if (!sim->Runner) return;
+            const auto snapshot = sim->Runner->AcquireSnapshot();
+            auto readout = ComputeObserverReadout(
+                *snapshot, static_cast<std::int32_t>(render.Solution), static_cast<ObserverKind>(render.Observer),
+                static_cast<OrbitDirection>(render.ObserverOrbit), m_UiState->ViewPositionM, m_ObserverGuid);
+            readout.Rendered = render.TransportMode == Transport::Integrated;
+            m_UiState->Observer.Publish(std::move(readout));
         }
 
         void PublishView()
@@ -775,6 +794,7 @@ namespace
         bool m_HasLastMouse{false};
         bool m_MouseLookActive{false};
         std::uint64_t m_FocusGuid{0};
+        std::uint64_t m_ObserverGuid{0}; // possessed scene camera entity while it is active
         double m_FocusDistance{10.0};
         double m_FocusMinDistance{0.1};
         std::atomic<bool> m_FocusRequest{false};

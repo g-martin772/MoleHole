@@ -13,6 +13,9 @@ namespace
     struct Gb
     {
         AnimationGraphData G;
+        // Setter/Getter pins come from the registered components, so they must exist before the first node is
+        // built; without this, a test running first in a random order gets pin-less setters.
+        bool Registered = (RegisterComponents(), true);
 
         int Add(Node node)
         {
@@ -559,4 +562,65 @@ TEST_CASE("Runtime errors map back to graph nodes and runaway graphs are stopped
     CHECK(sink.Errors[0].second.find("instruction limit") != std::string::npos);
     CHECK(sink.Errors[0].first != 0);
     (void)print;
+}
+
+namespace
+{
+    constexpr std::uint64_t kHole = 201;
+    constexpr std::uint64_t kProbe = 202;
+
+    // A 10^6 solar-mass Kerr hole and a geodesic body at about 30 M, in SI metres
+    void RelativityScene(Scene& scene)
+    {
+        RegisterComponents();
+        const BlackHoleComponent hole{.Mass = 1e6 * GPP::Units::kSolarMass, .Spin = 0.7};
+        const auto bh = scene.CreateEntityWithGuid(kHole, "Hole");
+        scene.Registry().emplace<GPP::TransformComponent>(bh);
+        scene.Registry().emplace<BlackHoleComponent>(bh, hole);
+        const auto probe = scene.CreateEntityWithGuid(kProbe, "Probe");
+        scene.Registry().emplace<GPP::TransformComponent>(
+            probe, GPP::TransformComponent{.Position = glm::dvec3(30.0, 5.0, 0.0) * GPP::Units::GravitationalRadius(hole.Mass)});
+        scene.Registry().emplace<GeodesicBodyComponent>(probe);
+    }
+}
+
+TEST_CASE("Parity: launch circular orbit, including its diagnostics", "[script][parity][relativity]")
+{
+    for (const float radius : {12.0f, 1.5f})
+    {
+        INFO("radius " << radius);
+        Gb b;
+        const int start = b.Add(CreateStartEventNode(b.Id()));
+        const int launch = b.Add(CreateLaunchOrbitNode(b.Id()));
+        b.Flow(start, launch);
+        b.Data(Getter(b, kProbe), 0, launch, 1);
+        b.Data(b.Const(radius, PinType::Float), 0, launch, 2);
+        b.Data(b.Const(0.75f, PinType::Float), 0, launch, 3);
+        b.Data(b.Const(true, PinType::Bool), 0, launch, 4);
+        ExpectParity(Single(b.G), RelativityScene, 1, true);
+    }
+    // Not a geodesic body
+    Gb b;
+    const int start = b.Add(CreateStartEventNode(b.Id()));
+    const int launch = b.Add(CreateLaunchOrbitNode(b.Id()));
+    b.Flow(start, launch);
+    b.Data(Getter(b, kHole), 0, launch, 1);
+    b.Data(b.Const(10.0f, PinType::Float), 0, launch, 2);
+    ExpectParity(Single(b.G), RelativityScene, 1, true);
+}
+
+TEST_CASE("Parity: clock rate", "[script][parity][relativity]")
+{
+    Gb b;
+    const int start = b.Add(CreateStartEventNode(b.Id()));
+    const float lengthM = static_cast<float>(GPP::Units::GravitationalRadius(1e6 * GPP::Units::kSolarMass));
+    int flow = start;
+    for (const int observer : {0, 1, 2, 3, 7})
+    {
+        const int position = b.Const(glm::vec3(10.0f * lengthM, 2.0f * lengthM, 0.0f), PinType::Vec3);
+        const int kind = b.Const(observer, PinType::Int);
+        const int rate = b.Math(NodeSubType::ClockRate, {{position, 0}, {kind, 0}});
+        flow = b.Print(flow, rate);
+    }
+    ExpectParity(Single(b.G), RelativityScene, 1, true);
 }

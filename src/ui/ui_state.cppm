@@ -5,6 +5,7 @@ import glm;
 import GPP;
 import imgui;
 import :Rendering.Frame;
+import :Simulation.ObserverReadout;
 
 export namespace MoleHole
 {
@@ -148,6 +149,9 @@ export namespace MoleHole
         glm::vec3 ViewFront{0.0f, 0.0f, -1.0f};
         glm::vec3 ViewUp{0.0f, 1.0f, 0.0f};
         float ViewFov = 60.0f;
+
+        // Viewport -> camera window: what the camera's observer measures (src/simulation/observer_readout.cppm)
+        GPP::LatestValue<ObserverReadout> Observer;
 
         glm::vec2 ViewportScreenMin{0.0f};
         glm::vec2 ViewportScreenMax{0.0f};

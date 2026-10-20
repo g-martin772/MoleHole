@@ -150,6 +150,7 @@ Render:
 
 ### Settings worth knowing
 - `transport.mode`: Straight / Analytic lens / Integrated. Only Integrated evaluates the spacetime (`spacetime.solution`: Schwarzschild, Kerr, Reissner-Nordstrom, Kerr-Newman; spin a* and charge q* come from each black hole)
+- `camera.observer`: ZAMO (default) / Static / Orbiting / Raindrop (free fall). Sets how the camera moves relative to the black hole, Integrated transport only. A moving camera sees the sky aberrated (shifted towards its direction of motion) and the disk Doppler shifted; the sky background itself is not colour- or brightness-shifted. Where the observer cannot exist (Static inside the ergosphere, Orbiting inside the photon orbit) the camera falls back to the ZAMO. `camera.observer_orbit` (Prograde / Retrograde) picks the direction for Orbiting. Background: `docs/notes/observers.md`
 - `sampling.resolution_scale` (25-200 %): the tracer renders at that share of the viewport and the image is scaled. Bloom width is kept the same on screen
 - `sampling.governor` + `sampling.budget_ms`: while editing or playing, lowers the resolution scale (to 25 % at worst) when the frame time exceeds the budget and restores it with headroom; never in reference views or exports
 - `debug.view`: step count heat map, termination reason (sky, horizon, object, opaque disk, ran out of steps, crosshair), geodesic constraint drift and ergosphere & ISCO (Integrated only). Bloom, flare, FXAA and tone mapping are off in debug views
@@ -158,6 +159,11 @@ Render:
 - `post.tonemap` (None / Reinhard / ACES) with `post.exposure_mode` (Manual / Auto), `post.exposure` (EV) and `post.exposure_key`. Bloom and flare thresholds apply to the exposed image. None shows the raw tracer output like before HDR
 - `transport.gpu_precision` f64 needs `shaderFloat64`; a setting the GPU cannot run is greyed with the reason, and loaded profiles fall back to the default (shown in the Render window)
 - Mesh objects are rasterised over the traced image (not lensed, always in front). The Integrated transport does not draw spheres yet
+- `overlay.characteristic_radii`: every black hole's horizon (grey), ergosphere (purple, in two meridian planes), equatorial photon orbit (orange), marginally bound orbit (green) and ISCO (blue). Bright = prograde, dim = retrograde With the Integrated transport the tracer draws the rings itself, lensed like the disk (the plain lines would sit inside the lensed shadow); object path trails and predicted orbits are traced too inside 50 M of the hole (lensed, with secondary images and Einstein-ring arcs) and are plain aberrated lines further out.
+- `overlay.predicted_orbits`: each Geodesic Body's future path, integrated ahead from its current state. Bright now, dim later, stops at the horizon
+- `overlay.prediction_span`: how far ahead to predict, as coordinate time in M = GM/c³ of the body's hole
+- Like the other overlays, these are rasterised: not lensed or aberrated
+- Disk brightness: exposure is anchored to the hottest gas as seen from far away (face-on), not to its rest-frame peak. Schwarzschild disks look as before; spinning disks are brighter (about 1.4× at a* = 0.5, 3× at 0.9, 20× at 0.998) and near-extremal disks look like Thorne-limit ones. Lower `post.exposure` for old high-spin scenes if needed. Background: `docs/notes/near_extremal.md`, `docs/notes/orbit_overlays_and_nodes.md`
 
 ### Environment
 - `GPP_GPU=<name part>`: choose the GPU by name instead of the highest score
@@ -167,14 +173,29 @@ Render:
 | Component | Fields |
 |---|---|
 | Transform | position, rotation, scale |
-| BlackHole | mass (kg), spin a*, charge q*, spin axis; derived r_g, horizon, ISCO |
+| BlackHole | mass (kg), spin range, spin a*, spin gap, charge q*, spin axis; derived r_g, horizon, ISCO, effective a* |
 | Sphere | radius (m), spin, color, spin axis, texture |
 | Mesh | mesh asset, metres per model unit |
+| Geodesic Body | launch mode, retrograde, launch velocity; readouts status, proper time, clock rate, speed vs ZAMO, r/M |
 | Camera | FOV, near, far, primary |
 | RigidBody / Collider / Velocity | physics |
 | Scripts | list of script components + props |
 - Add via inspector → Add Component
 - Add Mesh: browse file, optional convex-hull collider
+
+### Black hole spin range
+- `Spin range` ThorneLimit (default): a* is capped at 0.998, the most disk accretion can spin a hole up to (Thorne 1974)
+- `Spin range` NearExtremal: the `Spin a*` field is ignored and a* = 1 - `Spin gap`. The gap (1 - a*) runs from 1e-15 to 0.002, default 1.3e-14 (Interstellar's Gargantua, about one part in 100 trillion from maximal)
+- The inspector shows `Effective a*` and `dt/dτ at the ISCO` (about 10.8 at a* = 0.998, about 62 000 at 1 - 1.3e-14: one hour there is about 7 years far away)
+- The film itself rendered Gargantua with a = 0.6 for visual reasons. The renderer handles near-extremal holes, but the disk inside about 1.01 M is not drawn (rays are captured there)
+- Background: `docs/notes/near_extremal.md`
+
+### Geodesic Body
+- A body in free fall along an exact geodesic of one black hole. `Launch` picks how it starts: Zamo, Static, Orbiting (with `Retrograde`), Raindrop or Velocity (`Velocity (r, θ, φ) / c`)
+- Readouts: `Status`, `Proper time`, `Clock rate dτ/dt`, `Speed vs ZAMO`, `r/M`
+- Simulation time is the distant observer's coordinate time, scaled by the scene TimeScale
+- Moving the body in the editor relaunches it
+- Background: `docs/notes/geodesic_bodies.md`
 
 ## Animation Graph
 - One scene can hold many named graphs (tabs/dropdown)
@@ -187,6 +208,7 @@ Render:
 - Flow Control: Branch, For Loop, Sequence, Do Once, Gate, Switch, While, For Each Entity
 - Latent: Delay, Wait Until, Wait For Event, Interpolate (Luau only)
 - Entities: Spawn, Clone, Destroy
+- Relativity: Launch Circular Orbit, Clock Rate
 - Objects: Get / Decompose / Set per component (auto-generated for every component)
 - Math: add, sub, mul, div, min, max, lerp, clamp, sin, cos, sqrt, length, distance, look-at…
 - Variables: typed, per graph
@@ -202,6 +224,12 @@ Premade, prewired groups. Add menu → Combos, fill few fields.
 - Fade Property
 - On Start Set Property
 - Save selection as combo → your own library (`combos/*.yaml`)
+
+### Relativity nodes
+- Launch Circular Orbit: inputs Entity (with a Geodesic Body), Radius (M of its hole), Azimuth (rad about the spin axis), Retrograde. Puts the body on a circular equatorial orbit; the simulation follows it from the next tick. Warns when impossible (inside the photon orbit, no Geodesic Body)
+- Clock Rate: inputs world Position and Observer (0 ZAMO, 1 Static, 2 Orbiting, 3 Raindrop). Outputs dτ/dt against a distant observer; 0 where that observer cannot exist
+- Both behave identically in the interpreter and the Luau runtime
+- A Geodesic Body's Proper time, Clock rate and Speed are readable with the regular Get / Decompose Geodesic Body nodes
 
 ### Debugging
 - Executing wires highlight
@@ -268,3 +296,5 @@ Graphs: ...
 ```
 - Templates in `templates/`
 - 
+- `templates/m1-orbits.yaml`: milestone M1 demo. Kerr hole (10^6 Msun, a* = 0.9), prograde and retrograde circular orbits at 10 M (frame dragging: different periods), an inclined eccentric orbit (periapsis and nodal precession), a raindrop, and a scene camera riding its own orbit with an animation graph that keeps the hole in view. Its "M1 Orbits" render profile turns on both orbit overlays
+- `templates/gargantua-orbits.yaml`: near-extremal Gargantua with orbiting bodies and an orbiting camera

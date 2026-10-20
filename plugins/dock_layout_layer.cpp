@@ -23,6 +23,8 @@ namespace
 
         void OnUiRender() override
         {
+            // First UI layer of the main window: give every later window the Unicode fallback glyphs
+            EnsureSymbolFallback();
             if (m_Done) return;
             m_Done = true;
 

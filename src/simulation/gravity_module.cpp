@@ -38,6 +38,11 @@ namespace MoleHole
                 });
             }
         }
+        // Geodesic bodies are moved by GeodesicSimulationModule; PhysX only follows them.
+        for (auto [entity, geodesic, body] : scene.Registry().view<const GeodesicBodyComponent, GPP::RigidBodyComponent>().each())
+        {
+            if (body.Type == GPP::RigidBodyType::Dynamic) body.Type = GPP::RigidBodyType::Kinematic;
+        }
     }
 
     void GravitySimulationModule::OnTick(GPP::Scene& scene, const float deltaTime)
@@ -54,7 +59,7 @@ namespace MoleHole
         for (auto [entity, body, transform] :
              scene.Registry().view<const GPP::RigidBodyComponent, const GPP::TransformComponent>().each())
         {
-            if (body.Type != GPP::RigidBodyType::Dynamic) continue;
+            if (body.Type != GPP::RigidBodyType::Dynamic || scene.Registry().all_of<GeodesicBodyComponent>(entity)) continue;
             sources.push_back({transform.Position, body.Mass});
         }
 
@@ -64,7 +69,11 @@ namespace MoleHole
         for (auto [entity, body, transform] :
              scene.Registry().view<const GPP::RigidBodyComponent, const GPP::TransformComponent>().each())
         {
-            if (body.Type != GPP::RigidBodyType::Dynamic || !body.EnableGravity) continue;
+            if (body.Type != GPP::RigidBodyType::Dynamic || !body.EnableGravity
+                || scene.Registry().all_of<GeodesicBodyComponent>(entity))
+            {
+                continue;
+            }
 
             auto* actor = m_Physics->FindActor(entity);
             auto* dynamic = actor ? actor->is<physx::PxRigidDynamic>() : nullptr;

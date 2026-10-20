@@ -115,13 +115,17 @@ const float DISK_REFERENCE_LUMINANCE = 0.25;
 // LUT at the observed temperature g T; brightness from I ∝ T_obs^4 (I_nu / nu^3 is invariant along a ray).
 // The display temperature rescales every temperature by one factor for the colour lookup only, so ratios and
 // shifts stay physical.
+// Brightness is (g T / reference)⁴: the exposure reference (u_diskInfo.w) is the hottest gas as a distant observer
+// sees it, scaled so a Schwarzschild disk is unchanged; using the rest-frame peak instead made spinning disks far too
+// dim, because their hottest gas sits in the deep, redshifted throat (DiskExposureReference, metric.cppm).
 vec3 diskSourceRadiance(int hole, float temperature, float g) {
     float peak = max(u_diskInfo[hole].x, 1e-6);
+    float reference = u_diskInfo[hole].w > 0.0 ? u_diskInfo[hole].w : peak;
     float displayScale = u_diskDisplayTemperature > 0.0 ? u_diskDisplayTemperature / peak : 1.0;
     vec3 lut = getBlackbodyColorLUT(g * temperature * displayScale, 1.0);
     float luminance = dot(lut, vec3(0.2126, 0.7152, 0.0722));
     vec3 chroma = luminance > 1e-6 ? lut / luminance : vec3(0.0);
-    float ratio = g * temperature / peak;
+    float ratio = g * temperature / reference;
     return DISK_REFERENCE_LUMINANCE * chroma * (ratio * ratio) * (ratio * ratio);
 }
 

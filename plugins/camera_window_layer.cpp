@@ -66,6 +66,12 @@ namespace
                 EndSection();
             }
 
+            if (BeginSection(icons, "Observer"))
+            {
+                DrawObserver(*m_UiState->Observer.Load());
+                EndSection();
+            }
+
             if (BeginSection(icons, "Position"))
             {
                 glm::dvec3 position = m_UiState->CameraPositionM;
@@ -98,6 +104,37 @@ namespace
         }
 
     private:
+        // What the camera's observer measures; docs/notes/observers.md
+        static void DrawObserver(const ObserverReadout& readout)
+        {
+            ImGui::TextWrapped("%s", readout.Status.c_str());
+            if (!readout.Rendered) ImGui::TextDisabled("Only the Integrated transport renders the observer's motion.");
+            if (readout.Source != ObserverSource::None && !readout.InsideHorizon)
+            {
+                ImGui::Text("r = %.6g M", readout.Radius);
+                ImGui::Text("Speed vs ZAMO: %.4f c (γ = %.4f)", readout.Speed, readout.Gamma);
+                ImGui::Text("Clock rate dτ/dt: %.6g", readout.ClockRate);
+                const double dilation = readout.ClockRate > 0.0 ? 1.0 / readout.ClockRate
+                                                                : std::numeric_limits<double>::infinity();
+                ImGui::Text("1 h here = %s far away", FormatLongDuration(3600.0 * dilation).c_str());
+                if (readout.Source == ObserverSource::Body)
+                {
+                    ImGui::Text("Proper time: %s", FormatLongDuration(readout.ProperTimeS).c_str());
+                }
+                if (readout.FreeFall)
+                {
+                    ImGui::Text("Proper acceleration: 0 (free fall)");
+                }
+                else if (readout.Source != ObserverSource::Body)
+                {
+                    ImGui::Text("Proper acceleration: %.3g m/s² (%.3g × Earth gravity)", readout.AccelerationMs2,
+                                readout.AccelerationMs2 / EarthSurfaceGravity());
+                }
+            }
+            ImGui::TextDisabled("Choose the observer under Render > Camera > Observer, or give the primary scene camera "
+                                "a Geodesic Body and possess it while playing.");
+        }
+
         std::shared_ptr<UiState> m_UiState;
     };
 }
