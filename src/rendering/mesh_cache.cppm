@@ -19,7 +19,14 @@ export namespace MoleHole
         std::shared_ptr<GPP::GltfSceneData> GetOrLoad(const std::string& assetPath)
         {
             if (const auto cached = TryGet(assetPath)) return cached.value_or(nullptr);
-            std::scoped_lock loadLock(m_LoadMutex); // one load at a time; a second caller waits and reuses it
+            const auto pathLock = [&]
+            {
+                std::scoped_lock lock(m_Mutex);
+                auto& entry = m_PathLocks[assetPath];
+                if (!entry) entry = std::make_shared<std::mutex>();
+                return entry;
+            }();
+            std::scoped_lock loadLock(*pathLock);
             if (const auto cached = TryGet(assetPath)) return cached.value_or(nullptr);
 
             std::shared_ptr<GPP::GltfSceneData> result;
@@ -68,7 +75,7 @@ export namespace MoleHole
         std::shared_ptr<GPP::IFileSystem> m_FileSystem;
         std::shared_ptr<GPP::Logger> m_Logger;
         mutable std::mutex m_Mutex;
-        std::mutex m_LoadMutex;
+        std::unordered_map<std::string, std::shared_ptr<std::mutex>> m_PathLocks;
         std::unordered_map<std::string, std::shared_ptr<GPP::GltfSceneData>> m_Meshes;
         std::unordered_map<std::string, float> m_Radii;
     };

@@ -110,17 +110,26 @@ export namespace MoleHole
             return paths;
         }
 
+        static constexpr std::size_t kMaxParallelLoads = 8;
+
+        static void LoadMeshesParallel(const std::vector<std::string>& paths, MeshCache& meshes, GPP::ProgressTask& task)
+        {
+            GPP::ParallelFor(paths.size(), kMaxParallelLoads, [&](const std::size_t index)
+            {
+                const std::filesystem::path asset(paths[index]);
+                const auto folder = asset.parent_path().filename().string();
+                task.SetDetail(std::format("Mesh {}/{}: {}", index + 1, paths.size(),
+                                           folder.empty() ? asset.stem().string() : folder));
+                meshes.GetOrLoad(paths[index]);
+                task.Advance();
+            });
+        }
+
         static void LoadSceneMeshes(GPP::Scene& scene, MeshCache& meshes, GPP::ProgressTask& task)
         {
             const auto paths = MeshPaths(scene);
             task.SetTotal(paths.size());
-            for (std::size_t index = 0; index < paths.size(); ++index)
-            {
-                task.SetDetail(std::format("Mesh {}/{}: {}", index + 1, paths.size(),
-                                           std::filesystem::path(paths[index]).parent_path().filename().string()));
-                meshes.GetOrLoad(paths[index]);
-                task.Advance();
-            }
+            if (!paths.empty()) LoadMeshesParallel(paths, meshes, task);
             for (auto [entity, mesh, collider] :
                  scene.Registry().view<const GPP::MeshComponent, GPP::ColliderComponent>().each())
             {
