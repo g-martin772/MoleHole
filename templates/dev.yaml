@@ -27,10 +27,10 @@ Entities:
         Restitution: 0.1
         IsTrigger: true
       BlackHole:
-        Mass: 1.5111915017305185e+30
-        Spin: 0.65
-        Charge: 0.8
-        SpinAxis: [0.42, 0.33, -0.27]
+        Mass: 1.9884098706980507e+30
+        Spin: 0.23
+        Charge: 0
+        SpinAxis: [0.16, 0.33, -0.27]
   - Guid: 16017086654788356877
     Components:
       Metadata:
@@ -100,9 +100,9 @@ Entities:
         Name: Mesh
         TypeTag: Mesh
       Transform:
-        Position: [-39493.943210691985, 45784.46480666306, 7591.923219205994]
-        Rotation: [0.032389656, 0.17262217, -0.1752161, 0.96873724]
-        Scale: [0.9999993, 0.9999988, 0.9999991]
+        Position: [9343.722009533289, 26952.34626685442, 91434.80010599001]
+        Rotation: [0.032389555, 0.1726218, -0.1752159, 0.96873736]
+        Scale: [0.11999992, 0.11999983, 0.12411591]
       RigidBody:
         Type: Static
         Mass: 1e+20
@@ -140,7 +140,8 @@ Entities:
       Scripts:
         - Name: spring_arm_camera
           Props:
-            ArmLength: 30000
+            ArmLength: 50000
+            OrbitSpeed: 5
             Pitch: 38.9
             Target: 4380484363935821836
 Graphs:
@@ -159,3 +160,36 @@ Graphs:
               V: 0
         Nodes: []
         Links: []
+Render:
+  Version: 1
+  Contexts:
+    Edit: Flat
+    Play: Lensed (edited)
+    Reference: Reference
+    Export: Legacy
+  Profiles:
+    - Name: Legacy
+      Description: Render settings from before profiles existed.
+      Base: Lensed
+      Set:
+        spacetime.solution: KerrNewman
+        disk.volumetric: true
+        disk.height: 0.103
+        disk.speed: 1.115
+        disk.noise_scale: 0.083
+        disk.display_temperature: 1393
+        camera.third_person_height: 3.831
+    - Name: Lensed (edited)
+      Description: Analytic lens with bloom and flares. The interactive default.
+      Base: Lensed
+      Set:
+        transport.mode: Integrated
+        disk.volumetric: true
+        disk.height: 0.018
+        disk.noise_scale: 1.145
+        disk.noise_lod: 6.103
+        disk.accretion_rate: 0.0014
+        disk.opacity: 0.05
+        disk.display_temperature: 1239
+        disk.hot_spots: 5
+        post.tonemap: Reinhard
