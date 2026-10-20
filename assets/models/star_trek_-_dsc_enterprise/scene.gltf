@@ -1,0 +1,347 @@
+{
+  "accessors": [
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 90,
+      "max": [
+        5.425534248352051,
+        18.788362503051758,
+        0.22034774720668793
+      ],
+      "min": [
+        -5.425534248352051,
+        -0.953240156173706,
+        -1.24922776222229
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 1080,
+      "componentType": 5126,
+      "count": 90,
+      "max": [
+        0.987728476524353,
+        0.1270926594734192,
+        0.9918919801712036
+      ],
+      "min": [
+        -0.9877278208732605,
+        -0.017344960942864418,
+        -0.9993647336959839
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 90,
+      "max": [
+        1.0011260509490967,
+        0.9995877146720886
+      ],
+      "min": [
+        -0.00215806788764894,
+        -0.04829784110188484
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 0,
+      "componentType": 5125,
+      "count": 102,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 2160,
+      "componentType": 5126,
+      "count": 36996,
+      "max": [
+        5.938313007354736,
+        20.315641403198242,
+        0.8145749568939209
+      ],
+      "min": [
+        -5.938313007354736,
+        -5.915640830993652,
+        -4.575774669647217
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 446112,
+      "componentType": 5126,
+      "count": 36996,
+      "max": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "min": [
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 720,
+      "componentType": 5126,
+      "count": 36996,
+      "max": [
+        1.0,
+        1.0
+      ],
+      "min": [
+        -2.9802320611338473e-08,
+        -2.9802320611338473e-08
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 296688,
+      "componentType": 5126,
+      "count": 36996,
+      "max": [
+        1.0,
+        1.0
+      ],
+      "min": [
+        -2.9802320611338473e-08,
+        -2.9802320611338473e-08
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 408,
+      "componentType": 5125,
+      "count": 41742,
+      "type": "SCALAR"
+    }
+  ],
+  "asset": {
+    "extras": {
+      "author": "Wholock (https://sketchfab.com/wholock)",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://sketchfab.com/3d-models/star-trek-dsc-enterprise-98cdebaa7fae4752bcaa5a35453d224c",
+      "title": "Star Trek - DSC Enterprise"
+    },
+    "generator": "Sketchfab-12.68.0",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 167376,
+      "name": "floatBufferViews",
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 592656,
+      "byteOffset": 167376,
+      "byteStride": 8,
+      "name": "floatBufferViews",
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 890064,
+      "byteOffset": 760032,
+      "byteStride": 12,
+      "name": "floatBufferViews",
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1650096,
+      "uri": "scene.bin"
+    }
+  ],
+  "images": [
+    {
+      "uri": "textures/material_0_baseColor.png"
+    },
+    {
+      "uri": "textures/material_0_metallicRoughness.png"
+    },
+    {
+      "uri": "textures/material_1_baseColor.png"
+    },
+    {
+      "uri": "textures/material_1_metallicRoughness.png"
+    },
+    {
+      "uri": "textures/material_1_emissive.png"
+    }
+  ],
+  "materials": [
+    {
+      "alphaMode": "BLEND",
+      "doubleSided": true,
+      "name": "material_0",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicFactor": 0.0,
+        "metallicRoughnessTexture": {
+          "index": 1
+        }
+      }
+    },
+    {
+      "doubleSided": true,
+      "emissiveFactor": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissiveTexture": {
+        "index": 4
+      },
+      "name": "material_1",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 2
+        },
+        "metallicFactor": 0.0,
+        "metallicRoughnessTexture": {
+          "index": 3
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Object_0",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 0,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "Object_1",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 5,
+            "POSITION": 4,
+            "TEXCOORD_0": 6,
+            "TEXCOORD_1": 7
+          },
+          "indices": 8,
+          "material": 1,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "children": [
+        1
+      ],
+      "matrix": [
+        -1.0,
+        -6.290011496532519e-32,
+        2.832769343193999e-16,
+        0.0,
+        2.832769343193999e-16,
+        -2.220446049250313e-16,
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        2.220446049250313e-16,
+        0.0,
+        8.58306884765625e-06,
+        3.197445614348945e-15,
+        -14.400014877319336,
+        1.0
+      ],
+      "name": "Sketchfab_model"
+    },
+    {
+      "children": [
+        2
+      ],
+      "name": "4a2eb119de1c4469b931259a089f7654.lwo"
+    },
+    {
+      "children": [
+        3,
+        4
+      ],
+      "name": "Enterprise"
+    },
+    {
+      "mesh": 0,
+      "name": "Object_3"
+    },
+    {
+      "mesh": 1,
+      "name": "Object_4"
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Sketchfab_Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    },
+    {
+      "sampler": 0,
+      "source": 3
+    },
+    {
+      "sampler": 0,
+      "source": 4
+    }
+  ]
+}
