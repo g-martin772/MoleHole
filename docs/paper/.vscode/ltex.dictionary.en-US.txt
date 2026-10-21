@@ -6,3 +6,7 @@ Octree
 tristimulus
 Lambertian
 MoleHole
+Vulkan
+Schwarzschild
+Kruskal-Szekeres
+Painlevé-Gullstrand

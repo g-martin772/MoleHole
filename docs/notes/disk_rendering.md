@@ -58,7 +58,7 @@ fixed Eddington ratio, T scales as M^{−1/4}:
 | Stellar mass (10 M☉) | about 10⁷ K | X-ray hot, blue-white |
 | Supermassive | 10⁴–10⁵ K | UV/optical |
 
-The CPU eva| luates F on 64 log-spaced radii per hole and sends T/T_peak plus T_peak to the shader
+The CPU evaluates F on 64 log-spaced radii per hole and sends T/T_peak plus T_peak to the shader
 (`DiskInfo`, `DiskProfile`).
 
 - Novikov, I. D. & Thorne, K. S. (1973). *Astrophysics of black holes.* In *Black Holes (Les Houches)*, 343–450.

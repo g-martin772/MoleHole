@@ -11,26 +11,12 @@ vec3 getBlackbodyColorLUT(float temperature, float redshiftFactor) {
     return color;
 }
 
-const float ACC_LUT_R_MIN = 0.01;
-const float ACC_LUT_R_MAX = 50.0;
-const float ACC_LUT_ANG_MOM_MIN = 0.0;
-const float ACC_LUT_ANG_MOM_MAX = 100.0;
-const float ACC_LUT_LOG_R_MIN = log(ACC_LUT_R_MIN);
-const float ACC_LUT_LOG_R_MAX = log(ACC_LUT_R_MAX);
-
-vec3 calculateAccelerationLUT(float angMomentumSqrd, vec3 relPos) {
-    float rSqrd = dot(relPos, relPos);
-    float r = sqrt(rSqrd);
-
-    float angMomNorm = (angMomentumSqrd - ACC_LUT_ANG_MOM_MIN) / (ACC_LUT_ANG_MOM_MAX - ACC_LUT_ANG_MOM_MIN);
-    angMomNorm = clamp(angMomNorm, 0.0, 1.0);
-
-    float logR = log(max(r, ACC_LUT_R_MIN));
-    float rNorm = (logR - ACC_LUT_LOG_R_MIN) / (ACC_LUT_LOG_R_MAX - ACC_LUT_LOG_R_MIN);
-    rNorm = clamp(rNorm, 0.0, 1.0);
-
-    float factor = texture(u_accelerationLUT, vec2(angMomNorm, rNorm)).r;
-    return factor * relPos;
+// Binet term of the Schwarzschild null orbit, d2u/dphi2 + u = 3 M u^2 (u = 1/r), as a central force
+// -3 M h^2 / r^4 on a unit-speed ray with h = |r x d|. Its photon sphere is at 3 M and its critical impact
+// parameter is exactly 3 sqrt(3) M.
+vec3 calculateAcceleration(float angMomentumSqrd, vec3 relPos, float mass) {
+    float rSqrd = max(dot(relPos, relPos), 1e-6);
+    return (-3.0 * mass * angMomentumSqrd / (rSqrd * rSqrd * sqrt(rSqrd))) * relPos;
 }
 
 const float HR_MASS_MIN = 0.08;

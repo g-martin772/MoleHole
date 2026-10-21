@@ -87,6 +87,10 @@ namespace MoleHole
         output["Frames"] = info.Frames;
         if (info.Video) output["Framerate"] = info.Framerate;
 
+        auto time = root["Time"];
+        time["SimStart"] = info.SimStart;
+        time["TimeScale"] = info.TimeScale;
+
         auto scene = root["Scene"];
         scene["Path"] = info.ScenePath;
         scene["Name"] = info.SceneName;

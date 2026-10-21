@@ -29,8 +29,9 @@ export namespace MoleHole
     {
         // Same frame as spinFrame in shaders/kerr.glsl, so bodies and the rendered disk agree on the orientation
         // Normalised in double: a float-normalised axis is only unit to ~1e-7 and the frame would not be orthonormal
-        const glm::dvec3 axis = glm::length(hole.SpinAxis) > 0.0f ? glm::normalize(glm::dvec3(hole.SpinAxis))
-                                                                   : glm::dvec3(0.0, 1.0, 0.0);
+        const glm::dvec3 unit = glm::length(hole.SpinAxis) > 0.0f ? glm::normalize(glm::dvec3(hole.SpinAxis))
+                                                                  : glm::dvec3(0.0, 1.0, 0.0);
+        const glm::dvec3 axis = BlackHoleSignedSpin(hole) < 0.0 ? -unit : unit;
         const glm::dvec3 helper = std::abs(axis.y) < 0.99 ? glm::dvec3(0.0, 1.0, 0.0) : glm::dvec3(1.0, 0.0, 0.0);
         const glm::dvec3 x = glm::normalize(glm::cross(helper, axis));
         const glm::dvec3 y = glm::cross(axis, x);

@@ -240,6 +240,31 @@ TEST_CASE("Duplicate, rename and remove keep the contexts pointing at real profi
     CHECK_FALSE(set.Assign(RenderContext::Edit, "missing"));
 }
 
+TEST_CASE("No tone mapping is the default everywhere; ACES and Reinhard stay selectable", "[rendering][profiles]")
+{
+    CHECK(RenderSettings{}.ToneMapping == ToneMap::None);
+    const RenderProfileSet set;
+    for (const auto& profile : set.Profiles()) CHECK(profile.Settings.ToneMapping == ToneMap::None);
+    CHECK(LegacyRenderSettings(YAML::Load("{PhysicallyAccurate: true}")).ToneMapping == ToneMap::None);
+
+    const auto* setting = RenderSettingRegistry().Find("post.tonemap");
+    REQUIRE(setting != nullptr);
+    RenderSettings settings;
+    CHECK(RenderSettingRegistry().SetFromText(settings, "post.tonemap", "Aces").has_value());
+    CHECK(settings.ToneMapping == ToneMap::Aces);
+    CHECK(RenderSettingRegistry().SetFromText(settings, "post.tonemap", "Reinhard").has_value());
+    CHECK(settings.ToneMapping == ToneMap::Reinhard);
+    CHECK(RenderSettingRegistry().Diff(RenderSettings{}, settings).size() == 1);
+
+    RenderProfileSet edited;
+    auto lensed = edited.SettingsFor(RenderContext::Export);
+    lensed.ToneMapping = ToneMap::Aces;
+    edited.Replace(RenderContext::Export, lensed);
+    const auto node = edited.ToYaml();
+    REQUIRE(node["Profiles"].size() == 1);
+    CHECK(node["Profiles"][0]["Set"]["post.tonemap"].as<std::string>() == "Aces");
+}
+
 TEST_CASE("A profile set is saved as the user profiles' differences from their base", "[rendering][profiles]")
 {
     RenderProfileSet set;

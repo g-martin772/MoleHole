@@ -8,46 +8,40 @@ import GPP;
 // renderer only ever deals with one metric. Background and sources: docs/notes/metric_rendering.md
 export namespace MoleHole
 {
-    // Mirrors RenderToggles::MetricType.
     enum class MetricKind : std::int32_t { Schwarzschild = 0, Kerr = 1, ReissnerNordstrom = 2, KerrNewman = 3 };
 
-    // Thorne (1974) limit; also keeps a² + Q² < M² so the horizon exists (no naked singularity). The default for
-    // every black hole.
+    // Thorne (1974) limit: the spin disk accretion can bring a hole to, and the edge of the default spin range.
     constexpr double kMaxHorizonParameter = 0.998;
     // Near-extremal holes, beyond the Thorne limit (Interstellar's Gargantua: a/M = 1 - 1.3e-14), may come up to
     // 1 - kMinExtremalGap. Closer to 1 the gap is no longer resolved by double precision near r = M.
     constexpr double kMinExtremalGap = 1e-15;
     constexpr double kExtremalHorizonParameter = 1.0 - kMinExtremalGap;
+    // Radius (in M) the integrator treats as captured when there is no horizon; numerical, not physical.
+    constexpr double kNakedCaptureRadiusM = 0.05;
 
     struct KerrNewmanParams
     {
         double Mass{1.0};
-        double SpinParameter{0.0}; // a = J / M, in units of length
-        double Charge{0.0};        // geometrized charge Q
+        double SpinParameter{0.0}; // a = J / M, in units of length, >= 0 (the sign of the spin flips the spin axis)
+        double Charge{0.0};        // geometrized charge |Q|
     };
 
-    // `spin` and `charge` are the dimensionless BlackHoleComponent fields a/M and Q/M. The metric type
-    // zeroes the parameters it does not model, then √(a² + Q²) is clamped to `maxMagnitude` M.
+    // `spin` and `charge` are the dimensionless BlackHoleComponent fields a/M and Q/M. The metric type zeroes the
+    // parameters it does not model. Nothing is clamped: a² + Q² > M² is a naked singularity (HasHorizon is false).
+    // Only |a| and |Q| enter the metric; a negative spin is handled by reversing the spin axis (BlackHoleSignedSpin).
     [[nodiscard]] inline KerrNewmanParams MakeKerrNewmanParams(const std::int32_t metricType, const double mass,
-                                                                const double spin, const double charge,
-                                                                const double maxMagnitude = kMaxHorizonParameter)
+                                                                const double spin, const double charge)
     {
         const auto kind = static_cast<MetricKind>(metricType);
         const bool rotating = kind == MetricKind::Kerr || kind == MetricKind::KerrNewman;
         const bool charged = kind == MetricKind::ReissnerNordstrom || kind == MetricKind::KerrNewman;
 
+        // a* = 1 exactly is the degenerate limit (ISCO on the horizon); the closest the metric resolves is used instead
         double a = rotating ? std::abs(spin) : 0.0;
-        double q = charged ? std::abs(charge) : 0.0;
-        const double limit = std::min(maxMagnitude, kExtremalHorizonParameter);
-        const double magnitude = std::sqrt(a * a + q * q);
-        if (magnitude > limit)
-        {
-            a *= limit / magnitude;
-            q *= limit / magnitude;
-        }
+        if (a > kExtremalHorizonParameter && a <= 1.0) a = kExtremalHorizonParameter;
 
         const double m = std::max(mass, 0.0);
-        return KerrNewmanParams{.Mass = m, .SpinParameter = a * m, .Charge = q * m};
+        return KerrNewmanParams{.Mass = m, .SpinParameter = a * m, .Charge = charged ? std::abs(charge) * m : 0.0};
     }
 
     // M² - a² - Q², written so that it keeps its relative precision for near-extremal holes, where it is tiny.
@@ -56,21 +50,36 @@ export namespace MoleHole
         return (p.Mass - p.SpinParameter) * (p.Mass + p.SpinParameter) - p.Charge * p.Charge;
     }
 
+    [[nodiscard]] inline bool HasHorizon(const KerrNewmanParams& p)
+    {
+        return HorizonDiscriminant(p) >= -1e-12 * p.Mass * p.Mass;
+    }
+
+    // Larger root of Δ = 0; 0 for a naked singularity (no horizon).
     [[nodiscard]] inline double OuterHorizonRadius(const KerrNewmanParams& p)
     {
+        if (!HasHorizon(p)) return 0.0;
         return p.Mass + std::sqrt(std::max(HorizonDiscriminant(p), 0.0));
     }
 
     [[nodiscard]] inline double InnerHorizonRadius(const KerrNewmanParams& p)
     {
+        if (!HasHorizon(p)) return 0.0;
         return p.Mass - std::sqrt(std::max(HorizonDiscriminant(p), 0.0));
     }
 
-    // Δ = r² - 2Mr + a² + Q² in the factored form (r - r+)(r - r-): the expanded form loses all precision close
-    // to the horizon of a near-extremal hole, where Δ is far below the size of its terms.
+    // Δ = r² - 2Mr + a² + Q². With a horizon it is evaluated in the factored form (r - r+)(r - r-): the expanded
+    // form loses all precision close to the horizon of a near-extremal hole, where Δ is far below its terms.
     [[nodiscard]] inline double HorizonDelta(const KerrNewmanParams& p, const double r)
     {
+        if (!HasHorizon(p)) return r * r - 2.0 * p.Mass * r + p.SpinParameter * p.SpinParameter + p.Charge * p.Charge;
         return (r - OuterHorizonRadius(p)) * (r - InnerHorizonRadius(p));
+    }
+
+    // Radius inside which the integrators stop a ray: the horizon, or a small numerical radius around a naked singularity.
+    [[nodiscard]] inline double CaptureRadius(const KerrNewmanParams& p)
+    {
+        return HasHorizon(p) ? OuterHorizonRadius(p) : kNakedCaptureRadiusM * p.Mass;
     }
 
     // Static limit: inside it no observer can stay at rest relative to the distant stars.
@@ -202,8 +211,10 @@ export namespace MoleHole
         return -(g.Gtt + g.Gtphi * omega) / std::sqrt(norm);
     }
 
-    // Innermost stable circular orbit: the minimum of E(r) over the circular orbits. Kerr uses the closed form of
-    // Bardeen, Press & Teukolsky (1972), eq. 2.21; with charge there is none, so E(r) is minimised numerically.
+    // Innermost stable circular orbit: the minimum of the circular-orbit energy E(r). Kerr uses the closed form of
+    // Bardeen, Press & Teukolsky (1972), eq. 2.21; with charge there is none, so E(r) is found numerically by walking
+    // inwards from 12 M while E keeps falling. Without a horizon the walk also stops where E turns non-positive
+    // or undefined (the orbit branch ends there) and the last good sample is returned.
     [[nodiscard]] inline double IscoRadius(const KerrNewmanParams& p, const OrbitDirection direction)
     {
         if (p.Mass <= 0.0) return 0.0;
@@ -218,27 +229,32 @@ export namespace MoleHole
             return p.Mass * (3.0 + z2 + (direction == OrbitDirection::Prograde ? -root : root));
         }
 
-        const double rLow = OuterHorizonRadius(p) * (1.0 + 1e-6);
+        const double rLow = CaptureRadius(p) * (1.0 + 1e-6);
         const double rHigh = 12.0 * p.Mass;
         constexpr int kSamples = 4096;
-
-        int best = -1;
-        double bestEnergy = std::numeric_limits<double>::infinity();
-        for (int i = 0; i <= kSamples; ++i)
-        {
-            const double r = rLow + (rHigh - rLow) * static_cast<double>(i) / kSamples;
-            const double energy = CircularOrbitEnergy(p, r, direction);
-            if (energy < bestEnergy)
-            {
-                bestEnergy = energy;
-                best = i;
-            }
-        }
-        if (best < 0) return 6.0 * p.Mass;
-
         const double step = (rHigh - rLow) / kSamples;
-        double lo = rLow + step * std::max(best - 1, 0);
-        double hi = rLow + step * std::min(best + 1, kSamples);
+        const auto radius = [&](const int i) { return rLow + step * static_cast<double>(i); };
+
+        int best = kSamples;
+        double bestEnergy = CircularOrbitEnergy(p, rHigh, direction);
+        if (!std::isfinite(bestEnergy)) return 6.0 * p.Mass;
+        bool minimum = false;
+        for (int i = kSamples - 1; i >= 0; --i)
+        {
+            const double energy = CircularOrbitEnergy(p, radius(i), direction);
+            if (!std::isfinite(energy) || energy <= 0.0) break;
+            if (energy > bestEnergy)
+            {
+                minimum = true;
+                break;
+            }
+            best = i;
+            bestEnergy = energy;
+        }
+        if (!minimum) return radius(best);
+
+        double lo = radius(std::max(best - 1, 0));
+        double hi = radius(std::min(best + 1, kSamples));
         constexpr double kInvPhi = 0.6180339887498949;
         for (int i = 0; i < 100; ++i)
         {
@@ -295,7 +311,7 @@ export namespace MoleHole
             const double sign = direction == OrbitDirection::Prograde ? -1.0 : 1.0;
             return 2.0 * p.Mass * (1.0 + std::cos(2.0 / 3.0 * std::acos(sign * spin)));
         }
-        return BisectBoundary(OuterHorizonRadius(p), 12.0 * p.Mass,
+        return BisectBoundary(CaptureRadius(p), 12.0 * p.Mass,
                               [&](const double r) { return CircularOrbitNorm(p, r, direction) > 0.0; });
     }
 

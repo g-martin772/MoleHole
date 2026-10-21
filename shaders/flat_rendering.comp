@@ -83,11 +83,11 @@ vec4 shadeDisk(int hole, vec3 rayOrigin, vec3 rayDir, float t, float pixelAngle)
     float detailFine = 1.0f - smoothstep(0.25f, 0.6f, footprint * 4.0f);
     float streaks = 1.0f;
     if (detailCoarse > 0.0f) {
-        float swirl = phi - u_time * u_accDiskSpeed + 2.0f * log(r);
+        float swirl = phi - u_flatPhase + 2.0f * log(r);
         vec3 p = vec3(cos(swirl) * 3.0f, sin(swirl) * 3.0f, r * 1.5f) * u_accDiskNoiseScale;
         streaks += detailCoarse * 0.45f * snoise(p);
         if (detailFine > 0.0f) {
-            float swirlFast = phi - u_time * u_accDiskSpeed * 1.7f + 3.0f * log(r);
+            float swirlFast = phi - u_flatPhaseFast + 3.0f * log(r);
             vec3 q = vec3(cos(swirlFast) * 7.0f, sin(swirlFast) * 7.0f, r * 4.0f) * u_accDiskNoiseScale + 17.0f;
             streaks += detailFine * 0.25f * snoise(q);
         }

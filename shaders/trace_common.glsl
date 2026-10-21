@@ -4,8 +4,8 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
 {
     vec3 u_cameraPos; float u_fov;
     vec3 u_cameraFront; float u_aspect;
-    vec3 u_cameraUp; float u_time;
-    vec3 u_cameraRight; float u_cameraRightPad;
+    vec3 u_cameraUp; float u_flatPhase;
+    vec3 u_cameraRight; float u_flatPhaseFast;
 
     int u_enableThirdPerson;
     float u_thirdPersonDistance;
@@ -60,6 +60,7 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
 
     vec4 u_diskInfo[8];      // x = peak temperature [K], y = inner radius (ISCO), z = outer radius
     vec4 u_diskProfile[128]; // per hole 64 samples of T / peak, log-spaced between u_diskInfo.y and .z
+    vec4 u_diskPhase[2048];  // per hole 256 bins of the gas rotation angle: x whole turns, y remainder, z advance to the next bin
 
     // Camera velocity relative to the local ZAMO of the first hole along (e_r, e_theta, e_phi), in c;
     // w = 1 when it is not the ZAMO itself (src/physics/observer.cppm)
@@ -78,7 +79,6 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
 
 layout(set = 0, binding = 2) uniform sampler2D u_skyboxTexture;
 layout(set = 0, binding = 3) uniform sampler2D u_blackbodyLUT;
-layout(set = 0, binding = 4) uniform sampler2D u_accelerationLUT;
 layout(set = 0, binding = 5) uniform sampler2D u_hrDiagramLUT;
 
 layout(push_constant) uniform SlicePushBlock

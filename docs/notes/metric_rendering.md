@@ -47,11 +47,24 @@ A ray is captured when it gets within 0.01 M of r₊. BL coordinates are singula
 integration never crosses it. The step size shrinks in proportion to r − r₊, so a ray approaches the
 horizon geometrically.
 
-If a² + Q² > M² there is no horizon: the result is a naked singularity, which is not a black hole. The host
-therefore clamps √(a² + Q²) ≤ 0.998 M. The value 0.998 is Thorne's limit for the spin that accretion can
-actually produce.
+If a² + Q² > M² there is no horizon: the result is a naked singularity, which is not a black hole. The
+renderer does not hide this by clamping the parameters. It integrates the metric as given, the inspector shows
+`Status: Naked singularity`, a banner over the viewport says so (independent of the HUD toggle), and `HorizonRadius` is 0.
 
-- Thorne, K. S. (1974). *Disk-accretion onto a black hole. II. Evolution of the hole.* ApJ 191, 507.
+- The metric and the disk use the exact a and Q. Only the capture radius is a numerical device: with no horizon
+  the integrators stop a ray at 0.05 M (`kNakedCaptureRadiusM`) so that rays aimed at the singularity end in finite
+  time. Rays that cross the disk r = 0 (inside the ring of radius a) are absorbed there instead of continuing into
+  the negative-r sheet of the maximal extension, so the picture of a naked singularity is a black disc, not the
+  true image.
+- There is no shadow edge to measure. The disk's inner edge is the innermost end of the stable circular-orbit
+  branch with positive energy (the same minimum of E(r) as the ISCO of a black hole, but the walk also stops where
+  E turns non-positive); the Page–Thorne flux there has not been validated.
+- Thorne's (1974) a* = 0.998 limit is a statement about accretion spin-up, not about the metric, and is not
+  enforced.
+
+Spin sign. Only |a| enters the metric. A negative a* is the same hole spinning the other way about the spin axis,
+so the upload reverses the axis (`EffectiveSpinAxis`) and sends |a*|; the disk is always prograde with respect
+to the (possibly reversed) axis. Charge enters only as Q², so the sign of q* is dropped.
 
 **Shadow.** The shadow is not drawn explicitly. It is the set of camera rays that end on the horizon. For
 Schwarzschild its edge lies at impact parameter √27 M ≈ 5.196 M. For Kerr it becomes flattened and shifted
@@ -206,9 +219,28 @@ through the gas in its rest frame is:
 
 The full radiative transfer through the disk is described in `docs/notes/disk_rendering.md`.
 
+## 9. Lensed engine (analytic lens)
+
+`transport.mode = AnalyticLens` marches each ray in flat space and bends it with the Binet term of the
+Schwarzschild null orbit, d²u/dφ² + u = 3Mu² with u = 1/r, as the central force −3M h²/r⁴ on a unit-speed ray
+(`calculateAcceleration` in `shaders/lut_loader.glsl`; h = |r × d| plus a small spin term). It replaces the
+former acceleration look-up table, which had M = 2/3 baked in and saturated at h² = 100. The photon sphere is at 3 M and the
+critical impact parameter is exactly 3√3 M. Two details keep it scale invariant and exact at the camera:
+
+- The step is proportional to M (`stepSize * mass`), like the integrated path.
+- The pixel direction is the direction a static observer sees (sin ψ = b √(1 − 2M/D) / D); the integrator works
+  with sin ψ′ = b / D, so the launch direction is converted once (`staticObserverDirection`).
+
+Measured on `Termination` exports with the disk off (960x540, 60° vertical field of view, Schwarzschild, camera at
+44.8 M): shadow equivalent radius 53.09 px against 53.36 px predicted, −0.5 % for M = 0.5, 1, 5 and 20 M☉
+(`camera.length_unit = SolarMass`); −0.7 % at 15 M and −0.5 % at 100 M. The Traced engine gives −0.05 %. Only the
+heaviest hole follows this; deflection outside 16 M (8 r_s) is dropped, and a ≠ 0, Q ≠ 0 are not part of the bending.
+
 ## Limitations
 
-- **One hole only.** The accurate path uses only the first black hole. Multiple holes need a superposed or
+- **One hole only.** The accurate path uses only the primary hole, which is the heaviest one (the upload sorts
+  the holes by mass). Others are ignored by the Integrated path and only approximated by the Lensed path; a banner
+  over the viewport says so when more than one hole exists. Multiple holes need a superposed or
   numerical metric.
 - **Horizon crossing.** BL coordinates cannot follow rays through the horizon. Kerr–Schild coordinates
   would be needed for that.

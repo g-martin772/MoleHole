@@ -1,0 +1,11 @@
+Model Information:
+* title:	Realistic Uranus 4k
+* source:	https://sketchfab.com/3d-models/realistic-uranus-4k-8efca1ce8038429fa0fc0a94a7468eae
+* author:	Shady Tex (https://sketchfab.com/ShadyTex4u)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Realistic Uranus 4k" (https://sketchfab.com/3d-models/realistic-uranus-4k-8efca1ce8038429fa0fc0a94a7468eae) by Shady Tex (https://sketchfab.com/ShadyTex4u) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

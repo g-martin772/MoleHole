@@ -1,0 +1,380 @@
+Scene: Model Showcase
+SchemaVersion: 2
+Entities:
+  - Guid: 1001
+    Components:
+      Metadata:
+        Guid: 1001
+        Name: Borg Cube (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [-1173.57, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/borg_cube/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 22.9885063
+  - Guid: 1002
+    Components:
+      Metadata:
+        Guid: 1002
+        Name: Stargate (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [-1043.5, -0.946916, -0.0526534]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/stargate/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 27.5507864
+  - Guid: 1003
+    Components:
+      Metadata:
+        Guid: 1003
+        Name: ISS (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [-913.524, -4.32043, 3.85365]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/international_space_station_-_iss/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 0.892893561
+  - Guid: 1004
+    Components:
+      Metadata:
+        Guid: 1004
+        Name: USS Enterprise Kelvin (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [-778.266, 2.82866, 6.31636]
+        Rotation: [0, 0.34202, 0, 0.939693]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 2.75409185
+  - Guid: 1005
+    Components:
+      Metadata:
+        Guid: 1005
+        Name: DSC Enterprise (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [-635.929, 7.1693, 21.0266]
+        Rotation: [0, 0.34202, 0, 0.939693]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/star_trek_-_dsc_enterprise/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 3.81224216
+  - Guid: 1006
+    Components:
+      Metadata:
+        Guid: 1006
+        Name: USS Discovery (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [-520.94, -1.85047, 3.13781]
+        Rotation: [0, 0.34202, 0, 0.939693]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/star_trek_-_uss_discovery/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 0.0942382318
+  - Guid: 1007
+    Components:
+      Metadata:
+        Guid: 1007
+        Name: Dderidex Warbird (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [-393.572, -1.00776e-15, 0.00023812]
+        Rotation: [0, 0.34202, 0, 0.939693]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/star_trek_-_dderidex_class_warbird/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 0.141829605
+  - Guid: 1008
+    Components:
+      Metadata:
+        Guid: 1008
+        Name: Storm Infinity (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [-263.318, -1.93496, -0.213616]
+        Rotation: [0, 0.34202, 0, 0.939693]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/vehicleshumaninfinity/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 0.363310073
+  - Guid: 1009
+    Components:
+      Metadata:
+        Guid: 1009
+        Name: Sun (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [-183.573, -41.5313, -46.2184]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/the_sun/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 49.9999487
+  - Guid: 1010
+    Components:
+      Metadata:
+        Guid: 1010
+        Name: Mercury (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [-3.57252, 0, -1.3411e-05]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/mercury_realistic_8k/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 3.73963973
+  - Guid: 1011
+    Components:
+      Metadata:
+        Guid: 1011
+        Name: Venus (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [126.427, 0, -1.3411e-05]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/venus__realistic_8k/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 3.73963973
+  - Guid: 1012
+    Components:
+      Metadata:
+        Guid: 1012
+        Name: Earth (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [256.427, -2.24559e-06, 2.25708e-06]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/realistic_earth_8k/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 0.0761069866
+  - Guid: 1013
+    Components:
+      Metadata:
+        Guid: 1013
+        Name: Moon (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [386.427, 0, 8.9407e-06]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/moon_photo_realistic__8_k/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 20.8332373
+  - Guid: 1014
+    Components:
+      Metadata:
+        Guid: 1014
+        Name: Mars (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [516.427, 0, -1.3411e-05]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/mars_realistic_12k/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 3.76855419
+  - Guid: 1015
+    Components:
+      Metadata:
+        Guid: 1015
+        Name: Jupiter (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [646.427, 0, 8.90189e-06]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/realistic_jupiter/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 0.385078827
+  - Guid: 1016
+    Components:
+      Metadata:
+        Guid: 1016
+        Name: Saturn (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [882.049, -2.00466e-06, -3.19349e-06]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/realistic_saturn_8k/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 4.64354764
+  - Guid: 1017
+    Components:
+      Metadata:
+        Guid: 1017
+        Name: Uranus (100 m across)
+        TypeTag: Mesh
+      Transform:
+        Position: [1145.62, 3.33741e-06, -1.05008e-06]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Mesh:
+        AssetPath: assets/models/realistic_uranus_4k/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 0.0837432917
+  - Guid: 1018
+    Components:
+      Metadata:
+        Guid: 1018
+        Name: Key Light
+        TypeTag: DirectionalLight
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [-0.408668, 0.298355, 0.143353, 0.850544]
+        Scale: [1, 1, 1]
+      DirectionalLight:
+        Enabled: true
+        Irradiance: 0.9
+        Color: [1, 0.96, 0.9]
+        ColorMode: Rgb
+        AngularDiameter: 0.533
+  - Guid: 1019
+    Components:
+      Metadata:
+        Guid: 1019
+        Name: Fill Light
+        TypeTag: DirectionalLight
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [-0.15623, -0.377172, -0.064713, 0.910574]
+        Scale: [1, 1, 1]
+      DirectionalLight:
+        Enabled: true
+        Irradiance: 0.3
+        Color: [0.7, 0.8, 1]
+        ColorMode: Rgb
+        AngularDiameter: 0.533
+  - Guid: 1020
+    Components:
+      Metadata:
+        Guid: 1020
+        Name: Rim Light
+        TypeTag: DirectionalLight
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [0, 0.9894, 0.145213, 0]
+        Scale: [1, 1, 1]
+      DirectionalLight:
+        Enabled: true
+        Irradiance: 0.4
+        Color: [1, 1, 1]
+        ColorMode: Rgb
+        AngularDiameter: 0.533
+  - Guid: 1021
+    Components:
+      Metadata:
+        Guid: 1021
+        Name: Point Light 1
+        TypeTag: PointLight
+      Transform:
+        Position: [-783.573, 60, 60]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      PointLight:
+        Enabled: true
+        Mode: Intensity
+        Intensity: 20000
+        Power: 1000
+        Radius: 0
+        Color: [1, 0.85, 0.7]
+        ColorMode: Rgb
+        Temperature: 2700
+  - Guid: 1022
+    Components:
+      Metadata:
+        Guid: 1022
+        Name: Point Light 2
+        TypeTag: PointLight
+      Transform:
+        Position: [386.427, 60, 60]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      PointLight:
+        Enabled: true
+        Mode: Intensity
+        Intensity: 20000
+        Power: 1000
+        Radius: 0
+        Color: [1, 0.85, 0.7]
+        ColorMode: Rgb
+        Temperature: 2700
+  - Guid: 1023
+    Components:
+      Metadata:
+        Guid: 1023
+        Name: Camera
+        TypeTag: Camera
+      Transform:
+        Position: [0, 100, 2000]
+        Rotation: [-0.024977, -0, -0, 0.999688]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 50
+        NearPlane: 0.1
+        FarPlane: 100000
+        Primary: true
+  - Guid: 1024
+    Components:
+      Metadata:
+        Guid: 1024
+        Name: Unit Black Hole (1 m gravitational radius, sets the render length unit to 1 m)
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 3000, -8000]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      BlackHole:
+        Mass: 1.346590922e+27
+        Spin: 0
+        Charge: 0
+        SpinAxis: [0, 1, 0]
+EditorCamera:
+  PositionM: [0, 100, 2000]
+  Yaw: -90.0000
+  Pitch: -2.8624
+  Fov: 50
+  SpeedMs: 150
+Render:
+  Version: 1
+  Contexts:
+    Edit: Showcase
+    Play: Showcase
+    Reference: Reference
+    Export: Showcase
+  Profiles:
+    - Name: Showcase
+      Description: Analytic lens with traced meshes, no disk or glow, tone mapped. Lit by the scene's directional and point lights.
+      Base: Lensed
+      Set:
+        disk.enabled: false
+        lighting.disk_light: false
+        post.tonemap: Aces
+        post.bloom: false
+        post.lens_flare: false

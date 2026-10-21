@@ -1,6 +1,9 @@
+module;
+#include <yaml-cpp/yaml.h>
 export module MoleHole:Application.SceneLoader;
 
 import std;
+import glm;
 import GPP;
 import :Simulation.Components;
 import :Rendering.Meshes;
@@ -11,6 +14,15 @@ export namespace MoleHole
     class SceneLoader
     {
     public:
+        struct EditorView
+        {
+            glm::dvec3 PositionM{0.0};
+            float Yaw = -90.0f;
+            float Pitch = 0.0f;
+            float Fov = 60.0f;
+            std::optional<double> SpeedMs;
+        };
+
         struct Result
         {
             enum class Kind { Startup, File, Template };
@@ -20,6 +32,9 @@ export namespace MoleHole
             std::string SceneName;
             std::string Error;
             std::string RenderExtension;
+            std::optional<EditorView> Editor;
+            std::size_t MeshCount = 0;
+            double Seconds = 0.0;
         };
 
         SceneLoader(std::shared_ptr<GPP::SceneManager> scenes, std::shared_ptr<MeshCache> meshes,
@@ -33,17 +48,20 @@ export namespace MoleHole
         {
             bool expected = false;
             if (!m_State->InFlight.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) return false;
+            auto task = m_Logger->Notifications()->BeginTask("Loading " + std::filesystem::path(path).filename().string());
+            task->SetDetail("Reading scene file");
             try
             {
                 GPP::ThreadPool::Instance().Submit(
-                    [state = m_State, scenes = m_Scenes, meshes = m_Meshes, logger = m_Logger,
+                    [state = m_State, scenes = m_Scenes, meshes = m_Meshes, logger = m_Logger, task,
                      path = std::move(path), kind]() mutable
                     {
-                        Run(state, scenes, meshes, logger, std::move(path), kind);
+                        Run(state, scenes, meshes, logger, task, std::move(path), kind);
                     });
             }
             catch (const std::exception&)
             {
+                task->Finish(false);
                 m_State->InFlight.store(false, std::memory_order_release);
                 m_State->InFlight.notify_all();
                 return false;
@@ -67,8 +85,51 @@ export namespace MoleHole
             std::atomic<bool> InFlight{false};
         };
 
-        static void PopulateConvexHulls(GPP::Scene& scene, MeshCache& meshes)
+        // Optional `EditorCamera: {PositionM, Yaw, Pitch, Fov, SpeedMs}` scene key: where the editor camera starts
+        static std::optional<EditorView> ReadEditorView(const GPP::Scene& scene)
         {
+            const auto* node = scene.FindExtension("EditorCamera");
+            if (!node || !node->IsMap() || !(*node)["PositionM"]) return std::nullopt;
+            EditorView view;
+            view.PositionM = (*node)["PositionM"].as<glm::dvec3>();
+            view.Yaw = (*node)["Yaw"].as<float>(view.Yaw);
+            view.Pitch = (*node)["Pitch"].as<float>(view.Pitch);
+            view.Fov = (*node)["Fov"].as<float>(view.Fov);
+            if ((*node)["SpeedMs"]) view.SpeedMs = (*node)["SpeedMs"].as<double>();
+            return view;
+        }
+
+        static std::vector<std::string> MeshPaths(GPP::Scene& scene)
+        {
+            std::vector<std::string> paths;
+            for (auto [entity, mesh] : scene.Registry().view<const GPP::MeshComponent>().each())
+            {
+                if (!mesh.AssetPath.empty() && std::ranges::find(paths, mesh.AssetPath) == paths.end())
+                    paths.push_back(mesh.AssetPath);
+            }
+            return paths;
+        }
+
+        static constexpr std::size_t kMaxParallelLoads = 8;
+
+        static void LoadMeshesParallel(const std::vector<std::string>& paths, MeshCache& meshes, GPP::ProgressTask& task)
+        {
+            GPP::ParallelFor(paths.size(), kMaxParallelLoads, [&](const std::size_t index)
+            {
+                const std::filesystem::path asset(paths[index]);
+                const auto folder = asset.parent_path().filename().string();
+                task.SetDetail(std::format("Mesh {}/{}: {}", index + 1, paths.size(),
+                                           folder.empty() ? asset.stem().string() : folder));
+                meshes.GetOrLoad(paths[index]);
+                task.Advance();
+            });
+        }
+
+        static void LoadSceneMeshes(GPP::Scene& scene, MeshCache& meshes, GPP::ProgressTask& task)
+        {
+            const auto paths = MeshPaths(scene);
+            task.SetTotal(paths.size());
+            if (!paths.empty()) LoadMeshesParallel(paths, meshes, task);
             for (auto [entity, mesh, collider] :
                  scene.Registry().view<const GPP::MeshComponent, GPP::ColliderComponent>().each())
             {
@@ -83,7 +144,7 @@ export namespace MoleHole
 
         static void Run(const std::shared_ptr<State>& state, const std::shared_ptr<GPP::SceneManager>& scenes,
                         const std::shared_ptr<MeshCache>& meshes, const std::shared_ptr<GPP::Logger>& logger,
-                        std::string path, const Result::Kind kind)
+                        const std::shared_ptr<GPP::ProgressTask>& task, std::string path, const Result::Kind kind)
         {
             Result result;
             result.LoadKind = kind;
@@ -91,16 +152,20 @@ export namespace MoleHole
             try
             {
                 auto& scene = scenes->LoadSceneFromFile(path);
-                PopulateConvexHulls(scene, *meshes);
+                result.MeshCount = MeshPaths(scene).size();
+                LoadSceneMeshes(scene, *meshes, *task);
                 result.Ok = true;
                 result.SceneName = scene.Metadata().Name;
                 result.RenderExtension = RenderExtensionText(scene);
+                result.Editor = ReadEditorView(scene);
             }
             catch (const std::exception& error)
             {
                 result.Error = error.what();
                 logger->Warn("SceneLoader: failed to load '{}': {}", path, error.what());
             }
+            result.Seconds = task->Read().ElapsedSeconds;
+            task->Finish(result.Ok);
             {
                 std::scoped_lock lock(state->Mutex);
                 state->Outcome = std::move(result);

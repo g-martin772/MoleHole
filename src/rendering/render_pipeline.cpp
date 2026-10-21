@@ -4,7 +4,6 @@ import :Rendering.Pipeline;
 import :Rendering.Data;
 import :Rendering.DebugLegend;
 import :Rendering.MeshTrace;
-import :Rendering.Bodies;
 import :Rendering.Lut;
 import :Simulation.Components;
 import :Rendering.OrbitOverlays;
@@ -44,15 +43,13 @@ namespace MoleHole
             };
         }
 
-        struct MeshDrawable
+        // The shared PBR includes live in gpp; pipelines resolve quoted includes against these directories too
+        ShaderCompileOptions ShaderIncludeOptions(const RenderResources& res)
         {
-            const GltfPrimitive* Primitive = nullptr;
-            glm::mat4 Model{1.0f};
-            glm::vec4 BaseColorFactor{0.8f, 0.8f, 0.8f, 1.0f};
-            float MetallicFactor{0.5f};
-            float RoughnessFactor{0.5f};
-            std::shared_ptr<VulkanImage> BaseColorTexture;
-        };
+            ShaderCompileOptions options;
+            options.includeDirectories.push_back(res.FileSystem->ResolvePath("dependencies/gpp/shaders/pbr"));
+            return options;
+        }
 
         std::shared_ptr<ShaderPipeline> MakeComputePipeline(const RenderResources& res, std::string fileName,
                                                             std::unordered_map<std::string, std::string> defines = {})
@@ -66,6 +63,7 @@ namespace MoleHole
                         .stage = ShaderStage::Compute,
                         .defines = std::move(defines)
                     },
+                    .compileOptions = ShaderIncludeOptions(res),
                     .enableHotReload = true
                 },
                 res.FileSystem, res.Dispatcher, res.Logger);
@@ -79,7 +77,8 @@ namespace MoleHole
         std::shared_ptr<ShaderPipeline> MakeRasterPipeline(const RenderResources& res, vk::Format colorFormat,
                                                            vk::Format depthFormat, bool blending,
                                                            vk::PrimitiveTopology topology, std::string vertex,
-                                                           std::string fragment, const char* what)
+                                                           std::string fragment, const char* what,
+                                                           std::unordered_map<std::string, std::string> defines = {})
         {
             auto pipeline = std::make_shared<ShaderPipeline>(
                 res.Device,
@@ -97,8 +96,10 @@ namespace MoleHole
                     },
                     .fragment = ShaderSource{
                         .path = res.FileSystem->ResolveAssetPath("shaders", fragment),
-                        .stage = ShaderStage::Fragment
+                        .stage = ShaderStage::Fragment,
+                        .defines = std::move(defines)
                     },
+                    .compileOptions = ShaderIncludeOptions(res),
                     .enableHotReload = true
                 },
                 res.FileSystem, res.Dispatcher, res.Logger);
@@ -219,121 +220,26 @@ namespace MoleHole
             return caps.RayQuery && caps.AccelerationStructure && caps.DescriptorIndexing;
         }
 
-        class MeshAccelerator
+        struct TracedMeshBindings
         {
-        public:
-            explicit MeshAccelerator(RenderResources& res) : m_Res(res) {}
-
-            void Record(const RenderFrameContext& ctx)
-            {
-                m_Textures.Clear();
-                std::vector<MeshInstanceGpu> records;
-                std::vector<TlasInstance> instances;
-                glm::vec4 bounds{0.0f};
-                for (auto [entity, meshComponent, transform] :
-                     ctx.Scene.Registry().view<const MeshComponent, const TransformComponent>().each())
-                {
-                    if (meshComponent.AssetPath.empty()) continue;
-                    const auto gltfScene = m_Res.Meshes->GetOrLoad(meshComponent.AssetPath);
-                    if (!gltfScene) continue;
-                    const glm::mat4 model = transform.GetRenderMatrix(ctx.Frame.OriginM, ctx.Frame.LengthUnitM,
-                                                                      meshComponent.MetresPerUnit);
-                    const auto first = records.size();
-                    for (const auto& mesh : gltfScene->Meshes)
-                    {
-                        for (const auto& primitive : mesh.Primitives)
-                        {
-                            const auto* cached = Cached(gltfScene, primitive);
-                            if (!cached) continue;
-                            const GltfMaterial* material = nullptr;
-                            if (primitive.MaterialIndex >= 0 && static_cast<std::size_t>(primitive.MaterialIndex)
-                                                                    < gltfScene->Materials.size())
-                                material = &gltfScene->Materials[static_cast<std::size_t>(primitive.MaterialIndex)];
-                            const int slot = material ? m_Textures.Assign(material->BaseColorTexture.get()) : -1;
-                            instances.push_back(TlasInstance{
-                                .Transform = model, .CustomIndex = static_cast<std::uint32_t>(records.size()),
-                                .Blas = cached->Structure->GetDeviceAddress()});
-                            records.push_back(MakeMeshInstance(model, material, slot, cached->Vertices, cached->Indices));
-                        }
-                    }
-                    if (records.size() > first)
-                        bounds = MergeBounds(bounds, TransformBounds(model, m_Res.Meshes->BoundingRadius(meshComponent.AssetPath)));
-                }
-                if (records.empty()) return;
-                if (m_Textures.Overflowed() && !m_WarnedTextures)
-                {
-                    m_Res.Logger->Warn("Mesh tracing: more than {} base colour textures, the rest are drawn untextured",
-                                       kMeshTextureSlots);
-                    m_WarnedTextures = true;
-                }
-
-                if (!m_Tlas) m_Tlas = std::make_unique<Tlas>(m_Res.Device);
-                m_Tlas->SetInstances(instances);
-                const auto bytes = static_cast<vk::DeviceSize>(records.size() * sizeof(MeshInstanceGpu));
-                if (!m_Records || m_Records->GetSize() < bytes)
-                {
-                    m_Records = std::make_unique<VulkanBuffer>(
-                        m_Res.Device, MakeStorageBufferSpecification(std::bit_ceil(bytes), true), m_Res.Logger);
-                }
-                m_Records->Upload(records.data(), bytes);
-
-                ctx.Graph.AddComputePass("MeshAccel", {}, {}, [tlas = m_Tlas.get()](const vk::CommandBuffer cmd, RenderGraph&)
-                {
-                    tlas->RecordBuild(cmd);
-                });
-
-                auto& out = m_Res.MeshTrace;
-                out.Active = true;
-                out.Tlas = m_Tlas->GetHandle();
-                out.Instances = m_Records->GetBuffer();
-                out.Textures = m_Textures.Images();
-                out.Bounds = glm::vec4(glm::vec3(bounds), bounds.w * 1.01f + 1e-4f);
-                out.Count = static_cast<std::int32_t>(records.size());
-            }
-
-        private:
-            struct CachedPrimitive
-            {
-                std::shared_ptr<GltfSceneData> Owner;
-                std::unique_ptr<Blas> Structure;
-                vk::DeviceAddress Vertices = 0;
-                vk::DeviceAddress Indices = 0;
-            };
-
-            const CachedPrimitive* Cached(const std::shared_ptr<GltfSceneData>& owner, const GltfPrimitive& primitive)
-            {
-                if (const auto it = m_Primitives.find(&primitive); it != m_Primitives.end())
-                    return it->second.Structure ? &it->second : nullptr;
-                CachedPrimitive entry{.Owner = owner};
-                if (primitive.IndexCount >= 3 && primitive.VertexCount > 0)
-                {
-                    try
-                    {
-                        entry.Vertices = primitive.VertexBuffer.GetDeviceAddress();
-                        entry.Indices = primitive.IndexBuffer.GetDeviceAddress();
-                        entry.Structure = std::make_unique<Blas>(
-                            m_Res.Device, *m_Res.UploadPool, m_Res.Device->GetBackgroundQueue(),
-                            BlasTriangles{.VertexAddress = entry.Vertices, .VertexStride = sizeof(GltfVertex),
-                                          .VertexCount = primitive.VertexCount, .IndexAddress = entry.Indices,
-                                          .IndexCount = primitive.IndexCount});
-                    }
-                    catch (const std::exception& error)
-                    {
-                        m_Res.Logger->Warn("Mesh tracing: BLAS build failed: {}", error.what());
-                        entry.Structure.reset();
-                    }
-                }
-                const auto& stored = m_Primitives.emplace(&primitive, std::move(entry)).first->second;
-                return stored.Structure ? &stored : nullptr;
-            }
-
-            RenderResources& m_Res;
-            std::unordered_map<const GltfPrimitive*, CachedPrimitive> m_Primitives;
-            std::unique_ptr<Tlas> m_Tlas;
-            std::unique_ptr<VulkanBuffer> m_Records;
-            MeshTextureSlots m_Textures;
-            bool m_WarnedTextures = false;
+            bool Active = false;
+            vk::AccelerationStructureKHR Tlas{};
+            vk::Buffer Instances{};
+            vk::Buffer Materials{};
+            vk::Buffer Lights{};
+            vk::Buffer LightParams{};
+            vk::Buffer Dfg{};
+            std::shared_ptr<const std::vector<vk::DescriptorImageInfo>> Textures;
         };
+
+        // Defines of the PBR material library for a pass: texture table size, descriptor indexing, shadow rays
+        std::unordered_map<std::string, std::string> MeshShaderDefines(const GpuCapabilities& caps, const std::uint32_t textureCapacity,
+                                                                         const bool shadows)
+        {
+            auto defines = PbrShaderDefines(caps, textureCapacity);
+            if (shadows) defines.emplace("MESH_SHADOWS", "1");
+            return defines;
+        }
 
         // Everything the tracer kernels read, shared by the camera trace and the body probes
         struct TraceBindings
@@ -409,7 +315,7 @@ namespace MoleHole
         {
         public:
             TraceStage(RenderResources& res, const std::chrono::steady_clock::time_point& start)
-                : m_Res(res), m_StartTime(start), m_Meshes(res)
+                : m_Res(res), m_StartTime(start)
             {
             }
 
@@ -439,11 +345,17 @@ namespace MoleHole
                 m_ReducePipeline = MakeComputePipeline(m_Res, "body_probe_reduce.comp", {});
                 if (MeshTraceSupported(m_Res.Device->GetCapabilities()))
                 {
+                    auto meshDefines = MeshShaderDefines(m_Res.Device->GetCapabilities(),
+                                                         GltfTextureCapacity(m_Res.Device->GetCapabilities()), false);
+                    meshDefines.emplace("GPP_MESH_TRACE", "1");
+                    m_MeshPipeline = MakeComputePipeline(m_Res, "black_hole_rendering.comp", meshDefines);
                     m_MeshPipeline = MakeComputePipeline(m_Res, "black_hole_rendering.comp", with({{"GPP_MESH_TRACE", "1"}}));
                     if (m_PipelineF64)
                     {
                         m_MeshPipelineF64 = MakeComputePipeline(
                             m_Res, "black_hole_rendering.comp", with({{"GPP_MESH_TRACE", "1"}, {"GPP_PRECISION_F64", "1"}}));
+                        meshDefines.emplace("GPP_PRECISION_F64", "1");
+                        m_MeshPipelineF64 = MakeComputePipeline(m_Res, "black_hole_rendering.comp", meshDefines);
                     }
                 }
                 m_ParamsBuffer = std::make_unique<VulkanBuffer>(
@@ -494,7 +406,15 @@ namespace MoleHole
 
             void Record(RenderFrameContext& ctx) override
             {
-                if (m_MeshPipeline && WantsTracedMeshes(ctx.Settings) && MeshPipelinesReady()) m_Meshes.Record(ctx);
+                if (m_MeshPipeline && WantsTracedMeshes(ctx.Settings) && MeshPipelinesReady())
+                {
+                    auto frame = m_Res.Mesh->Prepare(ctx.Graph, ctx.Scene, ctx.Frame, ctx.Settings, true, *m_Res.DummyWhiteTexture);
+                    if (frame.HasTlas)
+                    {
+                        m_Res.MeshTrace.Active = true;
+                        m_Res.MeshTrace.Scene = std::move(frame);
+                    }
+                }
                 UploadParams(ctx);
 
                 const auto kernel = SelectTraceKernel(ctx.Settings, Compiled(m_PipelineF64), m_Res.MeshTrace.Active);
@@ -507,10 +427,21 @@ namespace MoleHole
                 const TraceBindings bindings = MakeBindings();
 
                 RecordProbes(ctx, kernel == TraceKernel::MarcherF64 || kernel == TraceKernel::MarcherMeshesF64, bindings);
+                const auto device = m_Res.Device;
+                auto* res = &m_Res;
+                auto* params = m_ParamsBuffer.get();
+                const auto& traced = m_Res.MeshTrace;
+                TracedMeshBindings bindings{.Active = traced.Active, .Tlas = traced.Scene.Tlas,
+                                            .Instances = traced.Scene.Instances, .Materials = traced.Scene.Materials,
+                                            .Lights = traced.Scene.Lights, .LightParams = traced.Scene.LightParams, .Dfg = traced.Scene.Dfg,
+                                            .Textures = traced.Scene.Textures};
+                const std::array<VulkanBuffer*, 4> trailBuffers{m_TrailSegments.get(), m_TrailCells.get(), m_TrailIndices.get(),
+                                                                m_TrailCoarse.get()};
 
                 ctx.Graph.AddBudgetedComputePass(
                     "Trace", {}, {}, ctx.GroupsX * ctx.GroupsY,
                     [groupsX, raytracePipeline, bindings, set = vk::DescriptorSet{}](
+                    [device, groupsX, raytracePipeline, res, params, trailBuffers, meshes = std::move(bindings), set = vk::DescriptorSet{}](
                         const vk::CommandBuffer cmd, RenderGraph& g, const RenderGraphWorkSlice& slice) mutable
                     {
                         const auto pipeline = raytracePipeline->GetPipeline();
@@ -519,6 +450,38 @@ namespace MoleHole
                         if (!set)
                         {
                             set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
+                            DescriptorSetWriter writer(device->GetDevice());
+                            writer.WriteStorageImage(set, 0, res->RaytraceImage->GetImageView())
+                                .WriteUniformBuffer(set, 1, params->GetBuffer());
+                            const auto bindings = raytracePipeline->GetReflection().descriptorBindings;
+                            const std::array<const VulkanImage*, 4> samplers{
+                                res->Skybox.get(), res->BlackbodyLut.get(), nullptr, res->HrDiagramLut.get()};
+                            for (std::uint32_t binding = 2; binding < 6; ++binding)
+                            {
+                                if (std::ranges::none_of(bindings, [binding](const auto& b) { return b.set == 0 && b.binding == binding; }))
+                                    continue;
+                                const auto* image = samplers[binding - 2];
+                                writer.WriteCombinedImageSampler(set, binding, image->GetImageView(), image->GetSampler());
+                            }
+                            const auto has = [&bindings](const std::uint32_t binding)
+                            {
+                                return std::ranges::any_of(bindings, [binding](const auto& b) { return b.set == 0 && b.binding == binding; });
+                            };
+                            for (std::uint32_t binding = 13; binding < 17; ++binding)
+                            {
+                                if (has(binding)) writer.WriteStorageBuffer(set, binding, trailBuffers[binding - 13]->GetBuffer());
+                            }
+                            if (meshes.Active)
+                            {
+                                if (has(6)) writer.WriteAccelerationStructure(set, 6, meshes.Tlas);
+                                if (has(7)) writer.WriteStorageBuffer(set, 7, meshes.Instances);
+                                if (has(8)) writer.WriteCombinedImageSamplers(set, 8, *meshes.Textures);
+                                if (has(9)) writer.WriteStorageBuffer(set, 9, meshes.Materials);
+                                if (has(10)) writer.WriteStorageBuffer(set, 10, meshes.Lights);
+                                if (has(11)) writer.WriteUniformBuffer(set, 11, meshes.LightParams);
+                                if (has(12)) writer.WriteStorageBuffer(set, 12, meshes.Dfg);
+                            }
+                            writer.Update();
                             WriteTraceSet(bindings, *raytracePipeline, set, bindings.Res->RaytraceImage->GetImageView());
                         }
                         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline->GetLayout(), 0, set, {});
@@ -542,7 +505,6 @@ namespace MoleHole
                 params.CameraRight = camera.GetRight();
                 params.Fov = camera.GetFov();
                 params.Aspect = static_cast<float>(ctx.TraceExtent.width) / static_cast<float>(ctx.TraceExtent.height);
-                params.Time = std::chrono::duration<float>(std::chrono::steady_clock::now() - m_StartTime).count();
                 params.ViewProjection = camera.GetViewProjectionMatrix(ctx.Frame);
                 FillSceneData(params, ctx.Scene, ctx.Frame);
                 UploadBodies(ctx, params);
@@ -553,7 +515,8 @@ namespace MoleHole
                 params.DiskOpacity = render.DiskOpacity;
                 params.DiskDisplayTemperature = render.DiskDisplayTemperature;
                 params.DiskHotSpots = render.DiskHotSpots;
-                FillMetricData(params);
+                FillMetricData(params, m_MetricCache);
+                FillDiskPhases(params, ctx.Scene.Clock().Time, render.AccDiskSpeed);
                 if (!FillObserverFromBody(params, ctx.Scene, ctx.Inputs.ObserverGuid))
                 {
                     FillObserverData(params, static_cast<ObserverKind>(render.Observer),
@@ -580,8 +543,8 @@ namespace MoleHole
                 params.ThirdPersonHeight = render.ThirdPersonHeight;
                 if (m_Res.MeshTrace.Active)
                 {
-                    params.MeshBounds = m_Res.MeshTrace.Bounds;
-                    params.NumMeshInstances = m_Res.MeshTrace.Count;
+                    params.MeshBounds = m_Res.MeshTrace.Scene.Bounds;
+                    params.NumMeshInstances = m_Res.MeshTrace.Scene.InstanceCount;
                 }
 
                 // Lensed trails prepared by OverlayGeometryStage
@@ -711,6 +674,7 @@ namespace MoleHole
             std::shared_ptr<ShaderPipeline> m_MeshPipeline;
             std::shared_ptr<ShaderPipeline> m_MeshPipelineF64;
             std::unique_ptr<VulkanBuffer> m_ParamsBuffer;
+            MetricCache m_MetricCache;
             std::unique_ptr<VulkanBuffer> m_TrailSegments;
             std::unique_ptr<VulkanBuffer> m_TrailCells;
             std::unique_ptr<VulkanBuffer> m_TrailIndices;
@@ -749,10 +713,17 @@ namespace MoleHole
                 const auto device = m_Res.Device;
                 auto* res = &m_Res;
                 const auto exposure = m_Pipeline;
-                struct { std::int32_t Enabled; std::int32_t Auto; float Ev; float Key; } push{
+                const bool physical = ctx.Settings.Exposure == ExposureMode::Physical;
+                // Image value 1 is the 203 cd/m^2 reference white: the photometric exposure scale acts on cd/m^2
+                const float physicalScale = physical
+                    ? static_cast<float>(Radiometry::ExposureScale(Radiometry::PhysicalCamera{
+                          ctx.Settings.CameraAperture, ctx.Settings.CameraShutter, ctx.Settings.CameraIso})
+                                         * Radiometry::kHdrReferenceWhite)
+                    : 0.0f;
+                struct { std::int32_t Enabled; std::int32_t Auto; float Ev; float Key; float PhysicalScale; } push{
                     ctx.Settings.ToneMapping != ToneMap::None ? 1 : 0,
                     ctx.Settings.Exposure == ExposureMode::Auto ? 1 : 0,
-                    ctx.Settings.ExposureEv, ctx.Settings.AutoExposureKey};
+                    ctx.Settings.ExposureEv, ctx.Settings.AutoExposureKey, physicalScale};
                 ctx.Graph.AddComputePass(
                     "Exposure", {}, {},
                     [device, res, exposure, push](const vk::CommandBuffer cmd, RenderGraph& g)
@@ -1232,7 +1203,7 @@ namespace MoleHole
                 {
                     const auto entity = ctx.Scene.FindByGuid(primary->first);
                     const auto& hole = ctx.Scene.Registry().get<const BlackHoleComponent>(entity);
-                    const glm::vec3 axis = glm::length(hole.SpinAxis) > 0.0f ? glm::normalize(hole.SpinAxis) : glm::vec3(0.0f, 1.0f, 0.0f);
+                    const glm::vec3 axis = EffectiveSpinAxis(hole.SpinAxis, BlackHoleSignedSpin(hole));
                     const glm::vec3 center = ctx.Frame.ToRender(primary->second.Position);
                     const float radius = kTracerIntegrationRadius * ctx.Frame.GeometricMass(hole.Mass);
                     // Line half-width: ~0.9 trace pixels, as an angle
@@ -1340,100 +1311,80 @@ namespace MoleHole
             void Record(RenderFrameContext& ctx) override
             {
                 if (ctx.DepthTarget == kInvalidRenderGraphHandle) return;
+                const auto& caps = m_Res.Device->GetCapabilities();
+                const bool shadows = m_Res.Mesh->ShadowsAvailable();
                 if (!m_Pipeline || m_ColorFormat != ctx.ColorFormat || m_DepthFormat != ctx.DepthFormat)
                 {
                     m_Pipeline = MakeRasterPipeline(m_Res, ctx.ColorFormat, ctx.DepthFormat, false,
                                                     vk::PrimitiveTopology::eTriangleList, "mesh.vert", "mesh.frag",
-                                                    "mesh overlay");
+                                                    "mesh overlay",
+                                                    MeshShaderDefines(caps, GltfTextureCapacity(caps), shadows));
                     m_ColorFormat = ctx.ColorFormat;
                     m_DepthFormat = ctx.DepthFormat;
                 }
-                auto drawables = Collect(ctx);
-                if (!m_Pipeline || drawables.empty()) return;
+                auto frame = m_Res.Mesh->Prepare(ctx.Graph, ctx.Scene, ctx.Frame, ctx.Settings, shadows,
+                                                 *m_Res.DummyWhiteTexture);
+                if (!m_Pipeline || frame.Draws.empty() || (shadows && !frame.HasTlas)) return;
 
                 MeshCameraParamsGpu params{};
                 params.View = ctx.ViewCamera.GetViewMatrix(ctx.Frame);
                 params.Projection = ctx.ViewCamera.GetProjectionMatrix();
                 params.CameraPos = ctx.Frame.ToRender(ctx.ViewCamera.GetPosition());
-                params.LightDir = glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f));
+                params.ToneMapping = static_cast<std::int32_t>(ctx.Settings.ToneMapping);
                 m_CameraBuffer->Upload(&params, sizeof(params));
 
                 const auto device = m_Res.Device;
                 const auto meshPipeline = m_Pipeline;
                 auto* cameraBuffer = m_CameraBuffer.get();
-                auto* white = m_Res.DummyWhiteTexture.get();
+                auto* exposure = m_Res.ExposureImage.get();
                 ctx.Graph.AddGraphicsPass(
                     "Meshes", {}, {},
                     {RenderGraphAttachment{.Handle = ctx.ColorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
                     RenderGraphAttachment{.Handle = ctx.DepthTarget, .LoadOp = vk::AttachmentLoadOp::eLoad},
-                    [device, meshPipeline, cameraBuffer, white, drawables = std::move(drawables)](
+                    [device, meshPipeline, cameraBuffer, exposure, frame = std::move(frame)](
                         const vk::CommandBuffer cmd, RenderGraph& g)
                     {
                         const auto pipeline = meshPipeline->GetPipeline();
                         if (!pipeline) return;
                         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->GetPipeline());
-                        for (const auto& drawable : drawables)
-                        {
-                            const auto set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
-                            const auto* texture = drawable.BaseColorTexture ? drawable.BaseColorTexture.get() : white;
-                            DescriptorSetWriter(device->GetDevice())
-                                .WriteUniformBuffer(set, 0, cameraBuffer->GetBuffer())
-                                .WriteCombinedImageSampler(set, 1, texture->GetImageView(), texture->GetSampler())
-                                .Update();
-                            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->GetLayout(), 0, set, {});
 
+                        const auto set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
+                        const auto bindings = meshPipeline->GetReflection().descriptorBindings;
+                        const auto has = [&bindings](const std::uint32_t binding)
+                        {
+                            return std::ranges::any_of(bindings, [binding](const auto& b) { return b.set == 0 && b.binding == binding; });
+                        };
+                        DescriptorSetWriter writer(device->GetDevice());
+                        writer.WriteUniformBuffer(set, 0, cameraBuffer->GetBuffer());
+                        if (has(1)) writer.WriteStorageBuffer(set, 1, frame.Materials);
+                        if (has(2)) writer.WriteCombinedImageSampler(set, 2, exposure->GetImageView(), exposure->GetSampler(),
+                                                                     vk::ImageLayout::eGeneral);
+                        if (has(3)) writer.WriteCombinedImageSamplers(set, 3, *frame.Textures);
+                        if (has(4)) writer.WriteStorageBuffer(set, 4, frame.Lights);
+                        if (has(5)) writer.WriteUniformBuffer(set, 5, frame.LightParams);
+                        if (has(6)) writer.WriteAccelerationStructure(set, 6, frame.Tlas);
+                        if (has(7)) writer.WriteStorageBuffer(set, 7, frame.Dfg);
+                        writer.Update();
+                        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->GetLayout(), 0, set, {});
+
+                        for (const auto& draw : frame.Draws)
+                        {
                             MeshPushConstantsGpu push{};
-                            push.Model = drawable.Model;
-                            push.BaseColorFactor = drawable.BaseColorFactor;
-                            push.MetallicFactor = drawable.MetallicFactor;
-                            push.RoughnessFactor = drawable.RoughnessFactor;
-                            push.HasBaseColorTexture = drawable.BaseColorTexture ? 1 : 0;
+                            push.Model = draw.Model;
+                            push.ExtraAddress = draw.Primitive->ExtraBuffer.GetDeviceAddress();
+                            push.MaterialIndex = draw.MaterialIndex;
                             cmd.pushConstants(pipeline->GetLayout(),
                                               vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                                               0, sizeof(push), &push);
 
-                            BindVertexBuffer(cmd, drawable.Primitive->VertexBuffer.GetBuffer());
-                            BindIndexBuffer(cmd, drawable.Primitive->IndexBuffer.GetBuffer());
-                            cmd.drawIndexed(drawable.Primitive->IndexCount, 1, 0, 0, 0);
+                            BindVertexBuffer(cmd, draw.Primitive->VertexBuffer.GetBuffer());
+                            BindIndexBuffer(cmd, draw.Primitive->IndexBuffer.GetBuffer());
+                            cmd.drawIndexed(draw.Primitive->IndexCount, 1, 0, 0, 0);
                         }
                     });
             }
 
         private:
-            std::vector<MeshDrawable> Collect(const RenderFrameContext& ctx)
-            {
-                std::vector<MeshDrawable> drawables;
-                for (auto [entity, meshComponent, transform] :
-                     ctx.Scene.Registry().view<const MeshComponent, const TransformComponent>().each())
-                {
-                    if (meshComponent.AssetPath.empty()) continue;
-                    const auto gltfScene = m_Res.Meshes->GetOrLoad(meshComponent.AssetPath);
-                    if (!gltfScene) continue;
-                    const glm::mat4 model = transform.GetRenderMatrix(ctx.Frame.OriginM, ctx.Frame.LengthUnitM,
-                                                                      meshComponent.MetresPerUnit);
-                    for (const auto& mesh : gltfScene->Meshes)
-                    {
-                        for (const auto& primitive : mesh.Primitives)
-                        {
-                            MeshDrawable drawable;
-                            drawable.Primitive = &primitive;
-                            drawable.Model = model;
-                            if (primitive.MaterialIndex >= 0 && static_cast<std::size_t>(primitive.MaterialIndex)
-                                                                     < gltfScene->Materials.size())
-                            {
-                                const auto& material = gltfScene->Materials[static_cast<std::size_t>(primitive.MaterialIndex)];
-                                drawable.BaseColorFactor = material.BaseColorFactor;
-                                drawable.MetallicFactor = material.MetallicFactor;
-                                drawable.RoughnessFactor = material.RoughnessFactor;
-                                drawable.BaseColorTexture = material.BaseColorTexture;
-                            }
-                            drawables.push_back(std::move(drawable));
-                        }
-                    }
-                }
-                return drawables;
-            }
-
             RenderResources& m_Res;
             std::shared_ptr<ShaderPipeline> m_Pipeline;
             vk::Format m_ColorFormat{vk::Format::eUndefined};
@@ -1476,6 +1427,7 @@ namespace MoleHole
         res.Device = res.Renderer->GetDevice();
         res.UploadPool = std::make_unique<VulkanCommandPool>(res.Device, res.Logger, res.Device->GetQueueIndices().Graphics);
         const auto queue = res.Device->GetBackgroundQueue();
+        res.Mesh = std::make_unique<MeshScene>(res.Device, res.Meshes, res.Logger, *res.UploadPool);
 
         // Before the trace: it hands the lensed part of the trails to the tracer
         impl.Stages.push_back(std::make_unique<OverlayGeometryStage>(res, impl.Paths, impl.PathMutex));

@@ -86,6 +86,19 @@ namespace
             else if (arg == "--duration") args.Request.DurationSeconds = std::stof(next());
             else if (arg == "--fps") args.Request.Framerate = std::stoi(next());
             else if (arg == "--scene") args.ScenePath = next();
+            else if (arg == "--sim-start" || arg == "--time-scale")
+            {
+                const auto value = next();
+                double number = std::numeric_limits<double>::quiet_NaN();
+                std::from_chars(value.data(), value.data() + value.size(), number);
+                const bool start = arg == "--sim-start";
+                if (!std::isfinite(number) || (start ? number < 0.0 : number <= 0.0))
+                {
+                    args.Error = std::string(arg) + " expects a " + (start ? "number of seconds >= 0" : "positive number") + ", got '" + value + "'";
+                    break;
+                }
+                (start ? args.Request.SimStart : args.Request.TimeScale) = number;
+            }
             else if (arg == "--export-timeout")
             {
                 const auto value = next();
@@ -209,6 +222,8 @@ int main(int argc, char* argv[])
                .SetWindowTarget("main");
         builder.AddHotReloadableLayer("tutorial-overlay", "molehole_tutorial_overlay_layer.so")
                .SetWindowTarget("main");
+        builder.AddHotReloadableLayer("log-window", "molehole_log_window_layer.so").SetWindowTarget("main");
+        builder.AddHotReloadableLayer("notifications", "molehole_notifications_layer.so").SetWindowTarget("main");
     }
 
     if (exportArgs)

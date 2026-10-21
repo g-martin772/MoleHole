@@ -231,10 +231,11 @@ namespace MoleHole
                 .OptionLabels = {"None (raw)", "Reinhard", "ACES filmic"}}));
             registry.Add(Setting("post.exposure_mode", &R::Exposure, {
                 .Label = "Exposure", .Group = "Post",
-                .Tooltip = "Manual: fixed exposure value. Auto: meters the image's log-average luminance each frame.",
+                .Tooltip = "Manual: fixed exposure value. Auto: meters the image's log-average luminance each frame.\n"
+                           "Physical camera: exposure from aperture, shutter and ISO (EV100 model); the EV below is a compensation.",
                 .Doc = kDoc,
-                .Options = {"Manual", "Auto"},
-                .OptionLabels = {"Manual", "Auto"},
+                .Options = {"Manual", "Auto", "Physical"},
+                .OptionLabels = {"Manual", "Auto", "Physical camera"},
                 .VisibleWhen = "post.tonemap>=1"}));
             registry.Add(Setting("post.exposure", &R::ExposureEv, {
                 .Label = "Exposure (EV)", .Group = "Post",
@@ -244,7 +245,22 @@ namespace MoleHole
                 .Label = "Auto key", .Group = "Post",
                 .Tooltip = "Grey level the metered average is mapped to.",
                 .Doc = kDoc, .Min = 0.01, .Max = 1.0, .Scale = SettingScale::Log, .Format = "%.2f",
-                .VisibleWhen = "post.tonemap>=1 & post.exposure_mode>=1"}));
+                .VisibleWhen = "post.tonemap>=1 & post.exposure_mode=1"}));
+            registry.Add(Setting("post.camera_aperture", &R::CameraAperture, {
+                .Label = "Aperture (f/N)", .Group = "Post",
+                .Tooltip = "f-number N of the physical camera: exposure scales with 1/N^2.",
+                .Doc = kDoc, .Min = 0.7, .Max = 64.0, .Scale = SettingScale::Log, .Format = "f/%.1f",
+                .VisibleWhen = "post.tonemap>=1 & post.exposure_mode=2"}));
+            registry.Add(Setting("post.camera_shutter", &R::CameraShutter, {
+                .Label = "Shutter (s)", .Group = "Post",
+                .Tooltip = "Exposure time t of the physical camera in seconds: exposure scales with t.",
+                .Doc = kDoc, .Min = 1e-5, .Max = 30.0, .Scale = SettingScale::Log, .Format = "%.5f s",
+                .VisibleWhen = "post.tonemap>=1 & post.exposure_mode=2"}));
+            registry.Add(Setting("post.camera_iso", &R::CameraIso, {
+                .Label = "ISO", .Group = "Post",
+                .Tooltip = "Sensor sensitivity S of the physical camera: exposure scales with S / 100.",
+                .Doc = kDoc, .Min = 25.0, .Max = 102400.0, .Scale = SettingScale::Log, .Format = "%.0f",
+                .VisibleWhen = "post.tonemap>=1 & post.exposure_mode=2"}));
             registry.Add(Setting("post.fxaa", &R::Fxaa, {
                 .Label = "Anti-aliasing (FXAA)", .Group = "Post", .Doc = kDoc, .Cost = 1}));
             registry.Add(Setting("post.bloom", &R::Bloom, {
@@ -268,6 +284,22 @@ namespace MoleHole
             registry.Add(Setting("post.flare_threshold", &R::LensFlareThreshold, {
                 .Label = "Flare threshold", .Group = "Post", .Doc = kDoc, .Min = 0.0, .Max = 5.0,
                 .VisibleWhen = "post.lens_flare"}));
+
+            registry.Add(Setting("lighting.disk_light", &R::DiskLight, {
+                .Label = "Disk light", .Group = "Lighting",
+                .Tooltip = "The accretion disk lights the meshes: a point source at the primary hole radiating\n"
+                           "L = eta Mdot c^2 as a flat Lambertian emitter, shown at the display brightness of the disk.\n"
+                           "Approximation: no lensing of the light, no occlusion of the disk by the hole.",
+                .Doc = kDoc}));
+            registry.Add(Setting("lighting.shadows", &R::Shadows, {
+                .Label = "Mesh shadows", .Group = "Lighting",
+                .Tooltip = "Shadow rays against the mesh acceleration structure (self shadowing of the ship).\n"
+                           "Needs ray queries; without them meshes are lit without shadows.",
+                .Doc = kDoc, .Cost = 1}));
+            registry.Add(Setting("lighting.sky_radiance", &R::SkyRadiance, {
+                .Label = "Sky radiance (W/m2/sr)", .Group = "Lighting",
+                .Tooltip = "Uniform ambient radiance on meshes. The default equals the old constant ambient (0.03 image units).",
+                .Doc = kDoc, .Min = 0.0, .Max = 100.0, .Format = "%.4f"}));
 
             registry.Add(Setting("overlay.gravity_grid", &R::ShowGravityGrid, {
                 .Label = "Gravity grid", .Group = "Overlays",

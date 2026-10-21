@@ -31,8 +31,13 @@ export namespace MoleHole
         const bool extremal = hole.SpinRange == BlackHoleSpinRange::NearExtremal;
         const double spin = extremal ? 1.0 - std::clamp(hole.SpinGap, kMinExtremalGap, 1.0 - kMaxHorizonParameter)
                                      : hole.Spin;
-        return MakeKerrNewmanParams(static_cast<std::int32_t>(MetricKind::KerrNewman), 1.0, spin, hole.Charge,
-                                    extremal ? kExtremalHorizonParameter : kMaxHorizonParameter);
+        return MakeKerrNewmanParams(static_cast<std::int32_t>(MetricKind::KerrNewman), 1.0, spin, hole.Charge);
+    }
+
+    // a* with its sign: a negative a* reverses the spin axis, the metric only sees |a*|. Near-extremal holes spin forward.
+    [[nodiscard]] inline double BlackHoleSignedSpin(const BlackHoleComponent& hole)
+    {
+        return hole.SpinRange == BlackHoleSpinRange::NearExtremal ? 1.0 : hole.Spin;
     }
 
     struct SphereComponent
@@ -136,6 +141,57 @@ export namespace MoleHole
         glm::vec3 Direction{1.0f, 0.3f, 0.5f};   // Directional: towards the light
         double ReferenceDistance{1.495978707e11}; // m, Point: 1 AU
     };
+
+    // Thermal sphere emitter: luminosity, colour and surface radiance follow from Teff and Radius (docs/notes/lighting-materials.md).
+    struct StarComponent
+    {
+        double Teff{GPP::Units::kSolarEffectiveTemperature}; // K
+        double Radius{GPP::Units::kSolarRadius};             // m
+        double Mass{GPP::Units::kSolarMass};                 // kg
+        float LimbDarkening{0.6f};                           // u in I(mu) = I0 (1 - u (1 - mu))
+    };
+
+    // L = 4 pi R^2 sigma T^4 [W]
+    [[nodiscard]] inline double StarLuminosity(const StarComponent& star)
+    {
+        const double t2 = star.Teff * star.Teff;
+        return 4.0 * static_cast<double>(GPP::Units::Pi()) * star.Radius * star.Radius
+               * GPP::Units::kStefanBoltzmann * t2 * t2;
+    }
+
+    // Bolometric surface radiance averaged over the disc, sigma T^4 / pi [W m^-2 sr^-1]
+    [[nodiscard]] inline double StarSurfaceRadiance(const StarComponent& star)
+    {
+        const double t2 = star.Teff * star.Teff;
+        return GPP::Units::kStefanBoltzmann * t2 * t2 / static_cast<double>(GPP::Units::Pi());
+    }
+
+    // Linear sRGB of the Planck spectrum at Teff, relative luminance 1
+    [[nodiscard]] inline glm::vec3 StarColor(const StarComponent& star)
+    {
+        return GPP::Radiometry::BlackbodyColor(star.Teff);
+    }
+
+    // Fraction of the bolometric power that counts as luminance in the 683 lm/W convention of the light buffer:
+    // K(T) / K_cd with K(T) the luminous efficacy of the blackbody. 1 would treat all power as 555 nm light.
+    [[nodiscard]] inline double StarLuminousFraction(const StarComponent& star)
+    {
+        return GPP::Radiometry::BlackbodyLuminousEfficacy(star.Teff) / GPP::Radiometry::kLuminousEfficacyMax;
+    }
+
+    // Disc-averaged radiance over I0 for I(mu) = I0 (1 - u (1 - mu)): 1 - u / 3
+    [[nodiscard]] inline double StarLimbMean(const StarComponent& star)
+    {
+        return 1.0 - static_cast<double>(std::clamp(star.LimbDarkening, 0.0f, 1.0f)) / 3.0;
+    }
+
+    // Radiance at the disc centre in image units (value 1 = the 203 cd/m^2 reference white) of the disc the tracer draws:
+    // the luminance of sigma T^4 / pi, with the limb darkening profile normalised to the same disc mean.
+    [[nodiscard]] inline double StarImageRadiance(const StarComponent& star)
+    {
+        return StarSurfaceRadiance(star) * StarLuminousFraction(star) * GPP::Radiometry::kLuminousEfficacyMax
+               / GPP::Radiometry::kHdrReferenceWhite / StarLimbMean(star);
+    }
 
     // How a geodesic body starts moving; the first four mirror ObserverKind (src/physics/observer.cppm).
     enum class GeodesicLaunch : std::int32_t { Zamo = 0, Static = 1, Orbiting = 2, Raindrop = 3, Velocity = 4 };
@@ -360,6 +416,27 @@ namespace MoleHole
                     GPP::Field("ReferenceDistance", &LightComponent::ReferenceDistance,
                                {.Label = "Reference distance", .Min = 1.0, .Speed = 1.0e9,
                                 .VisibleField = "Kind", .VisibleMask = 1u << 1, .Dim = GPP::Units::Dimension::Length}),
+                }});
+
+            GPP::RegisterComponent<StarComponent>("Star", GPP::ComponentDescription<StarComponent>{
+                .DisplayName = "Star",
+                .Note = "Thermal sphere emitter: drawn by the tracer and lights the meshes (E = L / 4 pi d^2).",
+                .Fields = {
+                    GPP::Field("Teff", &StarComponent::Teff,
+                               {.Label = "T eff", .Min = 500.0, .Max = 1.0e6, .Speed = 50.0,
+                                .Dim = GPP::Units::Dimension::Temperature}),
+                    GPP::Field("Radius", &StarComponent::Radius,
+                               {.Min = 1.0, .Speed = 1.0e6, .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Field("Mass", &StarComponent::Mass,
+                               {.Min = 1.0, .Speed = 1.0e28, .Dim = GPP::Units::Dimension::Mass}),
+                    GPP::Field("LimbDarkening", &StarComponent::LimbDarkening,
+                               {.Label = "Limb darkening u", .Min = 0.0f, .Max = 1.0f, .Speed = 0.01f}),
+                    GPP::Computed<StarComponent, double>(
+                        "Luminosity", [](const StarComponent& c) { return StarLuminosity(c); }, nullptr,
+                        {.Label = "Luminosity", .Dim = GPP::Units::Dimension::Power}),
+                    GPP::Computed<StarComponent, glm::vec3>(
+                        "Colour", [](const StarComponent& c) { return StarColor(c); }, nullptr,
+                        {.Label = "Colour (Planck)", .Kind = GPP::FieldKind::Color}),
                 }});
 
             GPP::RegisterComponent<GeodesicBodyComponent>("GeodesicBody", GPP::ComponentDescription<GeodesicBodyComponent>{

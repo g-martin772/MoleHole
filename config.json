@@ -13,7 +13,7 @@
         "Title": "MoleHole"
       },
       "Render": {
-        "ShaderAssetDirectories": ["shaders"],
+        "ShaderAssetDirectories": ["shaders", "dependencies/gpp/shaders/pbr"],
         "EnableShaderHotReload": true,
         "ShaderHotReloadIntervalMilliseconds": 250
       },

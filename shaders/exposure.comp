@@ -3,6 +3,7 @@
 // Exposure for the tone mapper, written to a 1x1 image read by bloom_extract.comp and blackhole_display.frag.
 // Manual: 2^EV. Auto: key / log-average luminance (Reinhard et al. 2002) of the pixels within 1/100 of the
 // brightest sample, times 2^EV, so a frame that is mostly dark sky is metered on its subject.
+// Physical camera: scale from aperture, shutter and ISO (EV100 model, image value 1 = 203 cd/m^2) times 2^EV.
 // Disabled (no tone mapping): 1, so the raw tracer output is shown unchanged.
 layout(local_size_x = 16, local_size_y = 16) in;
 
@@ -15,6 +16,7 @@ layout(push_constant) uniform PushConstants
     int u_auto;
     float u_ev;
     float u_key;
+    float u_physicalScale; // > 0: physical camera, replaces manual and auto
 };
 
 shared float s_max[256];
@@ -77,7 +79,9 @@ void main() {
         float exposure = 1.0;
         if (u_enabled == 1) {
             exposure = exp2(u_ev);
-            if (u_auto == 1 && s_count[0] > 0.0) {
+            if (u_physicalScale > 0.0) {
+                exposure *= u_physicalScale;
+            } else if (u_auto == 1 && s_count[0] > 0.0) {
                 exposure *= u_key / exp(s_logSum[0] / s_count[0]);
             }
         }

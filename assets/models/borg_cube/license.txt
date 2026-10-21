@@ -1,0 +1,11 @@
+Model Information:
+* title:	Borg Cube
+* source:	https://sketchfab.com/3d-models/borg-cube-0e0bfb83d11a44fbb62d5ccc89f21034
+* author:	JDGameStudios (https://sketchfab.com/JDGameStudios)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Borg Cube" (https://sketchfab.com/3d-models/borg-cube-0e0bfb83d11a44fbb62d5ccc89f21034) by JDGameStudios (https://sketchfab.com/JDGameStudios) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

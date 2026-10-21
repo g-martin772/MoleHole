@@ -21,9 +21,13 @@ namespace
     }
 }
 
-TEST_CASE("The spin range selects the Thorne limit or a near-extremal spin", "[physics][near-extremal]")
+TEST_CASE("The spin range selects the plain spin or a near-extremal spin", "[physics][near-extremal]")
 {
-    CHECK(BlackHoleMetric(BlackHoleComponent{.Spin = 0.999}).SpinParameter == Approx(kMaxHorizonParameter));
+    CHECK(BlackHoleMetric(BlackHoleComponent{.Spin = 0.999}).SpinParameter == Approx(0.999));
+    CHECK(BlackHoleMetric(BlackHoleComponent{.Spin = -0.5}).SpinParameter == Approx(0.5));
+    // a* = 1 is the degenerate limit, the closest resolvable spin is used; beyond it the hole is naked
+    CHECK(BlackHoleMetric(BlackHoleComponent{.Spin = 1.0}).SpinParameter == kExtremalHorizonParameter);
+    CHECK_FALSE(HasHorizon(BlackHoleMetric(BlackHoleComponent{.Spin = 1.2})));
     CHECK(BlackHoleMetric(BlackHoleComponent{.Spin = 0.5}).SpinParameter == Approx(0.5));
     CHECK(Gargantua().SpinParameter == 1.0 - kGap);
     CHECK(1.0 - Gargantua().SpinParameter == Approx(kGap).epsilon(1e-2)); // double spacing near 1 is 1.1e-16

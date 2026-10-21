@@ -1,0 +1,11 @@
+Model Information:
+* title:	Mercury Realistic 8K
+* source:	https://sketchfab.com/3d-models/mercury-realistic-8k-215f364627054d25ae03bcd72afda714
+* author:	Shady Tex (https://sketchfab.com/ShadyTex4u)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Mercury Realistic 8K" (https://sketchfab.com/3d-models/mercury-realistic-8k-215f364627054d25ae03bcd72afda714) by Shady Tex (https://sketchfab.com/ShadyTex4u) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

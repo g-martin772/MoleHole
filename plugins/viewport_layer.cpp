@@ -64,6 +64,7 @@ namespace
 
         void OnAttach() override
         {
+            m_AttachTime = std::chrono::steady_clock::now();
             MoleHole::RegisterComponents();
             BeginSceneLoad(StartupScenePath(), SceneLoader::Result::Kind::Startup);
 
@@ -109,7 +110,16 @@ namespace
         void OnRender() override
         {
             FixupPendingConvexHulls();
-            m_Export.SetPipelinesReady(m_Pipeline.AllStagesReady());
+            const bool shadersReady = m_Pipeline.AllStagesReady();
+            if (shadersReady && !std::exchange(m_ShadersReady, true))
+            {
+                m_Logger->Notifications()->Post(
+                    NotificationKind::Success, "Shaders compiled",
+                    std::format("Render pipelines ready ({:.1f} s)",
+                                std::chrono::duration<double>(std::chrono::steady_clock::now() - m_AttachTime).count()),
+                    0.0f, "shaders-ready");
+            }
+            m_Export.SetPipelinesReady(shadersReady);
             m_Export.SetPipelineFailure(m_Pipeline.FirstFailure());
         }
 
@@ -494,14 +504,35 @@ namespace
                 {
                     m_Logger->Info("ViewportLayer: loaded scene '{}'", result->SceneName);
                 }
+                m_Logger->Notifications()->Post(
+                    NotificationKind::Success, "Scene loaded",
+                    std::format("{} ({} mesh{}, {:.1f} s)", result->SceneName, result->MeshCount,
+                                result->MeshCount == 1 ? "" : "es", result->Seconds),
+                    0.0f, "scene-load");
                 m_RenderSettings->LoadScene(result->RenderExtension, m_UiState->CurrentScenePath);
-                for (const auto& warning : m_RenderSettings->Warnings()) m_Logger->Warn("ViewportLayer: {}", warning);
+                if (const auto& view = result->Editor)
+                {
+                    m_UiState->CameraPositionM = view->PositionM;
+                    m_UiState->CameraYaw = view->Yaw;
+                    m_UiState->CameraPitch = view->Pitch;
+                    m_UiState->CameraFov = view->Fov;
+                    if (view->SpeedMs) m_UiState->CameraSpeedMs = *view->SpeedMs;
+                }
+                for (const auto& warning : m_RenderSettings->Warnings())
+                {
+                    m_Logger->Warn("ViewportLayer: {}", warning);
+                    m_Logger->Notifications()->Post(NotificationKind::Warning, "Render settings", warning, 0.0f,
+                                                    "render-warning");
+                }
                 StartSimulationFor(result->SceneName);
             }
             else if (result->LoadKind == Kind::Startup)
             {
                 m_Logger->Warn("ViewportLayer: failed to load '{}' ({}), creating a default scene", result->Path,
                                result->Error);
+                m_Logger->Notifications()->Post(NotificationKind::Warning, "Scene failed to load",
+                                                std::format("{}: {}\nStarted with a default scene", result->Path, result->Error),
+                                                0.0f, "scene-load");
                 CreateDefaultScene("ViewportDefault", "BlackHole");
                 m_UiState->CurrentScenePath.clear();
                 m_RenderSettings->LoadScene({});
@@ -510,6 +541,8 @@ namespace
             else
             {
                 m_Logger->Error("ViewportLayer: failed to load scene '{}': {}", result->Path, result->Error);
+                m_Logger->Notifications()->Post(NotificationKind::Error, "Scene failed to load",
+                                                std::format("{}: {}", result->Path, result->Error), 0.0f, "scene-load");
             }
         }
 
@@ -772,6 +805,8 @@ namespace
         std::shared_ptr<RenderSettingsService> m_RenderSettings;
         std::shared_ptr<MeshCache> m_Meshes;
         SceneLoader m_Loader;
+        std::chrono::steady_clock::time_point m_AttachTime;
+        bool m_ShadersReady = false;
         RenderPipeline m_Pipeline;
         ExportController m_Export;
         std::shared_ptr<EventDispatcher> m_Dispatcher;

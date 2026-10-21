@@ -11,10 +11,6 @@ export namespace MoleHole
         const std::shared_ptr<GPP::VulkanDevice>& device, GPP::VulkanCommandPool& uploadPool, vk::Queue queue,
         const std::shared_ptr<GPP::Logger>& logger);
 
-    [[nodiscard]] std::shared_ptr<GPP::VulkanImage> GenerateAccelerationLut(
-        const std::shared_ptr<GPP::VulkanDevice>& device, GPP::VulkanCommandPool& uploadPool, vk::Queue queue,
-        const std::shared_ptr<GPP::Logger>& logger);
-
     [[nodiscard]] std::shared_ptr<GPP::VulkanImage> GenerateHrDiagramLut(
         const std::shared_ptr<GPP::VulkanDevice>& device, GPP::VulkanCommandPool& uploadPool, vk::Queue queue,
         const std::shared_ptr<GPP::Logger>& logger);

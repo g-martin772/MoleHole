@@ -110,7 +110,7 @@ export namespace MoleHole
         const auto& component = scene.Registry().get<const BlackHoleComponent>(scene.FindByGuid(primary->first));
         const auto physical = BlackHoleMetric(component);
         HoleFrame view = primary->second;
-        view.Metric = MakeKerrNewmanParams(metricType, 1.0, physical.SpinParameter, physical.Charge, kExtremalHorizonParameter);
+        view.Metric = MakeKerrNewmanParams(metricType, 1.0, physical.SpinParameter, physical.Charge);
         const auto bl = WorldToBoyerLindquist(view, cameraPositionM);
         const auto velocity = ObserverVelocity(view.Metric, kind, bl.x, bl.y, direction);
         if (!velocity) return std::nullopt;
@@ -176,8 +176,7 @@ export namespace MoleHole
         // Preset observer of the render setting, in the metric the renderer draws
         const auto& metricSource = scene.Registry().get<const BlackHoleComponent>(scene.FindByGuid(primary->first));
         const auto physical = BlackHoleMetric(metricSource);
-        const auto metric = MakeKerrNewmanParams(metricType, 1.0, physical.SpinParameter, physical.Charge,
-                                                 kExtremalHorizonParameter);
+        const auto metric = MakeKerrNewmanParams(metricType, 1.0, physical.SpinParameter, physical.Charge);
         HoleFrame view = hole;
         view.Metric = metric;
         const auto bl = WorldToBoyerLindquist(view, cameraPositionM);

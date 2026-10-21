@@ -97,7 +97,6 @@ namespace
 
         void OnUiRender() override
         {
-            if (!m_UiState->ShowViewportHud && !m_UiState->ShowCameraGizmos) return;
             if (m_UiState->CurrentSceneName.empty()) return;
             const auto runner = m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
             if (!runner) return;
@@ -123,6 +122,8 @@ namespace
             constexpr ImU32 colDot = IM_COL32(180, 100, 40, 230);
             constexpr float padding = 6.0f;
             constexpr float lineHeight = 16.0f;
+
+            DrawWarnings(drawList, CollectRenderWarnings(scene, m_RenderSettings->Effective().Solution), max);
 
             if (m_UiState->ShowCameraGizmos)
             {
@@ -193,6 +194,22 @@ namespace
         }
 
     private:
+        static void DrawWarnings(ImDrawList* list, const std::vector<std::string>& warnings, const glm::vec2& corner)
+        {
+            constexpr float padding = 6.0f;
+            float bottom = corner.y - 10.0f;
+            for (const auto& warning : warnings)
+            {
+                const ImVec2 size = ImGui::CalcTextSize(warning.c_str());
+                const ImVec2 max(corner.x - 10.0f, bottom);
+                const ImVec2 min(max.x - size.x - padding * 2.0f, bottom - size.y - padding * 2.0f);
+                list->AddRectFilled(min, max, IM_COL32(60, 40, 10, 200), 4.0f);
+                list->AddRect(min, max, IM_COL32(240, 170, 60, 230), 4.0f, 0, 1.0f);
+                list->AddText(ImVec2(min.x + padding, min.y + padding), IM_COL32(255, 215, 140, 255), warning.c_str());
+                bottom = min.y - 4.0f;
+            }
+        }
+
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<UiState> m_UiState;
         std::shared_ptr<RenderSettingsService> m_RenderSettings;

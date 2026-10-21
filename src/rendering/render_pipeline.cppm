@@ -9,6 +9,7 @@ import :Rendering.Camera;
 import :Rendering.Settings;
 import :Rendering.Meshes;
 import :Rendering.MeshTrace;
+import :Rendering.MeshScene;
 import :Simulation.ObjectPaths;
 import :Rendering.OrbitOverlays;
 
@@ -25,12 +26,8 @@ export namespace MoleHole
 
     struct MeshTraceFrame
     {
-        bool Active = false;
-        vk::AccelerationStructureKHR Tlas{};
-        vk::Buffer Instances{};
-        std::array<const GPP::VulkanImage*, kMeshTextureSlots> Textures{};
-        glm::vec4 Bounds{0.0f};
-        std::int32_t Count = 0;
+        bool Active = false; // the traced mesh kernel draws the meshes
+        MeshSceneFrame Scene;
     };
 
     struct RenderResources
@@ -40,11 +37,11 @@ export namespace MoleHole
         std::shared_ptr<GPP::EventDispatcher> Dispatcher;
         std::shared_ptr<GPP::Logger> Logger;
         std::shared_ptr<MeshCache> Meshes;
+        std::unique_ptr<MeshScene> Mesh;
         std::shared_ptr<GPP::VulkanDevice> Device;
         std::unique_ptr<GPP::VulkanCommandPool> UploadPool;
 
         std::shared_ptr<GPP::VulkanImage> BlackbodyLut;
-        std::shared_ptr<GPP::VulkanImage> AccelerationLut;
         std::shared_ptr<GPP::VulkanImage> HrDiagramLut;
         std::shared_ptr<GPP::VulkanImage> Skybox;
         std::shared_ptr<GPP::VulkanImage> DummyWhiteTexture;

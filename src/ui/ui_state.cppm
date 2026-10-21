@@ -25,6 +25,8 @@ export namespace MoleHole
         int Framerate = 60;
         std::optional<std::string> Profile;
         std::vector<std::pair<std::string, std::string>> Overrides;
+        std::optional<double> SimStart;  // coordinate time of the first frame [s]; default: the scene's clock
+        std::optional<double> TimeScale; // physical seconds per video second; default: the scene's TimeScale
     };
 
     template <typename T>
@@ -92,6 +94,7 @@ export namespace MoleHole
         ScriptStatusBoard ScriptStatuses;
         bool ShowCameraWindow = false;
         bool ShowSystemWindow = false;
+        bool ShowLogWindow = false;
         bool ShowSceneWindow = true;
         bool ShowSimulationWindow = false;
         bool ShowRenderWindow = false;

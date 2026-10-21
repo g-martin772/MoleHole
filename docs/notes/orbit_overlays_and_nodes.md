@@ -86,7 +86,7 @@ tracer treats them as straight, so the rasterised, aberrated lines are already e
    hole's local frame, the same `spinFrame` as the shader. The outside parts stay rasterised.
 2. **Grid.** The inside segments are bucketed into a 48³ grid over the integration cube, each with its
    footprint padded by the widest line it can be tested with. They are uploaded as three storage buffers
-   (bindings 9–11).
+   (bindings 13–16, after the mesh-trace bindings).
 3. **Per ray step.** Each integration step of `rk4RayMarching` is a short straight chord, the same chords
    used to hit traced spheres and meshes. The shader finds the nearest trail segment among the grid cells the
    chord touches, using the closest distance between two segments.

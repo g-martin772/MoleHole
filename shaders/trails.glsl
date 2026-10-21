@@ -9,13 +9,13 @@ struct TrailSegment {
     vec4 color; // rgb
 };
 
-layout(set = 0, binding = 9, std430) readonly buffer TrailSegmentBlock { TrailSegment u_trailSegments[]; };
+layout(set = 0, binding = 13, std430) readonly buffer TrailSegmentBlock { TrailSegment u_trailSegments[]; };
 // Open-addressing hash table of the occupied grid cells: x = cell key (or 0xFFFFFFFF), y = start, z = count in
 // u_trailIndices; size u_trailGrid2.x, a power of two
-layout(set = 0, binding = 10, std430) readonly buffer TrailCellBlock { uvec4 u_trailCells[]; };
-layout(set = 0, binding = 11, std430) readonly buffer TrailIndexBlock { uint u_trailIndices[]; };
+layout(set = 0, binding = 14, std430) readonly buffer TrailCellBlock { uvec4 u_trailCells[]; };
+layout(set = 0, binding = 15, std430) readonly buffer TrailIndexBlock { uint u_trailIndices[]; };
 // Occupancy bits of a coarse 32³ grid: steps far from every trail stop after one or two reads
-layout(set = 0, binding = 12, std430) readonly buffer TrailCoarseBlock { uint u_trailCoarse[]; };
+layout(set = 0, binding = 16, std430) readonly buffer TrailCoarseBlock { uint u_trailCoarse[]; };
 
 const int TRAIL_GRID_CELLS = 256;
 const uint TRAIL_EMPTY_CELL = 0xFFFFFFFFu;

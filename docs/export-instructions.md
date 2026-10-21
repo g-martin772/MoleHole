@@ -38,6 +38,8 @@ The disk noise still follows the wall clock, so two exports of the same scene ar
 | `--height <px>` | both | 1080 | Output height |
 | `--duration <seconds>` | video | 10.0 | Length of the output video |
 | `--fps <n>` | video | 60 | Output framerate; also the capture rate from the live sim |
+| `--sim-start <s>` | both | scene clock (0) | Simulation clock `t_sim` [physical s] of the first frame; the disk phase follows it |
+| `--time-scale <x>` | both | scene Time Scale | Physical seconds per second of video; frame k of a video is placed at `t_sim = start + k x / fps` |
 | `--scene <path>` | both | `templates/test-scene.yaml` | Scene file to load before rendering |
 | `--profile <name>` | both | Export context's profile | Render profile (built-in or stored in the scene) |
 | `--set <key=value>` | both | — | Override one render setting; repeatable; bad keys or values abort with exit code 2 |

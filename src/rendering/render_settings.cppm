@@ -15,7 +15,7 @@ export namespace MoleHole
     // Fixed: one white light from (1, 1, 1). Probe: what each body's sky probe sees, plus Light components.
     enum class BodyLighting : int { Fixed = 0, Probe = 1 };
     enum class ToneMap : int { None = 0, Reinhard = 1, Aces = 2 };
-    enum class ExposureMode : int { Manual = 0, Auto = 1 };
+    enum class ExposureMode : int { Manual = 0, Auto = 1, Physical = 2 };
     // Mirrors ObserverKind (src/physics/observer.cppm) and OrbitDirection (src/rendering/metric.cppm).
     enum class CameraObserver : int { Zamo = 0, Static = 1, Orbiting = 2, Raindrop = 3 };
     enum class CameraOrbit : int { Prograde = 0, Retrograde = 1 };
@@ -75,10 +75,18 @@ export namespace MoleHole
         bool LensFlare = true;
         float LensFlareIntensity = 0.3f;
         float LensFlareThreshold = 2.0f;
-        ToneMap ToneMapping = ToneMap::Aces;
+        ToneMap ToneMapping = ToneMap::None;
         ExposureMode Exposure = ExposureMode::Manual;
         float ExposureEv = 0.0f;
         float AutoExposureKey = 0.18f;
+        float CameraAperture = 2.8f;        // f-number N
+        float CameraShutter = 0.008f;       // s
+        float CameraIso = 100.0f;
+
+        bool DiskLight = true;
+        bool Shadows = true;
+        // Uniform sky radiance on meshes [W m^-2 sr^-1]; the default equals the old constant ambient of 0.03 image units
+        float SkyRadiance = static_cast<float>(0.03 * GPP::Radiometry::kHdrReferenceWhite / GPP::Radiometry::kLuminousEfficacyMax);
 
         bool ShowGravityGrid = false;
         bool ShowPhysicsDebug = false;
