@@ -18,6 +18,7 @@ namespace
         caps.ShaderFloat64 = true;
         caps.RayQuery = true;
         caps.AccelerationStructure = true;
+        caps.DescriptorIndexing = true;
         return caps;
     }
 

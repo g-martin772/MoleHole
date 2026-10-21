@@ -38,6 +38,7 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
 
     if (u_renderSpheres == 1) {
         for (int i = 0; i < u_numSpheres; i++) {
+            if (i == g_skipSphere) continue;
             float t;
             if (intersectSphere(rayOrigin, rayDir, u_spheres[i].position, u_spheres[i].radius, t)) {
                 if (t < record.t) {
@@ -66,7 +67,7 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
     }
 #endif
 
-    if (u_enableThirdPerson == 1) {
+    if (traceThirdPerson()) {
         float t;
         int axis = intersectCrosshair(rayOrigin, rayDir, u_cameraPos, u_cubeSize * 0.3, t);
         if (axis > 0) {
@@ -84,6 +85,25 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
         }
     }
     return record;
+}
+
+// Atmospheres and cloud shells of all spheres along the straight segment origin + t dir, t in [0, tEnd], front to
+// back: the segment shows add + transmit * (what lies at tEnd). shaders/body.glsl, docs/notes/atmospheres.md
+void segmentLayers(vec3 origin, vec3 dir, float tEnd, out vec3 add, out vec3 transmit) {
+    add = vec3(0.0);
+    transmit = vec3(1.0);
+    if (u_renderSpheres != 1) return;
+    float eye = distance(u_cameraPos, origin);
+    for (int i = 0; i < u_numSpheres; i++) {
+        if (i == g_skipSphere) continue;
+        bodyAllLayers(i, origin - u_spheres[i].position, dir, tEnd, eye, add, transmit);
+    }
+}
+
+// Folds a segment's layers into a front-to-back accumulator whose transmittance is a single number.
+void foldLayers(vec3 add, vec3 transmit, inout vec3 color, inout float alpha) {
+    color += alpha * add;
+    alpha *= dot(transmit, vec3(0.2126, 0.7152, 0.0722));
 }
 
 // alpha is the transmittance of everything in front (disk gas); it carries over between zones.
@@ -187,14 +207,17 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
 
         // Check object intersections within marching step
         HitRecord hit = rayTraceNormalSpace(newOrigin, newDirection, currentStepSize);
+        vec3 layerAdd, layerTransmit;
+        segmentLayers(newOrigin, newDirection, hit.hit ? hit.t : currentStepSize, layerAdd, layerTransmit);
         if (hit.hit) {
             if (hit.type == 1 || hit.type == 2) {
                 hitSolid = true;
                 hitPoint = newOrigin + newDirection * hit.t;
             }
             g_termination = hit.type == 3 ? TERM_CROSSHAIR : TERM_OBJECT;
-            return color + alpha * hit.color;
+            return color + alpha * (layerAdd + layerTransmit * hit.color);
         }
+        foldLayers(layerAdd, layerTransmit, color, alpha);
 
         // Check event horizon
         if (distToBH < u_blackHoles[closestBH].horizonRadius) {
@@ -265,10 +288,12 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             }
 
             HitRecord hit = rayTraceNormalSpace(currentOrigin, currentDir, 1e10);
+            vec3 layerAdd, layerTransmit;
 
             if (hit.hit) {
                 if (hit.t < minDistToInfluence) {
-                    color += alpha * hit.color;
+                    segmentLayers(currentOrigin, currentDir, hit.t, layerAdd, layerTransmit);
+                    color += alpha * (layerAdd + layerTransmit * hit.color);
                     if (hit.type == 1 || hit.type == 2) {
                         hitSolid = true;
                         hitPoint = currentOrigin + currentDir * hit.t;
@@ -282,11 +307,14 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             }
 
             if (minDistToInfluence < 1e9) {
+                segmentLayers(currentOrigin, currentDir, minDistToInfluence, layerAdd, layerTransmit);
+                foldLayers(layerAdd, layerTransmit, color, alpha);
                 currentOrigin += currentDir * (minDistToInfluence + EPSILON);
                 continue;
             }
 
-            color += alpha * texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
+            segmentLayers(currentOrigin, currentDir, 1e10, layerAdd, layerTransmit);
+            color += alpha * (layerAdd + layerTransmit * texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb);
             return color;
         }
     }
@@ -296,8 +324,18 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     return color;
 }
 
+// Layers (atmospheres, clouds) in front of the hit, or along the whole segment without one; see composeLayers.
+vec3 g_layerAdd = vec3(0.0);
+vec3 g_layerTransmit = vec3(1.0);
+
+// The last segmentObjectHit's layers over what lies behind them.
+vec3 composeLayers(vec3 behind) {
+    return g_layerAdd + g_layerTransmit * behind;
+}
+
 bool segmentObjectHit(vec3 origin, vec3 dir, float maxDistance, out vec3 color, inout vec3 hitPoint, inout bool hitSolid) {
     HitRecord hit = rayTraceNormalSpace(origin, dir, maxDistance);
+    segmentLayers(origin, dir, hit.hit ? hit.t : maxDistance, g_layerAdd, g_layerTransmit);
     color = vec3(0.0f);
     if (!hit.hit) return false;
     color = hit.color;
@@ -335,13 +373,14 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     float alpha = 1.0f;
     hitPoint = vec3(0.0f);
     hitSolid = false;
-    bool objects = (u_renderSpheres == 1 && u_numSpheres > 0) || u_numMeshInstances > 0 || u_enableThirdPerson == 1;
+    bool objects = (u_renderSpheres == 1 && u_numSpheres > 0) || u_numMeshInstances > 0 || traceThirdPerson();
     vec3 objectColor;
     vec3 dir = normalize(rayDirection);
 
     if (u_numBlackHoles == 0 || u_blackHoles[0].mass <= 0.0f) {
-        if (objects && segmentObjectHit(rayOrigin, dir, 1e10f, objectColor, hitPoint, hitSolid)) return objectColor;
-        return texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
+        vec3 sky = texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
+        if (!objects) return sky;
+        return composeLayers(segmentObjectHit(rayOrigin, dir, 1e10f, objectColor, hitPoint, hitSolid) ? objectColor : sky);
     }
 
     BlackHoleData bh = u_blackHoles[0];
@@ -354,14 +393,14 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     // turned into the direction the ZAMO at the camera sees the same photon from, and the energy ratio between the
     // two frames is kept for the disk colour. See docs/notes/observers.md.
     float observerShift = 1.0f;
-    if (u_observerVelocity.w > 0.5f) {
+    if (traceObserverVelocity().w > 0.5f) {
         rvec3 observerBL = cartesianToBL(rvec3(toLocal * (rayOrigin - bh.position)), st.a);
         vec3 er, eTheta, ePhi;
         blBasis(observerBL.x, observerBL.y, observerBL.z, st.a, er, eTheta, ePhi);
         vec3 look = toLocal * dir;
         vec3 k = -vec3(dot(look, er), dot(look, eTheta), dot(look, ePhi));
         vec3 kZamo;
-        boostPhoton(u_observerVelocity.xyz, k, kZamo, observerShift);
+        boostPhoton(traceObserverVelocity().xyz, k, kZamo, observerShift);
         dir = normalize(frame * -(kZamo.x * er + kZamo.y * eTheta + kZamo.z * ePhi));
     }
 
@@ -374,11 +413,15 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             float b = dot(rel, dir);
             float disc = b * b - (dot(rel, rel) - enterRadius * enterRadius);
             if (b >= 0.0f || disc < 0.0f) {
-                if (objects && segmentObjectHit(rayOrigin, dir, 1e10f, objectColor, hitPoint, hitSolid)) return objectColor;
-                return texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
+                vec3 sky = texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
+                if (!objects) return sky;
+                return composeLayers(segmentObjectHit(rayOrigin, dir, 1e10f, objectColor, hitPoint, hitSolid) ? objectColor : sky);
             }
             float entry = -b - sqrt(disc);
-            if (objects && segmentObjectHit(rayOrigin, dir, entry, objectColor, hitPoint, hitSolid)) return objectColor;
+            if (objects) {
+                if (segmentObjectHit(rayOrigin, dir, entry, objectColor, hitPoint, hitSolid)) return composeLayers(objectColor);
+                foldLayers(g_layerAdd, g_layerTransmit, colorValue, alpha);
+            }
             marchOrigin = rayOrigin + dir * entry;
         }
     }
@@ -431,7 +474,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         g_stepCount++;
 
         real r = y.x;
-        if (isnan(r) || r - st.rPlus < real(0.01) * st.M) {
+        if (isnan(r) || r - st.rPlus < captureMargin(st)) {
             g_termination = TERM_HORIZON;
             break;
         }
@@ -443,7 +486,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         rvec4 dy;
         real dphi, K;
         geodesicRhs(st, E, L, y, dy, dphi, K);
-        if (u_debugMode == 3) {
+        if (traceDebugMode() == 3) {
             real ct = rcos(y.y);
             real Sigma = r * r + st.a * st.a * ct * ct;
             g_constraintDrift = max(g_constraintDrift, float(abs(K) / (Sigma * max(E * E, real(1e-6)))));
@@ -451,10 +494,19 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
 
         // Geometric approach to the horizon; capped through the disk so the volume is sampled densely enough.
         real h = real(u_rayStepSize * u_adaptiveStepRate) * (r - st.rPlus);
+        // Slow photons (deep in a near-extremal throat) take steps that change r by the same fraction; rays with
+        // v >= 0.1 keep the plain geometric step
+        h *= max(real(1.0), real(0.1) / max(radialSpeedScale(st, r, y.y, E, L), real(1e-30)));
         if (r < real(1.2) * diskOuter) h = min(h, maxStep);
         // Rays passing close to the polar axis sweep through phi quickly (dphi/dlambda ~ L / sin^2 theta);
-        // bound the angle covered per step so they are resolved instead of jumping across the pole.
-        real angularRate = abs(dy.y) + abs(dphi);
+        // bound the angle covered per step so they are resolved instead of jumping across the pole. Only that part
+        // of dphi counts: the frame-dragging part a P / (Delta Sigma) winds a photon by ~1e4 rad of coordinate phi
+        // on its way out of a near-extremal throat without moving it anywhere (it is all of dphi for a = 0).
+        real poleS, poleC;
+        rsincos_pair(y.y, poleS, poleC);
+        poleS = safeSin(poleS);
+        real poleRate = abs(L / (poleS * poleS) - st.a * E) / (r * r + st.a * st.a * poleC * poleC);
+        real angularRate = abs(dy.y) + poleRate;
         h = min(h, real(0.02) / max(angularRate, real(1e-6)));
         // Resolve the vertical profile of the volumetric disk: at most a quarter scale height per step inside it.
         if (volumetricDisk && r < real(1.1) * diskOuter) {
@@ -478,9 +530,11 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         if (objects) {
             vec3 chord = frame * (blToCartesian(y.x, y.y, phi, st.a) - chordStart);
             float chordLength = length(chord);
-            if (chordLength > 0.0f
-                && segmentObjectHit(bh.position + frame * chordStart, chord / chordLength, chordLength, objectColor, hitPoint, hitSolid)) {
-                return colorValue + alpha * objectColor;
+            if (chordLength > 0.0f) {
+                if (segmentObjectHit(bh.position + frame * chordStart, chord / chordLength, chordLength, objectColor, hitPoint, hitSolid)) {
+                    return colorValue + alpha * composeLayers(objectColor);
+                }
+                foldLayers(g_layerAdd, g_layerTransmit, colorValue, alpha);
             }
         }
 
@@ -510,13 +564,13 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         real f = crossed ? ct0 / (ct0 - ct) : real(0.0);
         real rCross = mix(r0, y.x, f);
 
-        bool orbitOverlay = u_orbitRadii2.z > 0.5f;
+        bool orbitOverlay = traceOrbitOverlay();
         if (orbitOverlay && crossed) colorValue += orbitRingColor(float(rCross)) * alpha;
-        if (u_debugMode == 4 || orbitOverlay) {
+        if (traceDebugMode() == 4 || orbitOverlay) {
             real rErgo = st.M + sqrt(max(st.M * st.M - st.a * st.a * ct * ct - st.Q * st.Q, real(0.0)));
             if (r < rErgo) ergoPath += float(h);
         }
-        if (u_debugMode == 4) {
+        if (traceDebugMode() == 4) {
             if (crossed && abs(rCross - st.rIsco) < real(0.1) * st.M) {
                 colorValue += ISCO_RING_COLOR * alpha;
             }
@@ -564,9 +618,9 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         alpha *= 1.0f - coverage;
     }
 
-    if (u_debugMode == 4) {
+    if (traceDebugMode() == 4) {
         colorValue = mix(colorValue, ERGOSPHERE_TINT, 1.0f - exp(-ergoPath / mass));
-    } else if (u_orbitRadii2.z > 0.5f) {
+    } else if (traceOrbitOverlay()) {
         colorValue = mix(colorValue, ORBIT_ERGOSPHERE_COLOR, ORBIT_ERGOSPHERE_TINT * (1.0f - exp(-ergoPath / mass)));
     }
 
@@ -578,10 +632,12 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     geodesicRhs(st, E, L, y, dy, dphi, K);
     vec3 skyDirection = normalize(frame * -blVelocityToCartesian(y.x, y.y, phi, st.a, dy.x, dy.y, dphi));
 
-    if (objects && g_termination == TERM_SKY
-        && segmentObjectHit(bh.position + frame * blToCartesian(y.x, y.y, phi, st.a), skyDirection, 1e10f, objectColor, hitPoint, hitSolid)) {
-        return colorValue + alpha * objectColor;
+    vec3 sky = texture(u_skyboxTexture, directionToSpherical(skyDirection)).rgb;
+    if (objects && g_termination == TERM_SKY) {
+        bool hit = segmentObjectHit(bh.position + frame * blToCartesian(y.x, y.y, phi, st.a), skyDirection, 1e10f, objectColor,
+                                    hitPoint, hitSolid);
+        return colorValue + alpha * composeLayers(hit ? objectColor : sky);
     }
 
-    return colorValue + alpha * texture(u_skyboxTexture, directionToSpherical(skyDirection)).rgb;
+    return colorValue + alpha * sky;
 }

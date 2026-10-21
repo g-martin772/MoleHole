@@ -11,3 +11,6 @@ out/
 molehole_state.yaml
 molehole_state.yaml.backup
 /NodeEditor.json
+
+# Planet textures: fetched by tools/fetch_textures.py, see docs/notes/texture_sources.md
+/assets/textures/

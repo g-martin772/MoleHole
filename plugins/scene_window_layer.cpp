@@ -48,9 +48,13 @@ namespace
         return true;
     }
 
+    // Picks a file for an AssetPath field and returns the project-relative path to store, or nullopt.
+    using AssetBrowser = std::function<std::optional<std::string>(const FieldInfo&)>;
+
     // The single place a descriptor field becomes a widget; returns the edited value when the user changed it.
     std::optional<FieldValue> DrawField(ImFont* icons, const FieldInfo& field, const FieldValue& current,
-                                        const FieldValue* fallback, const std::vector<EntityChoice>& entities)
+                                        const FieldValue* fallback, const std::vector<EntityChoice>& entities,
+                                        const AssetBrowser& browse = {})
     {
         const auto& meta = field.Meta;
         const std::string label = meta.Label.empty() ? SpacedName(field.Name) : meta.Label;
@@ -140,7 +144,18 @@ namespace
             case FieldType::String:
             {
                 std::string text = std::get<std::string>(current);
+                const bool asset = meta.Kind == FieldKind::AssetPath && browse;
+                if (asset) ImGui::SetNextItemWidth(ImGui::CalcItemWidth() - ImGui::GetFrameHeight() - ImGui::GetStyle().ItemInnerSpacing.x);
                 if (TextValue("##v", text, "", meta.Kind == FieldKind::Multiline)) edited = std::move(text);
+                if (asset)
+                {
+                    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+                    if (ImGui::Button("...", ImVec2(ImGui::GetFrameHeight(), 0.0f)))
+                    {
+                        if (auto picked = browse(field)) edited = std::move(*picked);
+                    }
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pick a file; images outside the project are imported");
+                }
                 break;
             }
             case FieldType::Entity:
@@ -949,15 +964,45 @@ namespace
                     const auto def = defaults.find(field.Name);
                     ImGui::PushID(field.Name.c_str());
                     if (auto edited = DrawField(icons, field, current,
-                                                def != defaults.end() ? &def->second : nullptr, choices))
+                                                def != defaults.end() ? &def->second : nullptr, choices,
+                                                [this](const FieldInfo& picked) { return BrowseAsset(picked); }))
                     {
                         EditField(runner, guid, info.Name, field.Name, std::move(*edited));
+                    }
+                    if (m_ImportNote.first == field.Name && !m_ImportNote.second.empty())
+                    {
+                        ImGui::TextWrapped("%s", m_ImportNote.second.c_str());
                     }
                     ImGui::PopID();
                 }
             }
         }
 
+        // AssetPath fields: textures are imported into the project, other assets are referenced where they are
+        std::optional<std::string> BrowseAsset(const FieldInfo& field)
+        {
+            m_ImportNote = {};
+            const auto path = m_FileDialog->OpenFile({FileDialogFilter{"Image", "png,jpg,jpeg,tga,bmp,psd,gif,hdr"},
+                                                      FileDialogFilter{"Any file", "*"}});
+            if (!path) return std::nullopt;
+            const auto root = m_FileSystem->GetWorkingDirectory();
+            if (!IsImportableTexture(*path))
+            {
+                std::error_code ec;
+                const auto relative = std::filesystem::relative(*path, root, ec);
+                return (!ec && !relative.empty() && *relative.begin() != "..") ? relative.generic_string() : path->string();
+            }
+            auto result = ImportTexture(*path, root);
+            std::string note = result.Error;
+            if (result.Copied) note = "Imported into " + result.AssetPath;
+            for (const auto& warning : result.Warnings) note += (note.empty() ? "" : "\n") + warning;
+            m_ImportNote = {field.Name, note};
+            if (!result.Error.empty()) m_Logger->Warn("Texture import: {}", result.Error);
+            if (result.AssetPath.empty()) return std::nullopt;
+            return result.AssetPath;
+        }
+
+        std::pair<std::string, std::string> m_ImportNote; // field name, message shown under it
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<UiState> m_UiState;
         std::shared_ptr<AppStateService> m_AppState;

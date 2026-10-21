@@ -37,7 +37,7 @@ bool trailCoarseHit(vec3 lo, vec3 hi) {
     return false;
 }
 
-bool trailsEnabled() { return u_trailGrid.z > 0.5f; }
+bool trailsEnabled() { return !PROBE_PASS && u_trailGrid.z > 0.5f; }
 
 // Path length between trail tests in the ray marcher: one fine cell (0.4 M at a 50 M integration radius), the
 // longest chord a single midpoint lookup covers exactly. The ray bends little over it: a 0.4 M chord on a light ray

@@ -1,0 +1,140 @@
+# Planet textures fetched by tools/fetch_textures.py into assets/textures/ (not in git).
+# Sources, licences and checks: docs/notes/texture_sources.md. Groups: core (8k, the templates use these),
+# core-2k (small set for slow connections), nasa (optional higher-resolution and true height data).
+# TIFF targets are converted to PNG after download (stb_image cannot read TIFF).
+requires_referer:
+  https://www.solarsystemscope.com/textures/download/: https://www.solarsystemscope.com/textures/
+textures:
+- id: earth_albedo_2k
+  url: https://www.solarsystemscope.com/textures/download/2k_earth_daymap.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: earth/albedo_2k.jpg
+  sha256: 767ee1dc6eb3802699bfccf6f264880f8acd0b80de3191cd24984fe279b07b7c
+  group: core-2k
+- id: earth_albedo_8k
+  url: https://www.solarsystemscope.com/textures/download/8k_earth_daymap.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: earth/albedo_8k.jpg
+  sha256: 88ab060b6e7d241cfc590c69f528fab2b3247b738d40124cb590999a6fe44abc
+  group: core
+- id: earth_night_2k
+  url: https://www.solarsystemscope.com/textures/download/2k_earth_nightmap.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: earth/night_2k.jpg
+  group: core-2k
+- id: earth_night_8k
+  url: https://www.solarsystemscope.com/textures/download/8k_earth_nightmap.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: earth/night_8k.jpg
+  group: core
+- id: earth_clouds_2k
+  url: https://www.solarsystemscope.com/textures/download/2k_earth_clouds.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: earth/clouds_2k.jpg
+  group: core-2k
+- id: earth_clouds_8k
+  url: https://www.solarsystemscope.com/textures/download/8k_earth_clouds.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: earth/clouds_8k.jpg
+  group: core
+- id: earth_specular_2k
+  url: https://www.solarsystemscope.com/textures/download/2k_earth_specular_map.tif
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: earth/specular_2k.tif
+  group: core-2k
+- id: earth_specular_8k
+  url: https://www.solarsystemscope.com/textures/download/8k_earth_specular_map.tif
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: earth/specular_8k.tif
+  group: core
+- id: earth_normal_2k
+  url: https://www.solarsystemscope.com/textures/download/2k_earth_normal_map.tif
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: earth/normal_2k.tif
+  group: core-2k
+- id: earth_normal_8k
+  url: https://www.solarsystemscope.com/textures/download/8k_earth_normal_map.tif
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: earth/normal_8k.tif
+  group: core
+- id: saturn_albedo_2k
+  url: https://www.solarsystemscope.com/textures/download/2k_saturn.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: saturn/albedo_2k.jpg
+  group: core-2k
+- id: saturn_albedo_4k
+  url: https://www.solarsystemscope.com/textures/download/8k_saturn.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: saturn/albedo_4k.jpg
+  sha256: 0d39a4a490c87c3edabe00a3881a29bb3418364178c79c534fe0986e97e09853
+  group: core
+- id: saturn_rings_2k
+  url: https://www.solarsystemscope.com/textures/download/2k_saturn_ring_alpha.png
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: saturn/rings_2k.png
+  sha256: 4b0644b2f3ef259fd0bfaedd9dc52f9e7d9738f65f50363e8c4dd19f650d7334
+  group: core-2k
+- id: saturn_rings_8k
+  url: https://www.solarsystemscope.com/textures/download/8k_saturn_ring_alpha.png
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: saturn/rings_8k.png
+  sha256: f1f826933c9ff87d64ecf0518d6256b8ed990b003722794f67e96e3d2b876ae4
+  group: core
+- id: earth_albedo_nasa_5k
+  url: https://eoimages.gsfc.nasa.gov/images/imagerecords/74000/74218/world.200412.3x5400x2700.jpg
+  licence: NASA media usage guidelines (generally not subject to copyright in the US; acknowledge NASA)
+  attribution: NASA Earth Observatory, Blue Marble Next Generation (Reto Stockli, NASA GSFC)
+  target: earth/nasa/albedo_5k.jpg
+  group: nasa
+- id: earth_albedo_nasa_21k
+  url: https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x21600x10800.jpg
+  licence: NASA media usage guidelines (generally not subject to copyright in the US; acknowledge NASA)
+  attribution: NASA Earth Observatory, Blue Marble Next Generation with topography and bathymetry (relief shading baked in)
+  target: earth/nasa/albedo_topo_21k.jpg
+  group: nasa
+- id: earth_night_nasa_3600
+  url: https://eoimages.gsfc.nasa.gov/images/imagerecords/144000/144898/BlackMarble_2016_01deg.jpg
+  licence: NASA media usage guidelines (generally not subject to copyright in the US; acknowledge NASA)
+  attribution: NASA's Goddard Space Flight Center; Suomi NPP VIIRS data, Miguel Roman (NASA GSFC); processing Joshua Stevens
+  target: earth/nasa/night_3600.jpg
+  group: nasa
+- id: earth_night_nasa_13500
+  url: https://eoimages.gsfc.nasa.gov/images/imagerecords/144000/144898/BlackMarble_2016_3km.jpg
+  licence: NASA media usage guidelines (generally not subject to copyright in the US; acknowledge NASA)
+  attribution: NASA's Goddard Space Flight Center; Suomi NPP VIIRS data, Miguel Roman (NASA GSFC); processing Joshua Stevens
+  target: earth/nasa/night_13500.jpg
+  group: nasa
+- id: earth_height_5k
+  url: https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/topography/gebco_08_rev_elev_5400x2700.jpg
+  licence: NASA media usage guidelines (generally not subject to copyright in the US; acknowledge NASA)
+  attribution: Imagery by Jesse Allen, NASA's Earth Observatory, using data from the General Bathymetric Chart of the Oceans
+    (GEBCO)
+  target: earth/height_5k.jpg
+  group: core
+- id: earth_height_21k
+  url: https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/topography/gebco_08_rev_elev_21600x10800.jpg
+  licence: NASA media usage guidelines (generally not subject to copyright in the US; acknowledge NASA)
+  attribution: Imagery by Jesse Allen, NASA's Earth Observatory, using data from the General Bathymetric Chart of the Oceans
+    (GEBCO)
+  target: earth/height_21k.jpg
+  group: nasa
+- id: earth_clouds_nasa_2k
+  url: https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57747/cloud_combined_2048.jpg
+  licence: NASA media usage guidelines (generally not subject to copyright in the US; acknowledge NASA)
+  attribution: NASA Earth Observatory / Visible Earth, cloud_combined (contents not verified)
+  target: earth/nasa/clouds_2k.jpg
+  group: nasa

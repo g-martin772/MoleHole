@@ -137,6 +137,43 @@ namespace MoleHole
                 .OptionCosts = {0, 1},
                 .VisibleWhen = "objects.meshes & transport.mode>=1"}));
 
+            registry.Add(Setting("bodies.textures", &R::BodyTextures, {
+                .Label = "Surface maps", .Group = "Bodies",
+                .Tooltip = "Albedo, normal, roughness and emissive maps of the spheres' Surface component.",
+                .Doc = kDoc, .Cost = 1, .Requires = std::string(GpuCapability::kDescriptorIndexing),
+                .VisibleWhen = "objects.spheres"}));
+            registry.Add(Setting("bodies.texture_max_size", &R::BodyTextureMaxSize, {
+                .Label = "Max map size", .Group = "Bodies",
+                .Tooltip = "Largest side of a surface map on the GPU in pixels; larger maps drop their top mip levels.\n"
+                           "Changing it reloads every map.",
+                .Doc = kDoc, .Min = 256, .Max = 16384, .Scale = SettingScale::Log, .Format = "%d px",
+                .VisibleWhen = "objects.spheres & bodies.textures"}));
+            registry.Add(Setting("bodies.lighting", &R::BodyLightingMode, {
+                .Label = "Lighting", .Group = "Bodies",
+                .Tooltip = "Fixed: one white light from (1, 1, 1), for looking at a surface.\n"
+                           "Probe: each body traces the sky around it every frame (64x32 rays): the disk, stars and other\n"
+                           "bodies light it lensed, redshifted and Doppler-shifted by its motion, plus the scene's Light\n"
+                           "components. The Straight transport uses the Light components only.",
+                .Doc = kDoc, .Cost = 1,
+                .Options = {"Fixed", "Probe"},
+                .OptionCosts = {0, 1},
+                .VisibleWhen = "objects.spheres"}));
+            registry.Add(Setting("bodies.atmospheres", &R::BodyAtmospheres, {
+                .Label = "Atmospheres", .Group = "Bodies",
+                .Tooltip = "Rayleigh, Mie and ozone scattering of the Atmosphere components (Hillaire 2020): blue sky,\n"
+                           "limb glow and reddened light at the terminator.",
+                .Doc = kDoc, .Cost = 1, .VisibleWhen = "objects.spheres"}));
+            registry.Add(Setting("bodies.atmosphere_samples", &R::BodyAtmosphereSamples, {
+                .Label = "Atmosphere samples", .Group = "Bodies",
+                .Tooltip = "Steps through an atmosphere for each part of a view ray between cloud and ring crossings;\n"
+                           "each step also traces 6 steps towards every light.",
+                .Doc = kDoc, .Min = 4, .Max = 64, .Cost = 1, .VisibleWhen = "objects.spheres & bodies.atmospheres"}));
+            registry.Add(Setting("bodies.terrain_steps", &R::TerrainSteps, {
+                .Label = "Terrain steps", .Group = "Bodies",
+                .Tooltip = "Steps of the relief march when the camera is near a body with a Terrain (within 20 radii).\n"
+                           "Farther away the relief only shades the sphere.",
+                .Doc = kDoc, .Min = 8, .Max = 512, .Cost = 1, .VisibleWhen = "objects.spheres"}));
+
             registry.Add(Setting("camera.third_person", &R::ThirdPerson, {
                 .Label = "Third person crosshair", .Group = "Camera", .Doc = kDoc}));
             registry.Add(Setting("camera.third_person_distance", &R::ThirdPersonDistance, {

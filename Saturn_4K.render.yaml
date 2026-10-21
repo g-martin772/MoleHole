@@ -1,0 +1,98 @@
+Version: 1
+Timestamp: 2026-10-21T15:11:57Z
+GitCommit: 1473aa67dd5c
+WallSeconds: 1.323875541
+GpuMs: 13.065514
+GpuPassMs:
+  Trace: 3.68652
+  Exposure: 0.0025599999999999998
+  Bloom: 6.14188
+  Composite: 0.99884
+Output:
+  Path: Saturn_4K.png
+  Kind: image
+  Width: 3840
+  Height: 2160
+  Frames: 1
+Scene:
+  Path: /home/leo/04_REPOS/MoleHole/templates/solar-system-bodies.yaml
+  Name: Solar system bodies
+  Hash: 03ede116f5ec03d8
+Camera:
+  PositionM: [1399950782757.118, 32899992.27599148, 150321306.73158288]
+  Yaw: 634.6787
+  Pitch: -11.807418
+  Fov: 60
+Profile:
+  Name: Reference
+Settings:
+  spacetime.solution: Kerr
+  transport.mode: Integrated
+  transport.step_size: 0.01
+  transport.max_steps: 100000
+  transport.adaptive_rate: 0.8
+  transport.gpu_precision: f32
+  radiometry.redshift: true
+  radiometry.doppler: true
+  disk.enabled: true
+  disk.volumetric: true
+  disk.height: 0.2
+  disk.speed: 0.5
+  disk.noise_scale: 1
+  disk.noise_lod: 5
+  disk.accretion_rate: 0.1
+  disk.opacity: 2
+  disk.display_temperature: 0
+  disk.hot_spots: 3
+  objects.black_holes: true
+  objects.spheres: true
+  objects.meshes: true
+  objects.mesh_mode: Traced
+  bodies.textures: true
+  bodies.texture_max_size: 4096
+  bodies.lighting: Probe
+  bodies.atmospheres: true
+  bodies.atmosphere_samples: 16
+  bodies.terrain_steps: 128
+  camera.third_person: false
+  camera.third_person_distance: 10
+  camera.third_person_height: 3
+  camera.observer: Zamo
+  camera.observer_orbit: Prograde
+  camera.length_unit: PrimaryBlackHole
+  sampling.resolution_scale: 100
+  sampling.governor: false
+  sampling.budget_ms: 33.3
+  post.tonemap: Aces
+  post.exposure_mode: Manual
+  post.exposure: 0
+  post.exposure_key: 0.18
+  post.fxaa: true
+  post.bloom: true
+  post.bloom_threshold: 0.6
+  post.bloom_passes: 5
+  post.bloom_intensity: 5
+  post.bloom_debug: false
+  post.lens_flare: false
+  post.flare_intensity: 0.3
+  post.flare_threshold: 2
+  overlay.gravity_grid: false
+  overlay.physics_colliders: false
+  overlay.object_paths: false
+  overlay.characteristic_radii: false
+  overlay.predicted_orbits: false
+  overlay.prediction_span: 300
+  debug.view: None
+Gpu:
+  Name: AMD Radeon RX 7900 GRE (RADV NAVI31)
+  Driver: 26.2.5
+  Type: discrete
+  Reason: highest score (discrete GPU, 15 GiB device memory, score 1225)
+  Capabilities:
+    rayQuery: true
+    accelerationStructure: true
+    rayTracingPipeline: true
+    shaderFloat64: true
+    atomicFloat: true
+    descriptorIndexing: true
+    hdrMetadata: true

@@ -48,6 +48,7 @@ export namespace MoleHole
         std::shared_ptr<GPP::VulkanImage> HrDiagramLut;
         std::shared_ptr<GPP::VulkanImage> Skybox;
         std::shared_ptr<GPP::VulkanImage> DummyWhiteTexture;
+        std::shared_ptr<GPP::TextureCache> Textures; // body maps (equirectangular), hot reloaded
 
         vk::Extent3D TraceExtent{0, 0, 0};
         std::unique_ptr<GPP::VulkanImage> RaytraceImage;

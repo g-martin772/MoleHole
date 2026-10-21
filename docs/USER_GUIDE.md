@@ -158,7 +158,7 @@ Render:
 - Disk look: `disk.opacity` (translucent to opaque), `disk.hot_spots`, `disk.noise_scale` / `disk.noise_lod` (turbulence), `disk.speed` (angular speed of the inner edge in rad/s). `disk.display_temperature` (K) colours the hottest gas like an exposure for colour: all temperatures scale together, so ratios and shifts stay physical; 0 = physical colour (stellar-mass holes are ~10^7 K, blue-white)
 - `post.tonemap` (None / Reinhard / ACES) with `post.exposure_mode` (Manual / Auto), `post.exposure` (EV) and `post.exposure_key`. Bloom and flare thresholds apply to the exposed image. None shows the raw tracer output like before HDR
 - `transport.gpu_precision` f64 needs `shaderFloat64`; a setting the GPU cannot run is greyed with the reason, and loaded profiles fall back to the default (shown in the Render window)
-- Mesh objects are rasterised over the traced image (not lensed, always in front). The Integrated transport does not draw spheres yet
+- Mesh objects are rasterised over the traced image (not lensed, always in front) unless `objects.mesh_mode` is Traced. Spheres are traced by every transport; planets (spheres with a Surface) are described under "Planets: surfaces, lighting, atmospheres"
 - `overlay.characteristic_radii`: every black hole's horizon (grey), ergosphere (purple, in two meridian planes), equatorial photon orbit (orange), marginally bound orbit (green) and ISCO (blue). Bright = prograde, dim = retrograde With the Integrated transport the tracer draws the rings itself, lensed like the disk (the plain lines would sit inside the lensed shadow); object path trails and predicted orbits are traced too inside 50 M of the hole (lensed, with secondary images and Einstein-ring arcs) and are plain aberrated lines further out.
 - `overlay.predicted_orbits`: each Geodesic Body's future path, integrated ahead from its current state. Bright now, dim later, stops at the horizon
 - `overlay.prediction_span`: how far ahead to predict, as coordinate time in M = GM/c³ of the body's hole
@@ -196,6 +196,29 @@ Render:
 - Simulation time is the distant observer's coordinate time, scaled by the scene TimeScale
 - Moving the body in the editor relaunches it
 - Background: `docs/notes/geodesic_bodies.md`
+
+## Planets: surfaces, lighting, atmospheres
+Add these to a Sphere in the inspector (Add Component). A sphere without a Surface stays a flat, unlit marker (colour, optional texture) as before. A sphere with a mass and a main-sequence temperature (a star) glows in its blackbody colour.
+
+| Component | What it does |
+|---|---|
+| Surface | albedo, normal, roughness and emissive maps (equirectangular, 2:1), tint, roughness factor, `RoughnessIsSpecular` (the roughness map is a specular mask: white = glossy, e.g. ocean), rotation period (s of the body's own proper time per turn) and prime meridian. Maps repeat in longitude: u = 0 at -180° east, v = 0 at the north pole, +Y of the sphere is its spin axis |
+| Light | directional (`Direction` points towards the light) or point (inverse square from `ReferenceDistance`). `Intensity` is irradiance in display units: π makes a white matte surface facing the light show about 1. Lights along straight lines, without lensing or shadows from other bodies. Used by the Probe lighting and the Straight transport, not by Fixed |
+| Atmosphere | Rayleigh, Mie and ozone scattering (defaults: Earth). Height, coefficients per metre, scale heights, Mie anisotropy |
+| Cloud Layer | thin shell at an altitude with a coverage map, opacity, colour, own rotation relative to the ground. Casts shadows on the surface |
+| Ring | flat rings in the equatorial plane from a radial strip texture (colour + alpha), inner and outer radius. Lit on both sides, shadowed by the planet, shadow the planet |
+| Terrain | 16-bit height map between `HeightMin` and `HeightMax`, optional ridged noise detail, ocean below sea level (the sphere's radius) |
+
+- Asset fields have a "..." button. An image outside the project is copied to `assets/textures/imported/` (an identical file is reused, a different file with the same name gets `_1`). PNG, JPEG, TGA, BMP, PSD, GIF and Radiance HDR work; TIFF and EXR do not (convert them). A map that is not 2:1 is warned about. Maps reload when the file changes
+- Settings (Render window, group Bodies): `bodies.textures` (needs descriptor indexing), `bodies.texture_max_size` (default 4096, larger maps drop their top mips), `bodies.lighting`, `bodies.atmospheres`, `bodies.atmosphere_samples` (default 16), `bodies.terrain_steps` (default 128)
+- `bodies.lighting`: Fixed = one white light from (1, 1, 1), for looking at maps. Probe (default) = every Surface sphere traces the sky around itself every frame (64x32 rays), so the disk, stars and other bodies light it lensed and Doppler shifted by its motion, plus the Light components. With the Straight transport only the Light components light it. Probe costs 2048 traces per Surface sphere per frame. Limits: 16 spheres, 64 distinct maps
+- Atmospheres, clouds, rings and the close-up mode need the Analytic lens or Integrated transport. Within 20 body radii the nearest sphere is drawn in its own flat local frame (needed for Miller's orbit, where the planet is far below the resolution of the radial coordinate). Terrain relief is ray-marched in that mode and only shades the sphere from farther away
+- Rotation follows the body's own clock: a Geodesic Body in free fall turns slower (`dτ = clock rate · dt`)
+- Exports wait until all maps are loaded and the probes have run twice
+- Templates: `templates/solar-system-bodies.yaml` (Earth with clouds, atmosphere, terrain and city lights, and Saturn with rings, lit by a directional Sun) and `templates/interstellar-bodies.yaml` (Miller's, Mann's and Edmunds' planets around a near-extremal Gargantua, lit by the disk and sky, one camera per planet)
+- Textures are not in git (`assets/textures/` is ignored). Fetch Earth and Saturn with `python3 tools/fetch_textures.py` (group `core`; `--groups core-2k` for a small set, `nasa` for extras; needs PyYAML, and Pillow to convert TIFF to PNG; writes `assets/textures/ATTRIBUTION.md`). Generate the three Interstellar planets with `python3 tools/gen_planet_textures.py` (needs numpy and Pillow; `--planets`, `--width`)
+- Known gaps: the radiance scales of disk, stars and skybox are not matched (planets near Gargantua look dim against the starfield; use `post.exposure_mode` Auto), no terrain self-shadowing, no collision with the relief yet
+- Background: `docs/notes/textured_bodies.md`, `body_lighting.md`, `local_frames.md`, `atmospheres.md`, `terrain.md`
 
 ## Animation Graph
 - One scene can hold many named graphs (tabs/dropdown)

@@ -22,6 +22,26 @@ const float EPSILON = 0.00005f;
 #include "trails.glsl"
 #include "ray_tracing.glsl"
 
+#ifdef GPP_BODY_PROBE
+// Sky probe of every body: row band b of the output (PROBE_HEIGHT rows) is body b's equirectangular view of the light
+// arriving at its centre, traced like a camera there that moves with the body. Stars do not need one.
+void main() {
+    ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    int body = texel.y / PROBE_HEIGHT;
+    if (texel.x >= PROBE_WIDTH || body >= u_numSpheres || u_bodies[body].flags.x == 0) return;
+
+    vec2 uv = (vec2(texel.x, texel.y - body * PROBE_HEIGHT) + 0.5) / vec2(PROBE_WIDTH, PROBE_HEIGHT);
+    vec3 dir = probeDirection(uv);
+    g_skipSphere = body;
+    g_probeVelocity = u_bodies[body].velocity;
+
+    vec3 hitPoint = vec3(0.0f);
+    bool hitSolid = false;
+    vec3 color = u_isPhysicallyAccurate == 1 ? rk4RayMarching(u_spheres[body].position, dir, hitPoint, hitSolid)
+                                             : hybridRayTrace(u_spheres[body].position, dir, hitPoint, hitSolid);
+    imageStore(l_outputImage, texel, vec4(max(color, vec3(0.0)), 1.0));
+}
+#else
 void main() {
     ivec2 texCoords;
     if (!traceTexel(texCoords)) {
@@ -36,15 +56,54 @@ void main() {
     vec3 hitPoint = vec3(0.0f);
     bool hitSolid = false;
 
-    if (u_isPhysicallyAccurate == 1) {
-        color = rk4RayMarching(rayOrigin, rayDir, hitPoint, hitSolid);
+    // Near a body the camera works in the body's local frame (docs/notes/local_frames.md): the body is a sphere of
+    // its proper radius in flat space around it, and everything else is traced from the body's centre, seen by an
+    // observer moving with the body.
+    int patchBody = traceThirdPerson() ? -1 : u_lightHeader.z;
+    float patchT;
+    bool patchSurface = false;
+    bool patchHit = false;
+    if (patchBody >= 0) {
+        if (hasTerrain(u_bodies[patchBody])) {
+            float pixelSpread = 2.0 * tan(radians(u_fov) * 0.5) / float(imageSize(l_outputImage).y);
+            patchHit = terrainIntersect(patchBody, u_patchCamera.xyz, rayDir, pixelSpread, int(u_patchCamera.w), patchT);
+        } else {
+            patchHit = intersectSphere(u_patchCamera.xyz, rayDir, vec3(0.0), u_spheres[patchBody].radius, patchT);
+        }
     }
-    else {
-        color = hybridRayTrace(rayOrigin, rayDir, hitPoint, hitSolid);
+    if (patchHit) {
+        vec3 N = normalize(u_patchCamera.xyz + rayDir * patchT);
+        color = renderSphereSurface(patchBody, N, rayDir, patchT, normalize(vec3(1.0, 1.0, 1.0)));
+        hitPoint = rayOrigin + rayDir * patchT;
+        hitSolid = true;
+        patchSurface = true;
+        g_termination = TERM_OBJECT;
+    } else {
+        if (patchBody >= 0) {
+            rayOrigin = u_spheres[patchBody].position;
+            g_skipSphere = patchBody;
+            g_bodyObserver = true;
+            g_probeVelocity = u_bodies[patchBody].velocity;
+        }
+        if (u_isPhysicallyAccurate == 1) {
+            color = rk4RayMarching(rayOrigin, rayDir, hitPoint, hitSolid);
+        }
+        else {
+            color = hybridRayTrace(rayOrigin, rayDir, hitPoint, hitSolid);
+        }
+    }
+    // The local-frame body's atmosphere and clouds in front of its surface or of the traced background
+    if (patchBody >= 0) {
+        vec3 layerAdd = vec3(0.0), layerTransmit = vec3(1.0);
+        bodyAllLayers(patchBody, u_patchCamera.xyz, rayDir, patchSurface ? patchT : 1e30, 0.0, layerAdd, layerTransmit);
+        color = layerAdd + layerTransmit * color;
     }
 
     color = debugViewColor(color);
 
-    float depth = hitSolid ? hitDepth(hitPoint) : FAR_DEPTH;
+    // Far solids (planets at 1e8 m with a 10 m near plane) project to within float rounding of 1.0; keep them in front
+    // of the sky's depth so the composite and the raster passes after it do not treat them as background
+    float depth = hitSolid ? min(hitDepth(hitPoint), FAR_DEPTH - 1e-6) : FAR_DEPTH;
     imageStore(l_outputImage, texCoords, vec4(color, depth));
 }
+#endif

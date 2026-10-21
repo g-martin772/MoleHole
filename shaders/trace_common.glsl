@@ -136,3 +136,19 @@ float hitDepth(vec3 hitPoint) {
     vec4 clipPos = u_viewProjection * vec4(hitPoint, 1.0f);
     return clipPos.z / clipPos.w;
 }
+
+// A body's sky probe (GPP_BODY_PROBE) runs the same tracer from the body's centre: the body itself, the camera's
+// observer, debug views, overlays and trails are left out, and the body's own velocity takes the observer's place.
+#ifdef GPP_BODY_PROBE
+const bool PROBE_PASS = true;
+#else
+const bool PROBE_PASS = false;
+#endif
+int g_skipSphere = -1;
+vec4 g_probeVelocity = vec4(0.0);
+bool g_bodyObserver = false; // the camera sits in a body's local frame and moves with it (docs/notes/local_frames.md)
+
+vec4 traceObserverVelocity() { return (PROBE_PASS || g_bodyObserver) ? g_probeVelocity : u_observerVelocity; }
+int traceDebugMode() { return PROBE_PASS ? 0 : u_debugMode; }
+bool traceOrbitOverlay() { return !PROBE_PASS && u_orbitRadii2.z > 0.5f; }
+bool traceThirdPerson() { return !PROBE_PASS && u_enableThirdPerson == 1; }
