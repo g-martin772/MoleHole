@@ -23,14 +23,15 @@ bool intersectSphere(vec3 rayOrigin, vec3 rayDir, vec3 sphereCenter, float radiu
 
 #include "body.glsl"
 
-// Stars (a rigid body mass with a main-sequence temperature) glow in their blackbody colour; every other sphere is a
-// lit surface (shaders/body.glsl). N is the outward surface normal, hitDistance the eye's distance to it.
+// Star components are limb-darkened emitters, rigid body masses with a main-sequence temperature glow in their
+// blackbody colour, every other sphere is a lit surface (shaders/body.glsl). N is the outward surface normal,
+// hitDistance the eye's distance to it.
 vec3 renderSphereSurface(int sphereIndex, vec3 N, vec3 rayDir, float hitDistance, vec3 lightDir) {
     vec3 baseColor = u_spheres[sphereIndex].color.rgb;
     float mass = u_spheres[sphereIndex].mass;
 
     if (u_spheres[sphereIndex].emissive > 0.5) {
-        float mu = max(dot(normal, -rayDir), 0.0);
+        float mu = max(dot(N, -rayDir), 0.0);
         return baseColor * (1.0 - u_spheres[sphereIndex].limbDarkening * (1.0 - mu));
     }
 

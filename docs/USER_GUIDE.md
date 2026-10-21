@@ -218,7 +218,7 @@ Add these to a Sphere in the inspector (Add Component). A sphere without a Surfa
 - Exports wait until all maps are loaded and the probes have run twice
 - Templates: `templates/solar-system-bodies.yaml` (Earth with clouds, atmosphere, terrain and city lights, and Saturn with rings, lit by a directional Sun) and `templates/interstellar-bodies.yaml` (Miller's, Mann's and Edmunds' planets around a near-extremal Gargantua, lit by the disk and sky, one camera per planet)
 - Textures are not in git (`assets/textures/` is ignored). Fetch Earth and Saturn with `python3 tools/fetch_textures.py` (group `core`; `--groups core-2k` for a small set, `nasa` for extras; needs PyYAML, and Pillow to convert TIFF to PNG; writes `assets/textures/ATTRIBUTION.md`). Generate the three Interstellar planets with `python3 tools/gen_planet_textures.py` (needs numpy and Pillow; `--planets`, `--width`)
-- Known gaps: the radiance scales of disk, stars and skybox are not matched (planets near Gargantua look dim against the starfield; use `post.exposure_mode` Auto), no terrain self-shadowing, no collision with the relief yet
+- Known gaps: the radiance scales of disk, stars and skybox are not matched (planets near Gargantua look dim against the starfield; use `post.tonemap` ACES with `post.exposure_mode` Auto, as `interstellar-bodies.yaml` does), no terrain self-shadowing, no collision with the relief yet
 - Background: `docs/notes/textured_bodies.md`, `body_lighting.md`, `local_frames.md`, `atmospheres.md`, `terrain.md`
 
 ## Animation Graph

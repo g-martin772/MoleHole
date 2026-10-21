@@ -83,19 +83,19 @@ export namespace MoleHole
     enum class BodyLightingMode : std::int32_t { Fixed = 0, Probe = 1, LightsOnly = 2 };
 
     // std430: LightData in shaders/body.glsl
-    struct LightGpu
+    struct BodyLightGpu
     {
         glm::vec4 Position{0.0f}; // xyz: direction towards the light (w = 0) or position in render units (w = 1)
         glm::vec4 Color{0.0f};    // rgb irradiance, w: reference distance in render units (point lights)
     };
 
-    struct LightBlockGpu
+    struct BodyLightBlockGpu
     {
         glm::ivec4 Header{0, 0, -1, 0}; // x: light count, y: BodyLightingMode, z: local-frame body (sphere index) or -1
         glm::vec4 PatchCamera{0.0f};     // camera relative to that body, render units along the world axes
-        std::array<LightGpu, kMaxLights> Lights{};
+        std::array<BodyLightGpu, kMaxLights> Lights{};
     };
-    static_assert(sizeof(LightBlockGpu) == 32 + kMaxLights * 32);
+    static_assert(sizeof(BodyLightBlockGpu) == 32 + kMaxLights * 32);
 
     // The camera renders a body in its local frame while it is closer than this many body radii to its centre.
     constexpr double kLocalFrameRadii = 20.0;
@@ -296,10 +296,10 @@ export namespace MoleHole
         return bodies;
     }
 
-    [[nodiscard]] inline LightBlockGpu FillLightData(const GPP::Scene& scene, const RenderFrame& frame,
+    [[nodiscard]] inline BodyLightBlockGpu FillLightData(const GPP::Scene& scene, const RenderFrame& frame,
                                                      const BodyLightingMode mode)
     {
-        LightBlockGpu block;
+        BodyLightBlockGpu block;
         block.Header.y = static_cast<std::int32_t>(mode);
         std::size_t count = 0;
         for (auto [entity, light, transform] : scene.Registry().view<const LightComponent, const GPP::TransformComponent>().each())
@@ -307,7 +307,7 @@ export namespace MoleHole
             if (count >= kMaxLights) break;
             auto& gpu = block.Lights[count++];
             gpu.Color = glm::vec4(light.Color * light.Intensity, 0.0f);
-            if (light.Kind == LightKind::Directional)
+            if (light.Kind == BodyLightKind::Directional)
             {
                 const float length = glm::length(light.Direction);
                 gpu.Position = glm::vec4(length > 0.0f ? light.Direction / length : glm::vec3(0.0f, 1.0f, 0.0f), 0.0f);

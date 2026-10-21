@@ -8,7 +8,7 @@ shader adds the scene's `Light` components.
 
 Code:
 - `LightComponent` in `src/simulation/components.cppm`
-- `BodyLightingGpu`, `LightGpu`, `LightBlockGpu`, `FillLightData`, `ProbeDirection`, `ShBasis`, `ProjectRadianceSh`,
+- `BodyLightingGpu`, `BodyLightGpu`, `BodyLightBlockGpu`, `FillLightData`, `ProbeDirection`, `ShBasis`, `ProjectRadianceSh`,
   `EvaluateIrradianceSh` in `src/rendering/bodies.cppm`
 - `TraceStage::RecordProbes` and `UploadBodies` in `src/rendering/render_pipeline.cpp`
 - `GPP_BODY_PROBE` main in `shaders/black_hole_rendering.comp`; `PROBE_PASS`, `g_skipSphere`, `g_probeVelocity`,

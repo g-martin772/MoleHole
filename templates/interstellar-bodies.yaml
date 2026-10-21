@@ -227,6 +227,7 @@ Render:
       Base: Traced
       Set:
         transport.mode: Integrated
+        post.tonemap: Aces
         post.exposure_mode: Auto
         post.bloom: false
         post.lens_flare: false

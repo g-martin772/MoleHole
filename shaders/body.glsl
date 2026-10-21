@@ -21,7 +21,7 @@ struct BodyData
     vec4 ring;            // inner radius, outer radius (0: none), strip slot, opacity
 };
 
-layout(set = 0, binding = 13, std430) readonly buffer BodyBlock { BodyData u_bodies[]; };
+layout(set = 0, binding = 17, std430) readonly buffer BodyBlock { BodyData u_bodies[]; };
 
 // What a body's sky probe saw, reduced by body_probe_reduce.comp (MoleHole::BodyLightingGpu): irradiance as RGB
 // spherical harmonics without the brightest source, and that source as a directional light (irradiance.rgb at
@@ -32,21 +32,21 @@ struct BodyLighting
     vec4 direction;
     vec4 irradiance;
 };
-layout(set = 0, binding = 15, std430) readonly buffer BodyLightingBlock { BodyLighting u_bodyLighting[]; };
+layout(set = 0, binding = 19, std430) readonly buffer BodyLightingBlock { BodyLighting u_bodyLighting[]; };
 
-// Light components (MoleHole::LightBlockGpu): position.w = 0 directional (xyz towards the light), 1 point (xyz in
+// Light components (MoleHole::BodyLightBlockGpu): position.w = 0 directional (xyz towards the light), 1 point (xyz in
 // render units); color.rgb irradiance, color.w reference distance of a point light.
-struct LightData
+struct BodyLightData
 {
     vec4 position;
     vec4 color;
 };
-layout(set = 0, binding = 16, std430) readonly buffer LightBlock {
+layout(set = 0, binding = 20, std430) readonly buffer BodyLightBlock {
     ivec4 u_lightHeader; // x: light count, y: 0 fixed lighting, 1 probe + lights, 2 lights only, z: local-frame body or -1,
                          // w: atmosphere samples along a view ray (0: atmospheres off)
     vec4 u_patchCamera;  // xyz: camera relative to the local-frame body, render units along the world axes;
                          // w: terrain march steps
-    LightData u_lights[];
+    BodyLightData u_bodyLights[];
 };
 
 const int PROBE_WIDTH = 64;
@@ -55,7 +55,7 @@ const int PROBE_HEIGHT = 32;
 #ifdef GPP_BODY_TEXTURES
 #extension GL_EXT_nonuniform_qualifier : require
 const int BODY_TEXTURE_SLOTS = 64;
-layout(set = 0, binding = 14) uniform sampler2D u_bodyTextures[BODY_TEXTURE_SLOTS];
+layout(set = 0, binding = 18) uniform sampler2D u_bodyTextures[BODY_TEXTURE_SLOTS];
 #endif
 
 const float BODY_PI = 3.14159265359;
@@ -162,7 +162,7 @@ int gatherLights(int i, vec3 p, vec3 fixedDir, vec3 fixedIrradiance, out vec3 L[
         n++;
     }
     for (int l = 0; l < u_lightHeader.x && n < MAX_BODY_LIGHTS; l++) {
-        LightData light = u_lights[l];
+        BodyLightData light = u_bodyLights[l];
         L[n] = light.position.xyz;
         E[n] = light.color.rgb;
         if (light.position.w > 0.5) {

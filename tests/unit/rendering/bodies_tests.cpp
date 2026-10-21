@@ -195,7 +195,7 @@ TEST_CASE("Lights are uploaded in render units with the lighting mode", "[render
                                                                 .Direction = {0.0f, 0.0f, 3.0f}});
     const auto lamp = scene.CreateEntity("Lamp");
     scene.Registry().emplace<TransformComponent>(lamp, TransformComponent{.Position = {2000.0, 0.0, 0.0}});
-    scene.Registry().emplace<LightComponent>(lamp, LightComponent{.Kind = LightKind::Point, .ReferenceDistance = 500.0});
+    scene.Registry().emplace<LightComponent>(lamp, LightComponent{.Kind = BodyLightKind::Point, .ReferenceDistance = 500.0});
 
     RenderFrame frame;
     frame.LengthUnitM = 100.0;

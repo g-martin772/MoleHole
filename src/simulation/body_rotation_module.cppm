@@ -9,12 +9,11 @@ import :Simulation.Components;
 // simulation time.
 export namespace MoleHole
 {
-    constexpr double kTwoPi = 2.0 * std::numbers::pi;
-
     // Rotation angle (rad, in [0, 2π)) after `properSeconds` more of the body's time.
     [[nodiscard]] inline double AdvanceRotation(const double angle, const double properSeconds, const double period)
     {
         if (!(period > 0.0) || !std::isfinite(properSeconds)) return angle;
+        constexpr double kTwoPi = 2.0 * std::numbers::pi;
         const double next = std::fmod(angle + kTwoPi * properSeconds / period, kTwoPi);
         return next < 0.0 ? next + kTwoPi : next;
     }

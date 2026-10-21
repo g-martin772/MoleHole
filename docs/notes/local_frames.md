@@ -6,7 +6,7 @@ notes explain the numbers, the **local frame** that renders a nearby body in its
 the GPU integrator that make the throat reachable.
 
 Code:
-- `ChooseLocalFrame`, `kLocalFrameRadii` and `LightBlockGpu` in `src/rendering/bodies.cppm`
+- `ChooseLocalFrame`, `kLocalFrameRadii` and `BodyLightBlockGpu` in `src/rendering/bodies.cppm`
 - `UploadBodies` in `src/rendering/render_pipeline.cpp`
 - the local-frame branch of the camera `main` in `shaders/black_hole_rendering.comp`
 - `horizonDelta`, `captureMargin`, `radialSpeedScale`, `Spacetime::rMinus` in `shaders/kerr.glsl`

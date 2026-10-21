@@ -127,3 +127,16 @@ Entities:
         NearPlane: 10
         FarPlane: {value: 1000, unit: AU}
         Primary: false
+Render:
+  Version: 1
+  Contexts:
+    Edit: Bodies
+    Play: Bodies
+    Reference: Reference
+    Export: Bodies
+  Profiles:
+    - Name: Bodies
+      Description: Geodesic integration, tone mapped so the sunlit planets show at display brightness.
+      Base: Traced
+      Set:
+        post.tonemap: Aces
