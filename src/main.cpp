@@ -12,7 +12,6 @@ namespace
         bool Requested = false;
         bool ListSettings = false;
         ExportRequest Request;
-        std::string ScenePath;
         float TimeoutSeconds = 120.0f;
         std::string Error;
     };
@@ -132,7 +131,6 @@ namespace
             else if (arg == "--height") args.Request.Height = static_cast<std::uint32_t>(std::stoul(next()));
             else if (arg == "--duration") args.Request.DurationSeconds = std::stof(next());
             else if (arg == "--fps") args.Request.Framerate = std::stoi(next());
-            else if (arg == "--scene") args.ScenePath = next();
             else if (arg == "--sim-start" || arg == "--time-scale")
             {
                 const auto value = next();
@@ -187,6 +185,9 @@ int main(int argc, char* argv[])
     SetGlobalShaderDefines(Units::ShaderDefines());
     MoleHole::RegisterComponents();
 
+    const std::vector<std::string> cliArgs(argv + 1, argv + argc);
+    const auto startupArgs = ParseStartupArgs(cliArgs);
+
     auto cli = ParseExportArgs(argc, argv);
     if (cli && !cli->Error.empty())
     {
@@ -232,42 +233,46 @@ int main(int argc, char* argv[])
     {
         builder.Configuration.AddInMemory(InstalledAssetOverrides(paths));
     }
+    const auto statePath = builder.FS.ResolvePath(paths.ConfigDir() / "molehole_state.yaml", PathAnchor::WorkingDir);
+    const auto mode = SelectStartupMode(startupArgs, ReadStartupPrefs(statePath));
+    const bool launcherMode = mode == StartupMode::Launcher;
+
+    if (launcherMode)
+    {
+        builder.Configuration.AddInMemory({
+            {"GPP:Graphics:Window:Width", "820"},
+            {"GPP:Graphics:Window:Height", "520"},
+            {"GPP:Graphics:Window:Resizable", "false"},
+            {"GPP:Graphics:Window:Center", "true"},
+            {"GPP:Graphics:Window:Title", appInfo.Name},
+            {"GPP:Graphics:Window:ImGui:EnableDockSpace", "false"}});
+    }
     builder.Configuration
            .AddEnvironmentVariables()
            .AddCommandLine(argc, argv);
 
-    builder.ConfigureImGui({"DockingEnable", "ViewportsEnable"}, true);
+    if (launcherMode) builder.ConfigureImGui({}, false);
+    else builder.ConfigureImGui({"DockingEnable", "ViewportsEnable"}, true);
 
     const auto fontDirectory = paths.ResourceDir() / "font";
-    std::shared_ptr<UiState> exportState;
+    const auto uiState = std::make_shared<UiState>();
+    uiState->FontDirectory = fontDirectory;
     if (exportArgs)
     {
         builder.SetHeadless(true);
-        exportState = std::make_shared<UiState>();
-        builder.Services.AddSingleton<UiState>([exportArgs, exportState, fontDirectory](ServiceProvider&) -> std::shared_ptr<IService>
-        {
-            auto state = exportState;
-            state->FontDirectory = fontDirectory;
-            state->PendingExport.Set(exportArgs->Request);
-            state->ExitWhenExportDone = true;
-            state->ExportTimeoutSeconds = exportArgs->TimeoutSeconds;
-            if (!exportArgs->ScenePath.empty())
-            {
-                state->StartupScenePath = exportArgs->ScenePath;
-            }
-            return state;
-        });
+        uiState->PendingExport.Set(exportArgs->Request);
+        uiState->ExitWhenExportDone = true;
+        uiState->ExportTimeoutSeconds = exportArgs->TimeoutSeconds;
     }
     else
     {
-        builder.Services.AddSingleton<UiState>([fontDirectory](ServiceProvider&) -> std::shared_ptr<IService>
-        {
-            auto state = std::make_shared<UiState>();
-            state->FontDirectory = fontDirectory;
-            state->IntroActive = true;
-            return state;
-        });
+        uiState->IntroActive = !launcherMode && !startupArgs.SkipIntro;
+        uiState->LauncherMode = launcherMode;
+        uiState->PendingNewScene = startupArgs.New;
+        if (startupArgs.Template) uiState->PendingLoadTemplatePath.Set(*startupArgs.Template);
     }
+    if (startupArgs.Scene) uiState->StartupScenePath = startupArgs.Scene;
+    builder.Services.AddSingleton<UiState>([uiState](ServiceProvider&) -> std::shared_ptr<IService> { return uiState; });
 
     builder.Services.AddSingleton<RenderSettingsService>([cli, exportArgs](ServiceProvider&) -> std::shared_ptr<IService>
     {
@@ -278,7 +283,12 @@ int main(int argc, char* argv[])
     builder.Services.AddSingleton<LatexRenderer>();
     builder.Services.AddHostedService<AppStateService>();
 
-    if (!exportArgs)
+    if (launcherMode)
+    {
+        builder.AddHotReloadableLayer("launcher", "molehole_launcher_layer.so").SetWindowTarget("main");
+        builder.AddHotReloadableLayer("notifications", "molehole_notifications_layer.so").SetWindowTarget("main");
+    }
+    else if (!exportArgs)
     {
         builder.AddHotReloadableLayer("intro", "molehole_intro_layer.so").SetBufferTarget(kIntroBufferId);
         builder.AddHotReloadableLayer("dock-layout", "molehole_dock_layout_layer.so").SetWindowTarget("main");
@@ -309,10 +319,22 @@ int main(int argc, char* argv[])
                .SetBufferTarget(kViewportBufferId);
     }
 
-    builder.AddHotReloadableLayer("viewport", "molehole_viewport_layer.so")
-           .SetBufferTarget(kViewportBufferId);
+    if (!launcherMode)
+    {
+        builder.AddHotReloadableLayer("viewport", "molehole_viewport_layer.so")
+               .SetBufferTarget(kViewportBufferId);
+    }
 
     auto app = builder.Build();
     const int result = app->Run();
-    return result != 0 || !exportState ? result : exportState->ExportExitCode;
+    app.reset();
+    if (const auto relaunch = uiState->PendingRelaunch.Take())
+    {
+        if (const auto relaunched = RelaunchSelf(*relaunch); !relaunched)
+        {
+            std::cerr << "Relaunch failed: " << relaunched.error() << '\n';
+            return 1;
+        }
+    }
+    return result != 0 || !exportArgs ? result : uiState->ExportExitCode;
 }

@@ -133,6 +133,15 @@ export namespace MoleHole
         std::atomic<bool> PendingStopSimulation{false};
         // CLI --scene override
         std::optional<std::string> StartupScenePath;
+        bool LauncherMode = false;
+        // Arguments to re-exec with once the application has stopped and saved its state
+        OneShot<std::vector<std::string>> PendingRelaunch;
+
+        void RequestRelaunch(std::vector<std::string> args)
+        {
+            PendingRelaunch.Set(std::move(args));
+            GPP::Application::Instance().Stop();
+        }
 
         glm::dvec3 CameraPositionM{0.0, 20.0 * GPP::Units::kSolarGravitationalRadius,
                                    100.0 * GPP::Units::kSolarGravitationalRadius};

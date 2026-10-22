@@ -184,6 +184,11 @@ namespace
                 {
                     DoSaveAs();
                 }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Close Scene (Launcher)"))
+                {
+                    m_UiState->RequestRelaunch({"--launcher"});
+                }
                 ImGui::EndMenu();
             }
 

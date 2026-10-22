@@ -67,7 +67,10 @@ namespace
         {
             m_AttachTime = std::chrono::steady_clock::now();
             MoleHole::RegisterComponents();
-            BeginSceneLoad(StartupScenePath(), SceneLoader::Result::Kind::Startup);
+            if (!m_UiState->PendingNewScene && !m_UiState->PendingLoadTemplatePath.Pending())
+            {
+                BeginSceneLoad(StartupScenePath(), SceneLoader::Result::Kind::Startup);
+            }
 
             m_Pipeline.Initialize();
             m_RenderSettings->SetCapabilities(m_Pipeline.Capabilities());

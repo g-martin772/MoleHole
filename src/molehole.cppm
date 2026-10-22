@@ -1,5 +1,6 @@
 export module MoleHole;
 export import :Application.State;
+export import :Application.Startup;
 export import :Application.SceneLoader;
 export import :Application.Export;
 export import :Simulation.Components;

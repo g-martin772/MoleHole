@@ -26,6 +26,10 @@ export namespace MoleHole
         void NotifySceneOpened(const std::string& path);
         [[nodiscard]] std::string GetLastScenePath() const;
         [[nodiscard]] std::vector<std::string> GetRecentScenes() const;
+        [[nodiscard]] std::vector<GPP::RecentEntry> GetRecents() const;
+        void RemoveRecent(const std::string& path);
+        [[nodiscard]] bool GetShowLauncher() const;
+        void SetShowLauncher(bool show);
 
         void NotifyExported(const std::string& outputPath);
         [[nodiscard]] std::string GetLastExportDirectory() const;
@@ -55,7 +59,8 @@ export namespace MoleHole
 
         mutable std::mutex m_Mutex;
         std::string m_LastScenePath;
-        std::vector<std::string> m_RecentScenes;
+        GPP::RecentList m_Recents;
+        bool m_ShowLauncher = true;
         std::string m_LastExportDirectory;
         std::string m_DefaultExportDirectory;
         std::vector<std::string> m_MeshScanDirectories;

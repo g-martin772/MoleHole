@@ -36,7 +36,12 @@ namespace MoleHole
         m_StatePath = m_FileSystem->ResolvePath(m_AppPaths->ConfigDir() / "molehole_state.yaml", PathAnchor::WorkingDir);
         m_Persist = !m_UiState->ExitWhenExportDone;
         Load();
-        if (m_Persist)
+        if (m_UiState->LauncherMode)
+        {
+            m_UiState->CurrentScenePath = m_LastScenePath;
+            m_UiState->IntroActive = false;
+        }
+        else if (m_Persist)
         {
             if (!m_UiState->IntroEnabled) m_UiState->IntroActive = false;
             if (!m_TutorialCompleted)
@@ -68,13 +73,9 @@ namespace MoleHole
             {
                 m_LastScenePath = scene.as<std::string>();
             }
-            if (const auto recent = node["RecentScenes"]; recent && recent.IsSequence())
-            {
-                for (const auto& entry : recent)
-                {
-                    m_RecentScenes.push_back(entry.as<std::string>());
-                }
-            }
+            m_Recents.FromYaml(node["RecentScenes"]);
+            m_Recents.Prune();
+            if (const auto v = node["ShowLauncher"]; v && v.IsScalar()) m_ShowLauncher = v.as<bool>(true);
             if (const auto camera = node["Camera"])
             {
                 if (const auto v = camera["Position"])
@@ -192,15 +193,11 @@ namespace MoleHole
             YAML::Node root;
             root["LastScenePath"] = m_UiState->CurrentScenePath;
 
-            YAML::Node recentNode;
             {
                 std::scoped_lock lock(m_Mutex);
-                for (const auto& scene : m_RecentScenes)
-                {
-                    recentNode.push_back(scene);
-                }
+                root["RecentScenes"] = m_Recents.ToYaml();
+                root["ShowLauncher"] = m_ShowLauncher;
             }
-            root["RecentScenes"] = recentNode;
 
             root["Camera"]["PositionM"] = m_UiState->CameraPositionM;
             root["Camera"]["Yaw"] = m_UiState->CameraYaw;
@@ -276,8 +273,39 @@ namespace MoleHole
 
     std::vector<std::string> AppStateService::GetRecentScenes() const
     {
+        std::vector<std::string> paths;
+        for (const auto& entry : GetRecents()) paths.push_back(entry.Path);
+        return paths;
+    }
+
+    std::vector<RecentEntry> AppStateService::GetRecents() const
+    {
         std::scoped_lock lock(m_Mutex);
-        return m_RecentScenes;
+        auto entries = m_Recents.Entries();
+        std::erase_if(entries, [](const RecentEntry& entry)
+        {
+            std::error_code error;
+            return !std::filesystem::exists(entry.Path, error);
+        });
+        return entries;
+    }
+
+    void AppStateService::RemoveRecent(const std::string& path)
+    {
+        std::scoped_lock lock(m_Mutex);
+        m_Recents.Remove(path);
+    }
+
+    bool AppStateService::GetShowLauncher() const
+    {
+        std::scoped_lock lock(m_Mutex);
+        return m_ShowLauncher;
+    }
+
+    void AppStateService::SetShowLauncher(const bool show)
+    {
+        std::scoped_lock lock(m_Mutex);
+        m_ShowLauncher = show;
     }
 
     void AppStateService::NotifySceneOpened(const std::string& path)
@@ -290,13 +318,7 @@ namespace MoleHole
             m_FileSystem->ResolvePath(path, PathAnchor::WorkingDir).lexically_normal().string();
         std::scoped_lock lock(m_Mutex);
         m_LastScenePath = absolute;
-        std::erase(m_RecentScenes, absolute);
-        m_RecentScenes.insert(m_RecentScenes.begin(), absolute);
-        constexpr std::size_t kMaxRecent = 8;
-        if (m_RecentScenes.size() > kMaxRecent)
-        {
-            m_RecentScenes.resize(kMaxRecent);
-        }
+        m_Recents.Add(absolute);
     }
 
     std::filesystem::path NextNumberedPath(const std::filesystem::path& directory, const std::string_view stem,
