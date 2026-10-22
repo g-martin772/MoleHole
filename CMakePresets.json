@@ -12,12 +12,27 @@
         "VCPKG_OVERLAY_PORTS": "${sourceDir}/dependencies/gpp/vcpkg-overlays",
         "CMAKE_BUILD_TYPE": "Debug"
       }
+    },
+    {
+      "name": "release-vcpkg",
+      "inherits": "vcpkg",
+      "displayName": "Vcpkg - RELEASE",
+      "binaryDir": "${sourceDir}/build-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/.local"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "vcpkg",
       "configurePreset": "vcpkg",
+      "jobs": 8
+    },
+    {
+      "name": "release-vcpkg",
+      "configurePreset": "release-vcpkg",
       "jobs": 8
     }
   ]

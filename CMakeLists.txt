@@ -7,6 +7,11 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_MODULE_STD 1)
 set(CMAKE_CXX_SCAN_FOR_MODULES 1)
 
+include(GNUInstallDirs)
+set(MOLEHOLE_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/molehole")
+set(MOLEHOLE_INSTALL_DATADIR "${CMAKE_INSTALL_DATADIR}/molehole")
+set(CMAKE_INSTALL_RPATH "$ORIGIN")
+
 add_subdirectory(dependencies/gpp)
 
 file(GLOB_RECURSE MOLEHOLE_CORE_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
@@ -68,3 +73,40 @@ add_executable(molehole_tests ${MOLEHOLE_TEST_SOURCES})
 target_link_libraries(molehole_tests PRIVATE molehole_core Catch2::Catch2WithMain)
 target_compile_definitions(molehole_tests PRIVATE MOLEHOLE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 catch_discover_tests(molehole_tests)
+
+install(TARGETS MoleHole molehole_core gpp molehole_theme molehole_viewport_layer ${MOLEHOLE_UI_PLUGIN_TARGETS}
+        RUNTIME_DEPENDENCY_SET molehole_runtime_deps
+        RUNTIME DESTINATION "${MOLEHOLE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${MOLEHOLE_INSTALL_LIBDIR}")
+
+install(RUNTIME_DEPENDENCY_SET molehole_runtime_deps
+        DESTINATION "${MOLEHOLE_INSTALL_LIBDIR}"
+        PRE_EXCLUDE_REGEXES
+        "^ld-linux" "^linux-vdso" "^libc\\.so" "^libm\\.so" "^libdl\\.so" "^libpthread\\.so" "^librt\\.so"
+        "^libgcc_s" "^libstdc\\+\\+" "^libvulkan" "^libGL" "^libEGL" "^libOpenGL"
+        "^libX" "^libxcb" "^libxkbcommon" "^libwayland" "^libdrm" "^libdecor" "^libasound" "^libpulse"
+        "^libpipewire" "^libudev" "^libshaderc_shared" "^libgtk" "^libglib" "^libgobject"
+        "^libgio" "^libportal"
+        POST_EXCLUDE_REGEXES "^/lib" "^/usr/lib" "^/lib64")
+
+install(FILES packaging/linux/config.json DESTINATION "${MOLEHOLE_INSTALL_DATADIR}")
+install(DIRECTORY shaders/ DESTINATION "${MOLEHOLE_INSTALL_DATADIR}/shaders")
+install(DIRECTORY dependencies/gpp/shaders/pbr/ DESTINATION "${MOLEHOLE_INSTALL_DATADIR}/shaders/pbr")
+install(DIRECTORY font assets templates scripts combos DESTINATION "${MOLEHOLE_INSTALL_DATADIR}")
+
+install(CODE "
+    set(_bin \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}\")
+    file(MAKE_DIRECTORY \"\${_bin}\")
+    file(CREATE_LINK \"../${MOLEHOLE_INSTALL_LIBDIR}/MoleHole\" \"\${_bin}/molehole\" SYMBOLIC)
+")
+
+install(CODE "
+    if (NOT DEFINED ENV{DESTDIR} AND NOT DEFINED ENV{MOLEHOLE_SKIP_DESKTOP})
+        execute_process(
+            COMMAND \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/molehole\" --install-desktop --prefix \"\${CMAKE_INSTALL_PREFIX}\"
+            RESULT_VARIABLE _desktop_result)
+        if (NOT _desktop_result EQUAL 0)
+            message(WARNING \"Desktop integration failed (\${_desktop_result}); run molehole --install-desktop manually\")
+        endif ()
+    endif ()
+")

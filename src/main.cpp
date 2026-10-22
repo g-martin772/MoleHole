@@ -61,7 +61,7 @@ namespace
         info.Organization = "MoleHole";
         info.Version = MOLEHOLE_VERSION;
         info.Summary = "Black hole simulation and visualization";
-        info.Categories = "Graphics;Science;";
+        info.Categories = "Science;Physics;";
         info.IconFile = "assets/branding/molehole.svg";
         return info;
     }
@@ -210,6 +210,19 @@ int main(int argc, char* argv[])
         .Info = appInfo,
         .Env = AppPaths::ProcessEnv()
     });
+
+    StdioWmPrompter prompter;
+    if (const auto desktopResult = HandleDesktopArgs(argc, argv, {
+        .Info = appInfo,
+        .ResourceDir = paths.ResourceDir(),
+        .ConfigDir = paths.ConfigDir(),
+        .Env = AppPaths::ProcessEnv(),
+        .Prompter = &prompter,
+        .Out = &std::cout
+    }))
+    {
+        return *desktopResult;
+    }
     EnsureRuntimeDirectories(paths);
 
     builder.Configuration
@@ -224,7 +237,6 @@ int main(int argc, char* argv[])
            .AddCommandLine(argc, argv);
 
     builder.ConfigureImGui({"DockingEnable", "ViewportsEnable"}, true);
-    builder.SetTheme("molehole_theme.so", true);
 
     const auto fontDirectory = paths.ResourceDir() / "font";
     std::shared_ptr<UiState> exportState;

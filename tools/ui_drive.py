@@ -123,7 +123,8 @@ def cmd_launch(extra):
     if state and pid_alive(state["pid"]):
         sys.exit(f"already running (pid {state['pid']}); `kill` first")
     os.makedirs(os.path.dirname(LOG), exist_ok=True)
-    proc = subprocess.Popen([os.path.join(ROOT, "build", "MoleHole"), *extra], cwd=ROOT, stdout=open(LOG, "w"),
+    binary = os.environ.get("MOLEHOLE_BIN") or os.path.join(ROOT, "build", "MoleHole")
+    proc = subprocess.Popen([binary, *extra], cwd=os.environ.get("MOLEHOLE_CWD") or ROOT, stdout=open(LOG, "w"),
                             stderr=subprocess.STDOUT, start_new_session=True)
     with open(STATE, "w") as f:
         json.dump({"pid": proc.pid}, f)

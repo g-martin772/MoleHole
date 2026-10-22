@@ -1,0 +1,34 @@
+{
+  "GPP": {
+    "Assets": {
+      "Scripts": {"Directories": ["scripts"], "Extensions": [".lua", ".luau"]},
+      "Combos": {"Directories": ["combos"], "Extensions": [".yaml"]}
+    },
+    "Graphics": {
+      "Window": {
+        "Width": 1600,
+        "Height": 900,
+        "Fullscreen": false,
+        "Headless": false,
+        "Title": "MoleHole"
+      },
+      "Render": {
+        "ShaderAssetDirectories": ["shaders", "dependencies/gpp/shaders/pbr"],
+        "EnableShaderHotReload": false,
+        "ShaderHotReloadIntervalMilliseconds": 250
+      },
+      "LayerHotReload": {
+        "Enabled": false,
+        "PollingIntervalMilliseconds": 300
+      },
+      "Fonts": {
+        "FontDirectories": ["font"]
+      },
+      "Theme": {
+        "LibraryPath": "molehole_theme.so",
+        "EnableHotReload": false,
+        "PollingIntervalMilliseconds": 300
+      }
+    }
+  }
+}

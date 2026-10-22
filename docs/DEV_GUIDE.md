@@ -93,6 +93,21 @@ gpp/
 - Shaders hot reload too
 - `molehole_core` = shared lib, not hot-reloaded since that is basically a full app restart anyway. That includes `RenderPipeline` and its stages (`src/rendering/render_pipeline.cpp`): rebuild and restart after changing them. Shaders still reload live
 
+## Runtime paths and modes
+`AppPaths` (gpp) picks the mode from the binary location: *installed* if `<binaryDir>/../../share/<id>` exists (`binaryDir` from `/proc/self/exe`, so the `bin/molehole` symlink resolves to `lib/molehole`), else *dev*.
+| | Dev | Installed |
+|---|---|---|
+| Resources | cwd (repo root) | `<prefix>/share/molehole` |
+| Config, state, imgui ini | `.gpp/` | `$XDG_CONFIG_HOME/molehole` |
+| Caches, temp | `.gpp/` | `$XDG_CACHE_HOME/molehole` |
+| User files (exports, ...) | `.gpp/` | `~/Documents/MoleHole/{scenes,exports,scripts,combos,models}` |
+| Hot reload | per `config.json` | off (`packaging/linux/config.json`) |
+
+Config layers, later wins: `<ResourceDir>/config.json` < `<ConfigDir>/config.json` (optional) < in-memory absolute asset dirs (installed only, `InstalledAssetOverrides` in `main.cpp`) < environment < CLI.
+- Arrays merge per index: a lower layer with more entries than the override keeps its extra tail. Keep `packaging/linux/config.json` arrays no longer than the overrides in `main.cpp`
+- New resource dir: add it to the `install(DIRECTORY ...)` list in `CMakeLists.txt`; new plugins install automatically from `MOLEHOLE_UI_PLUGINS`
+- Run an installed copy under `tools/ui_drive.py` with `MOLEHOLE_BIN=<prefix>/bin/molehole` (optional `MOLEHOLE_CWD`)
+
 ---
 
 ## Register a component

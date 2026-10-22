@@ -282,6 +282,27 @@ CLI, headless. Output PNG / MP4 (needs ffmpeg).
 - `tools/bench.py`: time every profile, keep or compare golden images
 - Full table: `docs/export-instructions.md`
 
+## Installing
+```sh
+cmake --preset release-vcpkg
+cmake --build --preset release-vcpkg
+cmake --install build-release          # prefix ~/.local, or --prefix DIR
+```
+| Where | What |
+|---|---|
+| `<prefix>/bin/molehole` | symlink to the binary |
+| `<prefix>/lib/molehole/` | binary, libraries, UI plugins (hot reload is off when installed) |
+| `<prefix>/share/molehole/` | default `config.json`, shaders, fonts, assets, templates, scripts, combos |
+| `<prefix>/share/applications/molehole.desktop`, `share/icons/hicolor/scalable/apps/molehole.svg` | app menu entry |
+| `~/.config/molehole/` | your `config.json` overrides, app state, UI layout |
+| `~/.cache/molehole/` | shader cache, temp files |
+| `~/Documents/MoleHole/{scenes,exports,scripts,combos,models}` | your files; scripts and combos here are found before the bundled ones |
+
+- Paths follow `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME` and `XDG_DOCUMENTS_DIR` (`~/.config/user-dirs.dirs`)
+- The install ends with `molehole --install-desktop`. It writes a window-rule snippet to `~/.config/molehole/wm/` for Hyprland, sway or i3. On a terminal it asks once before adding the rule to your WM config (with a backup); `--apply-wm-rules` / `--no-wm-rules` skip the question. `MOLEHOLE_SKIP_DESKTOP=1` skips the step; it is also skipped with `DESTDIR`
+- Uninstall: `molehole --uninstall-desktop`, then delete `<prefix>/bin/molehole`, `<prefix>/lib/molehole`, `<prefix>/share/molehole` and, if wanted, `~/.config/molehole`, `~/.cache/molehole`, `~/Documents/MoleHole`
+- System dependencies (not bundled): a Vulkan driver (ray query GPU), shaderc (`libshaderc_shared`), Wayland/X11 and the usual desktop libraries; optional ffmpeg (video export), latex + dvipng (inline LaTeX)
+
 ## Scene file
 ```yaml
 Scene: Name
