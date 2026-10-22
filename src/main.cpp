@@ -245,7 +245,8 @@ int main(int argc, char* argv[])
             {"GPP:Graphics:Window:Resizable", "false"},
             {"GPP:Graphics:Window:Center", "true"},
             {"GPP:Graphics:Window:Title", appInfo.Name},
-            {"GPP:Graphics:Window:ImGui:EnableDockSpace", "false"}});
+            {"GPP:Graphics:Window:ImGui:EnableDockSpace", "false"},
+            {"GPP:Graphics:Window:ImGui:IniFile", "none"}});
     }
     builder.Configuration
            .AddEnvironmentVariables()

@@ -12,6 +12,14 @@ using namespace MoleHole;
 
 namespace
 {
+    bool HasDockLayout(const std::filesystem::path& iniPath)
+    {
+        std::ifstream in(iniPath);
+        if (!in) return false;
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        return text.find("[Docking][Data]") != std::string::npos && text.find("DockSpace") != std::string::npos;
+    }
+
     struct DockLayoutLayer final : public HotReloadableLayer
     {
         using Dependencies = std::tuple<Logger, Renderer, AppPaths>;
@@ -29,7 +37,7 @@ namespace
             if (m_Done) return;
             m_Done = true;
 
-            if (std::filesystem::exists(m_AppPaths->ConfigDir() / "imgui_main.ini"))
+            if (HasDockLayout(m_AppPaths->ConfigDir() / "imgui_main.ini"))
             {
                 m_Logger->Info("DockLayoutLayer: existing layout found, leaving it alone");
                 return;
