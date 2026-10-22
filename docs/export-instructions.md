@@ -41,6 +41,7 @@ The disk noise still follows the wall clock, so two exports of the same scene ar
 | `--sim-start <s>` | both | scene clock (0) | Simulation clock `t_sim` [physical s] of the first frame; the disk phase follows it |
 | `--time-scale <x>` | both | scene Time Scale | Physical seconds per second of video; frame k of a video is placed at `t_sim = start + k x / fps` |
 | `--scene <path>` | both | `templates/test-scene.yaml` | Scene file to load before rendering |
+| `--scene-camera` | both | off | Render through the scene's primary camera (the one with `Primary: true`) instead of the free viewport camera |
 | `--profile <name>` | both | Export context's profile | Render profile (built-in or stored in the scene) |
 | `--set <key=value>` | both | — | Override one render setting; repeatable; bad keys or values abort with exit code 2 |
 | `--export-timeout <seconds>` | both | 120 | Give up when the export makes no progress (scene load, shader compile, a frame, encoding) for this long; `0` disables |

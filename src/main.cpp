@@ -13,6 +13,7 @@ namespace
         bool ListSettings = false;
         ExportRequest Request;
         std::string ScenePath;
+        bool SceneCamera = false; // render through the scene's primary camera instead of the free viewport camera
         float TimeoutSeconds = 120.0f;
         std::string Error;
     };
@@ -86,6 +87,7 @@ namespace
             else if (arg == "--duration") args.Request.DurationSeconds = std::stof(next());
             else if (arg == "--fps") args.Request.Framerate = std::stoi(next());
             else if (arg == "--scene") args.ScenePath = next();
+            else if (arg == "--scene-camera") args.SceneCamera = true;
             else if (arg == "--sim-start" || arg == "--time-scale")
             {
                 const auto value = next();
@@ -175,6 +177,7 @@ int main(int argc, char* argv[])
             state->PendingExport.Set(exportArgs->Request);
             state->ExitWhenExportDone = true;
             state->ExportTimeoutSeconds = exportArgs->TimeoutSeconds;
+            state->PreviewSceneCamera = exportArgs->SceneCamera;
             if (!exportArgs->ScenePath.empty())
             {
                 state->StartupScenePath = exportArgs->ScenePath;

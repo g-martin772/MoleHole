@@ -65,7 +65,7 @@ export namespace MoleHole
         float GlossyRoughness{0.45f};
         float NormalStrength{1.0f};
         float EmissiveStrength{1.0f};
-        double RotationPeriod{0.0}; // s of the body's proper time per turn, 0 = not rotating
+        double RotationPeriod{0.0}; // s of the body's proper time per turn, 0 = not rotating, negative = retrograde
         float PrimeMeridian{0.0f};   // degrees east of the sphere's reference direction at rotation angle 0
 
         double RotationAngle{0.0}; // runtime, rad: advanced by BodyRotationModule, not saved
@@ -126,14 +126,14 @@ export namespace MoleHole
         float Opacity{1.0f};           // multiplies the texture's alpha
     };
 
-    enum class LightKind : std::int32_t { Directional = 0, Point = 1 };
+    enum class BodyLightKind : std::int32_t { Directional = 0, Point = 1 };
 
     // A light that is not part of the traced scene, such as the Sun for Earth and Saturn. It lights Surfaces directly
     // along a straight line, without lensing, redshift or shadows from other bodies; emitters inside the scene (the
     // disk, stars, lit bodies) reach Surfaces lensed through their sky probes. See docs/notes/body_lighting.md
     struct LightComponent
     {
-        LightKind Kind{LightKind::Directional};
+        BodyLightKind Kind{BodyLightKind::Directional};
         glm::vec3 Color{1.0f, 1.0f, 1.0f};
         // Irradiance in display units: π makes a white Lambertian surface facing the light show 1.0. A point light
         // has it at ReferenceDistance and falls off as the inverse square.
@@ -214,6 +214,17 @@ export namespace MoleHole
         double Speed{0.0};      // relative to the local ZAMO, in c
         glm::dvec3 WrittenPosition{0.0};
         std::uint64_t LaunchedFrom{0}; // hash of the launch fields and hole it was launched with
+    };
+
+    // A body of the Newtonian N-body system (src/simulation/nbody_module.cppm): it moves under the pull of every other
+    // body with a GM, the 1PN corrections of general relativity and the J2 of the oblate ones. Position is the
+    // entity's Transform (barycentric, metres); the rest is here. It needs no RigidBody and does not use PhysX.
+    struct NBodyComponent
+    {
+        double GM{0.0};            // m^3/s^2, the gravitational parameter G M; 0 = a test particle that only feels the others
+        glm::dvec3 Velocity{0.0};  // m/s, in the scene frame
+        double J2{0.0};            // second zonal harmonic, about the Sphere's SpinAxis; 0 = a point mass
+        double J2Radius{0.0};      // m, the reference radius of J2; 0 = the Sphere's Radius
     };
 
     // Legacy single-graph storage; read only to migrate old scenes into the scene Graphs section.
@@ -324,7 +335,7 @@ namespace MoleHole
                     GPP::Field("EmissiveStrength", &SurfaceComponent::EmissiveStrength,
                                {.Label = "Emissive strength", .Category = "Material", .Min = 0.0, .Max = 100.0, .Speed = 0.01}),
                     GPP::Field("RotationPeriod", &SurfaceComponent::RotationPeriod,
-                               {.Label = "Rotation period", .Category = "Rotation", .Min = 0.0, .Speed = 60.0,
+                               {.Label = "Rotation period", .Category = "Rotation", .Speed = 60.0,
                                 .Dim = GPP::Units::Dimension::Time}),
                     GPP::Field("PrimeMeridian", &SurfaceComponent::PrimeMeridian,
                                {.Label = "Prime meridian (deg)", .Category = "Rotation", .Min = -180.0, .Max = 180.0,
@@ -437,6 +448,20 @@ namespace MoleHole
                     GPP::Computed<StarComponent, glm::vec3>(
                         "Colour", [](const StarComponent& c) { return StarColor(c); }, nullptr,
                         {.Label = "Colour (Planck)", .Kind = GPP::FieldKind::Color}),
+                }});
+
+            GPP::RegisterComponent<NBodyComponent>("NBody", GPP::ComponentDescription<NBodyComponent>{
+                .DisplayName = "N-Body",
+                .Fields = {
+                    GPP::Field("GM", &NBodyComponent::GM,
+                               {.Label = "GM", .Min = 0.0, .Speed = 1e6, .Format = "%.9g"}),
+                    GPP::Field("Velocity", &NBodyComponent::Velocity,
+                               {.Label = "Velocity (m/s)", .Speed = 10.0, .Format = "%.6f"}),
+                    GPP::Field("J2", &NBodyComponent::J2,
+                               {.Label = "J2", .Category = "Shape", .Min = 0.0, .Speed = 1e-5, .Format = "%.6g"}),
+                    GPP::Field("J2Radius", &NBodyComponent::J2Radius,
+                               {.Label = "J2 radius", .Category = "Shape", .Min = 0.0, .Speed = 1e3,
+                                .Dim = GPP::Units::Dimension::Length}),
                 }});
 
             GPP::RegisterComponent<GeodesicBodyComponent>("GeodesicBody", GPP::ComponentDescription<GeodesicBodyComponent>{

@@ -78,6 +78,39 @@ TEST_CASE("Body entries line up with the uploaded spheres", "[rendering][bodies]
     }
 }
 
+TEST_CASE("Body entries line up with the uploaded spheres when a Star is among them", "[rendering][bodies]")
+{
+    RegisterComponents();
+    Scene scene;
+    const std::array<glm::vec3, 4> axes{glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f),
+                                        glm::normalize(glm::vec3(1.0f, 1.0f, 0.0f))};
+    std::array<entt::entity, 4> entities{};
+    for (std::size_t i = 0; i < axes.size(); ++i)
+    {
+        entities[i] = AddSphere(scene, glm::vec3(static_cast<float>(i) / 10.0f), axes[i]);
+    }
+    // The second sphere is a Star as well (a Sun with a Sphere), the fourth has a Surface; FillSceneData uploads Stars first
+    scene.Registry().emplace<StarComponent>(entities[1]);
+    scene.Registry().emplace<SurfaceComponent>(entities[3], SurfaceComponent{});
+
+    RaytraceParamsGpu params{};
+    FillSceneData(params, scene, RenderFrame{});
+    const auto bodies = FillBodyData(scene, kNoTextures);
+    const auto uploaded = UploadedSpheres(scene);
+    REQUIRE(params.NumSpheres == 4);
+    REQUIRE(uploaded.size() == 4);
+    CHECK(uploaded.front() == entities[1]); // the Star leads
+    for (int i = 0; i < params.NumSpheres; ++i)
+    {
+        const auto at = static_cast<std::size_t>(i);
+        if (i == 0) continue; // a Star's colour is its radiance, not the sphere's marker colour
+        const auto index = static_cast<std::size_t>(std::lround(params.Spheres[at].Color.r * 10.0f));
+        INFO("sphere " << i << " is entity " << index);
+        CheckNear(QuatRotate(bodies[at].Orientation, {0.0f, 1.0f, 0.0f}), axes[index]);
+        CHECK((bodies[at].Flags.x == 1) == (index == 3)); // only the fourth has a Surface
+    }
+}
+
 TEST_CASE("Surface maps get slots by role and a bare sphere uses its texture as albedo", "[rendering][bodies]")
 {
     RegisterComponents();

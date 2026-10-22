@@ -7,6 +7,7 @@ export import :Simulation.Components;
 export import :Simulation.Picking;
 export import :Simulation.Gravity;
 export import :Simulation.GeodesicBodies;
+export import :Simulation.NBody;
 export import :Simulation.BodyRotation;
 export import :Simulation.ObserverReadout;
 export import :Simulation.OrbitTools;

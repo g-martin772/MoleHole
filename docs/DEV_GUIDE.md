@@ -187,6 +187,14 @@ Spheres with a `Surface` are lit, textured planets; spheres without one stay fla
 - Notes: `docs/notes/textured_bodies.md`, `body_lighting.md`, `local_frames.md`, `atmospheres.md`, `terrain.md`
 - Textures are not in git: `python3 tools/fetch_textures.py` (Earth, Saturn; manifest `tools/texture_manifest.yaml`) and `python3 tools/gen_planet_textures.py` (Miller, Mann, Edmunds). Images picked with the inspector's `...` button are imported into `assets/textures/imported/`
 
+## Solar system scene (N-body)
+`templates/solar-system.yaml` is generated, not hand-edited: `tools/fetch_ephemeris.py` (JPL Horizons, cached in `tools/data/`) -> `tools/gen_solar_system.py`, physical data in `tools/solar_system_bodies.py`. Maps: `python3 tools/fetch_textures.py` (group `core`).
+- Dynamics: `NBodyComponent` (`GM`, `Velocity`, `J2`) on an entity with a `Transform` and a `Sphere`; `NBodySimulationModule` (`src/simulation/nbody_module.cppm`) integrates all of them in double precision (Newton, 1PN, J2, 6th-order symplectic). It does not use PhysX or `RigidBody`
+- Pure functions for tests: `NBodySystem`, `NBodyAcceleration`, `NBodyAdvance`, `NBodyEnergy`; the module is registered in `StartSimulationFor`
+- Add a body: an entry in `BODIES` (and a `CAMERAS` row for a follow camera), fetch the ephemeris again, regenerate
+- Check an export through a scene camera: `--scene-camera` renders from the camera with `Primary: true`; `gen_solar_system.py --primary <body id>` picks which
+- Notes: `docs/notes/solar_system.md`; the 30-day comparison against Horizons is hidden behind `[slow]` (minutes in Debug)
+
 ## Talk to the simulation
 ```cpp
 runner.EnqueueCommand(cmd, CommandOptions{.Undoable = runner.IsPaused(), .Label = "Do thing"});

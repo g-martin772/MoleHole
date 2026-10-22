@@ -138,3 +138,45 @@ textures:
   attribution: NASA Earth Observatory / Visible Earth, cloud_combined (contents not verified)
   target: earth/nasa/clouds_2k.jpg
   group: nasa
+- id: mercury_albedo_8k
+  url: https://www.solarsystemscope.com/textures/download/8k_mercury.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: mercury/albedo_8k.jpg
+  group: core
+- id: venus_atmosphere_4k
+  url: https://www.solarsystemscope.com/textures/download/4k_venus_atmosphere.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: venus/atmosphere_4k.jpg
+  group: core
+- id: moon_albedo_8k
+  url: https://www.solarsystemscope.com/textures/download/8k_moon.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: moon/albedo_8k.jpg
+  group: core
+- id: mars_albedo_8k
+  url: https://www.solarsystemscope.com/textures/download/8k_mars.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: mars/albedo_8k.jpg
+  group: core
+- id: jupiter_albedo_4k
+  url: https://www.solarsystemscope.com/textures/download/8k_jupiter.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: jupiter/albedo_4k.jpg
+  group: core
+- id: uranus_albedo_2k
+  url: https://www.solarsystemscope.com/textures/download/2k_uranus.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: uranus/albedo_2k.jpg
+  group: core
+- id: neptune_albedo_2k
+  url: https://www.solarsystemscope.com/textures/download/2k_neptune.jpg
+  licence: CC-BY-4.0
+  attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
+  target: neptune/albedo_2k.jpg
+  group: core

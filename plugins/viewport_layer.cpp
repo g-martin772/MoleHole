@@ -561,8 +561,10 @@ namespace
             options.FixedTimestep = std::chrono::duration<float>(1.0f / std::max(m_UiState->SimulationTickRate, 1.0f));
             auto geodesics = std::make_shared<GeodesicSimulationModule>(m_Logger);
             auto rotation = std::make_shared<BodyRotationModule>();
+            auto nbody = std::make_shared<NBodySimulationModule>(m_Logger);
             auto runner = m_Scenes->CreateSimulation(
-                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravity, physics, geodesics, rotation}, options);
+                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravity, physics, geodesics, nbody, rotation},
+                options);
             runner->Start();
             runner->SetPaused(true);
             m_Sim.Publish(SimBinding{runner});

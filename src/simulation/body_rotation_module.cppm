@@ -9,10 +9,11 @@ import :Simulation.Components;
 // simulation time.
 export namespace MoleHole
 {
-    // Rotation angle (rad, in [0, 2π)) after `properSeconds` more of the body's time.
+    // Rotation angle (rad, in [0, 2π)) after `properSeconds` more of the body's time. A negative period turns the
+    // other way about the spin axis (retrograde: Venus, Uranus), 0 does not turn.
     [[nodiscard]] inline double AdvanceRotation(const double angle, const double properSeconds, const double period)
     {
-        if (!(period > 0.0) || !std::isfinite(properSeconds)) return angle;
+        if (period == 0.0 || !std::isfinite(period) || !std::isfinite(properSeconds)) return angle;
         constexpr double kTwoPi = 2.0 * std::numbers::pi;
         const double next = std::fmod(angle + kTwoPi * properSeconds / period, kTwoPi);
         return next < 0.0 ? next + kTwoPi : next;
@@ -31,7 +32,7 @@ export namespace MoleHole
             auto& registry = scene.Registry();
             for (auto [entity, surface] : registry.view<SurfaceComponent>().each())
             {
-                if (!(surface.RotationPeriod > 0.0)) continue;
+                if (surface.RotationPeriod == 0.0) continue;
                 double rate = 1.0;
                 if (const auto* body = registry.try_get<const GeodesicBodyComponent>(entity);
                     body && body->Status == GeodesicBodyStatus::FreeFall)
@@ -43,7 +44,7 @@ export namespace MoleHole
             }
             for (auto [entity, clouds] : registry.view<CloudLayerComponent>().each())
             {
-                if (!(clouds.RotationPeriod > 0.0)) continue;
+                if (clouds.RotationPeriod == 0.0) continue;
                 double rate = 1.0;
                 if (const auto* body = registry.try_get<const GeodesicBodyComponent>(entity);
                     body && body->Status == GeodesicBodyStatus::FreeFall)

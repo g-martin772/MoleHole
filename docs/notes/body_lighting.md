@@ -42,7 +42,7 @@ all a Surface is black.
 
 In Probe mode every sphere with a Surface traces a **64 × 32 equirectangular image of the light arriving at its
 centre** (`kProbeWidth` × `kProbeHeight`), once per frame. The probes of all bodies are bands of one
-`R32G32B32A32_SFLOAT` image of 64 × (32 · 16) texels (`kMaxSpheres` = 16).
+`R32G32B32A32_SFLOAT` image of 64 × (32 · 64) texels (`kMaxSpheres` = 64).
 
 - **Directions.** The probe is world-aligned, with the map convention of `textured_bodies.md` §2: v = 0 at +Y, u = 0.5
   towards +X, east towards −Z (`ProbeDirection`, `probeDirection`). It does not rotate with the body.

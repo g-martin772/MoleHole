@@ -209,7 +209,7 @@ Textures are **not in git**: `assets/textures/` is in `.gitignore`.
 - **Lensing and LOD.** See §7.
 - **Pole filtering.** The mip chain is a plain 2×2 box. Texels near the poles cover less solid angle than those at
   the equator and are weighted equally (`m2_rendering_references.md` §1.1).
-- **Slot limit.** 64 distinct images per scene. 16 spheres at most (`kMaxSpheres`).
+- **Slot limit.** 64 distinct images per scene. 64 spheres at most (`kMaxSpheres`).
 - **Memory.** `TextureCache::GpuBytes()` reports the total, but there is no eviction. Lower `bodies.texture_max_size`
   if a scene runs out of memory.
 - **Not verified.** The A/B claim of §6 and the behaviour on GPUs without `descriptorIndexing` were not re-run for

@@ -114,18 +114,19 @@ export namespace MoleHole
         LocalFrameChoice choice;
         double best = std::numeric_limits<double>::infinity();
         int index = 0;
-        for (auto [entity, sphere, transform] : scene.Registry().view<const SphereComponent, const GPP::TransformComponent>().each())
+        for (const auto entity : UploadedSpheres(scene))
         {
-            if (index >= kMaxSpheres) break;
-            const glm::dvec3 offset = cameraM - transform.Position;
+            const int current = index++;
+            const auto* sphere = scene.Registry().try_get<const SphereComponent>(entity);
+            if (!sphere || scene.Registry().all_of<StarComponent>(entity)) continue;
+            const glm::dvec3 offset = cameraM - scene.Registry().get<GPP::TransformComponent>(entity).Position;
             const double distance = glm::length(offset);
-            if (distance < kLocalFrameRadii * sphere.Radius && distance / sphere.Radius < best)
+            if (distance < kLocalFrameRadii * sphere->Radius && distance / sphere->Radius < best)
             {
-                best = distance / sphere.Radius;
-                choice.Sphere = index;
+                best = distance / sphere->Radius;
+                choice.Sphere = current;
                 choice.CameraOffset = glm::vec3(offset / frame.LengthUnitM);
             }
-            ++index;
         }
         return choice;
     }
@@ -255,7 +256,7 @@ export namespace MoleHole
         return gpu;
     }
 
-    // One entry per sphere, in the order FillSceneData uploads them.
+    // One entry per sphere, in the order FillSceneData uploads them (UploadedSpheres).
     [[nodiscard]] inline std::array<BodyGpu, kMaxSpheres> FillBodyData(const GPP::Scene& scene,
                                                                        const BodyTextureSlotFn& slotFor,
                                                                        const double lengthUnitM = 1.0)
@@ -263,9 +264,15 @@ export namespace MoleHole
         std::array<BodyGpu, kMaxSpheres> bodies{};
         std::size_t count = 0;
         const auto& registry = scene.Registry();
-        for (auto [entity, sphere, transform] : registry.view<const SphereComponent, const GPP::TransformComponent>().each())
+        for (const auto entity : UploadedSpheres(scene))
         {
-            if (count >= bodies.size()) break;
+            const auto* sphereOrNull = registry.try_get<const SphereComponent>(entity);
+            if (!sphereOrNull)
+            {
+                ++count; // a Star without a Sphere keeps its slot, unlit
+                continue;
+            }
+            const auto& sphere = *sphereOrNull;
             const auto* surface = registry.try_get<const SurfaceComponent>(entity);
             auto& gpu = bodies[count++];
             gpu = MakeBodyGpu(sphere, surface, slotFor, BodyObserverVelocity(scene, scene.GuidOf(entity)));

@@ -251,10 +251,11 @@ namespace MoleHole
             VulkanBuffer* Lighting = nullptr;
             VulkanBuffer* Lights = nullptr;
             std::array<const VulkanImage*, kBodyTextureSlots> BodyTextures{};
-            MeshTraceFrame Meshes;
+            TracedMeshBindings Meshes;
         };
 
-        // Binding 0 is the kernel's output: the trace image for the camera, the probe image for the probes
+        // Binding 0 is the kernel's output: the trace image for the camera, the probe image for the probes.
+        // Layout (shaders): 1 params, 2-5 sky and LUTs, 6-12 traced meshes, 13-16 trails, 17-20 bodies.
         void WriteTraceSet(const TraceBindings& b, const ShaderPipeline& shader, const vk::DescriptorSet set,
                            const vk::ImageView output)
         {
@@ -266,21 +267,31 @@ namespace MoleHole
             {
                 return std::ranges::any_of(bindings, [binding](const auto& d) { return d.set == 0 && d.binding == binding; });
             };
-            const std::array<const VulkanImage*, 4> samplers{
-                res->Skybox.get(), res->BlackbodyLut.get(), res->AccelerationLut.get(), res->HrDiagramLut.get()};
+            const std::array<const VulkanImage*, 4> samplers{res->Skybox.get(), res->BlackbodyLut.get(), nullptr,
+                                                             res->HrDiagramLut.get()};
             for (std::uint32_t binding = 2; binding < 6; ++binding)
             {
-                if (!has(binding)) continue;
                 const auto* image = samplers[binding - 2];
+                if (!has(binding) || !image) continue;
                 writer.WriteCombinedImageSampler(set, binding, image->GetImageView(), image->GetSampler());
             }
-            for (std::uint32_t binding = 9; binding < 13; ++binding)
+            if (b.Meshes.Active)
             {
-                if (has(binding)) writer.WriteStorageBuffer(set, binding, b.Trails[binding - 9]->GetBuffer());
+                if (has(6)) writer.WriteAccelerationStructure(set, 6, b.Meshes.Tlas);
+                if (has(7)) writer.WriteStorageBuffer(set, 7, b.Meshes.Instances);
+                if (has(8)) writer.WriteCombinedImageSamplers(set, 8, *b.Meshes.Textures);
+                if (has(9)) writer.WriteStorageBuffer(set, 9, b.Meshes.Materials);
+                if (has(10)) writer.WriteStorageBuffer(set, 10, b.Meshes.Lights);
+                if (has(11)) writer.WriteUniformBuffer(set, 11, b.Meshes.LightParams);
+                if (has(12)) writer.WriteStorageBuffer(set, 12, b.Meshes.Dfg);
             }
-            if (has(13)) writer.WriteStorageBuffer(set, 13, b.Bodies->GetBuffer());
+            for (std::uint32_t binding = 13; binding < 17; ++binding)
+            {
+                if (has(binding)) writer.WriteStorageBuffer(set, binding, b.Trails[binding - 13]->GetBuffer());
+            }
+            if (has(17)) writer.WriteStorageBuffer(set, 17, b.Bodies->GetBuffer());
             std::array<vk::DescriptorImageInfo, kBodyTextureSlots> bodyImages;
-            if (has(14))
+            if (has(18))
             {
                 for (std::size_t i = 0; i < bodyImages.size(); ++i)
                 {
@@ -288,26 +299,10 @@ namespace MoleHole
                     bodyImages[i] = vk::DescriptorImageInfo{image->GetSampler(), image->GetImageView(),
                                                             vk::ImageLayout::eShaderReadOnlyOptimal};
                 }
-                writer.WriteCombinedImageSamplers(set, 14, bodyImages);
+                writer.WriteCombinedImageSamplers(set, 18, bodyImages);
             }
-            if (has(15)) writer.WriteStorageBuffer(set, 15, b.Lighting->GetBuffer());
-            if (has(16)) writer.WriteStorageBuffer(set, 16, b.Lights->GetBuffer());
-            std::array<vk::DescriptorImageInfo, kMeshTextureSlots> meshImages;
-            if (b.Meshes.Active)
-            {
-                if (has(6)) writer.WriteAccelerationStructure(set, 6, b.Meshes.Tlas);
-                if (has(7)) writer.WriteStorageBuffer(set, 7, b.Meshes.Instances);
-                if (has(8))
-                {
-                    for (std::size_t i = 0; i < meshImages.size(); ++i)
-                    {
-                        const auto* image = b.Meshes.Textures[i] ? b.Meshes.Textures[i] : res->DummyWhiteTexture.get();
-                        meshImages[i] = vk::DescriptorImageInfo{image->GetSampler(), image->GetImageView(),
-                                                                vk::ImageLayout::eShaderReadOnlyOptimal};
-                    }
-                    writer.WriteCombinedImageSamplers(set, 8, meshImages);
-                }
-            }
+            if (has(19)) writer.WriteStorageBuffer(set, 19, b.Lighting->GetBuffer());
+            if (has(20)) writer.WriteStorageBuffer(set, 20, b.Lights->GetBuffer());
             writer.Update();
         }
 
@@ -348,12 +343,10 @@ namespace MoleHole
                     auto meshDefines = MeshShaderDefines(m_Res.Device->GetCapabilities(),
                                                          GltfTextureCapacity(m_Res.Device->GetCapabilities()), false);
                     meshDefines.emplace("GPP_MESH_TRACE", "1");
+                    for (const auto& [name, value] : defines) meshDefines.emplace(name, value);
                     m_MeshPipeline = MakeComputePipeline(m_Res, "black_hole_rendering.comp", meshDefines);
-                    m_MeshPipeline = MakeComputePipeline(m_Res, "black_hole_rendering.comp", with({{"GPP_MESH_TRACE", "1"}}));
                     if (m_PipelineF64)
                     {
-                        m_MeshPipelineF64 = MakeComputePipeline(
-                            m_Res, "black_hole_rendering.comp", with({{"GPP_MESH_TRACE", "1"}, {"GPP_PRECISION_F64", "1"}}));
                         meshDefines.emplace("GPP_PRECISION_F64", "1");
                         m_MeshPipelineF64 = MakeComputePipeline(m_Res, "black_hole_rendering.comp", meshDefines);
                     }
@@ -372,7 +365,7 @@ namespace MoleHole
                 m_LightingBuffer = storage(kMaxSpheres * sizeof(BodyLightingGpu));
                 const std::array<BodyLightingGpu, kMaxSpheres> unlit{};
                 m_LightingBuffer->Upload(unlit.data(), sizeof(unlit));
-                m_LightBuffer = storage(sizeof(LightBlockGpu));
+                m_LightBuffer = storage(sizeof(BodyLightBlockGpu));
 
                 const vk::Extent3D probeExtent{kProbeWidth, kProbeHeight * kMaxSpheres, 1};
                 m_ProbeImage = std::make_unique<VulkanImage>(
@@ -427,21 +420,10 @@ namespace MoleHole
                 const TraceBindings bindings = MakeBindings();
 
                 RecordProbes(ctx, kernel == TraceKernel::MarcherF64 || kernel == TraceKernel::MarcherMeshesF64, bindings);
-                const auto device = m_Res.Device;
-                auto* res = &m_Res;
-                auto* params = m_ParamsBuffer.get();
-                const auto& traced = m_Res.MeshTrace;
-                TracedMeshBindings bindings{.Active = traced.Active, .Tlas = traced.Scene.Tlas,
-                                            .Instances = traced.Scene.Instances, .Materials = traced.Scene.Materials,
-                                            .Lights = traced.Scene.Lights, .LightParams = traced.Scene.LightParams, .Dfg = traced.Scene.Dfg,
-                                            .Textures = traced.Scene.Textures};
-                const std::array<VulkanBuffer*, 4> trailBuffers{m_TrailSegments.get(), m_TrailCells.get(), m_TrailIndices.get(),
-                                                                m_TrailCoarse.get()};
 
                 ctx.Graph.AddBudgetedComputePass(
                     "Trace", {}, {}, ctx.GroupsX * ctx.GroupsY,
                     [groupsX, raytracePipeline, bindings, set = vk::DescriptorSet{}](
-                    [device, groupsX, raytracePipeline, res, params, trailBuffers, meshes = std::move(bindings), set = vk::DescriptorSet{}](
                         const vk::CommandBuffer cmd, RenderGraph& g, const RenderGraphWorkSlice& slice) mutable
                     {
                         const auto pipeline = raytracePipeline->GetPipeline();
@@ -450,38 +432,6 @@ namespace MoleHole
                         if (!set)
                         {
                             set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
-                            DescriptorSetWriter writer(device->GetDevice());
-                            writer.WriteStorageImage(set, 0, res->RaytraceImage->GetImageView())
-                                .WriteUniformBuffer(set, 1, params->GetBuffer());
-                            const auto bindings = raytracePipeline->GetReflection().descriptorBindings;
-                            const std::array<const VulkanImage*, 4> samplers{
-                                res->Skybox.get(), res->BlackbodyLut.get(), nullptr, res->HrDiagramLut.get()};
-                            for (std::uint32_t binding = 2; binding < 6; ++binding)
-                            {
-                                if (std::ranges::none_of(bindings, [binding](const auto& b) { return b.set == 0 && b.binding == binding; }))
-                                    continue;
-                                const auto* image = samplers[binding - 2];
-                                writer.WriteCombinedImageSampler(set, binding, image->GetImageView(), image->GetSampler());
-                            }
-                            const auto has = [&bindings](const std::uint32_t binding)
-                            {
-                                return std::ranges::any_of(bindings, [binding](const auto& b) { return b.set == 0 && b.binding == binding; });
-                            };
-                            for (std::uint32_t binding = 13; binding < 17; ++binding)
-                            {
-                                if (has(binding)) writer.WriteStorageBuffer(set, binding, trailBuffers[binding - 13]->GetBuffer());
-                            }
-                            if (meshes.Active)
-                            {
-                                if (has(6)) writer.WriteAccelerationStructure(set, 6, meshes.Tlas);
-                                if (has(7)) writer.WriteStorageBuffer(set, 7, meshes.Instances);
-                                if (has(8)) writer.WriteCombinedImageSamplers(set, 8, *meshes.Textures);
-                                if (has(9)) writer.WriteStorageBuffer(set, 9, meshes.Materials);
-                                if (has(10)) writer.WriteStorageBuffer(set, 10, meshes.Lights);
-                                if (has(11)) writer.WriteUniformBuffer(set, 11, meshes.LightParams);
-                                if (has(12)) writer.WriteStorageBuffer(set, 12, meshes.Dfg);
-                            }
-                            writer.Update();
                             WriteTraceSet(bindings, *raytracePipeline, set, bindings.Res->RaytraceImage->GetImageView());
                         }
                         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline->GetLayout(), 0, set, {});
@@ -567,11 +517,16 @@ namespace MoleHole
 
             [[nodiscard]] TraceBindings MakeBindings()
             {
+                const auto& traced = m_Res.MeshTrace;
                 return TraceBindings{
                     .Res = &m_Res, .Params = m_ParamsBuffer.get(),
                     .Trails = {m_TrailSegments.get(), m_TrailCells.get(), m_TrailIndices.get(), m_TrailCoarse.get()},
                     .Bodies = m_BodyBuffer.get(), .Lighting = m_LightingBuffer.get(), .Lights = m_LightBuffer.get(),
-                    .BodyTextures = m_BodySlots.Images(), .Meshes = m_Res.MeshTrace};
+                    .BodyTextures = m_BodySlots.Images(),
+                    .Meshes = {.Active = traced.Active, .Tlas = traced.Scene.Tlas, .Instances = traced.Scene.Instances,
+                               .Materials = traced.Scene.Materials, .Lights = traced.Scene.Lights,
+                               .LightParams = traced.Scene.LightParams, .Dfg = traced.Scene.Dfg,
+                               .Textures = traced.Scene.Textures}};
             }
 
             // Each body traces the sky at its centre into a band of the probe image, then one workgroup per body
@@ -692,7 +647,6 @@ namespace MoleHole
             bool m_ProbeFramesSettled = true;
             TextureSlotTable<kBodyTextureSlots> m_BodySlots;
             bool m_WarnedBodySlots = false;
-            MeshAccelerator m_Meshes;
         };
 
         // Meters the traced image and writes the tone mapper's exposure to a 1x1 image (always 1 without tone mapping)
@@ -1444,7 +1398,6 @@ namespace MoleHole
         impl.Stages.push_back(std::make_unique<MeshStage>(res));
 
         res.BlackbodyLut = GenerateBlackbodyLut(res.Device, *res.UploadPool, queue, res.Logger);
-        res.AccelerationLut = GenerateAccelerationLut(res.Device, *res.UploadPool, queue, res.Logger);
         res.HrDiagramLut = GenerateHrDiagramLut(res.Device, *res.UploadPool, queue, res.Logger);
         res.Skybox = LoadSkyboxTexture(res.Device, *res.UploadPool, queue, res.FileSystem,
                                        "assets/backgrounds/space.hdr", res.Logger);

@@ -43,7 +43,7 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
     float _pad0;
 
     BlackHoleData u_blackHoles[8];
-    SphereData u_spheres[16];
+    SphereData u_spheres[64];
 
     mat4 u_viewProjection;
 
