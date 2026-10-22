@@ -60,6 +60,7 @@ export namespace MoleHole
         mutable std::mutex m_Mutex;
         std::string m_LastScenePath;
         GPP::RecentList m_Recents;
+        std::vector<std::string> m_RemovedRecents;
         bool m_ShowLauncher = true;
         std::string m_LastExportDirectory;
         std::string m_DefaultExportDirectory;

@@ -946,12 +946,7 @@ namespace
                 static_cast<AnimationGraphWindowLayer*>(user)->m_Logger->Error("[AnimationGraph] Refusing to save corrupt node editor view");
                 return false;
             }
-            std::error_code ec;
-            const auto viewPath = EditorViewPath(user);
-            std::filesystem::create_directories(viewPath.parent_path(), ec);
-            std::ofstream file(viewPath, std::ios::binary | std::ios::trunc);
-            file.write(data, static_cast<std::streamsize>(size));
-            return static_cast<bool>(file);
+            return WriteFileAtomic(EditorViewPath(user), std::string_view(data, size)).has_value();
         }
 
         ed::EditorContext* CreateEditorContext()

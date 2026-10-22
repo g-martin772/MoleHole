@@ -195,7 +195,18 @@ namespace MoleHole
 
             {
                 std::scoped_lock lock(m_Mutex);
-                root["RecentScenes"] = m_Recents.ToYaml();
+                RecentList onDisk(m_Recents.MaxEntries());
+                try
+                {
+                    onDisk.FromYaml(YAML::LoadFile(m_StatePath.string())["RecentScenes"]);
+                }
+                catch (const std::exception&)
+                {
+                }
+                auto merged = m_Recents;
+                merged.Merge(onDisk, m_RemovedRecents);
+                merged.Prune();
+                root["RecentScenes"] = merged.ToYaml();
                 root["ShowLauncher"] = m_ShowLauncher;
             }
 
@@ -250,13 +261,13 @@ namespace MoleHole
                                             std::filesystem::copy_options::overwrite_existing, ec);
             }
 
-            std::ofstream file(m_StatePath, std::ios::binary | std::ios::trunc);
-            if (!file)
+            YAML::Emitter out;
+            out << root;
+            if (const auto written = WriteFileAtomic(m_StatePath, out.c_str()); !written)
             {
-                m_Logger->Error("AppStateService: failed to open '{}' for writing", m_StatePath.string());
+                m_Logger->Error("AppStateService: failed to write '{}': {}", m_StatePath.string(), written.error());
                 return;
             }
-            file << root;
             m_Logger->Info("AppStateService: saved state to '{}'", m_StatePath.string());
         }
         catch (const std::exception& error)
@@ -294,6 +305,7 @@ namespace MoleHole
     {
         std::scoped_lock lock(m_Mutex);
         m_Recents.Remove(path);
+        m_RemovedRecents.push_back(RecentList::Normalize(path));
     }
 
     bool AppStateService::GetShowLauncher() const
@@ -319,6 +331,7 @@ namespace MoleHole
         std::scoped_lock lock(m_Mutex);
         m_LastScenePath = absolute;
         m_Recents.Add(absolute);
+        std::erase(m_RemovedRecents, absolute);
     }
 
     std::filesystem::path NextNumberedPath(const std::filesystem::path& directory, const std::string_view stem,

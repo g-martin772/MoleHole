@@ -217,7 +217,7 @@ namespace MoleHole
         {
             const auto tempRoot = m_AppPaths->IsInstalled() ? m_AppPaths->TempDir() : std::filesystem::temp_directory_path();
             m_TempDir = tempRoot /
-                        std::format("molehole_export_{}", std::chrono::steady_clock::now().time_since_epoch().count());
+                        std::format("molehole_export_{}_{}", GPP::CurrentProcessId(), std::chrono::steady_clock::now().time_since_epoch().count());
             std::filesystem::create_directories(m_TempDir);
         }
 

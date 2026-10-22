@@ -63,7 +63,7 @@ namespace MoleHole
 
     LatexRenderer::LatexRenderer(std::shared_ptr<GPP::Logger> logger) : m_Logger(std::move(logger))
     {
-        m_TempDir = std::filesystem::temp_directory_path() / "molehole_latex";
+        m_TempDir = std::filesystem::temp_directory_path() / std::format("molehole_latex_{}", GPP::CurrentProcessId());
         std::filesystem::create_directories(m_TempDir);
 
         m_Available = ToolAvailable("latex --version") && ToolAvailable("dvipng --version");
