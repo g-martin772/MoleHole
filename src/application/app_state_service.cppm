@@ -13,11 +13,12 @@ export namespace MoleHole
     class AppStateService final : public GPP::IHostedService
     {
     public:
-        using Dependencies = std::tuple<UiState, RenderSettingsService, GPP::UiPreferences, GPP::IFileSystem, GPP::Logger>;
+        using Dependencies = std::tuple<UiState, RenderSettingsService, GPP::UiPreferences, GPP::IFileSystem, GPP::AppPaths, GPP::Logger>;
 
         AppStateService(std::shared_ptr<UiState> uiState, std::shared_ptr<RenderSettingsService> renderSettings,
                          std::shared_ptr<GPP::UiPreferences> preferences,
-                         std::shared_ptr<GPP::IFileSystem> fileSystem, std::shared_ptr<GPP::Logger> logger);
+                         std::shared_ptr<GPP::IFileSystem> fileSystem, std::shared_ptr<GPP::AppPaths> appPaths,
+                         std::shared_ptr<GPP::Logger> logger);
 
         GPP::Task<void> StartAsync(std::stop_token stopToken) override;
         GPP::Task<void> StopAsync() override;
@@ -46,6 +47,7 @@ export namespace MoleHole
         std::shared_ptr<RenderSettingsService> m_RenderSettings;
         std::shared_ptr<GPP::UiPreferences> m_Preferences;
         std::shared_ptr<GPP::IFileSystem> m_FileSystem;
+        std::shared_ptr<GPP::AppPaths> m_AppPaths;
         std::shared_ptr<GPP::Logger> m_Logger;
 
         std::filesystem::path m_StatePath;
@@ -55,7 +57,7 @@ export namespace MoleHole
         std::string m_LastScenePath;
         std::vector<std::string> m_RecentScenes;
         std::string m_LastExportDirectory;
-        std::string m_DefaultExportDirectory{".gpp/exports"};
+        std::string m_DefaultExportDirectory;
         std::vector<std::string> m_MeshScanDirectories;
         bool m_TutorialCompleted = false;
     };

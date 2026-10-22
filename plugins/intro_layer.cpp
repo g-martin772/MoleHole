@@ -190,7 +190,8 @@ namespace
         void EnsureTitleFont()
         {
             if (m_TitleFont) return;
-            m_TitleFont = ImGui::GetIO().Fonts->AddFontFromFileTTF("font/DidotLTPro-Bold.ttf", 120.0f);
+            m_TitleFont = ImGui::GetIO().Fonts->AddFontFromFileTTF(
+                m_FileSystem->ResolvePath("font/DidotLTPro-Bold.ttf").string().c_str(), 120.0f);
             if (!m_TitleFont)
             {
                 m_Logger->Warn("IntroLayer: failed to load title font, falling back to default");

@@ -26,7 +26,6 @@ namespace
 
     constexpr int kNavigateToContentRetryFrames = 15;
     constexpr float kMinEditorExtent = 64.0f;
-    constexpr const char* kEditorViewPath = ".gpp/node_editor.json";
     constexpr double kMinEditorZoom = 0.05;
     constexpr double kMaxEditorViewMagnitude = 1.0e6;
     constexpr std::uint64_t kHighlightTicks = 30;
@@ -130,15 +129,15 @@ namespace
     struct AnimationGraphWindowLayer final : public HotReloadableLayer
     {
         using Dependencies = std::tuple<Logger, SceneManager, UiState, AssetDirectories, AssetOptions, EventDispatcher,
-                                        RenderSettingsService>;
+                                        RenderSettingsService, AppPaths>;
 
         AnimationGraphWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<SceneManager> scenes,
                                   std::shared_ptr<UiState> uiState, std::shared_ptr<AssetDirectories> assets,
                                   std::shared_ptr<AssetOptions> assetOptions, std::shared_ptr<EventDispatcher> dispatcher,
-                                  std::shared_ptr<RenderSettingsService> renderSettings)
+                                  std::shared_ptr<RenderSettingsService> renderSettings, std::shared_ptr<AppPaths> appPaths)
             : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState)),
               m_Assets(std::move(assets)), m_AssetOptions(std::move(assetOptions)), m_Dispatcher(std::move(dispatcher)),
-              m_RenderSettings(std::move(renderSettings))
+              m_RenderSettings(std::move(renderSettings)), m_AppPaths(std::move(appPaths))
         {
         }
 
@@ -917,17 +916,23 @@ namespace
 
         // ---- node-editor canvas ----------------------------------------------------------------
 
+        static std::filesystem::path EditorViewPath(void* user)
+        {
+            return static_cast<AnimationGraphWindowLayer*>(user)->m_AppPaths->ConfigDir() / "node_editor.json";
+        }
+
         static std::size_t LoadEditorView(char* data, void* user)
         {
-            std::ifstream file(kEditorViewPath, std::ios::binary);
+            const auto viewPath = EditorViewPath(user);
+            std::ifstream file(viewPath, std::ios::binary);
             if (!file) return 0;
             const std::string json((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
             if (!EditorViewSane(json))
             {
-                static_cast<AnimationGraphWindowLayer*>(user)->m_Logger->Error("[AnimationGraph] Discarding corrupt node editor view '{}'", kEditorViewPath);
+                static_cast<AnimationGraphWindowLayer*>(user)->m_Logger->Error("[AnimationGraph] Discarding corrupt node editor view '{}'", viewPath.string());
                 file.close();
                 std::error_code ec;
-                std::filesystem::remove(kEditorViewPath, ec);
+                std::filesystem::remove(viewPath, ec);
                 return 0;
             }
             if (data) std::memcpy(data, json.data(), json.size());
@@ -941,7 +946,10 @@ namespace
                 static_cast<AnimationGraphWindowLayer*>(user)->m_Logger->Error("[AnimationGraph] Refusing to save corrupt node editor view");
                 return false;
             }
-            std::ofstream file(kEditorViewPath, std::ios::binary | std::ios::trunc);
+            std::error_code ec;
+            const auto viewPath = EditorViewPath(user);
+            std::filesystem::create_directories(viewPath.parent_path(), ec);
+            std::ofstream file(viewPath, std::ios::binary | std::ios::trunc);
             file.write(data, static_cast<std::streamsize>(size));
             return static_cast<bool>(file);
         }
@@ -1481,7 +1489,7 @@ namespace
                     return it->second.Directories.front();
                 }
             }
-            return "combos";
+            return m_AppPaths->IsInstalled() ? m_AppPaths->UserSubdir("combos") : std::filesystem::path("combos");
         }
 
         void SaveSelectionAsCombo()
@@ -2597,6 +2605,7 @@ namespace
 
         std::shared_ptr<EventDispatcher> m_Dispatcher;
         std::shared_ptr<RenderSettingsService> m_RenderSettings;
+        std::shared_ptr<AppPaths> m_AppPaths;
         EventSubscription m_KeySubscription;
         EventSubscription m_TriggerSubscription;
         std::mutex m_EventMutex;

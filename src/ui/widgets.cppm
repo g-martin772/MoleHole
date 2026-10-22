@@ -121,7 +121,7 @@ export namespace MoleHole
             ImFontConfig config;
             config.FontDataOwnedByAtlas = true;
             state.IconFont = ImGui::GetIO().Fonts->AddFontFromFileTTF(
-                "font/fa-solid-900.ttf", 24.0f, &config, iconRanges);
+                (state.FontDirectory / "fa-solid-900.ttf").string().c_str(), 24.0f, &config, iconRanges);
         }
         return state.IconFont;
     }
@@ -131,7 +131,7 @@ export namespace MoleHole
     // fallback: the default font keeps every glyph it has, Roboto fills in the rest. Checked every frame because the
     // default font changes with the UI font preference; merging is cheap and done once per font.
     // Returns the font it merged into, or nullptr when there was nothing (more) to do.
-    inline ImFont* EnsureSymbolFallback(const char* path = "font/Roboto-Regular.ttf")
+    inline ImFont* EnsureSymbolFallback(const std::filesystem::path& path = "font/Roboto-Regular.ttf")
     {
         static std::unordered_set<const ImFont*> merged;
         auto& io = ImGui::GetIO();
@@ -143,7 +143,7 @@ export namespace MoleHole
         config.MergeMode = true;
         config.DstFont = target;
         config.FontDataOwnedByAtlas = true;
-        return io.Fonts->AddFontFromFileTTF(path, 0.0f, &config) ? target : nullptr;
+        return io.Fonts->AddFontFromFileTTF(path.string().c_str(), 0.0f, &config) ? target : nullptr;
     }
 
     // Smoothly chases a 0..1 target keyed by widget id; frame-rate independent.

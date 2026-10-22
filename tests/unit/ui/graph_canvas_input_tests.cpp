@@ -62,7 +62,12 @@ namespace
             State->CurrentSceneName = "CanvasScene";
             State->ShowAnimationGraphWindow = true;
             Layer = std::make_unique<AnimationGraphWindowLayer>(Log, Scenes, State, Assets, Options, Dispatcher,
-                                                                std::make_shared<RenderSettingsService>());
+                                                                std::make_shared<RenderSettingsService>(),
+                                                                std::make_shared<GPP::AppPaths>(GPP::AppPaths::Resolve({
+                                                                    .BinaryDir = WorkDirectory,
+                                                                    .WorkingDir = WorkDirectory,
+                                                                    .Env = [](std::string_view) { return std::optional<std::string>("dev"); }
+                                                                })));
             Layer->OnAttach();
             Layer->OnUpdate(0.016f);
         }

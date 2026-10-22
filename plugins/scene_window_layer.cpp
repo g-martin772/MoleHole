@@ -183,15 +183,15 @@ namespace
 
     struct SceneWindowLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, SceneManager, UiState, AppStateService, IFileSystem, FileDialog, AssetDirectories>;
+        using Dependencies = std::tuple<Logger, SceneManager, UiState, AppStateService, IFileSystem, FileDialog, AssetDirectories, AppPaths>;
 
         SceneWindowLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<SceneManager> scenes,
                          std::shared_ptr<UiState> uiState, std::shared_ptr<AppStateService> appState,
                          std::shared_ptr<IFileSystem> fileSystem, std::shared_ptr<FileDialog> fileDialog,
-                         std::shared_ptr<AssetDirectories> assets)
+                         std::shared_ptr<AssetDirectories> assets, std::shared_ptr<AppPaths> appPaths)
             : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState)),
               m_AppState(std::move(appState)), m_FileSystem(std::move(fileSystem)),
-              m_FileDialog(std::move(fileDialog)), m_Assets(std::move(assets))
+              m_FileDialog(std::move(fileDialog)), m_Assets(std::move(assets)), m_AppPaths(std::move(appPaths))
         {
         }
 
@@ -664,6 +664,7 @@ namespace
         [[nodiscard]] std::vector<std::string> CollectScannedMeshes() const
         {
             std::vector<std::string> roots{m_FileSystem->ResolvePath("assets/models").string()};
+            if (m_AppPaths->IsInstalled()) roots.push_back(m_AppPaths->UserSubdir("models").string());
             const auto extra = m_AppState->GetMeshScanDirectories();
             roots.insert(roots.end(), extra.begin(), extra.end());
 
@@ -964,6 +965,7 @@ namespace
         std::shared_ptr<IFileSystem> m_FileSystem;
         std::shared_ptr<FileDialog> m_FileDialog;
         std::shared_ptr<AssetDirectories> m_Assets;
+        std::shared_ptr<AppPaths> m_AppPaths;
         std::unique_ptr<ScriptCatalog> m_Catalog;
         std::map<std::string, ScriptDescriptor> m_ComponentGraphs;
         double m_ComponentGraphsStamp = -1.0;

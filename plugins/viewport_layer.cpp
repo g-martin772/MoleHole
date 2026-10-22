@@ -40,7 +40,7 @@ namespace
     {
         using Dependencies =
             std::tuple<Logger, Renderer, IFileSystem, EventDispatcher, SceneManager, InputState, UiState,
-                       AppStateService, RenderSettingsService>;
+                       AppStateService, RenderSettingsService, AppPaths>;
 
         ViewportLayer(const std::shared_ptr<Logger>& logger,
                       const std::shared_ptr<Renderer>& renderer,
@@ -50,13 +50,14 @@ namespace
                       const std::shared_ptr<InputState>& input,
                       const std::shared_ptr<UiState>& uiState,
                       const std::shared_ptr<AppStateService>& appState,
-                      const std::shared_ptr<RenderSettingsService>& renderSettings)
+                      const std::shared_ptr<RenderSettingsService>& renderSettings,
+                      const std::shared_ptr<AppPaths>& appPaths)
             : HotReloadableLayer(logger), m_Renderer(renderer), m_Scenes(scenes), m_Input(input), m_UiState(uiState),
               m_AppState(appState), m_RenderSettings(renderSettings),
               m_Meshes(std::make_shared<MeshCache>(renderer, fileSystem, logger)),
               m_Loader(scenes, m_Meshes, logger),
               m_Pipeline(renderer, fileSystem, dispatcher, logger, m_Meshes),
-              m_Export(renderer, uiState, appState, renderSettings, logger, kViewportBufferId,
+              m_Export(renderer, uiState, appState, renderSettings, appPaths, logger, kViewportBufferId,
                        [this] { return m_Sim.Load()->Runner; }),
               m_Dispatcher(dispatcher)
         {

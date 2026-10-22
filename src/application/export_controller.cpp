@@ -30,11 +30,11 @@ namespace MoleHole
     ExportController::ExportController(std::shared_ptr<Renderer> renderer, std::shared_ptr<UiState> uiState,
                                        std::shared_ptr<AppStateService> appState,
                                        std::shared_ptr<RenderSettingsService> renderSettings,
-                                       std::shared_ptr<Logger> logger, const std::uint32_t bufferTargetId,
-                                       RunnerProvider runner)
+                                       std::shared_ptr<AppPaths> appPaths, std::shared_ptr<Logger> logger,
+                                       const std::uint32_t bufferTargetId, RunnerProvider runner)
         : m_Renderer(std::move(renderer)), m_UiState(std::move(uiState)), m_AppState(std::move(appState)),
-          m_RenderSettings(std::move(renderSettings)), m_Logger(std::move(logger)), m_BufferTargetId(bufferTargetId),
-          m_Runner(std::move(runner))
+          m_RenderSettings(std::move(renderSettings)), m_AppPaths(std::move(appPaths)), m_Logger(std::move(logger)),
+          m_BufferTargetId(bufferTargetId), m_Runner(std::move(runner))
     {
     }
 
@@ -215,7 +215,8 @@ namespace MoleHole
 
         if (request.RequestKind == ExportRequest::Kind::Video)
         {
-            m_TempDir = std::filesystem::temp_directory_path() /
+            const auto tempRoot = m_AppPaths->IsInstalled() ? m_AppPaths->TempDir() : std::filesystem::temp_directory_path();
+            m_TempDir = tempRoot /
                         std::format("molehole_export_{}", std::chrono::steady_clock::now().time_since_epoch().count());
             std::filesystem::create_directories(m_TempDir);
         }
@@ -409,7 +410,18 @@ namespace MoleHole
         info.CameraYaw = m_UiState->CameraYaw;
         info.CameraPitch = m_UiState->CameraPitch;
         info.CameraFov = m_UiState->ViewFov;
-        info.GitCommit = ReadGitCommit(std::filesystem::current_path());
+        if (m_AppPaths->IsInstalled())
+        {
+#ifdef MOLEHOLE_GIT_COMMIT
+            info.GitCommit = MOLEHOLE_GIT_COMMIT;
+#else
+            info.GitCommit = "unknown";
+#endif
+        }
+        else
+        {
+            info.GitCommit = ReadGitCommit(std::filesystem::current_path());
+        }
         info.Gpu = m_RenderSettings->Capabilities();
         info.GpuMs = m_LastGpuMs;
         info.GpuPassMs = m_LastPassMs;

@@ -49,13 +49,60 @@ namespace
         return true;
     }
 
-    void EnsureRuntimeDirectories()
+#ifndef MOLEHOLE_VERSION
+#define MOLEHOLE_VERSION "0.0.0"
+#endif
+
+    AppInfo MakeAppInfo()
     {
-        for (const char* directory : {".gpp/exports", ".gpp/hot-reload-cache", ".gpp/shader-cache"})
+        AppInfo info;
+        info.Id = "molehole";
+        info.Name = "MoleHole";
+        info.Organization = "MoleHole";
+        info.Version = MOLEHOLE_VERSION;
+        info.Summary = "Black hole simulation and visualization";
+        info.Categories = "Graphics;Science;";
+        info.IconFile = "assets/branding/molehole.svg";
+        return info;
+    }
+
+    void EnsureRuntimeDirectories(const AppPaths& paths)
+    {
+        std::vector<std::filesystem::path> directories{
+            paths.CacheDir() / "hot-reload-cache", paths.CacheDir() / "shader-cache", paths.ConfigDir(),
+            paths.UserSubdir("exports")};
+        if (paths.IsInstalled())
+        {
+            directories.push_back(paths.TempDir());
+            for (const char* name : {"scenes", "scripts", "combos", "models"})
+            {
+                directories.push_back(paths.UserSubdir(name));
+            }
+        }
+        for (const auto& directory : directories)
         {
             std::error_code error;
             std::filesystem::create_directories(directory, error);
         }
+    }
+
+    // Absolute asset locations only exist once installed; in dev the bundled config's relative paths apply.
+    std::unordered_map<std::string, std::string> InstalledAssetOverrides(const AppPaths& paths)
+    {
+        std::unordered_map<std::string, std::string> values;
+        const auto set = [&](const std::string& key, const std::vector<std::filesystem::path>& directories)
+        {
+            for (std::size_t index = 0; index < directories.size(); ++index)
+            {
+                values[std::format("{}:{}", key, index)] = directories[index].string();
+            }
+        };
+        const auto& resources = paths.ResourceDir();
+        set("GPP:Assets:Scripts:Directories", {paths.UserSubdir("scripts"), resources / "scripts"});
+        set("GPP:Assets:Combos:Directories", {paths.UserSubdir("combos"), resources / "combos"});
+        set("GPP:Graphics:Render:ShaderAssetDirectories", {resources / "shaders", resources / "shaders" / "pbr"});
+        set("GPP:Graphics:Fonts:FontDirectories", {resources / "font"});
+        return values;
     }
 
     std::optional<CliExportArgs> ParseExportArgs(int argc, char* argv[])
@@ -137,7 +184,6 @@ namespace
 
 int main(int argc, char* argv[])
 {
-    EnsureRuntimeDirectories();
     SetGlobalShaderDefines(Units::ShaderDefines());
     MoleHole::RegisterComponents();
 
@@ -156,22 +202,40 @@ int main(int argc, char* argv[])
 
     auto builder = GuiApplicationBuilder();
 
+    const auto appInfo = MakeAppInfo();
+    builder.SetAppInfo(appInfo);
+    const auto paths = AppPaths::Resolve({
+        .BinaryDir = builder.FS.GetBinaryDirectory(),
+        .WorkingDir = builder.FS.GetWorkingDirectory(),
+        .Info = appInfo,
+        .Env = AppPaths::ProcessEnv()
+    });
+    EnsureRuntimeDirectories(paths);
+
     builder.Configuration
-           .AddJsonFile("config.json")
-           .AddCommandLine(argc, argv)
-           .AddEnvironmentVariables();
+           .AddJsonFile((paths.ResourceDir() / "config.json").string())
+           .AddJsonFile((paths.ConfigDir() / "config.json").string(), true);
+    if (paths.IsInstalled())
+    {
+        builder.Configuration.AddInMemory(InstalledAssetOverrides(paths));
+    }
+    builder.Configuration
+           .AddEnvironmentVariables()
+           .AddCommandLine(argc, argv);
 
     builder.ConfigureImGui({"DockingEnable", "ViewportsEnable"}, true);
     builder.SetTheme("molehole_theme.so", true);
 
+    const auto fontDirectory = paths.ResourceDir() / "font";
     std::shared_ptr<UiState> exportState;
     if (exportArgs)
     {
         builder.SetHeadless(true);
         exportState = std::make_shared<UiState>();
-        builder.Services.AddSingleton<UiState>([exportArgs, exportState](ServiceProvider&) -> std::shared_ptr<IService>
+        builder.Services.AddSingleton<UiState>([exportArgs, exportState, fontDirectory](ServiceProvider&) -> std::shared_ptr<IService>
         {
             auto state = exportState;
+            state->FontDirectory = fontDirectory;
             state->PendingExport.Set(exportArgs->Request);
             state->ExitWhenExportDone = true;
             state->ExportTimeoutSeconds = exportArgs->TimeoutSeconds;
@@ -184,9 +248,10 @@ int main(int argc, char* argv[])
     }
     else
     {
-        builder.Services.AddSingleton<UiState>([](ServiceProvider&) -> std::shared_ptr<IService>
+        builder.Services.AddSingleton<UiState>([fontDirectory](ServiceProvider&) -> std::shared_ptr<IService>
         {
             auto state = std::make_shared<UiState>();
+            state->FontDirectory = fontDirectory;
             state->IntroActive = true;
             return state;
         });

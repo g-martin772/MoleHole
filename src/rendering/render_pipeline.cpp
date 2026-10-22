@@ -47,7 +47,12 @@ namespace MoleHole
         ShaderCompileOptions ShaderIncludeOptions(const RenderResources& res)
         {
             ShaderCompileOptions options;
-            options.includeDirectories.push_back(res.FileSystem->ResolvePath("dependencies/gpp/shaders/pbr"));
+            auto pbrDirectory = res.FileSystem->ResolvePath("dependencies/gpp/shaders/pbr");
+            if (std::error_code error; !std::filesystem::exists(pbrDirectory, error))
+            {
+                pbrDirectory = res.FileSystem->ResourceDir() / "shaders" / "pbr";
+            }
+            options.includeDirectories.push_back(std::move(pbrDirectory));
             return options;
         }
 

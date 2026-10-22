@@ -15,7 +15,7 @@ export namespace MoleHole
 
         ExportController(std::shared_ptr<GPP::Renderer> renderer, std::shared_ptr<UiState> uiState,
                          std::shared_ptr<AppStateService> appState, std::shared_ptr<RenderSettingsService> renderSettings,
-                         std::shared_ptr<GPP::Logger> logger, std::uint32_t bufferTargetId, RunnerProvider runner);
+                         std::shared_ptr<GPP::AppPaths> appPaths, std::shared_ptr<GPP::Logger> logger, std::uint32_t bufferTargetId, RunnerProvider runner);
 
         void Update();
         void SetPipelinesReady(const bool ready) noexcept { m_PipelinesReady.store(ready, std::memory_order_release); }
@@ -45,6 +45,7 @@ export namespace MoleHole
         std::shared_ptr<UiState> m_UiState;
         std::shared_ptr<AppStateService> m_AppState;
         std::shared_ptr<RenderSettingsService> m_RenderSettings;
+        std::shared_ptr<GPP::AppPaths> m_AppPaths;
         std::shared_ptr<GPP::Logger> m_Logger;
         std::uint32_t m_BufferTargetId;
         RunnerProvider m_Runner;

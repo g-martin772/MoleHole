@@ -158,6 +158,7 @@ export namespace MoleHole
         glm::vec2 ViewportScreenMax{0.0f};
 
         ImFont* IconFont = nullptr;
+        std::filesystem::path FontDirectory{"font"};
 
         OneShot<ExportRequest> PendingExport;
         bool ExportActive = false;

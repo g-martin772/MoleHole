@@ -12,17 +12,17 @@ namespace
     struct TopBarLayer final : public HotReloadableLayer
     {
         using Dependencies = std::tuple<Logger, FileDialog, SceneManager, UiPreferences, FontAssetCatalog, UiState,
-                                        AppStateService, IFileSystem, RenderSettingsService>;
+                                        AppStateService, IFileSystem, RenderSettingsService, AppPaths>;
 
         TopBarLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<FileDialog> fileDialog,
                    std::shared_ptr<SceneManager> scenes, std::shared_ptr<UiPreferences> uiPreferences,
                    std::shared_ptr<FontAssetCatalog> fontAssets, std::shared_ptr<UiState> uiState,
                    std::shared_ptr<AppStateService> appState, std::shared_ptr<IFileSystem> fileSystem,
-                   std::shared_ptr<RenderSettingsService> renderSettings)
+                   std::shared_ptr<RenderSettingsService> renderSettings, std::shared_ptr<AppPaths> appPaths)
             : HotReloadableLayer(logger), m_FileDialog(std::move(fileDialog)), m_Scenes(std::move(scenes)),
               m_UiPreferences(std::move(uiPreferences)), m_FontAssets(std::move(fontAssets)),
               m_UiState(std::move(uiState)), m_AppState(std::move(appState)), m_FileSystem(std::move(fileSystem)),
-              m_RenderSettings(std::move(renderSettings))
+              m_RenderSettings(std::move(renderSettings)), m_AppPaths(std::move(appPaths))
         {
         }
 
@@ -51,9 +51,14 @@ namespace
             m_UiState->PendingNewScene = true;
         }
 
+        [[nodiscard]] std::filesystem::path ScenesDirectory() const
+        {
+            return m_AppPaths->IsInstalled() ? m_AppPaths->UserSubdir("scenes") : std::filesystem::path{};
+        }
+
         void DoOpen()
         {
-            if (const auto path = m_FileDialog->OpenFile({FileDialogFilter{"Scene", "yaml"}}))
+            if (const auto path = m_FileDialog->OpenFile({FileDialogFilter{"Scene", "yaml"}}, ScenesDirectory()))
             {
                 m_UiState->PendingLoadScenePath.Set(path->string());
             }
@@ -74,7 +79,7 @@ namespace
             const auto defaultName = m_UiState->CurrentSceneName.empty()
                                          ? std::string("scene.yaml")
                                          : m_UiState->CurrentSceneName + ".yaml";
-            if (const auto path = m_FileDialog->SaveFile({FileDialogFilter{"Scene", "yaml"}}, defaultName))
+            if (const auto path = m_FileDialog->SaveFile({FileDialogFilter{"Scene", "yaml"}}, defaultName, ScenesDirectory()))
             {
                 SaveLiveSceneTo(*path);
             }
@@ -311,7 +316,7 @@ namespace
                         }
                     }
                     ImGui::SameLine();
-                    if (ImGui::Button("Reset##ExportFolder")) m_AppState->SetDefaultExportDirectory(".gpp/exports");
+                    if (ImGui::Button("Reset##ExportFolder")) m_AppState->SetDefaultExportDirectory(m_AppPaths->UserSubdir("exports").string());
                     ImGui::TextDisabled("Relative paths start at the working directory");
                 }
 
@@ -478,6 +483,7 @@ namespace
         std::shared_ptr<UiState> m_UiState;
         std::shared_ptr<AppStateService> m_AppState;
         std::shared_ptr<RenderSettingsService> m_RenderSettings;
+        std::shared_ptr<AppPaths> m_AppPaths;
 
         std::string m_ExportProfile;
         bool m_ShowExportDialog = false;

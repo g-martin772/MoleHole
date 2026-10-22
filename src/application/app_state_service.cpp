@@ -23,15 +23,17 @@ namespace MoleHole
 
     AppStateService::AppStateService(std::shared_ptr<UiState> uiState, std::shared_ptr<RenderSettingsService> renderSettings,
                                       std::shared_ptr<UiPreferences> preferences,
-                                      std::shared_ptr<IFileSystem> fileSystem, std::shared_ptr<Logger> logger)
+                                      std::shared_ptr<IFileSystem> fileSystem, std::shared_ptr<AppPaths> appPaths,
+                                      std::shared_ptr<Logger> logger)
         : m_UiState(std::move(uiState)), m_RenderSettings(std::move(renderSettings)), m_Preferences(std::move(preferences)),
-          m_FileSystem(std::move(fileSystem)), m_Logger(std::move(logger))
+          m_FileSystem(std::move(fileSystem)), m_AppPaths(std::move(appPaths)), m_Logger(std::move(logger)),
+          m_DefaultExportDirectory(m_AppPaths->UserSubdir("exports").string())
     {
     }
 
     Task<void> AppStateService::StartAsync(std::stop_token)
     {
-        m_StatePath = m_FileSystem->ResolvePath(".gpp/molehole_state.yaml", PathAnchor::WorkingDir);
+        m_StatePath = m_FileSystem->ResolvePath(m_AppPaths->ConfigDir() / "molehole_state.yaml", PathAnchor::WorkingDir);
         m_Persist = !m_UiState->ExitWhenExportDone;
         Load();
         if (m_Persist)
@@ -284,10 +286,12 @@ namespace MoleHole
         {
             return;
         }
+        const auto absolute =
+            m_FileSystem->ResolvePath(path, PathAnchor::WorkingDir).lexically_normal().string();
         std::scoped_lock lock(m_Mutex);
-        m_LastScenePath = path;
-        std::erase(m_RecentScenes, path);
-        m_RecentScenes.insert(m_RecentScenes.begin(), path);
+        m_LastScenePath = absolute;
+        std::erase(m_RecentScenes, absolute);
+        m_RecentScenes.insert(m_RecentScenes.begin(), absolute);
         constexpr std::size_t kMaxRecent = 8;
         if (m_RecentScenes.size() > kMaxRecent)
         {
