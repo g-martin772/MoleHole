@@ -22,6 +22,6 @@ layout(set = 0, binding = 0, std140) uniform GravityGridParamsBlock
     float _pad1;
 
     GravityGridPoint u_blackHoles[8];
-    GravityGridPoint u_spheres[16];
+    GravityGridPoint u_spheres[64];
     GravityGridPoint u_meshes[8];
 };

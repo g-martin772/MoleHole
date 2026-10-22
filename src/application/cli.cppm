@@ -10,6 +10,7 @@ export namespace MoleHole
         bool Requested = false;
         bool ListSettings = false;
         ExportRequest Request;
+        bool SceneCamera = false;
         float TimeoutSeconds = 120.0f;
         std::string Error;
     };

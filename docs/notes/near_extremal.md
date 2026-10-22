@@ -89,8 +89,9 @@ These are the changes:
 - **Float spin.** The GPU receives the spin as a float, and 1 − 1.3 × 10⁻¹⁴ rounds to 1. `FillMetricData`
   then clamps it to the extremal limit, which places the horizon at 1.0000002 M and the ISCO at about 1.00004 M.
   At the scale of an image this is indistinguishable from the exact hole.
-- **The inner disk is not drawn.** The integrated tracer captures rays at r₊ + 0.01 M, so the disk between
-  the ISCO and about 1.01 M is not drawn. The light from there is redshifted by up to ~6 × 10⁴ and carries no
+- **The inner disk (before M2).** The integrated tracer used to capture rays at r₊ + 0.01 M, so the disk between
+  the ISCO and about 1.01 M was not drawn. Since M2 the margin is 0.01 · max(r₊ − M, 10⁻⁵ M), Δ is factored and
+  slow photons take larger steps, so rays reach the throat and Miller's orbit (`local_frames.md`). The light from there is redshifted by up to ~6 × 10⁴ and carries no
   visible flux anyway.
 - **Disk brightness (fixed).** The disk shader used to scale brightness by (gT/T_peak)⁴, relative to the
   hottest gas in its rest frame. A near-extremal disk is hottest deep in the throat, where its light is

@@ -10,8 +10,8 @@ import :Rendering.Metric;
 
 export namespace MoleHole
 {
-    // ThorneLimit: a* set directly, |a*| ≤ 1 in the UI. NearExtremal: a* = 1 - SpinGap, for holes closer to extremal
-    // than a* resolves, e.g. Interstellar's Gargantua (1 - 1.3e-14). See docs/notes/near_extremal.md.
+    // ThorneLimit: a* ≤ 0.998, what disk accretion can spin a hole up to. NearExtremal: a* = 1 - SpinGap, beyond
+    // that limit, for Interstellar's Gargantua (1 - 1.3e-14). See docs/notes/near_extremal.md.
     enum class BlackHoleSpinRange : std::int32_t { ThorneLimit = 0, NearExtremal = 1 };
 
     struct BlackHoleComponent
@@ -25,7 +25,7 @@ export namespace MoleHole
     };
 
     // The dimensionless spin and charge the physics uses (render and simulation alike), in geometric units of the
-    // hole's own mass; a near-extremal hole has a* = 1 - SpinGap. Nothing is clamped, a² + q² > 1 is a naked singularity.
+    // hole's own mass: √(a*² + q*²) clamped to the Thorne limit, or to 1 - kMinExtremalGap for a near-extremal hole.
     [[nodiscard]] inline KerrNewmanParams BlackHoleMetric(const BlackHoleComponent& hole)
     {
         const bool extremal = hole.SpinRange == BlackHoleSpinRange::NearExtremal;
@@ -46,7 +46,100 @@ export namespace MoleHole
         float Spin{0.0f};
         glm::vec3 Color{1.0f, 1.0f, 1.0f};
         glm::vec3 SpinAxis{0.0f, 1.0f, 0.0f};
-        std::string TexturePath;
+        std::string TexturePath; // albedo of a sphere without a Surface
+    };
+
+    // Appearance of a sphere: equirectangular maps (u = east longitude from -180°, v = 0 at the north pole along
+    // SpinAxis) and rotation about the sphere's SpinAxis. See docs/notes/textured_bodies.md
+    struct SurfaceComponent
+    {
+        std::string Albedo;    // sRGB colour
+        std::string Normal;    // tangent space (x east, y north, z up), linear
+        std::string Roughness; // linear, red channel
+        std::string Emissive;  // sRGB colour, e.g. city lights on the night side
+        glm::vec3 Tint{1.0f, 1.0f, 1.0f};
+        float RoughnessFactor{0.9f};    // multiplies the map; the whole surface without one
+        bool RoughnessIsSpecular{false}; // the map is a specular mask: roughness = mix(factor, GlossyRoughness, map)
+        // Wind-roughened ocean seen from orbit: Cox & Munk (1954) slope variance 0.003 + 5.12e-3 U at U = 7 m/s gives an
+        // rms slope of about 0.2 = GGX alpha, i.e. roughness sqrt(0.2) ≈ 0.45
+        float GlossyRoughness{0.45f};
+        float NormalStrength{1.0f};
+        float EmissiveStrength{1.0f};
+        double RotationPeriod{0.0}; // s of the body's proper time per turn, 0 = not rotating, negative = retrograde
+        float PrimeMeridian{0.0f};   // degrees east of the sphere's reference direction at rotation angle 0
+
+        double RotationAngle{0.0}; // runtime, rad: advanced by BodyRotationModule, not saved
+    };
+
+    // Scattering atmosphere around a sphere (Hillaire 2020): Rayleigh and Mie scattering with exponential density,
+    // ozone absorption in a tent profile. Defaults are Earth's (Hillaire 2020 Table 1); coefficients are per metre.
+    // See docs/notes/atmospheres.md and docs/notes/interstellar_planets.md for the other planets' values.
+    struct AtmosphereComponent
+    {
+        double Height{100000.0}; // m above the surface where the density is taken as zero
+        glm::dvec3 RayleighScattering{5.802e-6, 13.558e-6, 33.1e-6}; // 1/m at 680, 550, 440 nm
+        double RayleighScaleHeight{8000.0};
+        double MieScattering{3.996e-6};
+        double MieAbsorption{4.40e-6};
+        double MieScaleHeight{1200.0};
+        float MieAnisotropy{0.8f}; // Cornette–Shanks g
+        glm::dvec3 OzoneAbsorption{0.650e-6, 1.881e-6, 0.085e-6};
+        double OzoneCenter{25000.0}; // m, peak of the tent profile
+        double OzoneWidth{30000.0};  // m, full width of the tent
+    };
+
+    // A thin cloud shell: coverage map (white = overcast), drawn at Altitude, casting shadows on the surface.
+    struct CloudLayerComponent
+    {
+        std::string Coverage;     // equirectangular, red channel, same mapping as the Surface maps
+        double Altitude{4000.0};  // m above the surface
+        float Opacity{0.9f};      // of full coverage
+        glm::vec3 Color{1.0f, 1.0f, 1.0f};
+        double RotationPeriod{0.0}; // s per turn relative to the surface, 0 = turns with it
+        double RotationAngle{0.0};  // runtime, rad: advanced by BodyRotationModule, not saved
+    };
+
+    // Relief on a sphere: an equirectangular height map (same mapping as the Surface maps) between HeightMin and
+    // HeightMax, plus procedural detail. Ray-marched when the camera is in the body's local frame, shaded as relief
+    // (normals only) from farther away. With Ocean, everything below sea level (the sphere's radius) is water.
+    // See docs/notes/terrain.md
+    struct TerrainComponent
+    {
+        std::string Height;          // black = HeightMin, white = HeightMax
+        double HeightMin{0.0};       // m relative to the sphere's radius
+        double HeightMax{6400.0};
+        bool Ocean{true};
+        double DetailAmplitude{0.0}; // m of fBm detail added on top
+        double DetailScale{2000.0};  // m, wavelength of the largest detail octave
+        int DetailOctaves{5};
+        int Seed{1};
+    };
+
+    // A flat ring system in the sphere's equatorial plane (perpendicular to SpinAxis). The texture is a radial strip:
+    // u runs from InnerRadius to OuterRadius, colour in rgb and coverage in alpha. Defaults: Saturn's C ring inner
+    // edge to A ring outer edge (NASA Saturnian Rings Fact Sheet, docs/notes/interstellar_planets.md §5).
+    struct RingComponent
+    {
+        std::string Texture;
+        double InnerRadius{74658.0e3}; // m from the centre
+        double OuterRadius{136780.0e3};
+        float Opacity{1.0f};           // multiplies the texture's alpha
+    };
+
+    enum class BodyLightKind : std::int32_t { Directional = 0, Point = 1 };
+
+    // A light that is not part of the traced scene, such as the Sun for Earth and Saturn. It lights Surfaces directly
+    // along a straight line, without lensing, redshift or shadows from other bodies; emitters inside the scene (the
+    // disk, stars, lit bodies) reach Surfaces lensed through their sky probes. See docs/notes/body_lighting.md
+    struct LightComponent
+    {
+        BodyLightKind Kind{BodyLightKind::Directional};
+        glm::vec3 Color{1.0f, 1.0f, 1.0f};
+        // Irradiance in display units: π makes a white Lambertian surface facing the light show 1.0. A point light
+        // has it at ReferenceDistance and falls off as the inverse square.
+        float Intensity{3.14159265f};
+        glm::vec3 Direction{1.0f, 0.3f, 0.5f};   // Directional: towards the light
+        double ReferenceDistance{1.495978707e11}; // m, Point: 1 AU
     };
 
     // Thermal sphere emitter: luminosity, colour and surface radiance follow from Teff and Radius (docs/notes/lighting-materials.md).
@@ -123,6 +216,17 @@ export namespace MoleHole
         std::uint64_t LaunchedFrom{0}; // hash of the launch fields and hole it was launched with
     };
 
+    // A body of the Newtonian N-body system (src/simulation/nbody_module.cppm): it moves under the pull of every other
+    // body with a GM, the 1PN corrections of general relativity and the J2 of the oblate ones. Position is the
+    // entity's Transform (barycentric, metres); the rest is here. It needs no RigidBody and does not use PhysX.
+    struct NBodyComponent
+    {
+        double GM{0.0};            // m^3/s^2, the gravitational parameter G M; 0 = a test particle that only feels the others
+        glm::dvec3 Velocity{0.0};  // m/s, in the scene frame
+        double J2{0.0};            // second zonal harmonic, about the Sphere's SpinAxis; 0 = a point mass
+        double J2Radius{0.0};      // m, the reference radius of J2; 0 = the Sphere's Radius
+    };
+
     // Legacy single-graph storage; read only to migrate old scenes into the scene Graphs section.
     struct AnimationGraphComponent
     {
@@ -134,7 +238,6 @@ export namespace MoleHole
 
 namespace MoleHole
 {
-
     export void RegisterComponents()
     {
         static std::once_flag flag;
@@ -152,7 +255,7 @@ namespace MoleHole
                     GPP::Field("SpinRange", &BlackHoleComponent::SpinRange,
                                {.Label = "Spin range", .Options = {"ThorneLimit", "NearExtremal"}}),
                     GPP::Field("Spin", &BlackHoleComponent::Spin,
-                               {.Label = "Spin a*", .Min = -1.0, .Max = 1.0, .Speed = 0.01, .VisibleField = "SpinRange",
+                               {.Label = "Spin a*", .Min = 0.0, .Max = 0.998, .Speed = 0.01, .VisibleField = "SpinRange",
                                 .VisibleMask = 1u << 0}),
                     GPP::Field("SpinGap", &BlackHoleComponent::SpinGap,
                                {.Label = "1 - a*", .Min = kMinExtremalGap, .Max = 1.0 - kMaxHorizonParameter,
@@ -166,7 +269,8 @@ namespace MoleHole
                         [](const BlackHoleComponent& c) -> std::string
                         {
                             if (c.SpinRange == BlackHoleSpinRange::NearExtremal) return "Near-extremal (beyond the Thorne limit)";
-                            return HasHorizon(BlackHoleMetric(c)) ? "Black hole" : "Naked singularity";
+                            return std::hypot(c.Spin, c.Charge) > kMaxHorizonParameter ? "Clamped to the Thorne limit"
+                                                                                        : "Black hole";
                         },
                         nullptr, {.Label = "Status"}),
                     GPP::Computed<BlackHoleComponent, double>(
@@ -208,6 +312,123 @@ namespace MoleHole
                                {.Label = "Texture", .Kind = GPP::FieldKind::AssetPath}),
                 }});
 
+            GPP::RegisterComponent<SurfaceComponent>("Surface", GPP::ComponentDescription<SurfaceComponent>{
+                .Fields = {
+                    GPP::Field("Albedo", &SurfaceComponent::Albedo,
+                               {.Label = "Albedo map", .Category = "Maps", .Kind = GPP::FieldKind::AssetPath}),
+                    GPP::Field("Normal", &SurfaceComponent::Normal,
+                               {.Label = "Normal map", .Category = "Maps", .Kind = GPP::FieldKind::AssetPath}),
+                    GPP::Field("Roughness", &SurfaceComponent::Roughness,
+                               {.Label = "Roughness map", .Category = "Maps", .Kind = GPP::FieldKind::AssetPath}),
+                    GPP::Field("Emissive", &SurfaceComponent::Emissive,
+                               {.Label = "Emissive map", .Category = "Maps", .Kind = GPP::FieldKind::AssetPath}),
+                    GPP::Field("Tint", &SurfaceComponent::Tint,
+                               {.Label = "Tint", .Category = "Material", .Kind = GPP::FieldKind::Color}),
+                    GPP::Field("RoughnessFactor", &SurfaceComponent::RoughnessFactor,
+                               {.Label = "Roughness", .Category = "Material", .Min = 0.02, .Max = 1.0, .Speed = 0.01}),
+                    GPP::Field("RoughnessIsSpecular", &SurfaceComponent::RoughnessIsSpecular,
+                               {.Label = "Map is a specular mask", .Category = "Material"}),
+                    GPP::Field("GlossyRoughness", &SurfaceComponent::GlossyRoughness,
+                               {.Label = "Glossy roughness", .Category = "Material", .Min = 0.02, .Max = 1.0, .Speed = 0.01}),
+                    GPP::Field("NormalStrength", &SurfaceComponent::NormalStrength,
+                               {.Label = "Normal strength", .Category = "Material", .Min = 0.0, .Max = 4.0, .Speed = 0.01}),
+                    GPP::Field("EmissiveStrength", &SurfaceComponent::EmissiveStrength,
+                               {.Label = "Emissive strength", .Category = "Material", .Min = 0.0, .Max = 100.0, .Speed = 0.01}),
+                    GPP::Field("RotationPeriod", &SurfaceComponent::RotationPeriod,
+                               {.Label = "Rotation period", .Category = "Rotation", .Speed = 60.0,
+                                .Dim = GPP::Units::Dimension::Time}),
+                    GPP::Field("PrimeMeridian", &SurfaceComponent::PrimeMeridian,
+                               {.Label = "Prime meridian (deg)", .Category = "Rotation", .Min = -180.0, .Max = 180.0,
+                                .Speed = 0.5}),
+                }});
+
+            GPP::RegisterComponent<AtmosphereComponent>("Atmosphere", GPP::ComponentDescription<AtmosphereComponent>{
+                .Fields = {
+                    GPP::Field("Height", &AtmosphereComponent::Height,
+                               {.Label = "Height", .Min = 1.0, .Speed = 100.0, .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Field("RayleighScattering", &AtmosphereComponent::RayleighScattering,
+                               {.Label = "Scattering (R, G, B) 1/m", .Category = "Rayleigh", .Min = 0.0, .Speed = 1e-7}),
+                    GPP::Field("RayleighScaleHeight", &AtmosphereComponent::RayleighScaleHeight,
+                               {.Label = "Scale height", .Category = "Rayleigh", .Min = 1.0, .Speed = 10.0,
+                                .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Field("MieScattering", &AtmosphereComponent::MieScattering,
+                               {.Label = "Scattering 1/m", .Category = "Mie (aerosols)", .Min = 0.0, .Speed = 1e-7,
+                                .Format = "%.3e"}),
+                    GPP::Field("MieAbsorption", &AtmosphereComponent::MieAbsorption,
+                               {.Label = "Absorption 1/m", .Category = "Mie (aerosols)", .Min = 0.0, .Speed = 1e-7,
+                                .Format = "%.3e"}),
+                    GPP::Field("MieScaleHeight", &AtmosphereComponent::MieScaleHeight,
+                               {.Label = "Scale height", .Category = "Mie (aerosols)", .Min = 1.0, .Speed = 10.0,
+                                .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Field("MieAnisotropy", &AtmosphereComponent::MieAnisotropy,
+                               {.Label = "Anisotropy g", .Category = "Mie (aerosols)", .Min = 0.0, .Max = 0.999, .Speed = 0.01}),
+                    GPP::Field("OzoneAbsorption", &AtmosphereComponent::OzoneAbsorption,
+                               {.Label = "Absorption (R, G, B) 1/m", .Category = "Ozone", .Min = 0.0, .Speed = 1e-8}),
+                    GPP::Field("OzoneCenter", &AtmosphereComponent::OzoneCenter,
+                               {.Label = "Peak altitude", .Category = "Ozone", .Min = 0.0, .Speed = 100.0,
+                                .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Field("OzoneWidth", &AtmosphereComponent::OzoneWidth,
+                               {.Label = "Width", .Category = "Ozone", .Min = 0.0, .Speed = 100.0,
+                                .Dim = GPP::Units::Dimension::Length}),
+                }});
+
+            GPP::RegisterComponent<CloudLayerComponent>("CloudLayer", GPP::ComponentDescription<CloudLayerComponent>{
+                .DisplayName = "Cloud Layer",
+                .Fields = {
+                    GPP::Field("Coverage", &CloudLayerComponent::Coverage,
+                               {.Label = "Coverage map", .Kind = GPP::FieldKind::AssetPath}),
+                    GPP::Field("Altitude", &CloudLayerComponent::Altitude,
+                               {.Label = "Altitude", .Min = 0.0, .Speed = 10.0, .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Field("Opacity", &CloudLayerComponent::Opacity,
+                               {.Label = "Opacity", .Min = 0.0, .Max = 1.0, .Speed = 0.01}),
+                    GPP::Field("Color", &CloudLayerComponent::Color, {.Label = "Colour", .Kind = GPP::FieldKind::Color}),
+                    GPP::Field("RotationPeriod", &CloudLayerComponent::RotationPeriod,
+                               {.Label = "Drift period", .Min = 0.0, .Speed = 60.0, .Dim = GPP::Units::Dimension::Time}),
+                }});
+
+            GPP::RegisterComponent<TerrainComponent>("Terrain", GPP::ComponentDescription<TerrainComponent>{
+                .Fields = {
+                    GPP::Field("Height", &TerrainComponent::Height, {.Label = "Height map", .Kind = GPP::FieldKind::AssetPath}),
+                    GPP::Field("HeightMin", &TerrainComponent::HeightMin,
+                               {.Label = "Height of black", .Speed = 10.0, .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Field("HeightMax", &TerrainComponent::HeightMax,
+                               {.Label = "Height of white", .Speed = 10.0, .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Field("Ocean", &TerrainComponent::Ocean, {.Label = "Ocean below sea level"}),
+                    GPP::Field("DetailAmplitude", &TerrainComponent::DetailAmplitude,
+                               {.Label = "Amplitude", .Category = "Detail", .Min = 0.0, .Speed = 1.0,
+                                .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Field("DetailScale", &TerrainComponent::DetailScale,
+                               {.Label = "Largest wavelength", .Category = "Detail", .Min = 1.0, .Speed = 10.0,
+                                .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Field("DetailOctaves", &TerrainComponent::DetailOctaves,
+                               {.Label = "Octaves", .Category = "Detail", .Min = 1, .Max = 10}),
+                    GPP::Field("Seed", &TerrainComponent::Seed, {.Label = "Seed", .Category = "Detail", .Min = 0, .Max = 100000}),
+                }});
+
+            GPP::RegisterComponent<RingComponent>("Ring", GPP::ComponentDescription<RingComponent>{
+                .Fields = {
+                    GPP::Field("Texture", &RingComponent::Texture, {.Label = "Radial strip", .Kind = GPP::FieldKind::AssetPath}),
+                    GPP::Field("InnerRadius", &RingComponent::InnerRadius,
+                               {.Label = "Inner radius", .Min = 0.0, .Speed = 1.0e5, .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Field("OuterRadius", &RingComponent::OuterRadius,
+                               {.Label = "Outer radius", .Min = 0.0, .Speed = 1.0e5, .Dim = GPP::Units::Dimension::Length}),
+                    GPP::Field("Opacity", &RingComponent::Opacity, {.Label = "Opacity", .Min = 0.0, .Max = 1.0, .Speed = 0.01}),
+                }});
+
+            GPP::RegisterComponent<LightComponent>("Light", GPP::ComponentDescription<LightComponent>{
+                .Fields = {
+                    GPP::Field("Kind", &LightComponent::Kind, {.Label = "Kind", .Options = {"Directional", "Point"}}),
+                    GPP::Field("Color", &LightComponent::Color, {.Label = "Colour", .Kind = GPP::FieldKind::Color}),
+                    GPP::Field("Intensity", &LightComponent::Intensity,
+                               {.Label = "Irradiance", .Min = 0.0, .Max = 1000.0, .Speed = 0.05}),
+                    GPP::Field("Direction", &LightComponent::Direction,
+                               {.Label = "Towards the light", .Speed = 0.01, .Kind = GPP::FieldKind::Direction,
+                                .VisibleField = "Kind", .VisibleMask = 1u << 0}),
+                    GPP::Field("ReferenceDistance", &LightComponent::ReferenceDistance,
+                               {.Label = "Reference distance", .Min = 1.0, .Speed = 1.0e9,
+                                .VisibleField = "Kind", .VisibleMask = 1u << 1, .Dim = GPP::Units::Dimension::Length}),
+                }});
+
             GPP::RegisterComponent<StarComponent>("Star", GPP::ComponentDescription<StarComponent>{
                 .DisplayName = "Star",
                 .Note = "Thermal sphere emitter: drawn by the tracer and lights the meshes (E = L / 4 pi d^2).",
@@ -227,6 +448,20 @@ namespace MoleHole
                     GPP::Computed<StarComponent, glm::vec3>(
                         "Colour", [](const StarComponent& c) { return StarColor(c); }, nullptr,
                         {.Label = "Colour (Planck)", .Kind = GPP::FieldKind::Color}),
+                }});
+
+            GPP::RegisterComponent<NBodyComponent>("NBody", GPP::ComponentDescription<NBodyComponent>{
+                .DisplayName = "N-Body",
+                .Fields = {
+                    GPP::Field("GM", &NBodyComponent::GM,
+                               {.Label = "GM", .Min = 0.0, .Speed = 1e6, .Format = "%.9g"}),
+                    GPP::Field("Velocity", &NBodyComponent::Velocity,
+                               {.Label = "Velocity (m/s)", .Speed = 10.0, .Format = "%.6f"}),
+                    GPP::Field("J2", &NBodyComponent::J2,
+                               {.Label = "J2", .Category = "Shape", .Min = 0.0, .Speed = 1e-5, .Format = "%.6g"}),
+                    GPP::Field("J2Radius", &NBodyComponent::J2Radius,
+                               {.Label = "J2 radius", .Category = "Shape", .Min = 0.0, .Speed = 1e3,
+                                .Dim = GPP::Units::Dimension::Length}),
                 }});
 
             GPP::RegisterComponent<GeodesicBodyComponent>("GeodesicBody", GPP::ComponentDescription<GeodesicBodyComponent>{
@@ -279,7 +514,6 @@ namespace MoleHole
                         GPP::Field("GraphYaml", &AnimationGraphComponent::GraphYaml,
                                    {.Kind = GPP::FieldKind::Multiline}),
                     }});
-
         });
     }
 }

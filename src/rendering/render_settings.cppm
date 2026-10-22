@@ -12,6 +12,8 @@ export namespace MoleHole
     enum class Transport : int { Straight = 0, AnalyticLens = 1, Integrated = 2 };
     enum class DebugView : int { None = 0, StepCount = 1, Termination = 2, ConstraintDrift = 3, Ergosphere = 4 };
     enum class MeshMode : int { Raster = 0, Traced = 1 };
+    // Fixed: one white light from (1, 1, 1). Probe: what each body's sky probe sees, plus Light components.
+    enum class BodyLighting : int { Fixed = 0, Probe = 1 };
     enum class ToneMap : int { None = 0, Reinhard = 1, Aces = 2 };
     enum class ExposureMode : int { Manual = 0, Auto = 1, Physical = 2 };
     // Mirrors ObserverKind (src/physics/observer.cppm) and OrbitDirection (src/rendering/metric.cppm).
@@ -46,6 +48,12 @@ export namespace MoleHole
         bool RenderSpheres = true;
         bool RenderMeshes = true;
         MeshMode MeshDrawMode = MeshMode::Traced;
+        bool BodyTextures = true;
+        int BodyTextureMaxSize = 4096; // largest side kept on the GPU, px
+        BodyLighting BodyLightingMode = BodyLighting::Probe;
+        bool BodyAtmospheres = true;
+        int BodyAtmosphereSamples = 16; // along a view ray through an atmosphere
+        int TerrainSteps = 128;         // relief march near a body
 
         bool ThirdPerson = false;
         float ThirdPersonDistance = 10.0f;

@@ -9,6 +9,7 @@ struct Spacetime {
     real a;
     real Q;
     real rPlus;
+    real rMinus; // r- = 2M - r+, both roots of Delta
     real rIsco;
 };
 
@@ -18,8 +19,22 @@ Spacetime spacetimeOf(BlackHoleData bh) {
     st.a = real(bh.spin) * st.M;
     st.Q = real(bh.charge) * st.M;
     st.rPlus = real(bh.horizonRadius);
+    st.rMinus = real(2.0) * st.M - st.rPlus;
     st.rIsco = real(bh.iscoRadius);
     return st;
+}
+
+// Delta = r^2 - 2Mr + a^2 + Q^2 factored as (r - r+)(r - r-): the expanded form cancels catastrophically near the
+// horizon of a near-extremal hole (r - M ~ 1e-5 M), the factored one keeps the relative precision of r - r+.
+// HorizonDelta in src/rendering/metric.cppm; docs/notes/near_extremal.md
+real horizonDelta(Spacetime st, real r) {
+    return (r - st.rPlus) * (r - st.rMinus);
+}
+
+// Rays closer to the horizon than this are captured: 1% of the horizon's distance from r = M (0.01 M for
+// Schwarzschild, as before), so a near-extremal hole's throat (Miller's orbit at r - M = 3.7e-5 M) stays reachable.
+real captureMargin(Spacetime st) {
+    return real(0.01) * max(st.rPlus - st.M, real(1e-5) * st.M);
 }
 
 real safeSin(real s) {
@@ -86,7 +101,7 @@ void metricTPhi(Spacetime st, real r, real theta, out real gtt, out real gtphi, 
     s = safeSin(s);
     real a2 = st.a * st.a, s2 = s * s;
     real Sigma = r * r + a2 * ct * ct;
-    real Delta = r * r - real(2.0) * st.M * r + a2 + st.Q * st.Q;
+    real Delta = horizonDelta(st, r);
     real A = rsq(r * r + a2) - Delta * a2 * s2;
     gtt = -(Delta - a2 * s2) / Sigma;
     gtphi = -st.a * s2 * (r * r + a2 - Delta) / Sigma;
@@ -100,10 +115,25 @@ void zamo(Spacetime st, real r, real theta, out real alpha, out real omega) {
     s = safeSin(s);
     real a2 = st.a * st.a;
     real Sigma = r * r + a2 * ct * ct;
-    real Delta = r * r - real(2.0) * st.M * r + a2 + st.Q * st.Q;
+    real Delta = horizonDelta(st, r);
     real A = rsq(r * r + a2) - Delta * a2 * s * s;
     alpha = sqrt(max(Sigma * Delta / A, real(0.0)));
     omega = st.a * (real(2.0) * st.M * r - st.Q * st.Q) / A;
+}
+
+// Largest coordinate speed |dr/dlambda| a photon of (E, L) can have at (r, theta): the one moving radially in the local
+// ZAMO frame, sqrt(Delta / Sigma) times its local energy (E - omega L) / alpha = sqrt(A) |E - omega L| / Sigma.
+// About E far from the hole, but tiny in a near-extremal throat, where a photon launched with unit local energy
+// needs ~1/v steps of a fixed affine size to climb out (docs/notes/local_frames.md).
+real radialSpeedScale(Spacetime st, real r, real theta, real E, real L) {
+    real s, ct;
+    rsincos_pair(theta, s, ct);
+    s = safeSin(s);
+    real a2 = st.a * st.a;
+    real Sigma = r * r + a2 * ct * ct;
+    real A = rsq(r * r + a2) - horizonDelta(st, r) * a2 * s * s;
+    real omega = st.a * (real(2.0) * st.M * r - st.Q * st.Q) / A;
+    return sqrt(A) * abs(E - omega * L) / Sigma;
 }
 
 // Hamiltonian H = K / (2 Sigma) in Carter's separated form with p_t = -E and p_phi = L conserved:
@@ -117,7 +147,7 @@ void geodesicRhs(Spacetime st, real E, real L, rvec4 y, out rvec4 dy, out real d
     s = safeSin(s);
 
     real Sigma = r * r + a2 * ct * ct;
-    real Delta = r * r - real(2.0) * st.M * r + a2 + st.Q * st.Q;
+    real Delta = horizonDelta(st, r);
     real P = (r * r + a2) * E - a * L;
     real T = L / s - a * E * s;
     K = Delta * pr * pr + pth * pth + T * T - P * P / Delta;
@@ -155,7 +185,7 @@ void launchPhoton(Spacetime st, real r, real theta, vec3 n, out real E, out real
     s = safeSin(s);
     real a2 = st.a * st.a;
     real Sigma = r * r + a2 * ct * ct;
-    real Delta = r * r - real(2.0) * st.M * r + a2 + st.Q * st.Q;
+    real Delta = horizonDelta(st, r);
     real A = rsq(r * r + a2) - Delta * a2 * s * s;
     real alpha, omega;
     zamo(st, r, theta, alpha, omega);

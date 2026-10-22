@@ -85,6 +85,7 @@ int main(int argc, char* argv[])
         uiState->PendingExport.Set(exportArgs->Request);
         uiState->ExitWhenExportDone = true;
         uiState->ExportTimeoutSeconds = exportArgs->TimeoutSeconds;
+        uiState->PreviewSceneCamera = exportArgs->SceneCamera;
     }
     else
     {

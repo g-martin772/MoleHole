@@ -1,0 +1,142 @@
+# Milestone M2: Earth and Saturn for the opening act (docs/notes/interstellar_planets.md section 5), lit by the
+# Sun as a directional Light. Maps: tools/fetch_textures.py (NASA, Solar System Scope CC BY 4.0, see
+# assets/textures/ATTRIBUTION.md). Spin axes carry the real obliquities; Saturn is drawn as a sphere of its
+# equatorial radius (no flattening yet).
+Scene: Solar system bodies
+SchemaVersion: 2
+Entities:
+  - Guid: 7400000000000000001
+    Components:
+      Metadata:
+        Guid: 7400000000000000001
+        Name: Earth
+        TypeTag: Sphere
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Sphere:
+        Radius: 6371000.0
+        Spin: 0
+        Color: [1, 1, 1]
+        SpinAxis: [0.397789, 0.917477, 0]
+        TexturePath: ""
+      Surface:
+        Albedo: assets/textures/earth/albedo_8k.jpg
+        Normal: assets/textures/earth/normal_8k.png
+        Roughness: assets/textures/earth/specular_8k.png
+        RoughnessIsSpecular: true
+        Emissive: assets/textures/earth/night_8k.jpg
+        EmissiveStrength: 0.04
+        RotationPeriod: 86164.1
+        PrimeMeridian: 0
+      Terrain:
+        Height: assets/textures/earth/height_5k.jpg
+        HeightMin: 0
+        HeightMax: 6400
+        Ocean: true
+        DetailAmplitude: 120
+        DetailScale: 3000
+        DetailOctaves: 5
+        Seed: 1
+      Atmosphere:
+        Height: 100000.0
+        RayleighScattering: [5.802e-06, 1.3558e-05, 3.31e-05]
+        RayleighScaleHeight: 8000.0
+        MieScattering: 3.996e-06
+        MieAbsorption: 4.4e-06
+        MieScaleHeight: 1200.0
+        MieAnisotropy: 0.8
+        OzoneAbsorption: [6.5e-07, 1.881e-06, 8.5e-08]
+        OzoneCenter: 25000
+        OzoneWidth: 30000
+      CloudLayer:
+        Coverage: assets/textures/earth/clouds_8k.jpg
+        Altitude: 6000.0
+        Opacity: 0.95
+        Color: [1, 1, 1]
+        RotationPeriod: 0.0
+  - Guid: 7400000000000000002
+    Components:
+      Metadata:
+        Guid: 7400000000000000002
+        Name: Saturn
+        TypeTag: Sphere
+      Transform:
+        Position: [1.4e+12, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Sphere:
+        Radius: 60268000.0
+        Spin: 0
+        Color: [1, 1, 1]
+        SpinAxis: [0.449787, 0.893136, 0]
+        TexturePath: ""
+      Surface:
+        Albedo: assets/textures/saturn/albedo_4k.jpg
+        RoughnessFactor: 1
+        RotationPeriod: 38361.6
+      Ring:
+        Texture: assets/textures/saturn/rings_8k.png
+        InnerRadius: 74658.0e3
+        OuterRadius: 136780.0e3
+        Opacity: 1
+  - Guid: 7400000000000000003
+    Components:
+      Metadata:
+        Guid: 7400000000000000003
+        Name: Sun
+        TypeTag: Light
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Light:
+        Kind: Directional
+        Color: [1, 0.96, 0.9]
+        Intensity: 3.14159
+        Direction: [0.80044, 0.150083, 0.580319]
+        ReferenceDistance: 1.495978707e11
+  - Guid: 7400000000000000010
+    Components:
+      Metadata:
+        Guid: 7400000000000000010
+        Name: Camera (Earth)
+        TypeTag: Camera
+      Transform:
+        Position: [0, 0, 1.9113e+07]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 45
+        NearPlane: 10
+        FarPlane: {value: 1000, unit: AU}
+        Primary: true
+  - Guid: 7400000000000000011
+    Components:
+      Metadata:
+        Guid: 7400000000000000011
+        Name: Camera (Saturn)
+        TypeTag: Camera
+      Transform:
+        Position: [1.39988e+12, 7.23216e+07, 3.31474e+08]
+        Rotation: [0, -0.173503, 0, 0.984833]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 45
+        NearPlane: 10
+        FarPlane: {value: 1000, unit: AU}
+        Primary: false
+Render:
+  Version: 1
+  Contexts:
+    Edit: Bodies
+    Play: Bodies
+    Reference: Reference
+    Export: Bodies
+  Profiles:
+    - Name: Bodies
+      Description: Geodesic integration, tone mapped so the sunlit planets show at display brightness.
+      Base: Traced
+      Set:
+        post.tonemap: Aces

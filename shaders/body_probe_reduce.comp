@@ -1,0 +1,117 @@
+#version 460
+
+// Reduces each body's sky probe (black_hole_rendering.comp with GPP_BODY_PROBE) to what shadeBody needs: the
+// brightest source as a directional light (everything within SOURCE_CONE of the strongest texel) and the rest of the
+// sky as 9 RGB spherical-harmonic radiance coefficients (Ramamoorthi & Hanrahan 2001).
+// One workgroup per body. See docs/notes/body_lighting.md
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, rgba32f) readonly uniform image2D u_probes;
+
+struct BodyLighting
+{
+    vec4 sh[9];
+    vec4 direction;
+    vec4 irradiance;
+};
+layout(set = 0, binding = 1, std430) writeonly buffer BodyLightingBlock { BodyLighting u_lighting[]; };
+
+layout(push_constant) uniform ReduceParams
+{
+    int u_bodyCount;
+};
+
+const int PROBE_WIDTH = 64;
+const int PROBE_HEIGHT = 32;
+const int TEXELS = PROBE_WIDTH * PROBE_HEIGHT;
+const float PI = 3.14159265359;
+const float SOURCE_CONE = 0.9659258; // cos 15 deg
+
+shared float s_strength[64];
+shared int s_index[64];
+shared vec3 s_sum[64][10]; // 9 SH coefficients + the source's irradiance
+
+vec3 probeDirection(vec2 uv) {
+    float longitude = (uv.x - 0.5) * 2.0 * PI;
+    float latitude = (0.5 - uv.y) * PI;
+    return vec3(cos(latitude) * cos(longitude), sin(latitude), -cos(latitude) * sin(longitude));
+}
+
+void texelOf(int body, int index, out vec3 radiance, out vec3 direction, out float solidAngle) {
+    ivec2 local = ivec2(index % PROBE_WIDTH, index / PROBE_WIDTH);
+    vec2 uv = (vec2(local) + 0.5) / vec2(PROBE_WIDTH, PROBE_HEIGHT);
+    radiance = imageLoad(u_probes, ivec2(local.x, local.y + body * PROBE_HEIGHT)).rgb;
+    direction = probeDirection(uv);
+    solidAngle = (2.0 * PI / float(PROBE_WIDTH)) * (PI / float(PROBE_HEIGHT)) * cos((0.5 - uv.y) * PI);
+}
+
+void main() {
+    int body = int(gl_WorkGroupID.x);
+    uint t = gl_LocalInvocationIndex;
+    if (body >= u_bodyCount) return;
+
+    // Strongest texel by radiant contribution (luminance x solid angle)
+    float best = -1.0;
+    int bestIndex = 0;
+    for (int i = int(t); i < TEXELS; i += 64) {
+        vec3 radiance, direction;
+        float solidAngle;
+        texelOf(body, i, radiance, direction, solidAngle);
+        float strength = dot(radiance, vec3(0.2126, 0.7152, 0.0722)) * solidAngle;
+        if (strength > best) {
+            best = strength;
+            bestIndex = i;
+        }
+    }
+    s_strength[t] = best;
+    s_index[t] = bestIndex;
+    barrier();
+    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (t < stride && s_strength[t + stride] > s_strength[t]) {
+            s_strength[t] = s_strength[t + stride];
+            s_index[t] = s_index[t + stride];
+        }
+        barrier();
+    }
+
+    vec3 sourceRadiance, sourceDirection;
+    float sourceSolidAngle;
+    texelOf(body, s_index[0], sourceRadiance, sourceDirection, sourceSolidAngle);
+
+    vec3 sums[10];
+    for (int k = 0; k < 10; k++) sums[k] = vec3(0.0);
+    for (int i = int(t); i < TEXELS; i += 64) {
+        vec3 radiance, d;
+        float solidAngle;
+        texelOf(body, i, radiance, d, solidAngle);
+        vec3 value = radiance * solidAngle;
+        if (dot(d, sourceDirection) > SOURCE_CONE) {
+            sums[9] += value;
+            continue;
+        }
+        sums[0] += value * 0.282095;
+        sums[1] += value * 0.488603 * d.y;
+        sums[2] += value * 0.488603 * d.z;
+        sums[3] += value * 0.488603 * d.x;
+        sums[4] += value * 1.092548 * d.x * d.y;
+        sums[5] += value * 1.092548 * d.y * d.z;
+        sums[6] += value * 0.315392 * (3.0 * d.z * d.z - 1.0);
+        sums[7] += value * 1.092548 * d.x * d.z;
+        sums[8] += value * 0.546274 * (d.x * d.x - d.y * d.y);
+    }
+    for (int k = 0; k < 10; k++) s_sum[t][k] = sums[k];
+    barrier();
+    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (t < stride) {
+            for (int k = 0; k < 10; k++) s_sum[t][k] += s_sum[t + stride][k];
+        }
+        barrier();
+    }
+
+    if (t == 0u) {
+        for (int k = 0; k < 9; k++) u_lighting[body].sh[k] = vec4(s_sum[0][k], 0.0);
+        u_lighting[body].direction = vec4(sourceDirection, 0.0);
+        u_lighting[body].irradiance = vec4(s_sum[0][9], 1.0);
+    }
+}

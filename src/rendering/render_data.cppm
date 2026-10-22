@@ -34,7 +34,10 @@ export namespace MoleHole
     static_assert(sizeof(SphereGpuData) == 48);
 
     constexpr int kMaxBlackHoles = 8;
-    constexpr int kMaxSpheres = 16;
+    // The sphere table of the trace uniform block grows every offset behind it by 48 bytes per sphere over the original 16;
+    // the shaders' u_spheres arrays (trace_common.glsl, gravity_grid_data.glsl) must match.
+    constexpr int kMaxSpheres = 64;
+    constexpr std::size_t kSphereTableGrowth = (kMaxSpheres - 16) * 48;
     constexpr int kDiskProfileVec4s = kDiskProfileSamples / 4;
     // Outer edge of the disk in M; a free (artistic) parameter, nothing in the metric sets it.
     constexpr double kDiskOuterRadiusM = 20.0;
@@ -119,24 +122,44 @@ export namespace MoleHole
         glm::vec4 TrailGrid{0.0f};
         glm::vec4 TrailGrid2{0.0f}; // x = hash table size of the occupied trail cells
     };
-    constexpr std::size_t kObserverVelocityOffset = 3616 + 16 * kMaxBlackHoles * kDiskPhaseBins;
+    constexpr std::size_t kObserverVelocityOffset = 3616 + kSphereTableGrowth + 16 * kMaxBlackHoles * kDiskPhaseBins;
     static_assert(sizeof(RaytraceParamsGpu) == kObserverVelocityOffset + 80);
-    static_assert(offsetof(RaytraceParamsGpu, DiskPhase) == 3616);
+    static_assert(offsetof(RaytraceParamsGpu, DiskPhase) == 3616 + kSphereTableGrowth);
     static_assert(offsetof(RaytraceParamsGpu, ObserverVelocity) == kObserverVelocityOffset);
     static_assert(offsetof(RaytraceParamsGpu, OrbitRadii) == kObserverVelocityOffset + 16);
-    static_assert(offsetof(RaytraceParamsGpu, DiskAccretionRate) == 1424);
-    static_assert(offsetof(RaytraceParamsGpu, DiskInfo) == 1440);
-    static_assert(offsetof(RaytraceParamsGpu, DiskProfile) == 1568);
+    static_assert(offsetof(RaytraceParamsGpu, DiskAccretionRate) == 1424 + kSphereTableGrowth);
+    static_assert(offsetof(RaytraceParamsGpu, DiskInfo) == 1440 + kSphereTableGrowth);
+    static_assert(offsetof(RaytraceParamsGpu, DiskProfile) == 1568 + kSphereTableGrowth);
     static_assert(offsetof(RaytraceParamsGpu, BlackHoles) == 176);
     static_assert(offsetof(RaytraceParamsGpu, Spheres) == 560);
-    static_assert(offsetof(RaytraceParamsGpu, ViewProjection) == 1328);
-    static_assert(offsetof(RaytraceParamsGpu, MeshBounds) == 1392);
+    static_assert(offsetof(RaytraceParamsGpu, ViewProjection) == 1328 + kSphereTableGrowth);
+    static_assert(offsetof(RaytraceParamsGpu, MeshBounds) == 1392 + kSphereTableGrowth);
 
     // A negative spin a* is a hole spinning the other way: the metric only sees |a*|, the axis is reversed.
     [[nodiscard]] inline glm::vec3 EffectiveSpinAxis(const glm::vec3& axis, const double spin)
     {
         const glm::vec3 unit = glm::length(axis) > 0.0f ? glm::normalize(axis) : glm::vec3(0.0f, 1.0f, 0.0f);
         return spin < 0.0 ? -unit : unit;
+    }
+
+    // The entities FillSceneData uploads as spheres, in its order: the Stars first, then the other Spheres (a Star that
+    // also has a Sphere counts once, as a Star). Entry i of every per-sphere table (BodyGpu, the local frame choice)
+    // belongs to u_spheres[i], so they all take their order from here.
+    [[nodiscard]] inline std::vector<entt::entity> UploadedSpheres(const GPP::Scene& scene)
+    {
+        std::vector<entt::entity> result;
+        const auto& registry = scene.Registry();
+        for (auto [entity, star, transform] : registry.view<const StarComponent, const GPP::TransformComponent>().each())
+        {
+            if (result.size() >= static_cast<std::size_t>(kMaxSpheres)) return result;
+            result.push_back(entity);
+        }
+        for (auto [entity, sphere, transform] : registry.view<const SphereComponent, const GPP::TransformComponent>().each())
+        {
+            if (result.size() >= static_cast<std::size_t>(kMaxSpheres)) return result;
+            if (!registry.all_of<StarComponent>(entity)) result.push_back(entity);
+        }
+        return result;
     }
 
     // Holes are uploaded heaviest first: the lensing engines treat index 0 as the primary hole.
@@ -409,10 +432,11 @@ export namespace MoleHole
         std::array<GravityGridPointGpu, kMaxSpheres> Spheres{};
         std::array<GravityGridPointGpu, kMaxGravityGridMeshes> Meshes{};
     };
-    static_assert(sizeof(GravityGridParamsGpu) == 624);
+    constexpr std::size_t kGravityGridSphereGrowth = (kMaxSpheres - 16) * 16;
+    static_assert(sizeof(GravityGridParamsGpu) == 624 + kGravityGridSphereGrowth);
     static_assert(offsetof(GravityGridParamsGpu, BlackHoles) == 112);
     static_assert(offsetof(GravityGridParamsGpu, Spheres) == 240);
-    static_assert(offsetof(GravityGridParamsGpu, Meshes) == 496);
+    static_assert(offsetof(GravityGridParamsGpu, Meshes) == 496 + kGravityGridSphereGrowth);
 
     inline void FillGravityGridData(GravityGridParamsGpu& params, const GPP::Scene& scene, const RenderFrame& frame)
     {

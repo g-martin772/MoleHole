@@ -68,6 +68,7 @@ namespace MoleHole
             else if (arg == "--height") args.Request.Height = static_cast<std::uint32_t>(std::stoul(next()));
             else if (arg == "--duration") args.Request.DurationSeconds = std::stof(next());
             else if (arg == "--fps") args.Request.Framerate = std::stoi(next());
+            else if (arg == "--scene-camera") args.SceneCamera = true;
             else if (arg == "--sim-start" || arg == "--time-scale")
             {
                 const auto value = next();

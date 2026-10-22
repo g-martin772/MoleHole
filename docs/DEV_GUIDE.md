@@ -192,6 +192,25 @@ That generates the Render window row (cost badge, tooltip, reset, search), the s
 - Context: `ViewportLayer::UpdateRenderSettings` picks Edit / Play / Reference / Export each update; edits are mirrored into the scene's `Render:` extension (not undoable)
 - GPU features: `VulkanDevice::GetCapabilities()` (gpp); a setting's `Requires` is checked in the UI and `SanitizeForDevice`
 
+## Bodies (planets)
+Spheres with a `Surface` are lit, textured planets; spheres without one stay flat-colour markers. Layers are components on the sphere's entity: `Surface`, `Atmosphere`, `CloudLayer`, `Ring`, `Terrain`; `Light` entities light them directly.
+- GPU data: `BodyGpu` in `src/rendering/bodies.cppm` (std430, entry i belongs to `u_spheres[i]`), mirrored by `BodyData` in `shaders/body.glsl`. New per-body data: a field in both, filled in `FillBodyData` (lengths and coefficients converted to render units there)
+- Textures: `GPP::TextureCache` (`gpp/src/graphics/assets/texture.cppm`) by path and `TextureRole` (Color sRGB / Data / Height R16 / Hdr); mips built on the CPU, hot reloaded, exports wait for them. Bodies get bindless slots via the `slotFor` callback (64 slots, needs descriptor indexing)
+- Shading: `shadeBodySurface` (`body.glsl`) takes a normal and a distance, not a world position, because a body in its local frame has none at surface scale
+- Layers along a ray: `bodyAllLayers` (atmosphere, clouds, rings, front to back); the tracers call `segmentLayers` per straight segment
+- Lighting: per-body sky probes (`GPP_BODY_PROBE` variant of `black_hole_rendering.comp`) reduced by `body_probe_reduce.comp` to SH + one directional source
+- Local frame: within 20 radii (`kLocalFrameRadii`) the camera renders the body in its own flat frame and traces the rest from the body's centre
+- Notes: `docs/notes/textured_bodies.md`, `body_lighting.md`, `local_frames.md`, `atmospheres.md`, `terrain.md`
+- Textures are not in git: `python3 tools/fetch_textures.py` (Earth, Saturn; manifest `tools/texture_manifest.yaml`) and `python3 tools/gen_planet_textures.py` (Miller, Mann, Edmunds). Images picked with the inspector's `...` button are imported into `assets/textures/imported/`
+
+## Solar system scene (N-body)
+`templates/solar-system.yaml` is generated, not hand-edited: `tools/fetch_ephemeris.py` (JPL Horizons, cached in `tools/data/`) -> `tools/gen_solar_system.py`, physical data in `tools/solar_system_bodies.py`. Maps: `python3 tools/fetch_textures.py` (group `core`).
+- Dynamics: `NBodyComponent` (`GM`, `Velocity`, `J2`) on an entity with a `Transform` and a `Sphere`; `NBodySimulationModule` (`src/simulation/nbody_module.cppm`) integrates all of them in double precision (Newton, 1PN, J2, 6th-order symplectic). It does not use PhysX or `RigidBody`
+- Pure functions for tests: `NBodySystem`, `NBodyAcceleration`, `NBodyAdvance`, `NBodyEnergy`; the module is registered in `StartSimulationFor`
+- Add a body: an entry in `BODIES` (and a `CAMERAS` row for a follow camera), fetch the ephemeris again, regenerate
+- Check an export through a scene camera: `--scene-camera` renders from the camera with `Primary: true`; `gen_solar_system.py --primary <body id>` picks which
+- Notes: `docs/notes/solar_system.md`; the 30-day comparison against Horizons is hidden behind `[slow]` (minutes in Debug)
+
 ## Talk to the simulation
 ```cpp
 runner.EnqueueCommand(cmd, CommandOptions{.Undoable = runner.IsPaused(), .Label = "Do thing"});
