@@ -28,7 +28,9 @@ Entities:
         IsTrigger: true
       BlackHole:
         Mass: 1.9884098706980507e+30
+        SpinRange: ThorneLimit
         Spin: 0.23
+        SpinGap: 1.3e-14
         Charge: 0
         SpinAxis: [0.16, 0.33, -0.27]
   - Guid: 16017086654788356877
@@ -163,7 +165,7 @@ Graphs:
 Render:
   Version: 1
   Contexts:
-    Edit: Flat
+    Edit: Traced (edited)
     Play: Lensed (edited)
     Reference: Reference
     Export: Legacy
@@ -193,3 +195,14 @@ Render:
         disk.display_temperature: 1239
         disk.hot_spots: 5
         post.tonemap: Reinhard
+    - Name: Traced (edited)
+      Description: Geodesic integration at preview tolerance. Cinematic preview, seconds per frame.
+      Base: Traced
+      Set:
+        spacetime.solution: KerrNewman
+        post.exposure: -1.6
+        post.bloom_threshold: 0.822
+        post.bloom_passes: 3
+        post.bloom_intensity: 22.215
+        post.lens_flare: false
+        lighting.sky_radiance: 0
