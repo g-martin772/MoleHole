@@ -20,6 +20,7 @@
     "physx",
     "entt",
     "nativefiledialog-extended",
-    "luau"
+    "luau",
+    "lunasvg"
   ]
 }

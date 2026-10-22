@@ -13,15 +13,15 @@ namespace
 {
     struct LauncherLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, FileDialog, UiState, AppStateService, IFileSystem, AppPaths, AppInfo>;
+        using Dependencies = std::tuple<Logger, FileDialog, UiState, AppStateService, IFileSystem, AppPaths, AppInfo, Renderer>;
 
         LauncherLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<FileDialog> fileDialog,
                       std::shared_ptr<UiState> uiState, std::shared_ptr<AppStateService> appState,
                       std::shared_ptr<IFileSystem> fileSystem, std::shared_ptr<AppPaths> appPaths,
-                      std::shared_ptr<AppInfo> appInfo)
+                      std::shared_ptr<AppInfo> appInfo, std::shared_ptr<Renderer> renderer)
             : HotReloadableLayer(logger), m_FileDialog(std::move(fileDialog)), m_UiState(std::move(uiState)),
               m_AppState(std::move(appState)), m_FileSystem(std::move(fileSystem)), m_AppPaths(std::move(appPaths)),
-              m_AppInfo(std::move(appInfo))
+              m_AppInfo(std::move(appInfo)), m_Renderer(std::move(renderer))
         {
         }
 
@@ -35,8 +35,16 @@ namespace
             m_Hooks.DrawSettings = [this] { DrawSettings(); };
         }
 
+        void OnDetach() override
+        {
+            m_Data.Branding.IconTexture = 0;
+            m_Icon.reset();
+            m_IconTried = false;
+        }
+
         void OnUiRender() override
         {
+            EnsureIcon();
             EnsureSymbolFallback(m_AppPaths->ResourceDir() / "font" / "Roboto-Regular.ttf");
 
             const auto* viewport = ImGui::GetMainViewport();
@@ -60,6 +68,24 @@ namespace
         }
 
     private:
+        void EnsureIcon()
+        {
+            if (m_IconTried) return;
+            m_IconTried = true;
+            if (m_AppInfo->IconFile.empty()) return;
+
+            const int size = static_cast<int>(std::lround(ImGui::GetFontSize() * 8.0f));
+            const auto path = m_FileSystem->ResolvePath(m_AppInfo->IconFile);
+            const auto image = RasterizeSvgFile(path, size, size);
+            if (!image)
+            {
+                m_Logger->Warn("Launcher icon {} not loaded: {}", path.string(), image.error());
+                return;
+            }
+            m_Icon = m_Renderer->CreateUiTexture(image->Rgba, image->Width, image->Height);
+            if (m_Icon) m_Data.Branding.IconTexture = m_Icon->Id();
+        }
+
         void Handle(const LauncherAction& action)
         {
             switch (action.Kind)
@@ -155,6 +181,9 @@ namespace
         std::shared_ptr<IFileSystem> m_FileSystem;
         std::shared_ptr<AppPaths> m_AppPaths;
         std::shared_ptr<AppInfo> m_AppInfo;
+        std::shared_ptr<Renderer> m_Renderer;
+        std::shared_ptr<ImGuiTextureHandle> m_Icon;
+        bool m_IconTried = false;
         LauncherData m_Data;
         LauncherHooks m_Hooks;
     };
