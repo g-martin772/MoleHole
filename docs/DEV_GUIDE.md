@@ -106,6 +106,7 @@ gpp/
 Config layers, later wins: `<ResourceDir>/config.json` < `<ConfigDir>/config.json` (optional) < in-memory absolute asset dirs (installed only, `InstalledAssetOverrides` in `main.cpp`) < environment < CLI.
 - Arrays merge per index: a lower layer with more entries than the override keeps its extra tail. Keep `packaging/linux/config.json` arrays no longer than the overrides in `main.cpp`
 - New resource dir: add it to the `install(DIRECTORY ...)` list in `CMakeLists.txt`; new plugins install automatically from `MOLEHOLE_UI_PLUGINS`
+- Parallel instances are supported. Plugin shadow copies live in `<CacheDir>/hot-reload-cache/<pid>/` (`ProcessShadowDirectory`), removed at exit; the first use per process sweeps `<pid>` dirs whose process is dead or runs another executable (a crash leaves its dir until the next start). Shared files (state yaml, node editor view, shader cache) are written with `WriteFileAtomic` (temp + rename); `AppStateService::Save` merges the on-disk recents. Other per-process temp: `molehole_export_<pid>_*`, `molehole_latex_<pid>`. File > Launcher... starts another process with `SpawnSelf({"--launcher"})`
 - Run an installed copy under `tools/ui_drive.py` with `MOLEHOLE_BIN=<prefix>/bin/molehole` (optional `MOLEHOLE_CWD`)
 
 ---
