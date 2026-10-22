@@ -189,6 +189,17 @@ namespace
                 {
                     m_UiState->RequestRelaunch({"--launcher"});
                 }
+                if (ImGui::MenuItem("Launcher..."))
+                {
+                    if (const auto spawned = SpawnSelf(std::vector<std::string>{"--launcher"}); !spawned)
+                    {
+                        m_Logger->Error("Failed to open the launcher: {}", spawned.error());
+                    }
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Open another scene in a new window");
+                }
                 ImGui::EndMenu();
             }
 
