@@ -25,6 +25,8 @@ target_link_libraries(molehole_core PUBLIC gpp)
 add_executable(MoleHole src/main.cpp)
 target_link_libraries(MoleHole PRIVATE molehole_core)
 target_compile_definitions(MoleHole PRIVATE MOLEHOLE_VERSION="${PROJECT_VERSION}")
+gpp_hot_reload_track_sources(${MOLEHOLE_MODULES})
+gpp_use_hot_reload_build_id(MoleHole)
 
 gpp_add_hot_reload_theme(molehole_theme
         SOURCES plugins/theme.cpp

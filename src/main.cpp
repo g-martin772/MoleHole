@@ -1,3 +1,5 @@
+#include <gpp/hot_reload_build_id.h>
+
 import GPP;
 import MoleHole;
 import std;
@@ -11,6 +13,7 @@ using namespace MoleHole;
 
 int main(int argc, char* argv[])
 {
+    SetHotReloadHostBuildId(GPP_HOT_RELOAD_BUILD_ID);
     SetGlobalShaderDefines(Units::ShaderDefines());
     RegisterComponents();
 
