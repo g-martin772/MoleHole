@@ -138,8 +138,11 @@ namespace MoleHole
         for (const auto& diagnostic : diagnostics) std::println("{}", diagnostic.Format(path));
         const auto errors = GPP::CountDiagnostics(diagnostics, GPP::DiagnosticSeverity::Error);
         const auto warnings = GPP::CountDiagnostics(diagnostics, GPP::DiagnosticSeverity::Warning);
-        std::println(std::cerr, "{}: {} error{}, {} warning{}", path, errors, errors == 1 ? "" : "s", warnings,
-                     warnings == 1 ? "" : "s");
+        std::ifstream file(path, std::ios::binary);
+        const std::string text{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+        const auto versions = GPP::DescribeSceneVersions(text);
+        std::println(std::cerr, "{}: {}{} error{}, {} warning{}", path, versions.empty() ? "" : versions + "; ", errors,
+                     errors == 1 ? "" : "s", warnings, warnings == 1 ? "" : "s");
         return errors > 0 ? 1 : 0;
     }
 }

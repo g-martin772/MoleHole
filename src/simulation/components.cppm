@@ -234,6 +234,11 @@ export namespace MoleHole
     };
 
     constexpr const char* kAnimationGraphDataTypeTag = "__AnimationGraphData";
+
+    constexpr const char* kSceneGraphsKey = "Graphs";
+    constexpr int kSceneGraphsVersion = 3;
+    constexpr const char* kRenderExtensionKey = "Render";
+    constexpr int kRenderExtensionVersion = 1;
 }
 
 namespace MoleHole
@@ -245,6 +250,14 @@ namespace MoleHole
         {
             GPP::RegisterBaseComponents();
             GPP::RegisterScriptComponents();
+
+            auto& migrations = GPP::SceneMigrations::Instance();
+            migrations.RegisterExtension(kSceneGraphsKey, kSceneGraphsVersion);
+            migrations.RegisterExtension(kRenderExtensionKey, kRenderExtensionVersion);
+            migrations.Register({.Extension = kSceneGraphsKey, .From = 1, .To = 2,
+                                 .Description = "comments, reroutes and variables are optional additions"});
+            migrations.Register({.Extension = kSceneGraphsKey, .From = 2, .To = 3,
+                                 .Description = "functions and component graphs are optional additions"});
 
             GPP::RegisterComponent<BlackHoleComponent>("BlackHole", GPP::ComponentDescription<BlackHoleComponent>{
                 .DisplayName = "Black Hole",

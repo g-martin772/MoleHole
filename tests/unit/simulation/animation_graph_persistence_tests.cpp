@@ -172,3 +172,72 @@ TEST_CASE("A scene fixture carries a Main graph", "[simulation][scene][templates
     CHECK(graphs.Items[0].Name == kMainGraphName);
     CHECK(graphs.Items[0].Graph.Nodes.size() == 3);
 }
+
+namespace
+{
+    std::string ReadSceneFixture(const std::string& name)
+    {
+        std::ifstream stream(std::filesystem::path(MOLEHOLE_SOURCE_DIR) / "tests" / "fixtures" / "scenes" / name);
+        return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    }
+}
+
+TEST_CASE("Golden scenes of every supported schema and graphs version load and re-save at the current versions",
+          "[simulation][scene][migration]")
+{
+    RegisterComponents();
+
+    struct Golden
+    {
+        const char* File;
+        int Schema;
+        int Graphs;
+        std::size_t Items;
+        std::size_t Steps;
+    };
+    const Golden goldens[] = {
+        {"schema1-graphs-v1.yaml", 1, 1, 1, 3},
+        {"graphs-v2.yaml", 2, 2, 1, 1},
+        {"graphs-v3.yaml", 2, 3, 3, 0},
+    };
+
+    for (const auto& golden : goldens)
+    {
+        INFO(golden.File);
+        const auto text = ReadSceneFixture(golden.File);
+        REQUIRE_FALSE(text.empty());
+        CHECK(CountDiagnostics(ValidateSceneYaml(text), DiagnosticSeverity::Error) == 0);
+
+        Scene scene;
+        scene.DeserializeFromYaml(text);
+        CHECK(scene.Metadata().LoadedVersions.Schema == golden.Schema);
+        CHECK(scene.Metadata().LoadedVersions.Extensions.at(kSceneGraphsKey) == golden.Graphs);
+        CHECK(scene.Metadata().MigrationSteps.size() == golden.Steps);
+        const auto graphs = LoadSceneGraphs(scene);
+        CHECK(graphs.Items.size() == golden.Items);
+
+        const auto saved = scene.SerializeToYaml();
+        const auto root = YAML::Load(saved);
+        CHECK(root["SchemaVersion"].as<int>() == kSceneSchemaVersion);
+        CHECK(root["Graphs"]["Version"].as<int>() == kSceneGraphsVersion);
+
+        Scene reloaded;
+        reloaded.DeserializeFromYaml(saved);
+        CHECK(reloaded.Metadata().MigrationSteps.empty());
+        CHECK(reloaded.SerializeToYaml() == saved);
+    }
+}
+
+TEST_CASE("A scene with graphs newer than this build is refused and the old scene survives",
+          "[simulation][scene][migration][transactional]")
+{
+    RegisterComponents();
+    Scene scene;
+    scene.DeserializeFromYaml(ReadSceneFixture("graphs-v3.yaml"));
+    const auto before = scene.SerializeToYaml();
+
+    auto newer = ReadSceneFixture("graphs-v3.yaml");
+    newer.replace(newer.find("Version: 3"), 10, "Version: 99");
+    CHECK_THROWS_AS(scene.DeserializeFromYaml(newer), SceneVersionError);
+    CHECK(scene.SerializeToYaml() == before);
+}

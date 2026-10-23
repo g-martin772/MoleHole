@@ -1,0 +1,29 @@
+Scene: GoldenSchema1
+Entities:
+  - Guid: 7
+    Components:
+      Metadata: {Guid: 7, Name: Body, TypeTag: Empty}
+      Transform: {Position: [1, 0, 0], Rotation: [0, 0, 0, 1], Scale: [1, 1, 1]}
+      BlackHole: {Mass: 1.0, Spin: 0.5}
+Graphs:
+  Version: 1
+  Items:
+    - Name: Main
+      Enabled: true
+      Entity: 0
+      Graph:
+        NextId: 2
+        Variables: []
+        Nodes:
+          - Id: 1
+            Name: Start
+            Type: Event
+            SubType: Start
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue: {T: None}
+            Position: [0, 0]
+            Inputs: []
+            Outputs:
+              - {Id: 1500, Name: Out, Type: Flow, IsInput: false}
+        Links: []

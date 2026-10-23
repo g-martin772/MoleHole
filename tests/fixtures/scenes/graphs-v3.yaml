@@ -1,0 +1,52 @@
+Scene: GoldenGraphsV3
+SchemaVersion: 2
+Entities:
+  - Guid: 7
+    Components:
+      Metadata: {Guid: 7, Name: Body, TypeTag: Empty}
+      Transform: {Position: [1, 0, 0], Rotation: [0, 0, 0, 1], Scale: [1, 1, 1]}
+Graphs:
+  Version: 3
+  Items:
+    - Name: Main
+      Enabled: true
+      Entity: 0
+      Graph:
+        NextId: 2
+        Variables: []
+        Nodes:
+          - Id: 1
+            Name: Start
+            Type: Event
+            SubType: Start
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue: {T: None}
+            Position: [0, 0]
+            Inputs: []
+            Outputs:
+              - {Id: 1500, Name: Out, Type: Flow, IsInput: false}
+        Links: []
+    - Name: Helper
+      Enabled: true
+      Entity: 0
+      IsFunction: true
+      Signature:
+        Pure: false
+        NextKey: 0
+        Inputs: []
+        Outputs: []
+      Graph:
+        NextId: 1
+        Variables: []
+        Nodes: []
+        Links: []
+    - Name: Spinner
+      Enabled: true
+      Entity: 0
+      IsComponent: true
+      Graph:
+        NextId: 1
+        Variables: []
+        Nodes: []
+        Links: []

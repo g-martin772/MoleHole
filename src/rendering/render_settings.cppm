@@ -5,6 +5,7 @@ export module MoleHole:Rendering.Settings;
 import std;
 import GPP;
 import :Rendering.Frame;
+import :Simulation.Components;
 
 export namespace MoleHole
 {
@@ -169,9 +170,6 @@ export namespace MoleHole
 
     [[nodiscard]] const std::vector<RenderProfile>& BuiltInRenderProfiles();
     [[nodiscard]] RenderSettings LegacyRenderSettings(const YAML::Node& legacyState);
-
-    inline constexpr const char* kRenderExtensionKey = "Render";
-    inline constexpr int kRenderExtensionVersion = 1;
 
     // The scene's `Render:` extension as YAML text, empty when it has none
     [[nodiscard]] std::string RenderExtensionText(const GPP::Scene& scene);
