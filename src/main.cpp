@@ -22,6 +22,8 @@ int main(int argc, char* argv[])
 
     if (const auto validatePath = ParseValidateSceneArg(argc, argv)) return RunValidateScene(*validatePath);
 
+    if (const auto replayArgs = ParseReplayArgs(argc, argv)) return RunReplay(*replayArgs);
+
     auto cli = ParseExportArgs(argc, argv);
     if (cli && !cli->Error.empty())
     {

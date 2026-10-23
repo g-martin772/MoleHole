@@ -4,6 +4,7 @@ export import :Application.Startup;
 export import :Application.SceneLoader;
 export import :Application.Export;
 export import :Application.Cli;
+export import :Application.ReplayCli;
 export import :Application.Bootstrap;
 export import :Application.TextureImport;
 export import :Simulation.Components;
