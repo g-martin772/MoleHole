@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    env:
+      VCPKG_ROOT: /opt/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: /opt/vcpkg-cache
+    steps:
+      - name: Toolchain (GCC 16, CMake >= 4.4, Ninja)
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git cmake ninja clang python curl zip unzip tar \
+            pkgconf vulkan-headers vulkan-icd-loader shaderc libx11 libxext libxrandr libxcursor libxi \
+            libxkbcommon wayland wayland-protocols mesa alsa-lib libpulse gtk3 dbus
+          gcc --version | head -1
+          cmake --version | head -1
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: g-martin772/gpp
+          path: dependencies/gpp
+          token: ${{ secrets.GPP_TOKEN || github.token }}
+
+      - name: vcpkg
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+
+      - uses: actions/cache@v4
+        with:
+          path: /opt/vcpkg-cache
+          key: vcpkg-${{ hashFiles('vcpkg.json', 'dependencies/gpp/vcpkg.json', 'dependencies/gpp/vcpkg-overlays/**') }}
+          restore-keys: vcpkg-
+
+      - run: tools/ci.sh configure
+      - run: tools/ci.sh build
+      - run: tools/ci.sh test
+
+      - name: Format (advisory until the tree is formatted)
+        continue-on-error: true
+        run: CI_STRICT_FORMAT=1 tools/ci.sh format
+
+      - run: tools/ci.sh scenes
