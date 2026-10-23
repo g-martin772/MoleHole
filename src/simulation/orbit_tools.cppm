@@ -7,10 +7,11 @@ import GPP;
 import :Simulation.Components;
 import :Simulation.GeodesicBodies;
 import :Simulation.ObserverReadout;
+import :Simulation.TidalReadout;
 import :Rendering.Metric;
 import :Physics.Observer;
 
-// Relativity helpers behind the animation-graph nodes "Clock Rate" and "Launch Circular Orbit". The interpreter
+// Relativity helpers behind the animation-graph nodes "Clock Rate", "Tidal Stretch" and "Launch Circular Orbit". The interpreter
 // (animation_graph_executor.cpp) and the Luau host (script_runtime.cpp) both call these, so both runtimes produce the
 // same numbers, writes and diagnostics. Background: docs/notes/orbit_overlays_and_nodes.md
 export namespace MoleHole
@@ -29,6 +30,22 @@ export namespace MoleHole
         const auto velocity = ObserverVelocity(hole.Metric, kind, bl.x, bl.y);
         if (!velocity) return 0.0;
         return ProperTimeRate(hole.Metric, bl.x, bl.y, *velocity);
+    }
+
+    // The strongest tidal stretch (s⁻², the magnitude of the most negative eigenvalue of the tidal tensor) a preset
+    // observer feels at a world position around the first black hole, in its full metric. Times a length it is the
+    // acceleration pulling the ends of that length apart. 0 without a black hole and where the observer cannot exist.
+    // `observer` as in ObserverClockRateAt. Background: docs/notes/tidal_forces.md
+    [[nodiscard]] inline double ObserverTidalStretchAt(const GPP::Scene& scene, const glm::dvec3& positionM, const int observer)
+    {
+        const auto primary = PrimaryHole(scene);
+        if (!primary) return 0.0;
+        const HoleFrame& hole = primary->second;
+        const auto kind = observer >= 0 && observer <= 3 ? static_cast<ObserverKind>(observer) : ObserverKind::Zamo;
+        const auto bl = WorldToBoyerLindquist(hole, positionM);
+        const auto velocity = ObserverVelocity(hole.Metric, kind, bl.x, bl.y);
+        if (!velocity) return 0.0;
+        return TidalStretchAcrossMs2(MakeTidalSample(hole, bl, *velocity), 1.0);
     }
 
     [[nodiscard]] inline double EntityClockRate(const GPP::Scene& scene, const std::uint64_t guid)

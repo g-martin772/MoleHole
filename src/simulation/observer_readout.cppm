@@ -9,10 +9,11 @@ import :Simulation.GeodesicBodies;
 import :Rendering.Metric;
 import :Physics.Geodesic;
 import :Physics.Observer;
+import :Simulation.TidalReadout;
 
 // What the camera's observer measures: the values behind the camera window's Observer section. The renderer uses
 // the same rules (FillObserverFromBody, FillObserverData), so readout and image always describe the same observer.
-// Background: docs/notes/observers.md, docs/notes/geodesic_bodies.md
+// Background: docs/notes/observers.md, docs/notes/geodesic_bodies.md, docs/notes/tidal_forces.md
 export namespace MoleHole
 {
     enum class ObserverSource : std::int32_t
@@ -36,6 +37,7 @@ export namespace MoleHole
         double AccelerationMs2{0.0}; // proper acceleration needed to keep this motion
         double ProperTimeS{0.0};     // geodesic bodies only
         bool Rendered{true};         // false when the transport ignores the observer (only Integrated renders it)
+        std::optional<TidalSample> Tidal; // the tidal tensor this observer feels; nullopt inside the horizon
         std::string Status;
     };
 
@@ -169,6 +171,7 @@ export namespace MoleHole
             else
             {
                 readout.Status = "Geodesic body in free fall";
+                readout.Tidal = BodyTidalSample(scene, entity);
             }
             return readout;
         }
@@ -209,6 +212,7 @@ export namespace MoleHole
                            || (readout.Kind == ObserverKind::Orbiting && std::abs(std::cos(bl.y)) < 1e-9);
         const auto acceleration = ProperAcceleration(metric, readout.Kind, bl.x, bl.y, direction);
         readout.AccelerationMs2 = acceleration.value_or(0.0) * GPP::Units::kSpeedOfLight * GPP::Units::kSpeedOfLight / hole.LengthM;
+        readout.Tidal = MakeTidalSample(view, bl, *velocity);
         return readout;
     }
 }

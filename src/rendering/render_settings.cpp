@@ -355,6 +355,18 @@ namespace MoleHole
                 .Tooltip = "Coordinate time to predict ahead, in M (GM/c³ of each body's black hole).",
                 .Doc = kDoc, .Min = 10.0, .Max = 100000.0, .Scale = SettingScale::Log, .Format = "%.0f M",
                 .VisibleWhen = "overlay.predicted_orbits"}));
+            registry.Add(Setting("overlay.tidal_axes", &R::ShowTidalAxes, {
+                .Label = "Tidal axes", .Group = "Overlays",
+                .Tooltip = "Principal axes of the tidal tensor every free-falling Geodesic Body feels: red stretches,\n"
+                           "blue squeezes, length relative to the strongest axis. The camera's own tensor is the gizmo\n"
+                           "in the viewport corner. Drawn without lensing.",
+                .Doc = kDoc}));
+            registry.Add(Setting("overlay.tidal_axes_scale", &R::TidalAxesScale, {
+                .Label = "Tidal axes size", .Group = "Orbit overlays",
+                .Tooltip = "Half-length of a body's strongest tidal axis, in radii of its Sphere (or in 1 % of M of its\n"
+                           "black hole for a body without one).",
+                .Doc = kDoc, .Min = 0.5, .Max = 50.0, .Scale = SettingScale::Log, .Format = "%.1f",
+                .VisibleWhen = "overlay.tidal_axes"}));
 
             registry.Add(Setting("debug.view", &R::Debug, {
                 .Label = "Debug view", .Group = "Debug",

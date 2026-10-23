@@ -624,3 +624,19 @@ TEST_CASE("Parity: clock rate", "[script][parity][relativity]")
     }
     ExpectParity(Single(b.G), RelativityScene, 1, true);
 }
+
+TEST_CASE("Parity: tidal stretch", "[script][parity][relativity][tidal]")
+{
+    Gb b;
+    const int start = b.Add(CreateStartEventNode(b.Id()));
+    const float lengthM = static_cast<float>(GPP::Units::GravitationalRadius(1e6 * GPP::Units::kSolarMass));
+    int flow = start;
+    for (const int observer : {0, 1, 2, 3, 7})
+    {
+        const int position = b.Const(glm::vec3(10.0f * lengthM, 2.0f * lengthM, 0.0f), PinType::Vec3);
+        const int kind = b.Const(observer, PinType::Int);
+        const int stretch = b.Math(NodeSubType::TidalStretch, {{position, 0}, {kind, 0}});
+        flow = b.Print(flow, stretch);
+    }
+    ExpectParity(Single(b.G), RelativityScene, 1, true);
+}

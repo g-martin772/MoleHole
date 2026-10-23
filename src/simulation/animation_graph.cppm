@@ -54,6 +54,7 @@ export namespace MoleHole
         And, Or,
         LookAt,
         ClockRate,
+        TidalStretch,
 
         // Entity
         SpawnEntity, DestroyEntity, CloneEntity, LaunchOrbit,

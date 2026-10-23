@@ -337,6 +337,11 @@ export namespace MoleHole
             "Observer: 0 ZAMO, 1 Static, 2 Orbiting, 3 Raindrop. 0 where that observer cannot exist.",
             {"time", "dilation", "proper time", "clock", "relativity", "redshift"},
             [](const int id) { return CreateMathNode(id, NodeSubType::ClockRate); });
+        add("Tidal Stretch", "Relativity",
+            "The strongest tidal stretch an observer feels at a world position, in 1/s²: times a length, the acceleration "
+            "pulling its ends apart. Observer: 0 ZAMO, 1 Static, 2 Orbiting, 3 Raindrop. 0 where that observer cannot exist.",
+            {"tidal", "tide", "spaghettification", "stretch", "geodesic deviation", "relativity"},
+            [](const int id) { return CreateMathNode(id, NodeSubType::TidalStretch); });
 
         registry.Add(NodeEntry{"Comment", "Utility", "A titled box that groups nodes; dragging it moves the nodes inside.",
                                {"group", "box", "note", "frame"},

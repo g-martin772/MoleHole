@@ -64,6 +64,23 @@ export namespace MoleHole
         return hole.Position + hole.Frame * local * hole.LengthM;
     }
 
+    // World directions of the local (r̂, θ̂, φ̂) at Boyer–Lindquist `bl` = (r, θ, φ): the unit tangents of the oblate
+    // embedding above, as blBasis in shaders/kerr.glsl. They are the directions the renderer gives the ZAMO's axes;
+    // r̂ and θ̂ are only orthogonal to O(a²/r²) in this flat picture.
+    [[nodiscard]] inline std::array<glm::dvec3, 3> BoyerLindquistBasisWorld(const HoleFrame& hole, const glm::dvec3& bl)
+    {
+        const double a = hole.Metric.SpinParameter;
+        const double r = bl.x;
+        const double s = std::sin(bl.y);
+        const double c = std::cos(bl.y);
+        const double rho = std::sqrt(r * r + a * a);
+        return {
+            hole.Frame * glm::normalize(glm::dvec3(r / rho * s * std::cos(bl.z), r / rho * s * std::sin(bl.z), c)),
+            hole.Frame * glm::normalize(glm::dvec3(rho * c * std::cos(bl.z), rho * c * std::sin(bl.z), -r * s)),
+            hole.Frame * glm::dvec3(-std::sin(bl.z), std::cos(bl.z), 0.0),
+        };
+    }
+
     // The hole with this guid, or the first black hole in the scene for guid 0 (a Geodesic Body's default).
     [[nodiscard]] inline std::optional<HoleFrame> FindHoleFrame(const GPP::Scene& scene, const std::uint64_t guid)
     {

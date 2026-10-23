@@ -695,7 +695,7 @@ namespace MoleHole
 
             [[nodiscard]] static bool SceneHasMeshes(const Scene& scene)
             {
-                for (const auto [entity, mesh] : scene.Registry().view<const MeshComponent>().each())
+                for (const auto [entity, mesh] : scene.Registry().view<const MeshComponent>.each())
                 {
                     if (!mesh.AssetPath.empty()) return true;
                 }
@@ -1318,8 +1318,8 @@ namespace MoleHole
             bool m_WasEnabled{false};
         };
 
-        // Every rasterised overlay line of the frame (characteristic radii of non-traced holes, predicted orbits, object
-        // path trails), computed once before the trace. With the Integrated transport the parts inside the first hole's
+        // Every rasterised overlay line of the frame (characteristic radii of non-traced holes, tidal glyphs, predicted
+        // orbits, object path trails), computed once before the trace. With the Integrated transport the parts inside the first hole's
         // integration sphere go to the tracer instead (res.Trails), which draws them lensed; the rest stays rasterised
         // and is aberrated for a moving camera. Predictions are integrated again only when a body's state or the span
         // changed, so a paused scene costs nothing per frame. See docs/notes/orbit_overlays_and_nodes.md.
@@ -1334,7 +1334,8 @@ namespace MoleHole
             [[nodiscard]] std::string_view Name() const override { return "OverlayGeometry"; }
             [[nodiscard]] bool Enabled(const RenderSettings& settings) const override
             {
-                return settings.ShowObjectPaths || settings.ShowCharacteristicRadii || settings.ShowPredictedOrbits || settings.ShowBodyOrbits;
+                return settings.ShowObjectPaths || settings.ShowCharacteristicRadii || settings.ShowPredictedOrbits
+                       || settings.ShowTidalAxes || settings.ShowBodyOrbits;
             }
 
             void Record(RenderFrameContext& ctx) override
@@ -1366,6 +1367,44 @@ namespace MoleHole
                                                     std::hypot(1.0, static_cast<double>(ctx.TraceExtent.width) /
                                                                         static_cast<double>(std::max(ctx.TraceExtent.height, 1u)))),
                          .ViewHeightPixels = static_cast<double>(ctx.TraceExtent.height)});
+                }
+                if (ctx.Settings.ShowTidalAxes)
+                {
+                    // Glyphs sit at the bodies, so like the radii they stay rasterised and unlensed
+                    const auto glyphs = TidalAxesOverlay(ctx.Scene, ctx.Settings.TidalAxesScale, ctx.Inputs.ObserverGuid);
+                    m_Radii.insert(m_Radii.end(), glyphs.begin(), glyphs.end());
+                }
+                std::vector<OverlaySegment> trails;
+                if (ctx.Settings.ShowPredictedOrbits)
+                {
+                    UpdatePredictions(ctx.Scene, ctx.Settings.PredictionSpan, ctx.Inputs.ObserverGuid);
+                    trails = m_Predictions;
+                }
+                if (ctx.Settings.ShowObjectPaths)
+                {
+                    std::scoped_lock lock(m_Mutex);
+                    const auto append = [&](const auto& histories, const glm::vec3& color)
+                    {
+                        for (const auto& [guid, history] : histories)
+                        {
+                            for (std::size_t i = 1; i < history.size(); ++i) trails.push_back({history[i - 1], history[i], color});
+                        }
+                    };
+                    append(m_Tracker.MeshHistories(), kMeshColor);
+                    append(m_Tracker.SphereHistories(), kSphereColor);
+                }
+
+                std::vector<RenderSegment> render;
+                render.reserve(m_Radii.size() + trails.size());
+                for (const auto& segment : m_Radii) render.push_back({ctx.Frame.ToRender(segment.A), ctx.Frame.ToRender(segment.B), segment.Color});
+                std::vector<RenderSegment> raster = render;
+                render.clear();
+                for (const auto& segment : trails) render.push_back({ctx.Frame.ToRender(segment.A), ctx.Frame.ToRender(segment.B), segment.Color});
+                if (primary)
+                {
+                    // Object paths record a point per tick; 1 % of M is far below anything visible
+                    const auto& hole = ctx.Scene.Registry().get<const BlackHoleComponent>(ctx.Scene.FindByGuid(primary->first));
+                    render = SimplifyTrails(render, 0.01f * ctx.Frame.GeometricMass(hole.Mass));
                 }
 
                 std::uint64_t pathRevision = 0;
@@ -1470,7 +1509,7 @@ namespace MoleHole
                     m_Res.TrailAngularHalfWidth = m_TrailsHalfWidth;
                     m_Res.TrailsActive = true;
                 }
-                const auto& raster = m_Raster;
+                raster = m_Raster;
 
                 // A moving camera sees the traced image aberrated; the rasterised lines follow it
                 const auto observer = MovingCameraObserver(ctx);
@@ -1495,7 +1534,7 @@ namespace MoleHole
             {
                 // A re-launched body starts again at λ = 0, so position is part of the key
                 std::vector<std::array<double, 4>> key;
-                for (auto [entity, body] : scene.Registry().view<const GeodesicBodyComponent>().each())
+                for (auto [entity, body] : scene.Registry().view<const GeodesicBodyComponent>.each())
                 {
                     const bool moving = body.Status == GeodesicBodyStatus::FreeFall;
                     key.push_back({static_cast<double>(scene.GuidOf(entity)), moving ? body.State.Lambda : -1.0, body.State.R,
@@ -1537,7 +1576,8 @@ namespace MoleHole
             [[nodiscard]] std::string_view Name() const override { return "OverlayLines"; }
             [[nodiscard]] bool Enabled(const RenderSettings& settings) const override
             {
-                return settings.ShowObjectPaths || settings.ShowCharacteristicRadii || settings.ShowPredictedOrbits || settings.ShowBodyOrbits;
+                return settings.ShowObjectPaths || settings.ShowCharacteristicRadii || settings.ShowPredictedOrbits
+                       || settings.ShowTidalAxes || settings.ShowBodyOrbits;
             }
 
             void Record(RenderFrameContext& ctx) override

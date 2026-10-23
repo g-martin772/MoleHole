@@ -478,6 +478,13 @@ namespace MoleHole
             const int observer = GetValueAs<int>(EvaluatePinValue(in[1].Id, ctx), 0);
             return static_cast<float>(ObserverClockRateAt(ctx.Scene, glm::dvec3(std::get<glm::vec3>(position)), observer));
         }
+        case NodeSubType::TidalStretch:
+        {
+            const Value position = EvaluatePinValue(in[0].Id, ctx);
+            if (!std::holds_alternative<glm::vec3>(position)) break;
+            const int observer = GetValueAs<int>(EvaluatePinValue(in[1].Id, ctx), 0);
+            return static_cast<float>(ObserverTidalStretchAt(ctx.Scene, glm::dvec3(std::get<glm::vec3>(position)), observer));
+        }
         case NodeSubType::And:
         {
             const bool a = GetValueAs<bool>(EvaluatePinValue(in[0].Id, ctx), false);

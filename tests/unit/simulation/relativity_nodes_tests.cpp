@@ -172,3 +172,42 @@ TEST_CASE("Clock Rate gives dτ/dt of the chosen observer", "[simulation][animat
     CHECK(std::get<float>(rate(glm::vec3(2.5f * lengthM, 0.0f, 0.0f), 2)) == 0.0f);
     CHECK(ObserverClockRateAt(world.Space, glm::dvec3(10.0, 0.0, 0.0) * world.Frame.LengthM, 1) == Approx(std::sqrt(0.8)));
 }
+
+TEST_CASE("Tidal Stretch gives the strongest stretch of the chosen observer", "[simulation][animation][relativity][tidal]")
+{
+    auto world = MakeWorld(0.0);
+    const auto stretch = [&](const glm::vec3& positionM, const int observer)
+    {
+        // Start -> Print(Tidal Stretch(position, observer)); the value is read from the trace
+        AnimationGraphData graph;
+        Node start = CreateStartEventNode(graph.AllocateId());
+        const int startOut = start.Outputs[0].Id;
+        graph.Nodes.push_back(start);
+        Node math = CreateMathNode(graph.AllocateId(), NodeSubType::TidalStretch);
+        const auto in = math.Inputs;
+        const int out = math.Outputs[0].Id;
+        graph.Nodes.push_back(math);
+        Node print = CreatePrintNode(graph.AllocateId());
+        const auto printIn = print.Inputs;
+        graph.Nodes.push_back(print);
+        Connect(graph, startOut, printIn[0].Id);
+        Connect(graph, out, printIn[1].Id);
+        Connect(graph, AddConstant(graph, positionM, PinType::Vec3), in[0].Id);
+        Connect(graph, AddConstant(graph, observer, PinType::Int), in[1].Id);
+        GraphExecutor executor(graph, [](std::string) {});
+        Recorder recorder;
+        executor.SetTraceSink(&recorder);
+        (void)executor.ExecuteStartEvent(world.Space);
+        return recorder.Pins.contains(out) ? recorder.Pins[out] : Value{};
+    };
+    const double lengthM = world.Frame.LengthM;
+    // Schwarzschild, static at r = 10 M: 2M/r³, times c²/r_g² for s⁻²
+    const double expected = 2.0 / 1000.0 * Units::kSpeedOfLight * Units::kSpeedOfLight / (lengthM * lengthM);
+    const Value still = stretch(glm::vec3(static_cast<float>(10.0 * lengthM), 0.0f, 0.0f), 1);
+    REQUIRE(std::holds_alternative<float>(still));
+    CHECK(std::get<float>(still) == Approx(expected).epsilon(1e-5));
+    // Radial motion leaves it unchanged: the raindrop feels the same
+    CHECK(std::get<float>(stretch(glm::vec3(static_cast<float>(10.0 * lengthM), 0.0f, 0.0f), 3)) == Approx(expected).epsilon(1e-5));
+    // Inside the photon orbit no orbiting observer exists
+    CHECK(std::get<float>(stretch(glm::vec3(static_cast<float>(2.5 * lengthM), 0.0f, 0.0f), 2)) == 0.0f);
+}

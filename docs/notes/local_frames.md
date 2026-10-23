@@ -24,7 +24,9 @@ is in `m2_rendering_references.md` §4.
 
 ## 1. The problem in numbers
 
-Gargantua: 10⁸ M☉, so M = GM/c² = 1.4767 × 10¹¹ m.
+Gargantua: 10⁸ M☉, so M = GM/c² = 1.4767 × 10¹¹ m. (The numbers below are for 10⁸ M☉. `templates/interstellar-bodies.yaml` now uses
+10⁹ M☉ for the Roche limit, `tidal_forces.md` §3; the planet then spans ten times less of M, which makes the argument
+only stronger.)
 
 | Quantity | Value |
 |---|---|

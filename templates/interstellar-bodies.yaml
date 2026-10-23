@@ -1,4 +1,7 @@
 # Milestone M2: Interstellar's planets around a near-extremal Gargantua (docs/notes/interstellar_planets.md).
+# Gargantua is 1e9 Msun, not the film's "at least 1e8": at 1e8 the tidal stretch on Miller's orbit is 6 times the
+# planet's own gravity and it would be torn apart; 1e9 is below the fluid Roche limit (docs/notes/tidal_forces.md §3).
+# Positions scale with M, so r/M and the time dilation are unchanged.
 # Maps: tools/gen_planet_textures.py. The planets are lit only by what their sky probes see (the disk, the sky).
 # Positions are exact Boyer-Lindquist orbits at t = 0; the tiny time scale keeps them in front of their cameras,
 # which do not ride the planets yet (M5). Miller orbits at r - M = 4e-5 M, so close views use its local frame.
@@ -17,7 +20,7 @@ Entities:
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       BlackHole:
-        Mass: 1.98847e+38
+        Mass: 1.98847e+39
         Spin: 0.6
         Charge: 0
         SpinAxis: [0, 1, 0]
@@ -30,7 +33,7 @@ Entities:
         Name: Miller's planet
         TypeTag: Sphere
       Transform:
-        Position: [0, 0, 2.08837e+11]
+        Position: [0, 0, 2.08837e+12]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Sphere:
@@ -73,7 +76,7 @@ Entities:
         Name: Mann's planet
         TypeTag: Sphere
       Transform:
-        Position: [5.11693e+12, 0, -2.95426e+12]
+        Position: [5.11693e+13, 0, -2.95426e+13]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Sphere:
@@ -125,7 +128,7 @@ Entities:
         Name: Edmunds' planet
         TypeTag: Sphere
       Transform:
-        Position: [-1.02315e+13, 0, -5.90714e+12]
+        Position: [-1.02315e+14, 0, -5.90714e+13]
         Rotation: [0, 0, 0, 1]
         Scale: [1, 1, 1]
       Sphere:
@@ -177,13 +180,13 @@ Entities:
         Name: Camera (Miller)
         TypeTag: Camera
       Transform:
-        Position: [0, 5.0968e+06, 2.08859e+11]
+        Position: [0, 5096800, 2.088392e+12]
         Rotation: [0, 0, 0, 1.0]
         Scale: [1, 1, 1]
       Camera:
         Fov: 60
         NearPlane: 10
-        FarPlane: {value: 1000, unit: AU}
+        FarPlane: {value: 3000, unit: AU}
         Primary: true
   - Guid: 7300000000000000011
     Components:
@@ -192,13 +195,13 @@ Entities:
         Name: Camera (Mann)
         TypeTag: Camera
       Transform:
-        Position: [5.11692e+12, 4.5873e+06, -2.95427e+12]
+        Position: [5.116929e+13, 4587300, -2.954261e+13]
         Rotation: [-0.058237, -0.873945, -0.108238, 0.470227]
         Scale: [1, 1, 1]
       Camera:
         Fov: 60
         NearPlane: 10
-        FarPlane: {value: 1000, unit: AU}
+        FarPlane: {value: 3000, unit: AU}
         Primary: false
   - Guid: 7300000000000000012
     Components:
@@ -207,13 +210,13 @@ Entities:
         Name: Camera (Edmunds)
         TypeTag: Camera
       Transform:
-        Position: [-1.02315e+13, 5.7339e+06, -5.90712e+12]
+        Position: [-1.02315e+14, 5733900, -5.907138e+13]
         Rotation: [-0.122855, -0.029744, -0.003684, 0.991972]
         Scale: [1, 1, 1]
       Camera:
         Fov: 60
         NearPlane: 10
-        FarPlane: {value: 1000, unit: AU}
+        FarPlane: {value: 3000, unit: AU}
         Primary: false
 EditorCamera:
   PositionM: [0, 7.4e11, 4.43e12]

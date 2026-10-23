@@ -99,6 +99,8 @@ export namespace MoleHole
         bool ShowPredictedOrbits = false;
         bool ShowBodyOrbits = false;
         float PredictionSpan = 300.0f; // coordinate time ahead, in M of each body's hole
+        bool ShowTidalAxes = false;
+        float TidalAxesScale = 3.0f; // glyph half-length of the strongest axis, in body radii
 
         DebugView Debug = DebugView::None;
 

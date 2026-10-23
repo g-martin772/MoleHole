@@ -201,6 +201,13 @@ namespace
             constexpr float lineHeight = 16.0f;
 
             DrawWarnings(drawList, CollectRenderWarnings(scene, m_RenderSettings->Effective().Solution), max);
+            if (m_RenderSettings->Effective().ShowTidalAxes)
+            {
+                if (const auto readout = m_UiState->Observer.Load(); readout && readout->Tidal)
+                {
+                    DrawTidalGizmo(drawList, *readout->Tidal, *m_UiState, ImVec2(min.x + 72.0f, max.y - 92.0f), 48.0f);
+                }
+            }
 
             if (m_UiState->ShowCameraGizmos)
             {
@@ -254,6 +261,15 @@ namespace
                 {
                     lines.emplace_back("mass " + Units::FormatQuantity(body->Mass, Units::Dimension::Mass, 4));
                 }
+                if (const auto tidal = BodyTidalSample(scene, entity))
+                {
+                    std::string line = std::format("tidal stretch {:.3g} s⁻²", -std::min(tidal->EigenvaluesS2[0], 0.0));
+                    if (const auto* sphere = scene.Registry().try_get<const SphereComponent>(entity))
+                    {
+                        line += std::format(", {:.3g} g⊕ across R", TidalStretchAcrossMs2(*tidal, sphere->Radius) / EarthSurfaceGravity());
+                    }
+                    lines.push_back(std::move(line));
+                }
 
                 const std::string& name = metadata.Name.empty() ? metadata.TypeTag : metadata.Name;
                 float panelWidth = padding * 2.0f + ImGui::CalcTextSize(name.c_str()).x;
@@ -283,6 +299,36 @@ namespace
         }
 
     private:
+        // The camera observer's tidal axes as seen in the view (docs/notes/tidal_forces.md): red stretches, blue
+        // squeezes, each axis as long as its eigenvalue relative to the strongest; the near half is drawn solid.
+        static void DrawTidalGizmo(ImDrawList* list, const TidalSample& tidal, const UiState& state, const ImVec2 center,
+                                   const float radius)
+        {
+            const glm::dvec3 front = glm::normalize(glm::dvec3(state.ViewFront));
+            const glm::dvec3 right = glm::normalize(glm::cross(front, glm::dvec3(state.ViewUp)));
+            const glm::dvec3 up = glm::cross(right, front);
+            const auto& lambda = tidal.EigenvaluesS2;
+            const double strongest = std::max({std::abs(lambda[0]), std::abs(lambda[1]), std::abs(lambda[2])});
+            if (!(strongest > 0.0)) return;
+            list->AddCircleFilled(center, radius + 14.0f, IM_COL32(20, 20, 20, 150));
+            for (std::size_t k = 0; k < 3; ++k)
+            {
+                const bool stretch = lambda[k] < 0.0;
+                const float length = radius * static_cast<float>(std::abs(lambda[k]) / strongest);
+                const glm::dvec3& axis = tidal.AxesWorld[k];
+                const ImVec2 offset(length * static_cast<float>(glm::dot(axis, right)), -length * static_cast<float>(glm::dot(axis, up)));
+                const ImU32 color = stretch ? IM_COL32(255, 90, 64, 255) : IM_COL32(77, 153, 255, 255);
+                const ImU32 dim = stretch ? IM_COL32(255, 90, 64, 110) : IM_COL32(77, 153, 255, 110);
+                // The half pointing towards the viewer is solid
+                const bool towards = glm::dot(axis, front) < 0.0;
+                list->AddLine(center, ImVec2(center.x + offset.x, center.y + offset.y), towards ? color : dim, 2.5f);
+                list->AddLine(center, ImVec2(center.x - offset.x, center.y - offset.y), towards ? dim : color, 2.5f);
+            }
+            const std::string label = std::format("tidal {:.2g} s⁻²", strongest);
+            const ImVec2 size = ImGui::CalcTextSize(label.c_str());
+            list->AddText(ImVec2(center.x - size.x * 0.5f, center.y + radius + 16.0f), IM_COL32(230, 230, 230, 230), label.c_str());
+        }
+
         static void DrawWarnings(ImDrawList* list, const std::vector<std::string>& warnings, const glm::vec2& corner)
         {
             constexpr float padding = 6.0f;

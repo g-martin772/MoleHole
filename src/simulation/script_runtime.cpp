@@ -241,6 +241,14 @@ namespace MoleHole
                 call.PushValue(static_cast<float>(ObserverClockRateAt(*Scene, glm::dvec3(std::get<glm::vec3>(position)), observer)));
                 return 1;
             });
+            vm.Register("host", "tidalstretch", [this](GPP::LuauNativeCall& call)
+            {
+                const Value position = call.ToValue(1, GPP::LuauType::Vec3);
+                if (!std::holds_alternative<glm::vec3>(position)) return 0;
+                const int observer = static_cast<int>(call.Number(2));
+                call.PushValue(static_cast<float>(ObserverTidalStretchAt(*Scene, glm::dvec3(std::get<glm::vec3>(position)), observer)));
+                return 1;
+            });
             vm.Register("host", "launchorbit", [this](GPP::LuauNativeCall& call)
             {
                 const int node = static_cast<int>(call.Number(1));

@@ -130,6 +130,20 @@ namespace
                     ImGui::Text("Proper acceleration: %.3g m/s² (%.3g × Earth gravity)", readout.AccelerationMs2,
                                 readout.AccelerationMs2 / EarthSurfaceGravity());
                 }
+                if (readout.Tidal)
+                {
+                    // docs/notes/tidal_forces.md: negative eigenvalues stretch, positive ones squeeze
+                    const auto& lambda = readout.Tidal->EigenvaluesS2;
+                    ImGui::Text("Tidal stretch: %.3g s⁻² (%.3g × Earth gravity across 2 m)", -std::min(lambda[0], 0.0),
+                                TidalStretchAcrossMs2(*readout.Tidal, 2.0) / EarthSurfaceGravity());
+                    ImGui::Text("Tidal squeeze: %.3g s⁻²", std::max(lambda[2], 0.0));
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Principal values of the tidal tensor in the observer's frame: the difference in\n"
+                                          "acceleration per metre of separation. Show the axes with Render > Overlays >\n"
+                                          "Tidal axes.");
+                    }
+                }
             }
             ImGui::TextDisabled("Choose the observer under Render > Camera > Observer, or give the primary scene camera "
                                 "a Geodesic Body and possess it while playing.");

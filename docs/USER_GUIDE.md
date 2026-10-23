@@ -186,6 +186,7 @@ Render:
 - `overlay.predicted_orbits`: each Geodesic Body's future path, integrated ahead from its current state. Bright now, dim later, stops at the horizon
 - `overlay.prediction_span`: how far ahead to predict, as coordinate time in M = GM/c³ of the body's hole
 - `overlay.body_orbits`: the osculating orbit of every N-body body about its parent (planets blue, moons orange, open orbits magenta, comets and probes dim) and a ring around bodies too small to see; only bodies in view, orbits over 10 px across. Lines are hidden behind spheres
+- `overlay.tidal_axes`: principal axes of the tidal tensor each free-falling Geodesic Body feels (red = stretch, blue = squeeze, arrowheads out or in, length relative to the strongest axis), plus a gizmo in the viewport's lower-left corner for the camera's own observer. `overlay.tidal_axes_scale` sets the glyph size in body radii. The camera window's Observer section shows the stretch and squeeze in s⁻² and the stretch across 2 m in Earth gravities; with the HUD on, each body's label shows its stretch. Background: `docs/notes/tidal_forces.md`
 - Like the other overlays, these are rasterised: not lensed or aberrated
 - Disk brightness: exposure is anchored to the hottest gas as seen from far away (face-on), not to its rest-frame peak. Schwarzschild disks look as before; spinning disks are brighter (about 1.4× at a* = 0.5, 3× at 0.9, 20× at 0.998) and near-extremal disks look like Thorne-limit ones. Lower `post.exposure` for old high-spin scenes if needed. Background: `docs/notes/near_extremal.md`, `docs/notes/orbit_overlays_and_nodes.md`
 
@@ -239,7 +240,7 @@ Add these to a Sphere in the inspector (Add Component). A sphere without a Surfa
 - Atmospheres, clouds, rings and the close-up mode need the Analytic lens or Integrated transport. Within 20 body radii the nearest sphere is drawn in its own flat local frame (needed for Miller's orbit, where the planet is far below the resolution of the radial coordinate). Terrain relief is ray-marched in that mode and only shades the sphere from farther away
 - Rotation follows the body's own clock: a Geodesic Body in free fall turns slower (`dτ = clock rate · dt`)
 - Exports wait until all maps are loaded and the probes have run twice
-- Templates: `templates/solar-system-bodies.yaml` (Earth with clouds, atmosphere, terrain and city lights, and Saturn with rings, lit by a directional Sun) and `templates/interstellar-bodies.yaml` (Miller's, Mann's and Edmunds' planets around a near-extremal Gargantua, lit by the disk and sky, one camera per planet)
+- Templates: `templates/solar-system-bodies.yaml` (Earth with clouds, atmosphere, terrain and city lights, and Saturn with rings, lit by a directional Sun) and `templates/interstellar-bodies.yaml` (Miller's, Mann's and Edmunds' planets around a near-extremal Gargantua of 10⁹ M☉, heavier than the film's 10⁸ so Miller's planet stays outside its Roche limit, lit by the disk and sky, one camera per planet)
 - Textures are not in git (`assets/textures/` is ignored). Fetch Earth and Saturn with `python3 tools/fetch_textures.py` (group `core`; `--groups core-2k` for a small set, `nasa` for extras; needs PyYAML, and Pillow to convert TIFF to PNG; writes `assets/textures/ATTRIBUTION.md`). Generate the three Interstellar planets with `python3 tools/gen_planet_textures.py` (needs numpy and Pillow; `--planets`, `--width`)
 - Solar system: `templates/solar-system.yaml` has 98 bodies (Sun, planets, 70 moons, dwarf planets, asteroids, comets, interstellar visitors, spacecraft) at their JPL Horizons positions of 2026-10-22, integrated while the simulation plays (Newtonian N-body with 1PN relativity and planetary J2, 4 hours per second by default; raise the time scale in the simulation window). The Sun lights the planets (day and night side, city lights); the profile turns on `overlay.body_orbits`. One follow camera per major body (`Camera: Earth`, `Camera: Inner solar system`, ...); run `python3 tools/fetch_textures.py --groups core moons` first for the maps. `templates/solar-system-black-hole.yaml` is the same system with a 1 solar-mass black hole instead of the Sun (same orbits, a point light stands in for the accretion luminosity; profile `Black hole close-up` for the lensed view). Background and accuracy: `docs/notes/solar_system.md`, demo renders: `docs/solar-system-demo/`
 - Known gaps: the radiance scales of disk, stars and skybox are not matched (planets near Gargantua look dim against the starfield; use `post.tonemap` ACES with `post.exposure_mode` Auto, as `interstellar-bodies.yaml` does), no terrain self-shadowing, no collision with the relief yet
@@ -256,7 +257,7 @@ Add these to a Sphere in the inspector (Add Component). A sphere without a Surfa
 - Flow Control: Branch, For Loop, Sequence, Do Once, Gate, Switch, While, For Each Entity
 - Latent: Delay, Wait Until, Wait For Event, Interpolate (Luau only)
 - Entities: Spawn, Clone, Destroy
-- Relativity: Launch Circular Orbit, Clock Rate
+- Relativity: Launch Circular Orbit, Clock Rate, Tidal Stretch
 - Objects: Get / Decompose / Set per component (auto-generated for every component)
 - Math: add, sub, mul, div, min, max, lerp, clamp, sin, cos, sqrt, length, distance, look-at…
 - Variables: typed, per graph
@@ -276,6 +277,7 @@ Premade, prewired groups. Add menu → Combos, fill few fields.
 ### Relativity nodes
 - Launch Circular Orbit: inputs Entity (with a Geodesic Body), Radius (M of its hole), Azimuth (rad about the spin axis), Retrograde. Puts the body on a circular equatorial orbit; the simulation follows it from the next tick. Warns when impossible (inside the photon orbit, no Geodesic Body)
 - Clock Rate: inputs world Position and Observer (0 ZAMO, 1 Static, 2 Orbiting, 3 Raindrop). Outputs dτ/dt against a distant observer; 0 where that observer cannot exist
+- Tidal Stretch: same inputs. Outputs the strongest tidal stretch that observer feels, in 1/s² (times a length: the acceleration pulling its ends apart); 0 where that observer cannot exist
 - Both behave identically in the interpreter and the Luau runtime
 - A Geodesic Body's Proper time, Clock rate and Speed are readable with the regular Get / Decompose Geodesic Body nodes
 

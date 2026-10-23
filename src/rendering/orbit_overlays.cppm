@@ -10,6 +10,7 @@ import :Rendering.Metric;
 import :Physics.Geodesic;
 import :Physics.Observer;
 import :Simulation.ObserverReadout;
+import :Simulation.TidalReadout;
 
 // Line geometry of the orbit overlays, in world metres: the characteristic radii of every black hole and the
 // predicted world lines of the geodesic bodies. Computed from a scene snapshot (never the simulation thread's scene)
@@ -101,15 +102,7 @@ export namespace MoleHole
         const double distance = glm::length(offset);
         if (!(distance > 0.0)) return pointM;
         const HoleFrame& hole = observer.Hole;
-        const auto bl = WorldToBoyerLindquist(hole, cameraM);
-        const double a = hole.Metric.SpinParameter;
-        const double r = bl.x;
-        const double s = std::sin(bl.y);
-        const double c = std::cos(bl.y);
-        const double rho = std::sqrt(r * r + a * a);
-        const glm::dvec3 er = hole.Frame * glm::normalize(glm::dvec3(r / rho * s * std::cos(bl.z), r / rho * s * std::sin(bl.z), c));
-        const glm::dvec3 eTheta = hole.Frame * glm::normalize(glm::dvec3(rho * c * std::cos(bl.z), rho * c * std::sin(bl.z), -r * s));
-        const glm::dvec3 ePhi = hole.Frame * glm::dvec3(-std::sin(bl.z), std::cos(bl.z), 0.0);
+        const auto [er, eTheta, ePhi] = BoyerLindquistBasisWorld(hole, WorldToBoyerLindquist(hole, cameraM));
 
         // Photon from the point travels along -look; seen from the camera, the ZAMO moves with -v
         const glm::dvec3 look = offset / distance;
@@ -118,6 +111,65 @@ export namespace MoleHole
         const auto seen = BoostPhoton({-v[0], -v[1], -v[2]}, k).Direction;
         const glm::dvec3 apparent = -(seen[0] * er + seen[1] * eTheta + seen[2] * ePhi);
         return cameraM + glm::normalize(apparent) * distance;
+    }
+
+    inline constexpr glm::vec3 kTidalStretchColor{1.0f, 0.35f, 0.25f};
+    inline constexpr glm::vec3 kTidalSqueezeColor{0.3f, 0.6f, 1.0f};
+
+    // A tidal glyph: the three principal axes of `sample` through `center`, each with a half-length of `size` times
+    // its eigenvalue over the strongest one. Stretching axes are red with arrowheads pointing out, squeezing axes
+    // blue with arrowheads pointing in. The other two axes span the arrowheads, so they lie in the glyph's own planes.
+    inline void AppendTidalGlyph(std::vector<OverlaySegment>& out, const TidalSample& sample, const glm::dvec3& center,
+                                 const double size)
+    {
+        const auto& lambda = sample.EigenvaluesS2;
+        const double strongest = std::max({std::abs(lambda[0]), std::abs(lambda[1]), std::abs(lambda[2])});
+        if (!(strongest > 0.0) || !std::isfinite(strongest)) return;
+        for (std::size_t k = 0; k < 3; ++k)
+        {
+            const double half = size * std::abs(lambda[k]) / strongest;
+            if (half <= 0.0) continue;
+            const bool stretch = lambda[k] < 0.0;
+            const glm::vec3 color = stretch ? kTidalStretchColor : kTidalSqueezeColor;
+            const glm::dvec3& axis = sample.AxesWorld[k];
+            const glm::dvec3& side = sample.AxesWorld[(k + 1) % 3];
+            out.push_back({center - half * axis, center + half * axis, color});
+            const double wing = 0.2 * half;
+            for (const double sign : {-1.0, 1.0})
+            {
+                const glm::dvec3 end = center + sign * half * axis;
+                // Arrowhead tip and the direction it points in
+                const glm::dvec3 pointing = stretch ? sign * axis : -sign * axis;
+                const glm::dvec3 tip = stretch ? end : end - pointing * wing;
+                for (const double flank : {-0.6, 0.6})
+                {
+                    out.push_back({tip, tip - pointing * wing + side * (flank * wing), color});
+                }
+            }
+        }
+    }
+
+    // A tidal glyph at every free-falling Geodesic Body, `scale` of its Sphere's radius long (1 % of M of its hole
+    // without a Sphere). `excludeGuid`: the body a riding camera sits on; the camera's own tensor is the HUD gizmo.
+    [[nodiscard]] inline std::vector<OverlaySegment> TidalAxesOverlay(const GPP::Scene& scene, const double scale,
+                                                                      const std::uint64_t excludeGuid = 0)
+    {
+        std::vector<OverlaySegment> out;
+        for (auto [entity, body, transform] : scene.Registry().view<const GeodesicBodyComponent, const GPP::TransformComponent>().each())
+        {
+            if (excludeGuid != 0 && scene.GuidOf(entity) == excludeGuid) continue;
+            const auto sample = BodyTidalSample(scene, entity);
+            if (!sample) continue;
+            double radiusM = 0.0;
+            if (const auto* sphere = scene.Registry().try_get<const SphereComponent>(entity)) radiusM = sphere->Radius;
+            if (!(radiusM > 0.0))
+            {
+                const auto hole = FindHoleFrame(scene, body.BlackHole);
+                radiusM = hole ? 0.01 * hole->LengthM : 1.0;
+            }
+            AppendTidalGlyph(out, *sample, transform.Position, scale * radiusM);
+        }
+        return out;
     }
 
     inline constexpr glm::vec3 kPredictionNearColor{1.0f, 0.9f, 0.3f};

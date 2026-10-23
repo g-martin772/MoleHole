@@ -103,6 +103,7 @@ namespace MoleHole
             case NodeSubType::Or: return "lor";
             case NodeSubType::LookAt: return "lookat";
             case NodeSubType::ClockRate: return "clockrate";
+            case NodeSubType::TidalStretch: return "tidalstretch";
             default: return nullptr;
             }
         }
@@ -1349,6 +1350,11 @@ end
 
 function rt.clockrate(p, o)
     if type(p) == "vector" then return host.clockrate(p, rt.int(o)) end
+    return nil
+end
+
+function rt.tidalstretch(p, o)
+    if type(p) == "vector" then return host.tidalstretch(p, rt.int(o)) end
     return nil
 end
 

@@ -103,6 +103,7 @@ namespace MoleHole
             case NodeSubType::Or: return "Or";
             case NodeSubType::LookAt: return "LookAt";
             case NodeSubType::ClockRate: return "ClockRate";
+            case NodeSubType::TidalStretch: return "TidalStretch";
             case NodeSubType::SpawnEntity: return "SpawnEntity";
             case NodeSubType::DestroyEntity: return "DestroyEntity";
             case NodeSubType::LaunchOrbit: return "LaunchOrbit";
@@ -159,6 +160,7 @@ namespace MoleHole
             if (text == "Or") return NodeSubType::Or;
             if (text == "LookAt") return NodeSubType::LookAt;
             if (text == "ClockRate") return NodeSubType::ClockRate;
+            if (text == "TidalStretch") return NodeSubType::TidalStretch;
             if (text == "SpawnEntity") return NodeSubType::SpawnEntity;
             if (text == "DestroyEntity") return NodeSubType::DestroyEntity;
             if (text == "LaunchOrbit") return NodeSubType::LaunchOrbit;
@@ -513,6 +515,17 @@ namespace MoleHole
                 Pin{InputPinId(id, 1), "Observer", PinType::Int, true},
             };
             node.Outputs = { Pin{OutputPinId(id, 0), "Rate", PinType::Float, false} };
+            return node;
+        }
+        if (op == NodeSubType::TidalStretch)
+        {
+            // Strongest tidal stretch of a preset observer at a world position (ObserverTidalStretchAt)
+            node.Name = "Tidal Stretch";
+            node.Inputs = {
+                Pin{InputPinId(id, 0), "Position", PinType::Vec3, true},
+                Pin{InputPinId(id, 1), "Observer", PinType::Int, true},
+            };
+            node.Outputs = { Pin{OutputPinId(id, 0), "Stretch", PinType::Float, false} };
             return node;
         }
 

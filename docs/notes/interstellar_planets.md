@@ -28,6 +28,7 @@ Related notes: `near_extremal.md` (spin and the throat), `geodesic_bodies.md` (o
 |---|---|---|
 | Mass | 10⁸ M☉ ("100 million solar masses") | Verified, as a secondary text: Luminet (2015), §"Gargantua", gives M = 10⁸ M☉. Thorne (2014) gives "≳ 10⁸ M☉" (checked in an excerpt per `geodesic_bodies.md`; page not recorded). |
 | GM/c² | 1.4767 × 10¹¹ m (0.987 AU) | Derived: 10⁸ × 1476.6 m. |
+| Mass in the app | 10⁹ M☉ (`templates/interstellar-bodies.yaml`) | Project choice. At 10⁸ M☉ the exact tidal tensor on Miller's orbit stretches the planet with 6 times its own surface gravity, above the Roche limit; at 10⁹ M☉ it is 0.06 g_planet, below the fluid limit (`tidal_forces.md` §3). Thorne's "≳ 10⁸ M☉" allows it. Lengths and times scale with M; r/M, the orbits and the time dilation do not change. |
 | GM/c³ | 492.6 s | Derived. |
 | Horizon radius (a → M) | r₊ → M = 1.477 × 10¹¹ m | Derived (Kerr, a = M). |
 | Spin for the movie's dynamics | a/M = 1 − δ, δ ≈ 1.3 × 10⁻¹⁴ | Thorne (2014) ch. 9: "less than the maximum by about one part in 100 trillion" (as quoted in `near_extremal.md`). Schnittman (2019), §3.3: "the spin must be at least a/M ≳ 1 − 10⁻¹⁴" (Verified). The 1.3 × 10⁻¹⁴ itself: Not verified in a primary text; see `near_extremal.md` §5. |
@@ -176,7 +177,7 @@ verified**, textbook figure).
 
 | Body | Radius | Surface gravity | Rotation period | Atmosphere preset | Orbit |
 |---|---|---|---|---|---|
-| Gargantua | r₊ = M = 1.477 × 10¹¹ m (10⁸ M☉) | n/a | a/M = 1 − 1.3 × 10⁻¹⁴ | none | n/a |
+| Gargantua | r₊ = M = 1.477 × 10¹² m (10⁹ M☉, see §1) | n/a | a/M = 1 − 1.3 × 10⁻¹⁴ | none | n/a |
 | Miller's planet | 6371 km (Project choice) | 12.75 m/s² (1.3 g⊕, film) | tidally locked (fixed bulge); see §2 caution | Miller | circular, equatorial, prograde, r − M = 4 × 10⁻⁵ M, T ≈ 1.72 h coordinate |
 | Mann's planet | 5097 km (Project choice) | about 0.8 g⊕ (Not verified) | 24 h (Project choice) | Mann | far elliptical (Not verified); no default numbers |
 | Edmunds' planet | 6371 km (Project choice) | 9.81 m/s² (Project choice) | 24 h (Project choice) | Edmunds | not stated; Project choice |
