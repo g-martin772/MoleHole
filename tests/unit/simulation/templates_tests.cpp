@@ -51,3 +51,37 @@ TEST_CASE("Every scene template loads and re-serializes stably", "[simulation][s
         }
     }
 }
+
+TEST_CASE("Every scene template validates without errors", "[simulation][scene][templates][validation]")
+{
+    RegisterComponents();
+
+    for (const auto& path : TemplatePaths())
+    {
+        const auto diagnostics = ValidateSceneFile(path);
+        INFO(path.string());
+        for (const auto& diagnostic : diagnostics) UNSCOPED_INFO(diagnostic.Format(path.filename().string()));
+        CHECK(CountDiagnostics(diagnostics, DiagnosticSeverity::Error) == 0);
+        if (std::getenv("MOLEHOLE_LIST_TEMPLATE_WARNINGS"))
+        {
+            for (const auto& diagnostic : diagnostics) std::println("{}", diagnostic.Format(path.filename().string()));
+        }
+    }
+}
+
+TEST_CASE("Validation CLI exit codes", "[application][validation]")
+{
+    RegisterComponents();
+    const auto dir = std::filesystem::temp_directory_path() / "molehole_validate_cli";
+    std::filesystem::create_directories(dir);
+    const auto clean = dir / "clean.yaml";
+    const auto bad = dir / "bad.yaml";
+    { std::ofstream(clean) << "Scene: C\nSchemaVersion: 2\nEntities:\n  - Guid: 1\n    Components:\n      Metadata: {Name: A}\n"; }
+    { std::ofstream(bad) << "Scene: B\nEntities: [\n"; }
+
+    CHECK(RunValidateScene(clean.string()) == 0);
+    CHECK(RunValidateScene(bad.string()) == 1);
+    CHECK(RunValidateScene((dir / "missing.yaml").string()) == 1);
+    CHECK(RunValidateScene("") == 2);
+    std::filesystem::remove_all(dir);
+}

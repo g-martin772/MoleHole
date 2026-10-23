@@ -513,6 +513,14 @@ namespace
                     std::format("{} ({} mesh{}, {:.1f} s)", result->SceneName, result->MeshCount,
                                 result->MeshCount == 1 ? "" : "es", result->Seconds),
                     0.0f, "scene-load");
+                if (result->WarningCount > 0)
+                {
+                    m_Logger->Notifications()->Post(
+                        NotificationKind::Warning, "Scene warnings",
+                        std::format("{} warning{} in {}, see log", result->WarningCount,
+                                    result->WarningCount == 1 ? "" : "s", result->SceneName),
+                        0.0f, "scene-warnings");
+                }
                 m_RenderSettings->LoadScene(result->RenderExtension, m_UiState->CurrentScenePath);
                 if (const auto& view = result->Editor)
                 {

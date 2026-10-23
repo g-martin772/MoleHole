@@ -36,8 +36,7 @@ format()
 
 scenes()
 {
-    # TODO(#4): enable once --validate-scene exists; confirm the CLI shape then.
-    if ! grep -rqF -- "validate-scene" src; then echo "scenes: --validate-scene not implemented yet, skipped"; return 0; fi
+    # exit 1 on errors only; warnings are printed but do not fail
     local scene
     for scene in templates/*.yaml; do
         build/MoleHole --validate-scene "$scene"

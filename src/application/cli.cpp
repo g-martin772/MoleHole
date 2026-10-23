@@ -2,6 +2,7 @@ module MoleHole;
 
 import :Application.Cli;
 import :Rendering.Settings;
+import GPP;
 import std;
 
 namespace MoleHole
@@ -115,5 +116,30 @@ namespace MoleHole
             else if (arg == "--metric") { if (!AddOverride(args, "spacetime.solution", next())) break; }
         }
         return (args.Requested || args.ListSettings || !args.Error.empty()) ? std::optional(args) : std::nullopt;
+    }
+
+    std::optional<std::string> ParseValidateSceneArg(int argc, char* argv[])
+    {
+        for (int i = 1; i < argc; ++i)
+        {
+            if (std::string_view(argv[i]) == "--validate-scene") return i + 1 < argc ? std::string(argv[i + 1]) : std::string();
+        }
+        return std::nullopt;
+    }
+
+    int RunValidateScene(const std::string& path)
+    {
+        if (path.empty())
+        {
+            std::cerr << "--validate-scene expects a scene file\n";
+            return 2;
+        }
+        const auto diagnostics = GPP::ValidateSceneFile(path);
+        for (const auto& diagnostic : diagnostics) std::println("{}", diagnostic.Format(path));
+        const auto errors = GPP::CountDiagnostics(diagnostics, GPP::DiagnosticSeverity::Error);
+        const auto warnings = GPP::CountDiagnostics(diagnostics, GPP::DiagnosticSeverity::Warning);
+        std::println(std::cerr, "{}: {} error{}, {} warning{}", path, errors, errors == 1 ? "" : "s", warnings,
+                     warnings == 1 ? "" : "s");
+        return errors > 0 ? 1 : 0;
     }
 }

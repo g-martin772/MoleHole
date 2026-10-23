@@ -20,6 +20,8 @@ int main(int argc, char* argv[])
     const std::vector<std::string> cliArgs(argv + 1, argv + argc);
     const auto startupArgs = ParseStartupArgs(cliArgs);
 
+    if (const auto validatePath = ParseValidateSceneArg(argc, argv)) return RunValidateScene(*validatePath);
+
     auto cli = ParseExportArgs(argc, argv);
     if (cli && !cli->Error.empty())
     {

@@ -34,6 +34,7 @@ export namespace MoleHole
             std::string RenderExtension;
             std::optional<EditorView> Editor;
             std::size_t MeshCount = 0;
+            std::size_t WarningCount = 0;
             double Seconds = 0.0;
         };
 
@@ -151,7 +152,9 @@ export namespace MoleHole
             result.Path = path;
             try
             {
-                auto& scene = scenes->LoadSceneFromFile(path);
+                std::vector<GPP::SceneDiagnostic> diagnostics;
+                auto& scene = scenes->LoadSceneFromFile(path, &diagnostics);
+                result.WarningCount = diagnostics.size();
                 result.MeshCount = MeshPaths(scene).size();
                 LoadSceneMeshes(scene, *meshes, *task);
                 result.Ok = true;
