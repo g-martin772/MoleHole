@@ -160,10 +160,10 @@ TEST_CASE("Legacy AnimationGraph component scenes migrate into a graph named Mai
     CHECK(loaded.FindExtension(kSceneGraphsKey) != nullptr);
 }
 
-TEST_CASE("The bundled test scene template carries a Main graph", "[simulation][scene][templates]")
+TEST_CASE("A scene fixture carries a Main graph", "[simulation][scene][templates]")
 {
     RegisterComponents();
-    std::ifstream stream(std::filesystem::path(MOLEHOLE_SOURCE_DIR) / "templates" / "test-scene.yaml");
+    std::ifstream stream(std::filesystem::path(MOLEHOLE_SOURCE_DIR) / "tests" / "fixtures" / "scene-with-main-graph.yaml");
     const std::string text{std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
     Scene scene;
     scene.DeserializeFromYaml(text);

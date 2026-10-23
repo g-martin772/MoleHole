@@ -1,0 +1,238 @@
+Scene: Test
+SchemaVersion: 2
+TimeScale: 4.911927171628457e-05
+Entities:
+  - Guid: 4380484363935821836
+    Components:
+      Metadata:
+        Guid: 4380484363935821836
+        Name: BlackHole
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 28587.582585204855, 103363.75266350873]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      RigidBody:
+        Type: Static
+        Mass: 1
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: false
+      Collider:
+        Shape: Sphere
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 2953.2500761002493
+        HalfHeight: 738.3125190250623
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: true
+      BlackHole:
+        Mass: 1.9884098706980507e+30
+        Spin: 0.519
+        Charge: 0
+        SpinAxis: [0.43, 1.16, 0.1]
+  - Guid: 16017086654788356877
+    Components:
+      Metadata:
+        Guid: 16017086654788356877
+        Name: Sphere
+        TypeTag: Sphere
+      Transform:
+        Position: [7383.124451938105, 0.0028322802277830615, 0.009994844889350213]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      RigidBody:
+        Type: Dynamic
+        Mass: 5.972e+24
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: true
+      Collider:
+        Shape: Sphere
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 738.3125190250623
+        HalfHeight: 738.3125190250623
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: false
+      Sphere:
+        Radius: 738.3125190250623
+        Spin: 0
+        Color: [0.8, 0.8, 0.9]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+  - Guid: 8940108931251162906
+    Components:
+      Metadata:
+        Guid: 8940108931251162906
+        Name: Sphere
+        TypeTag: Sphere
+      Transform:
+        Position: [20848.110092345465, 9394.717303985943, -11955.705777953275]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      RigidBody:
+        Type: Dynamic
+        Mass: 5.972e+24
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: true
+      Collider:
+        Shape: Sphere
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 738.3125190250623
+        HalfHeight: 738.3125190250623
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: false
+      Sphere:
+        Radius: 738.3125190250623
+        Spin: 0
+        Color: [0.8, 0.8, 0.9]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+  - Guid: 16517151201453543067
+    Components:
+      Metadata:
+        Guid: 16517151201453543067
+        Name: Mesh
+        TypeTag: Mesh
+      Transform:
+        Position: [-39493.943210691985, 45784.46480666306, 7591.923219205994]
+        Rotation: [0.032389656, 0.17262217, -0.1752161, 0.96873724]
+        Scale: [0.9999993, 0.9999988, 0.9999991]
+      RigidBody:
+        Type: Static
+        Mass: 1e+20
+        LinearDamping: 0
+        AngularDamping: 0.05
+        EnableGravity: true
+      Collider:
+        Shape: ConvexMesh
+        HalfExtents: [738.3125190250623, 738.3125190250623, 738.3125190250623]
+        Radius: 738.3125190250623
+        HalfHeight: 738.3125190250623
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: false
+      Mesh:
+        AssetPath: /home/gabriel/Repos/MoleHole/assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 1476.6250380501247
+  - Guid: 4240113347262655872
+    Components:
+      Metadata:
+        Guid: 4240113347262655872
+        Name: Camera
+        TypeTag: Camera
+      Transform:
+        Position: [84368.62120304586, 133031.738325076, 464127.43207877915]
+        Rotation: [-0.14426483, 0.13473046, 0.019831039, 0.9801235]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 60
+        NearPlane: 147.66250380501248
+        FarPlane: 1476625.0380501247
+        Primary: true
+Graphs:
+  Version: 1
+  Items:
+    - Name: Main
+      Enabled: true
+      Entity: 0
+      Graph:
+        NextId: 6
+        Variables: []
+        Nodes:
+          - Id: 1
+            Name: Start
+            Type: Event
+            SubType: Start
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue: {T: None}
+            Position: [-140, 438]
+            Inputs: []
+            Outputs:
+              - {Id: 1500, Name: Out, Type: Flow, IsInput: false}
+          - Id: 2
+            Name: Print
+            Type: Print
+            SubType: None
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue: {T: None}
+            Position: [110, 438]
+            Inputs:
+              - {Id: 2001, Name: In, Type: Flow, IsInput: true}
+              - {Id: 2002, Name: Value, Type: String, IsInput: true}
+            Outputs:
+              - {Id: 2500, Name: Out, Type: Flow, IsInput: false}
+          - Id: 3
+            Name: Constant String
+            Type: Constant
+            SubType: None
+            VariableName: ""
+            TargetGuid: 0
+            ConstantValue: {T: String, V: Test}
+            Position: [-213, 518]
+            Inputs: []
+            Outputs:
+              - {Id: 3500, Name: Value, Type: String, IsInput: false}
+        Links:
+          - {Id: 4, StartPinId: 3500, EndPinId: 2002}
+          - {Id: 5, StartPinId: 1500, EndPinId: 2001}
+Render:
+  Version: 1
+  Contexts:
+    Edit: Interstellar
+    Play: Reference
+    Reference: Reference
+    Export: Reference
+  Profiles:
+    - Name: Legacy
+      Description: Render settings from before profiles existed.
+      Base: Lensed
+      Set:
+        transport.step_size: 0.0335
+        transport.max_steps: 112044
+        transport.adaptive_rate: 0.52
+        disk.volumetric: true
+        disk.height: 0.832
+        disk.speed: 0.04
+        disk.noise_scale: 5
+        disk.noise_lod: 3.751
+        camera.third_person_height: 20.8
+        post.bloom_threshold: 0.68
+        post.bloom_passes: 7
+        post.bloom_intensity: 8.932
+        post.lens_flare: false
+        post.flare_intensity: 0
+        post.flare_threshold: 5
+    - Name: Interstellar
+      Description: Geodesic integration in Kerr-Newman with a volumetric disk, redshift and Doppler off. Cinematic look.
+      Base: Flat
+      Set:
+        spacetime.solution: KerrNewman
+        transport.mode: Integrated
+        transport.step_size: 0.007
+        transport.max_steps: 85033
+        transport.adaptive_rate: 0.88
+        radiometry.redshift: false
+        radiometry.doppler: false
+        disk.volumetric: true
+        disk.height: 0.043
+        disk.speed: 0.431
+        disk.opacity: 0.49
+        disk.display_temperature: 4232
+        disk.hot_spots: 4
+        sampling.resolution_scale: 200
+        post.exposure: -1
+        post.bloom: true
+        post.bloom_threshold: 0.721
+        post.bloom_passes: 7
+        post.bloom_intensity: 40.122
