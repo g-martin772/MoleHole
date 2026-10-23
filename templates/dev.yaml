@@ -121,7 +121,7 @@ Entities:
         Restitution: 0.1
         IsTrigger: false
       Mesh:
-        AssetPath: /home/gabriel/Repos/MoleHole/assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
+        AssetPath: assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
         CenterOfMassOffset: [0, 0, 0]
         MetresPerUnit: 1476.6250380501247
   - Guid: 14745305380211402418

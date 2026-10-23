@@ -94,6 +94,7 @@ namespace
             UpdateRenderSettings();
             if (const auto sim = m_Sim.Load(); sim->Runner)
             {
+                ReportInitErrors(*sim->Runner);
                 if (const auto gravity = sim->Runner->GetModule<GravitySimulationModule>())
                 {
                     gravity->SetGravityMultiplier(m_UiState->GravityMultiplier);
@@ -481,10 +482,7 @@ namespace
 
         void CreateDefaultScene(const std::string& name, const std::string& entityName)
         {
-            auto& scene = m_Scenes->CreateScene(name);
-            const auto entity = scene.CreateEntity(entityName, "BlackHole");
-            scene.Registry().emplace<TransformComponent>(entity, TransformComponent{});
-            scene.Registry().emplace<BlackHoleComponent>(entity, BlackHoleComponent{.Mass = 1.0f, .Spin = 0.5f});
+            PopulateDefaultScene(m_Scenes->CreateScene(name), entityName);
         }
 
         void PollSceneLoad()
@@ -514,6 +512,14 @@ namespace
                                 result->MeshCount == 1 ? "" : "es", result->Seconds),
                     0.0f, "scene-load");
                 if (result->WarningCount > 0)
+                if (!result->FailedMeshes.empty())
+                {
+                    m_Logger->Notifications()->Post(
+                        NotificationKind::Warning, "Meshes failed to load",
+                        std::format("{} of {} in {}, first: {}", result->FailedMeshes.size(), result->MeshCount,
+                                    result->SceneName, result->FailedMeshes.front()),
+                        0.0f, "scene-meshes");
+                }
                 {
                     m_Logger->Notifications()->Post(
                         NotificationKind::Warning, "Scene warnings",
@@ -559,6 +565,16 @@ namespace
         }
 
         void StartSimulationFor(const std::string& sceneName)
+        void ReportInitErrors(SimulationRunner& runner)
+        {
+            for (const auto& error : runner.TakeInitErrors())
+            {
+                m_Logger->Notifications()->Post(NotificationKind::Error, "Simulation failed to start",
+                                                std::format("{}: {}", m_UiState->CurrentSceneName, error), 0.0f,
+                                                "sim-init");
+            }
+        }
+
         {
             if (const auto previous = m_Sim.Load(); previous->Runner && !m_UiState->CurrentSceneName.empty())
             {

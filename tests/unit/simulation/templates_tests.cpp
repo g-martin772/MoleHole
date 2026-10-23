@@ -85,3 +85,37 @@ TEST_CASE("Validation CLI exit codes", "[application][validation]")
     CHECK(RunValidateScene("") == 2);
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("Template meshes use relative asset paths that exist", "[simulation][scene][templates][install]")
+{
+    RegisterComponents();
+
+    for (const auto& path : TemplatePaths())
+    {
+        Scene scene;
+        scene.DeserializeFromYaml(ReadFile(path));
+        for (auto [entity, mesh] : scene.Registry().view<const MeshComponent>().each())
+        {
+            if (mesh.AssetPath.empty()) continue;
+            INFO(path.filename().string() << ": " << mesh.AssetPath);
+            CHECK_FALSE(std::filesystem::path(mesh.AssetPath).is_absolute());
+            CHECK(std::filesystem::exists(std::filesystem::path(MOLEHOLE_SOURCE_DIR) / mesh.AssetPath));
+        }
+    }
+}
+
+TEST_CASE("The default scene holds a black hole of astrophysical mass", "[simulation][scene]")
+{
+    RegisterComponents();
+
+    Scene scene("Default");
+    PopulateDefaultScene(scene, "Black Hole");
+
+    std::size_t holes = 0;
+    for (auto [entity, hole] : scene.Registry().view<const BlackHoleComponent>().each())
+    {
+        ++holes;
+        CHECK(hole.Mass >= 0.5 * Units::kSolarMass);
+    }
+    CHECK(holes == 1);
+}

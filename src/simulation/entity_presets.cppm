@@ -68,6 +68,13 @@ export namespace MoleHole
         return entity;
     }
 
+    inline void PopulateDefaultScene(GPP::Scene& scene, const std::string& entityName)
+    {
+        const auto entity = scene.CreateEntity(entityName, "BlackHole");
+        scene.Registry().emplace<GPP::TransformComponent>(entity, GPP::TransformComponent{});
+        scene.Registry().emplace<BlackHoleComponent>(entity, BlackHoleComponent{.Mass = GPP::Units::kSolarMass, .Spin = 0.5});
+    }
+
     // The spawn as a replayable command; `reference` decides whether a new camera becomes the primary one.
     inline std::optional<GPP::SpawnEntityCommand> MakeSpawnPresetCommand(
         const GPP::Scene& reference, const std::uint64_t guid, const std::string_view preset,

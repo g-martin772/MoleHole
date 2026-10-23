@@ -34,6 +34,7 @@ export namespace MoleHole
             std::string RenderExtension;
             std::optional<EditorView> Editor;
             std::size_t MeshCount = 0;
+            std::vector<std::string> FailedMeshes;
             std::size_t WarningCount = 0;
             double Seconds = 0.0;
         };
@@ -126,11 +127,16 @@ export namespace MoleHole
             });
         }
 
-        static void LoadSceneMeshes(GPP::Scene& scene, MeshCache& meshes, GPP::ProgressTask& task)
+        static std::vector<std::string> LoadSceneMeshes(GPP::Scene& scene, MeshCache& meshes, GPP::ProgressTask& task)
         {
             const auto paths = MeshPaths(scene);
             task.SetTotal(paths.size());
             if (!paths.empty()) LoadMeshesParallel(paths, meshes, task);
+            std::vector<std::string> failed;
+            for (const auto& path : paths)
+            {
+                if (!meshes.GetOrLoad(path)) failed.push_back(path);
+            }
             for (auto [entity, mesh, collider] :
                  scene.Registry().view<const GPP::MeshComponent, GPP::ColliderComponent>().each())
             {
@@ -141,6 +147,7 @@ export namespace MoleHole
                     collider.ConvexHullPoints = gltfScene->Geometry.Vertices;
                 }
             }
+            return failed;
         }
 
         static void Run(const std::shared_ptr<State>& state, const std::shared_ptr<GPP::SceneManager>& scenes,
@@ -156,7 +163,7 @@ export namespace MoleHole
                 auto& scene = scenes->LoadSceneFromFile(path, &diagnostics);
                 result.WarningCount = diagnostics.size();
                 result.MeshCount = MeshPaths(scene).size();
-                LoadSceneMeshes(scene, *meshes, *task);
+                result.FailedMeshes = LoadSceneMeshes(scene, *meshes, *task);
                 result.Ok = true;
                 result.SceneName = scene.Metadata().Name;
                 result.RenderExtension = RenderExtensionText(scene);
