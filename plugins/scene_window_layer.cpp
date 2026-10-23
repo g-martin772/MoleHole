@@ -819,15 +819,15 @@ namespace
             return m_ComponentGraphs;
         }
 
-        static void EditScript(SimulationRunner& runner, std::uint64_t guid, std::function<void(ScriptsComponent&)> edit)
+        static void EditScript(SimulationRunner& runner, const Scene& scene, std::uint64_t guid, const std::function<void(ScriptsComponent&)>& edit)
         {
-            runner.EnqueueTrackedEdit([guid, edit = std::move(edit)](Scene& s)
-            {
-                const auto e = s.FindByGuid(guid);
-                if (!s.IsValid(e)) return;
-                edit(s.Registry().get_or_emplace<ScriptsComponent>(e));
-                s.MarkDirty(e);
-            });
+            const auto entity = scene.FindByGuid(guid);
+            if (!scene.IsValid(entity)) return;
+            const auto* current = scene.Registry().try_get<ScriptsComponent>(entity);
+            ScriptsComponent edited = current ? *current : ScriptsComponent{};
+            edit(edited);
+            runner.EnqueueCommand(MakeSetComponentCommand(guid, kScriptsComponentName, edited),
+                                  UndoStep(runner, "Edit Scripts", std::format("{}:Scripts", guid)));
         }
 
         void RenderScripts(SimulationRunner& runner, const Scene& scene, entt::entity entity, std::uint64_t guid,
@@ -885,7 +885,7 @@ namespace
                                 ImGui::PushID(property.Name.c_str());
                                 if (auto edited = DrawField(icons, field, current, &property.Default, choices))
                                 {
-                                    EditScript(runner, guid, [i, name = property.Name, value = std::move(*edited),
+                                    EditScript(runner, scene, guid, [i, name = property.Name, value = std::move(*edited),
                                                               fallback = property.Default](ScriptsComponent& component)
                                     {
                                         if (i >= component.Entries.size()) return;
@@ -901,7 +901,7 @@ namespace
                     }
                     if (removeEntry)
                     {
-                        EditScript(runner, guid, [index = *removeEntry](ScriptsComponent& component)
+                        EditScript(runner, scene, guid, [index = *removeEntry](ScriptsComponent& component)
                         {
                             if (index < component.Entries.size()) component.Entries.erase(component.Entries.begin() + static_cast<std::ptrdiff_t>(index));
                         });
@@ -910,13 +910,7 @@ namespace
                 }
                 if (removeAll)
                 {
-                    runner.EnqueueTrackedEdit([guid](Scene& s)
-                    {
-                        const auto e = s.FindByGuid(guid);
-                        if (!s.IsValid(e)) return;
-                        s.Registry().remove<ScriptsComponent>(e);
-                        s.MarkDirty(e);
-                    });
+                    runner.EnqueueCommand(RemoveComponentCommand{guid, kScriptsComponentName}, UndoStep(runner, "Remove Scripts"));
                 }
             }
 
@@ -928,7 +922,7 @@ namespace
             for (const auto& name : names)
             {
                 if (!ImGui::MenuItem(name.c_str())) continue;
-                EditScript(runner, guid, [name](ScriptsComponent& component) { component.Entries.push_back(ScriptEntry{name, {}}); });
+                EditScript(runner, scene, guid, [name](ScriptsComponent& component) { component.Entries.push_back(ScriptEntry{name, {}}); });
             }
             ImGui::EndPopup();
         }
