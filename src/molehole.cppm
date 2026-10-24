@@ -58,6 +58,7 @@ export import :Rendering.Data;
 export import :Rendering.Camera;
 export import :Rendering.Lut;
 export import :Rendering.Latex;
+export import :UI.EditLogic;
 export import :UI.State;
 export import :UI.WidgetLogic;
 export import :UI.FuzzySearch;

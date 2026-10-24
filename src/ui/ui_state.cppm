@@ -8,6 +8,7 @@ import :Rendering.Frame;
 import :Application.SceneDirty;
 import :Application.Autosave;
 import :Simulation.ObserverReadout;
+import :UI.EditLogic;
 
 export namespace MoleHole
 {
@@ -112,6 +113,7 @@ export namespace MoleHole
         bool ShowGeneralRelativityWindow = false;
         bool ShowScienceWindow = false;
         bool ShowAnimationGraphWindow = false;
+        bool ShowUndoHistoryWindow = false;
 
         bool IntroActive = false;
         bool IntroEnabled = true;
@@ -120,6 +122,9 @@ export namespace MoleHole
         int TutorialStep = 0;
 
         std::uint64_t SelectedEntityGuid = 0;
+        EditRequests Edits;
+        bool GraphEditorFocused = false;
+        int UndoHistoryCapacity = static_cast<int>(GPP::CommandHistory::kDefaultCapacity);
         GizmoOperation ActiveGizmoOperation = GizmoOperation::Translate;
         GizmoMode ActiveGizmoMode = GizmoMode::World;
         bool GizmoSnapEnabled = false;

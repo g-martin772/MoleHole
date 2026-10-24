@@ -68,6 +68,7 @@ namespace
             ImGui::DockBuilderDockWindow("General Relativity", dockBottom);
             ImGui::DockBuilderDockWindow("Science", dockBottom);
             ImGui::DockBuilderDockWindow("Log", dockBottom);
+            ImGui::DockBuilderDockWindow("Undo History", dockRightBottom);
 
             ImGui::DockBuilderFinish(dockspaceId);
             m_Logger->Info("DockLayoutLayer: applied first-run docking layout");

@@ -54,7 +54,9 @@ namespace
         void OnUiRender() override
         {
             if (m_UiState->QuitRequested.exchange(false)) RequestAction({SceneAction::Kind::Quit, {}});
+            ApplyHistoryCapacity();
             HandleShortcuts();
+            HandleHistoryShortcuts();
             RenderMenuBar();
             RenderSettingsPopup();
             RenderExportDialog();
@@ -73,6 +75,51 @@ namespace
             else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_S)) DoSave();
             else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_O)) DoOpen();
             else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_N)) DoNewScene();
+        }
+
+        [[nodiscard]] std::shared_ptr<SimulationRunner> CurrentRunner() const
+        {
+            return m_UiState->CurrentSceneName.empty() ? nullptr : m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
+        }
+
+        void ApplyHistoryCapacity()
+        {
+            const auto runner = CurrentRunner();
+            const auto capacity = static_cast<std::size_t>(std::max(m_UiState->UndoHistoryCapacity, 1));
+            if (!runner || (m_CapacityRunner.lock() == runner && capacity == m_AppliedCapacity)) return;
+            runner->SetHistoryCapacity(capacity);
+            m_CapacityRunner = runner;
+            m_AppliedCapacity = capacity;
+        }
+
+        void StepHistory(const bool redo)
+        {
+            const auto runner = CurrentRunner();
+            const bool playing = runner && !runner->IsPaused();
+            const bool available = runner && (redo ? runner->CanRedo() : runner->CanUndo());
+            if (const auto toast = PlayingToast(redo, runner != nullptr, playing))
+            {
+                m_Logger->Notifications()->Post(NotificationKind::Info, *toast, {}, 0.0f, "history-blocked");
+                return;
+            }
+            if (!runner || !available) return;
+            if (redo) runner->Redo();
+            else runner->Undo();
+        }
+
+        void HandleHistoryShortcuts()
+        {
+            const bool graphEditor = std::exchange(m_UiState->GraphEditorFocused, false);
+            const ImGuiIO& io = ImGui::GetIO();
+            if (io.WantTextInput || ImGui::IsAnyItemActive() || graphEditor) return;
+            if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) return;
+            constexpr auto repeat = ImGuiInputFlags_Repeat;
+            if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z, repeat) ||
+                ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Y, repeat))
+            {
+                StepHistory(true);
+            }
+            else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Z, repeat)) StepHistory(false);
         }
 
         void RequestAction(SceneAction action)
@@ -429,12 +476,15 @@ namespace
                 ImGui::EndMenu();
             }
 
+            RenderEditMenu();
+
             if (ImGui::BeginMenu("View"))
             {
                 ImGui::MenuItem("Camera", nullptr, &m_UiState->ShowCameraWindow);
                 ImGui::MenuItem("System", nullptr, &m_UiState->ShowSystemWindow);
                 ImGui::MenuItem("Profiler", nullptr, &m_UiState->ShowProfilerWindow);
                 ImGui::MenuItem("Log", nullptr, &m_UiState->ShowLogWindow);
+                ImGui::MenuItem("Undo History", nullptr, &m_UiState->ShowUndoHistoryWindow);
                 ImGui::MenuItem("Scene", nullptr, &m_UiState->ShowSceneWindow);
                 ImGui::MenuItem("Render", nullptr, &m_UiState->ShowRenderWindow);
                 ImGui::MenuItem("Simulation", nullptr, &m_UiState->ShowSimulationWindow);
@@ -469,6 +519,48 @@ namespace
             }
 
             ImGui::EndMainMenuBar();
+        }
+
+        static void HistoryMenuEntry(const HistoryMenuItem& item, const std::function<void()>& run)
+        {
+            if (ImGui::MenuItem(item.Text.c_str(), item.Shortcut.c_str(), false, item.Enabled)) run();
+            if (!item.Enabled && !item.Reason.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("%s", item.Reason.c_str());
+        }
+
+        void RenderEditMenu()
+        {
+            if (!ImGui::BeginMenu("Edit")) return;
+            const auto runner = CurrentRunner();
+            const bool playing = runner && !runner->IsPaused();
+            const bool hasScene = runner != nullptr;
+            const bool undoAvailable = runner && runner->CanUndo();
+            const bool redoAvailable = runner && runner->CanRedo();
+
+            HistoryMenuEntry(MakeHistoryMenuItem(false, hasScene, playing, undoAvailable, undoAvailable ? runner->UndoLabel() : ""),
+                             [&] { StepHistory(false); });
+            HistoryMenuEntry(MakeHistoryMenuItem(true, hasScene, playing, redoAvailable, redoAvailable ? runner->RedoLabel() : ""),
+                             [&] { StepHistory(true); });
+            ImGui::MenuItem("Undo History...", nullptr, &m_UiState->ShowUndoHistoryWindow);
+            ImGui::Separator();
+
+            auto& edits = m_UiState->Edits;
+            const bool selected = hasScene && m_UiState->SelectedEntityGuid != 0;
+            const auto entry = [&](const char* label, const char* shortcut, const bool enabled, const EditAction action,
+                                   const char* reason)
+            {
+                if (ImGui::MenuItem(label, shortcut, false, enabled)) edits.Push(action);
+                if (!enabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", reason);
+            };
+            entry("Select All", "Ctrl+A", hasScene, EditAction::SelectAll, "No scene loaded");
+            entry("Duplicate", "Ctrl+D", selected, EditAction::Duplicate, "No entity selected");
+            entry("Delete", "Del", selected, EditAction::Delete, "No entity selected");
+            entry("Rename", "F2", selected, EditAction::Rename, "No entity selected");
+            entry("Frame Selected", "F", selected, EditAction::FrameSelected, "No entity selected");
+            entry("Deselect", "Esc", selected, EditAction::Deselect, "No entity selected");
+            ImGui::Separator();
+            if (ImGui::MenuItem("Preferences...")) m_UiState->ShowSettingsWindow = true;
+            ImGui::EndMenu();
         }
 
         void RenderSettingsPopup()
@@ -731,6 +823,8 @@ namespace
         std::shared_ptr<AppInfo> m_AppInfo;
         std::string m_WindowTitle;
         int m_PromptFrames = 0;
+        std::weak_ptr<SimulationRunner> m_CapacityRunner;
+        std::size_t m_AppliedCapacity = 0;
 
         std::string m_ExportProfile;
         bool m_ShowExportDialog = false;

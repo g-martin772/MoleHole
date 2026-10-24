@@ -92,7 +92,8 @@ namespace MoleHole
             for (const auto* id : {"dock-layout", "sidebar", "topbar", "scene-window", "camera-window",
                                    "simulation-window", "render-window", "system-window", "profiler-window", "viewport-hud",
                                    "simulation-controls", "general-relativity-window", "science-window",
-                                   "animation-graph-window", "tutorial-overlay", "log-window", "notifications"})
+                                   "animation-graph-window", "tutorial-overlay", "log-window", "undo-history-window",
+                                   "notifications"})
             {
                 addWindowLayer(id);
             }

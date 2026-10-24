@@ -148,6 +148,7 @@ namespace
         void OnUiRender() override
         {
             ImGuizmo::BeginFrame();
+            if (!m_UiState->Edits.Take({EditAction::FrameSelected}).empty()) m_FocusRequest.store(true, std::memory_order_relaxed);
             const bool viewportOpen = ImGui::Begin("Viewport");
             m_UiState->ViewportVisible = viewportOpen;
             const bool viewportFocused =
@@ -156,9 +157,11 @@ namespace
             m_CameraMouseHover.store(false, std::memory_order_relaxed);
             if (viewportFocused)
             {
-                if (ImGui::IsKeyPressed(ImGuiKey_F, false) && !ImGui::GetIO().WantTextInput)
-                    m_FocusRequest.store(true, std::memory_order_relaxed);
-                if (const auto sim = m_Sim.Load(); sim->Runner) HandleSceneUndoShortcuts(*sim->Runner);
+                if (!ImGui::GetIO().WantTextInput)
+                {
+                    if (ImGui::IsKeyPressed(ImGuiKey_F, false)) m_UiState->Edits.Push(EditAction::FrameSelected);
+                    if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) m_UiState->Edits.Push(EditAction::Delete);
+                }
             }
             m_Renderer->SetBufferTargetVisible(m_LayerTarget.Id, viewportOpen || m_UiState->ExportActive);
             if (!viewportOpen)
@@ -317,6 +320,7 @@ namespace
             glm::mat4 model(1.0f);
             bool hasTransform = false;
             RenderFrame frame;
+            std::string entityName;
             {
                 const auto sceneLock = sim.Runner->AcquireSnapshot();
                 const Scene& scene = *sceneLock;
@@ -325,6 +329,7 @@ namespace
                 const auto entity = scene.FindByGuid(m_UiState->SelectedEntityGuid);
                 if (scene.IsValid(entity) && scene.Registry().all_of<TransformComponent>(entity))
                 {
+                    if (const auto* metadata = scene.Registry().try_get<MetadataComponent>(entity)) entityName = metadata->Name;
                     // Gizmo matrix: render-space translation and rotation, the entity's own Scale (dimensionless).
                     const auto& transform = scene.Registry().get<TransformComponent>(entity);
                     model = transform.GetRenderMatrix(frame.OriginM, frame.LengthUnitM, frame.LengthUnitM);
@@ -376,8 +381,11 @@ namespace
                 const auto guid = m_UiState->SelectedEntityGuid;
                 CommandOptions options;
                 options.Undoable = sim.Runner->IsPaused();
-                options.Label = "Transform";
-                options.CoalesceKey = std::format("gizmo:{}", guid);
+                const char* verb = m_UiState->ActiveGizmoOperation == GizmoOperation::Translate ? "Move"
+                                   : m_UiState->ActiveGizmoOperation == GizmoOperation::Rotate  ? "Rotate"
+                                                                                                : "Scale";
+                options.Label = entityName.empty() ? std::string(verb) : std::format("{} {}", verb, ShortenLabel(entityName, 28));
+                options.CoalesceKey = std::format("gizmo:{}:{}", guid, verb);
                 sim.Runner->EnqueueCommands(
                     {SetFieldCommand{guid, "Transform", "Position", position},
                      SetFieldCommand{guid, "Transform", "Rotation", glm::vec3(r[0], r[1], r[2])},

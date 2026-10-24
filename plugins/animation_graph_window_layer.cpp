@@ -1218,6 +1218,7 @@ namespace
             ApplyEditorStyle();
             RebuildLinkedPins();
             m_EditorFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
+            if (m_EditorFocused) m_UiState->GraphEditorFocused = true;
             m_BadgeHoverNode = 0;
             ed::Begin("AnimationGraphCanvas");
 

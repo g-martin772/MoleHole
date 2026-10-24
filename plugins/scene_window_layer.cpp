@@ -12,11 +12,11 @@ using namespace MoleHole::UiDetail;
 namespace
 {
     void EditField(SimulationRunner& runner, std::uint64_t guid, std::string component, std::string field,
-                   FieldValue value)
+                   FieldValue value, std::string label)
     {
         CommandOptions options;
         options.Undoable = runner.IsPaused();
-        options.Label = "Edit " + field;
+        options.Label = std::move(label);
         options.CoalesceKey = std::format("{}:{}:{}", guid, component, field);
         runner.EnqueueCommand(SetFieldCommand{guid, std::move(component), std::move(field), std::move(value)},
                               std::move(options));
@@ -228,6 +228,7 @@ namespace
 
         void OnUiRender() override
         {
+            ProcessEditRequests();
             if (!m_UiState->ShowSceneWindow) return;
             if (!ImGui::Begin("Scene", &m_UiState->ShowSceneWindow))
             {
@@ -249,8 +250,6 @@ namespace
                 ImGui::End();
                 return;
             }
-
-            if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) HandleSceneUndoShortcuts(*runner);
 
             ImFont* icons = m_UiState->IconFont;
             ImGui::TextDisabled("%s%s", m_UiState->SceneState.IsDirty() ? "* " : "",
@@ -274,6 +273,46 @@ namespace
         }
 
     private:
+        void ProcessEditRequests()
+        {
+            const auto requests = m_UiState->Edits.Take({EditAction::SelectAll, EditAction::Duplicate, EditAction::Delete,
+                                                         EditAction::Rename, EditAction::Deselect});
+            if (requests.empty() || m_UiState->CurrentSceneName.empty()) return;
+            const auto runner = m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
+            if (!runner) return;
+            const auto sceneLock = runner->LockRenderScene();
+            const auto entries = CollectEntries(*sceneLock);
+            for (const auto action : requests)
+            {
+                SyncSelection(entries);
+                switch (action)
+                {
+                case EditAction::SelectAll:
+                    for (const auto& entry : entries) m_Selection.insert(entry.Guid);
+                    if (m_UiState->SelectedEntityGuid == 0 && !entries.empty()) m_UiState->SelectedEntityGuid = entries.front().Guid;
+                    break;
+                case EditAction::Duplicate:
+                    if (!m_Selection.empty()) Duplicate(*runner, entries, {m_Selection.begin(), m_Selection.end()});
+                    break;
+                case EditAction::Delete:
+                    if (!m_Selection.empty()) DeleteEntities(*runner, entries, m_Selection);
+                    break;
+                case EditAction::Rename:
+                    if (const auto it = std::ranges::find(entries, m_UiState->SelectedEntityGuid, &OutlinerEntry::Guid);
+                        it != entries.end())
+                    {
+                        m_UiState->ShowSceneWindow = true;
+                        StartRename(*it);
+                    }
+                    break;
+                case EditAction::Deselect:
+                    m_Selection.clear();
+                    m_UiState->SelectedEntityGuid = 0;
+                    break;
+                case EditAction::FrameSelected: break;
+                }
+            }
+        }
 
         void RenderToolbar(SimulationRunner& runner, const Scene& scene)
         {
@@ -308,22 +347,37 @@ namespace
             runner.EnqueueCommand(MakeSpawnEmptyCommand(GPP::GenerateGuid(), parent), UndoStep(runner, "Add Empty"));
         }
 
-        static void Reparent(SimulationRunner& runner, std::vector<std::uint64_t> guids, std::uint64_t parent)
+        static std::vector<std::string> NamesOf(const std::vector<OutlinerEntry>& entries,
+                                                const std::vector<std::uint64_t>& guids)
         {
-            std::vector<Command> commands;
-            for (const auto guid : guids) commands.push_back(SetParentCommand{guid, parent});
-            runner.EnqueueCommands(std::move(commands), UndoStep(runner, "Reparent"));
+            std::vector<std::string> names;
+            for (const auto guid : guids)
+            {
+                if (const auto entry = std::ranges::find(entries, guid, &OutlinerEntry::Guid); entry != entries.end())
+                    names.push_back(entry->Name);
+            }
+            return names;
         }
 
-        static void Rename(SimulationRunner& runner, std::uint64_t guid, std::string name)
+        static void Reparent(SimulationRunner& runner, const std::vector<OutlinerEntry>& entries,
+                             std::vector<std::uint64_t> guids, std::uint64_t parent)
+        {
+            const auto label = CountLabel("Reparent", NamesOf(entries, guids));
+            std::vector<Command> commands;
+            for (const auto guid : guids) commands.push_back(SetParentCommand{guid, parent});
+            runner.EnqueueCommands(std::move(commands), UndoStep(runner, label));
+        }
+
+        static void Rename(SimulationRunner& runner, std::uint64_t guid, std::string name, const std::string& oldName)
         {
             runner.EnqueueCommand(SetFieldCommand{guid, "Metadata", "Name", std::move(name)},
-                                  UndoStep(runner, "Rename", std::format("rename:{}", guid)));
+                                  UndoStep(runner, CountLabel("Rename", {oldName}), std::format("rename:{}", guid)));
         }
 
         static void Duplicate(SimulationRunner& runner, const std::vector<OutlinerEntry>& entries,
                               const std::vector<std::uint64_t>& guids)
         {
+            const auto label = CountLabel("Duplicate", NamesOf(entries, guids));
             std::vector<Command> commands;
             for (const auto guid : guids)
             {
@@ -333,17 +387,18 @@ namespace
                 commands.push_back(CloneEntityCommand{guid, copy});
                 commands.push_back(SetFieldCommand{copy, "Metadata", "Name", entry->Name + " Copy"});
             }
-            runner.EnqueueCommands(std::move(commands), UndoStep(runner, "Duplicate"));
+            runner.EnqueueCommands(std::move(commands), UndoStep(runner, label));
         }
 
         void DeleteEntities(SimulationRunner& runner, const std::vector<OutlinerEntry>& entries,
                             const std::unordered_set<std::uint64_t>& guids)
         {
             const auto orphans = OrphanedChildren(entries, guids);
+            const auto label = CountLabel("Delete", NamesOf(entries, {guids.begin(), guids.end()}));
             std::vector<Command> commands;
             for (const auto child : orphans) commands.push_back(SetParentCommand{child, 0});
             for (const auto guid : guids) commands.push_back(DestroyEntityCommand{guid});
-            runner.EnqueueCommands(std::move(commands), UndoStep(runner, "Delete"));
+            runner.EnqueueCommands(std::move(commands), UndoStep(runner, label));
             m_Selection.clear();
             m_UiState->SelectedEntityGuid = 0;
         }
@@ -470,7 +525,7 @@ namespace
                     }
                     if (ImGui::MenuItem("Unparent", nullptr, false, entry.Parent != 0))
                     {
-                        Reparent(runner, {m_Selection.begin(), m_Selection.end()}, 0);
+                        Reparent(runner, entries, {m_Selection.begin(), m_Selection.end()}, 0);
                     }
                     ImGui::Separator();
                     if (ImGui::MenuItem("Delete", "Del")) DeleteEntities(runner, entries, m_Selection);
@@ -526,7 +581,7 @@ namespace
                     const bool cancelled = ImGui::IsKeyPressed(ImGuiKey_Escape);
                     if (entered || (ImGui::IsItemDeactivated() && !cancelled))
                     {
-                        if (m_RenameBuffer[0] != '\0') Rename(runner, row.Guid, m_RenameBuffer.data());
+                        if (m_RenameBuffer[0] != '\0') Rename(runner, row.Guid, m_RenameBuffer.data(), entry.Name);
                         m_RenameGuid = 0;
                     }
                     else if (cancelled)
@@ -565,24 +620,18 @@ namespace
                 }
                 if (!movable.empty())
                 {
-                    Reparent(runner, std::move(movable), dropped->second);
+                    Reparent(runner, entries, std::move(movable), dropped->second);
                     if (dropped->second != 0) m_Expanded.insert(dropped->second);
                 }
             }
 
             if (focused && !ImGui::IsAnyItemActive() && m_RenameGuid == 0)
             {
-                if (ImGui::IsKeyPressed(ImGuiKey_Delete) && !m_Selection.empty())
-                {
-                    DeleteEntities(runner, entries, m_Selection);
-                }
-                else if (ImGui::IsKeyPressed(ImGuiKey_F2) && m_UiState->SelectedEntityGuid != 0)
-                {
-                    if (const auto it = byGuid.find(m_UiState->SelectedEntityGuid); it != byGuid.end())
-                    {
-                        StartRename(*it->second);
-                    }
-                }
+                auto& edits = m_UiState->Edits;
+                if (ImGui::IsKeyPressed(ImGuiKey_Delete) && !m_Selection.empty()) edits.Push(EditAction::Delete);
+                else if (ImGui::IsKeyPressed(ImGuiKey_F2)) edits.Push(EditAction::Rename);
+                else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_D)) edits.Push(EditAction::Duplicate);
+                else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_A)) edits.Push(EditAction::SelectAll);
             }
             ImGui::EndChild();
         }
@@ -771,7 +820,7 @@ namespace
             {
                 std::string name = metadata->Name;
                 ImGui::SetNextItemWidth(-1.0f);
-                if (TextValue("##entityName", name, "Name")) Rename(runner, guid, name);
+                if (TextValue("##entityName", name, "Name")) Rename(runner, guid, name, metadata->Name);
                 if (Chip(metadata->TypeTag.empty() ? "Entity" : metadata->TypeTag.c_str(), Palette::Accent) == 1)
                 {
                     ImGui::SetClipboardText(std::to_string(guid).c_str());
@@ -978,7 +1027,10 @@ namespace
                                                 [this](const FieldInfo& picked) { return BrowseAsset(picked); },
                                                 &m_AssetPicker, &pickerHost))
                     {
-                        EditField(runner, guid, info.Name, field.Name, std::move(*edited));
+                        const auto* metadata = scene.Registry().try_get<MetadataComponent>(entity);
+                        EditField(runner, guid, info.Name, field.Name, std::move(*edited),
+                                  SetFieldLabel(field.Meta.Label.empty() ? field.Name : field.Meta.Label,
+                                                metadata ? metadata->Name : std::string_view{}));
                     }
                     if (m_ImportNote.first == field.Name && !m_ImportNote.second.empty())
                     {
