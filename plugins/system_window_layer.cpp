@@ -79,9 +79,12 @@ namespace
 
             DrawDevice();
 
+            SectionHeader("DEBUG");
+            ImGui::Checkbox("Dear ImGui metrics window", &m_UiState->ShowImGuiMetrics);
+
             ImGui::End();
 
-            ImGui::ShowMetricsWindow();
+            if (m_UiState->ShowImGuiMetrics) ImGui::ShowMetricsWindow(&m_UiState->ShowImGuiMetrics);
         }
 
     private:
