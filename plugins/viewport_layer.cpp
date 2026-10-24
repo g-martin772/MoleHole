@@ -223,7 +223,7 @@ namespace
                 m_UiState->ViewportToolbarLeft = max.x;
                 if (!m_UiState->ExportActive)
                 {
-                    const bool toolbarHovered = RenderGizmoToolbar(min, max);
+                    const bool toolbarHovered = RenderGizmoToolbar(min, max) || DrawAxisGizmo(min, max);
                     UpdateGizmoAndPicking(min, max, imageHovered, toolbarHovered);
                 }
             }
@@ -270,6 +270,50 @@ namespace
             drawList->AddRectFilled(ImVec2(origin.x - pad.x, origin.y - pad.y), ImVec2(origin.x + size.x + pad.x, origin.y + size.y + pad.y),
                                     ImGui::GetColorU32(ImVec4(0.08f, 0.08f, 0.08f, 0.85f * alpha)), 6.0f);
             drawList->AddText(origin, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, alpha)), text.c_str());
+        }
+
+        [[nodiscard]] bool DrawAxisGizmo(const ImVec2 viewportMin, const ImVec2 viewportMax)
+        {
+            constexpr float kLength = 40.0f;
+            constexpr float kBubble = 11.0f;
+            const float top = ViewportToolbar::Top(viewportMin.y) + ViewportToolbar::Height() + 12.0f;
+            if (viewportMax.y - top < 2.0f * (kLength + kBubble) + 8.0f || viewportMax.x - viewportMin.x < 3.0f * (kLength + kBubble)) return false;
+            const glm::vec2 center{viewportMax.x - ViewportToolbar::kMargin - kLength - kBubble, top + kLength + kBubble};
+            const auto items = LayoutAxisGizmo(m_Camera.GetRight(), m_Camera.GetUp(), m_Camera.GetFront());
+            const ImVec2 mousePos = ImGui::GetMousePos();
+            const glm::vec2 mouse = glm::vec2(mousePos.x, mousePos.y) - center;
+            const bool inside = glm::length(mouse) <= kLength + kBubble && ImGui::IsWindowHovered();
+            const auto hit = inside ? HitAxisGizmo(items, mouse, kLength, kBubble) : std::nullopt;
+
+            auto* drawList = ImGui::GetWindowDrawList();
+            const ImVec2 origin(center.x, center.y);
+            if (inside) drawList->AddCircleFilled(origin, kLength + kBubble, ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.35f)), 48);
+            for (const auto& item : items)
+            {
+                const ImVec2 position(center.x + item.Offset.x * kLength, center.y + item.Offset.y * kLength);
+                const bool positive = item.Axis == ViewAxis::PosX || item.Axis == ViewAxis::PosY || item.Axis == ViewAxis::PosZ;
+                const ImVec4 base = item.Axis == ViewAxis::PosX || item.Axis == ViewAxis::NegX   ? ImVec4(0.90f, 0.30f, 0.30f, 1.0f)
+                                    : item.Axis == ViewAxis::PosY || item.Axis == ViewAxis::NegY ? ImVec4(0.55f, 0.80f, 0.25f, 1.0f)
+                                                                                                : ImVec4(0.30f, 0.55f, 0.95f, 1.0f);
+                const float shade = 0.65f + 0.35f * std::clamp(item.Depth * 0.5f + 0.5f, 0.0f, 1.0f);
+                const ImU32 color = ImGui::GetColorU32(ImVec4(base.x * shade, base.y * shade, base.z * shade, positive ? 1.0f : 0.55f));
+                if (positive) drawList->AddLine(origin, position, color, 2.0f);
+                drawList->AddCircleFilled(position, kBubble, color, 24);
+                if (hit == item.Axis) drawList->AddCircle(position, kBubble + 1.0f, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.92f)), 24, 2.0f);
+                if (positive || hit == item.Axis)
+                {
+                    const std::string label(AxisLabel(item.Axis));
+                    const ImVec2 size = ImGui::CalcTextSize(label.c_str());
+                    drawList->AddText(ImVec2(position.x - size.x * 0.5f, position.y - size.y * 0.5f), ImGui::GetColorU32(ImVec4(0.08f, 0.08f, 0.08f, 1.0f)), label.c_str());
+                }
+            }
+            if (hit)
+            {
+                ImGui::SetTooltip("View from %s", std::string(AxisViewName(*hit)).c_str());
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                    m_UiState->View.Push({ViewRequest::Kind::Snap, static_cast<int>(*hit)});
+            }
+            return inside;
         }
 
         [[nodiscard]] bool RenderGizmoToolbar(ImVec2 viewportMin, ImVec2 viewportMax)
@@ -885,7 +929,11 @@ namespace
         {
             if (m_UiState->IntroActive) return;
 
-            if (UpdateSceneCamera()) return;
+            if (UpdateSceneCamera())
+            {
+                static_cast<void>(m_UiState->View.Take());
+                return;
+            }
 
             m_Camera.SetPosition(m_UiState->CameraPositionM);
             m_Camera.SetYawPitch(m_UiState->CameraYaw, m_UiState->CameraPitch);
@@ -1013,8 +1061,27 @@ namespace
                 switch (request.What)
                 {
                 case ViewRequest::Kind::FrameAll: FrameAll(); break;
+                case ViewRequest::Kind::Snap: SnapToAxis(static_cast<ViewAxis>(request.Index)); break;
                 }
             }
+        }
+
+        void SnapToAxis(const ViewAxis axis)
+        {
+            glm::dvec3 pivot = m_Camera.GetPosition();
+            if (const auto sim = m_Sim.Load(); sim->Runner)
+            {
+                const auto sceneLock = sim->Runner->AcquireSnapshot();
+                const Scene& scene = *sceneLock;
+                const auto selected = scene.FindByGuid(m_UiState->SelectedEntityGuid);
+                if (scene.IsValid(selected) && scene.Registry().all_of<TransformComponent>(selected))
+                    pivot = scene.Registry().get<TransformComponent>(selected).Position;
+                else if (const auto bounds = SceneBounds(scene)) pivot = bounds->Center;
+            }
+            m_FocusGuid = 0;
+            const auto snapped = SnapView(m_Camera.GetPosition(), pivot, axis, m_Camera.GetYaw());
+            m_Camera.SetPosition(snapped.PositionM);
+            m_Camera.SetYawPitch(snapped.Angles.Yaw, snapped.Angles.Pitch);
         }
 
         void FrameAll()

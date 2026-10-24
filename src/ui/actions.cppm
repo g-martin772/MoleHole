@@ -12,6 +12,7 @@ import :UI.EditLogic;
 import :UI.TransportLogic;
 import :UI.TutorialState;
 import :UI.ViewportNav;
+import :UI.ViewAxisGizmo;
 
 export namespace MoleHole
 {
@@ -212,6 +213,16 @@ export namespace MoleHole
             b.Window("view.graph", "Animation Graph", flag(&UiState::ShowAnimationGraphWindow));
             b.Key("view.frame_all", "Frame All", "View", "Home", "Viewport",
                   [ui] { if (ui) ui->View.Push({ViewRequest::Kind::FrameAll}); }).Needs = ActionNeed::Scene;
+            for (const auto axis : kViewAxes)
+            {
+                const auto name = std::string(AxisViewName(axis));
+                auto& action = b.Key("view.snap:" + name, "Snap View: " + name, "View", {}, "Viewport", [ui, axis]
+                {
+                    if (ui) ui->View.Push({ViewRequest::Kind::Snap, static_cast<int>(axis)});
+                });
+                action.Needs = ActionNeed::Scene;
+                action.Keywords = "axis orthographic front back top bottom left right camera";
+            }
             b.Defer("layout.reset", "Reset Layout", "View").Keywords = "layout dock windows default arrange";
             b.Add("layout.save", "Save Layout As...", "View", [ui] { if (ui) ui->LayoutSaveRequested = true; }).Keywords =
                 "layout dock windows preset store";

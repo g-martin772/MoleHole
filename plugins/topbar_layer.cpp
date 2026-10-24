@@ -608,6 +608,15 @@ namespace
             if (ImGui::MenuItem("Frame All", ActionShortcut("view.frame_all").c_str(), false, reason.empty()))
                 m_UiState->View.Push({ViewRequest::Kind::FrameAll});
             if (!reason.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", reason.c_str());
+            if (ImGui::BeginMenu("Snap View", reason.empty()))
+            {
+                for (const auto axis : kViewAxes)
+                {
+                    if (ImGui::MenuItem(std::string(AxisViewName(axis)).c_str()))
+                        m_UiState->View.Push({ViewRequest::Kind::Snap, static_cast<int>(axis)});
+                }
+                ImGui::EndMenu();
+            }
         }
 
         void RenderEditMenu()
