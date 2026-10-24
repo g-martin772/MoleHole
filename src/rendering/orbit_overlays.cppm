@@ -251,6 +251,7 @@ export namespace MoleHole
 
     // Joins runs of consecutive, equally coloured segments whose inner points lie within `tolerance` of the joined
     // line (object paths record a point every tick, far more than the line needs).
+    inline void SimplifyTrails(const std::vector<struct RenderSegment>& segments, float tolerance, std::vector<struct RenderSegment>& out);
     [[nodiscard]] inline std::vector<struct RenderSegment> SimplifyTrails(const std::vector<struct RenderSegment>& segments, float tolerance);
 
     // The hole's spin frame exactly as spinFrame in shaders/kerr.glsl builds it (columns X, Y, Z = spin axis).
@@ -267,12 +268,15 @@ export namespace MoleHole
     // render units). Inside it rays are curved, so those parts go to the tracer in the hole's local frame; outside
     // the tracer itself treats rays as straight, so the rest stays rasterised and is appended to `outside`.
     // `pad` widens each segment's grid footprint by the largest line half-width a ray can test it with.
-    [[nodiscard]] inline TracedTrails SplitTrailsForTracer(const std::vector<RenderSegment>& segments, const glm::vec3& holePosition,
-                                                          const glm::vec3& spinAxis, const float radius, const float pad,
-                                                          std::vector<RenderSegment>& outside)
+    inline void BuildTracedTrails(TracedTrails& traced, const std::vector<RenderSegment>& segments, const glm::vec3& holePosition,
+                                  const glm::vec3& spinAxis, const float radius, const float pad,
+                                  std::vector<RenderSegment>& outside)
     {
-        TracedTrails traced;
+        traced.Segments.clear();
+        traced.CellSegments.clear();
         traced.Radius = radius;
+        if (traced.Coarse.size() == kTrailCoarseWords) std::ranges::fill(traced.Coarse, 0u);
+        else traced.Coarse.assign(kTrailCoarseWords, 0u);
         const glm::mat3 toLocal = glm::transpose(ShaderSpinFrame(spinAxis));
         const auto inside = [&](const glm::vec3& p) { return glm::dot(p - holePosition, p - holePosition) < radius * radius; };
         // Parameters where the segment a + t (b - a) crosses the sphere
@@ -317,7 +321,8 @@ export namespace MoleHole
         // Each ray step looks up only the fine cell of its midpoint and is at most one cell long, so every segment
         // is also registered half a cell further out: then anything within reach of the step is in that cell.
         const float finePad = pad + radius / static_cast<float>(n);
-        std::vector<std::pair<std::uint32_t, std::uint32_t>> entries; // (cell key, segment)
+        thread_local std::vector<std::pair<std::uint32_t, std::uint32_t>> entries; // (cell key, segment)
+        entries.clear();
         std::size_t kept = 0;
         for (; kept < traced.Segments.size(); ++kept)
         {
@@ -371,6 +376,14 @@ export namespace MoleHole
             ++inserted;
             i = j;
         }
+    }
+
+    [[nodiscard]] inline TracedTrails SplitTrailsForTracer(const std::vector<RenderSegment>& segments, const glm::vec3& holePosition,
+                                                          const glm::vec3& spinAxis, const float radius, const float pad,
+                                                          std::vector<RenderSegment>& outside)
+    {
+        TracedTrails traced;
+        BuildTracedTrails(traced, segments, holePosition, spinAxis, radius, pad, outside);
         return traced;
     }
 
@@ -471,8 +484,16 @@ export namespace MoleHole
     inline std::vector<RenderSegment> SimplifyTrails(const std::vector<RenderSegment>& segments, const float tolerance)
     {
         std::vector<RenderSegment> out;
+        SimplifyTrails(segments, tolerance, out);
+        return out;
+    }
+
+    inline void SimplifyTrails(const std::vector<RenderSegment>& segments, const float tolerance, std::vector<RenderSegment>& out)
+    {
+        out.clear();
         out.reserve(segments.size());
-        std::vector<glm::vec3> inner; // points the current run would drop
+        thread_local std::vector<glm::vec3> inner; // points the current run would drop
+        inner.clear();
         const auto distanceToLine = [](const glm::vec3& p, const glm::vec3& a, const glm::vec3& b)
         {
             const glm::vec3 ab = b - a;
@@ -497,6 +518,5 @@ export namespace MoleHole
             inner.clear();
             out.push_back(segment);
         }
-        return out;
     }
 }

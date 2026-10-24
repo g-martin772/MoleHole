@@ -1308,64 +1308,105 @@ namespace MoleHole
                 const bool integrated = ctx.Settings.TransportMode == Transport::Integrated;
                 const auto primary = integrated ? PrimaryHole(ctx.Scene) : std::nullopt;
 
-                std::vector<OverlaySegment> radii;
+                m_Radii.clear();
                 if (ctx.Settings.ShowCharacteristicRadii)
                 {
                     // The integrated tracer draws the first hole's rings itself (orbitRingColor); other holes stay lines
-                    radii = CharacteristicRadiiOverlay(ctx.Scene, 96, primary ? primary->first : 0);
+                    m_Radii = CharacteristicRadiiOverlay(ctx.Scene, 96, primary ? primary->first : 0);
                 }
-                std::vector<OverlaySegment> trails;
-                if (ctx.Settings.ShowPredictedOrbits)
-                {
-                    UpdatePredictions(ctx.Scene, ctx.Settings.PredictionSpan, ctx.Inputs.ObserverGuid);
-                    trails = m_Predictions;
-                }
+                if (ctx.Settings.ShowPredictedOrbits) UpdatePredictions(ctx.Scene, ctx.Settings.PredictionSpan, ctx.Inputs.ObserverGuid);
+
+                std::uint64_t pathRevision = 0;
                 if (ctx.Settings.ShowObjectPaths)
                 {
                     std::scoped_lock lock(m_Mutex);
-                    const auto append = [&](const auto& histories, const glm::vec3& color)
+                    pathRevision = m_Tracker.Revision();
+                }
+                const BlackHoleComponent* hole =
+                    primary ? &ctx.Scene.Registry().get<const BlackHoleComponent>(ctx.Scene.FindByGuid(primary->first)) : nullptr;
+                SignatureHasher key;
+                key.Value(ctx.Settings.ShowCharacteristicRadii);
+                key.Value(ctx.Settings.ShowPredictedOrbits);
+                key.Value(ctx.Settings.ShowObjectPaths);
+                key.Value(ctx.Frame.OriginM);
+                key.Value(ctx.Frame.LengthUnitM);
+                key.Value(ctx.Settings.ShowPredictedOrbits ? m_PredictionRevision : std::uint64_t{0});
+                key.Value(pathRevision);
+                for (const auto& segment : m_Radii)
+                {
+                    key.Value(segment.A);
+                    key.Value(segment.B);
+                    key.Value(segment.Color);
+                }
+                if (hole)
+                {
+                    key.Value(primary->first);
+                    key.Value(primary->second.Position);
+                    key.Value(hole->Mass);
+                    key.Value(hole->SpinAxis);
+                    key.Value(BlackHoleSignedSpin(*hole));
+                    key.Value(ctx.ViewCamera.GetFov());
+                    key.Value(ctx.TraceExtent.height);
+                }
+                const auto digest = key.Digest();
+
+                if (!m_CacheValid || digest != m_CacheKey)
+                {
+                    m_Raster.clear();
+                    for (const auto& segment : m_Radii) m_Raster.push_back({ctx.Frame.ToRender(segment.A), ctx.Frame.ToRender(segment.B), segment.Color});
+                    m_Render.clear();
+                    if (ctx.Settings.ShowPredictedOrbits)
                     {
-                        for (const auto& [guid, history] : histories)
+                        for (const auto& segment : m_Predictions) m_Render.push_back({ctx.Frame.ToRender(segment.A), ctx.Frame.ToRender(segment.B), segment.Color});
+                    }
+                    if (ctx.Settings.ShowObjectPaths)
+                    {
+                        std::scoped_lock lock(m_Mutex);
+                        const auto append = [&](const auto& histories, const glm::vec3& color)
                         {
-                            for (std::size_t i = 1; i < history.size(); ++i) trails.push_back({history[i - 1], history[i], color});
-                        }
-                    };
-                    append(m_Tracker.MeshHistories(), kMeshColor);
-                    append(m_Tracker.SphereHistories(), kSphereColor);
-                }
+                            for (const auto& [guid, history] : histories)
+                            {
+                                for (std::size_t i = 1; i < history.size(); ++i)
+                                    m_Render.push_back({ctx.Frame.ToRender(history[i - 1]), ctx.Frame.ToRender(history[i]), color});
+                            }
+                        };
+                        append(m_Tracker.MeshHistories(), kMeshColor);
+                        append(m_Tracker.SphereHistories(), kSphereColor);
+                    }
+                    if (hole)
+                    {
+                        // Object paths record a point per tick; 1 % of M is far below anything visible
+                        SimplifyTrails(m_Render, 0.01f * ctx.Frame.GeometricMass(hole->Mass), m_Simplified);
+                        m_Render.swap(m_Simplified);
+                    }
 
-                std::vector<RenderSegment> render;
-                render.reserve(radii.size() + trails.size());
-                for (const auto& segment : radii) render.push_back({ctx.Frame.ToRender(segment.A), ctx.Frame.ToRender(segment.B), segment.Color});
-                std::vector<RenderSegment> raster = render;
-                render.clear();
-                for (const auto& segment : trails) render.push_back({ctx.Frame.ToRender(segment.A), ctx.Frame.ToRender(segment.B), segment.Color});
-                if (primary)
-                {
-                    // Object paths record a point per tick; 1 % of M is far below anything visible
-                    const auto& hole = ctx.Scene.Registry().get<const BlackHoleComponent>(ctx.Scene.FindByGuid(primary->first));
-                    render = SimplifyTrails(render, 0.01f * ctx.Frame.GeometricMass(hole.Mass));
+                    m_TrailsActive = false;
+                    if (hole && !m_Render.empty())
+                    {
+                        const glm::vec3 axis = EffectiveSpinAxis(hole->SpinAxis, BlackHoleSignedSpin(*hole));
+                        const glm::vec3 center = ctx.Frame.ToRender(primary->second.Position);
+                        const float radius = kTracerIntegrationRadius * ctx.Frame.GeometricMass(hole->Mass);
+                        // Line half-width: ~0.9 trace pixels, as an angle
+                        const float fov = glm::radians(ctx.ViewCamera.GetFov());
+                        const float halfWidth = 0.9f * 2.0f * std::tan(0.5f * fov) / static_cast<float>(std::max(ctx.TraceExtent.height, 1u));
+                        const float pad = halfWidth * (glm::length(center) + radius);
+                        BuildTracedTrails(m_Res.Trails, m_Render, center, axis, radius, pad, m_Raster);
+                        m_TrailsHalfWidth = halfWidth;
+                        m_TrailsActive = !m_Res.Trails.Segments.empty();
+                    }
+                    else
+                    {
+                        m_Raster.insert(m_Raster.end(), m_Render.begin(), m_Render.end());
+                    }
+                    m_CacheKey = digest;
+                    m_CacheValid = true;
                 }
-
-                if (primary && !render.empty())
+                if (m_TrailsActive)
                 {
-                    const auto entity = ctx.Scene.FindByGuid(primary->first);
-                    const auto& hole = ctx.Scene.Registry().get<const BlackHoleComponent>(entity);
-                    const glm::vec3 axis = EffectiveSpinAxis(hole.SpinAxis, BlackHoleSignedSpin(hole));
-                    const glm::vec3 center = ctx.Frame.ToRender(primary->second.Position);
-                    const float radius = kTracerIntegrationRadius * ctx.Frame.GeometricMass(hole.Mass);
-                    // Line half-width: ~0.9 trace pixels, as an angle
-                    const float fov = glm::radians(ctx.ViewCamera.GetFov());
-                    const float halfWidth = 0.9f * 2.0f * std::tan(0.5f * fov) / static_cast<float>(std::max(ctx.TraceExtent.height, 1u));
-                    const float pad = halfWidth * (glm::length(center) + radius);
-                    m_Res.Trails = SplitTrailsForTracer(render, center, axis, radius, pad, raster);
-                    m_Res.TrailAngularHalfWidth = halfWidth;
-                    m_Res.TrailsActive = !m_Res.Trails.Segments.empty();
+                    m_Res.TrailAngularHalfWidth = m_TrailsHalfWidth;
+                    m_Res.TrailsActive = true;
                 }
-                else
-                {
-                    raster.insert(raster.end(), render.begin(), render.end());
-                }
+                const auto& raster = m_Raster;
 
                 // A moving camera sees the traced image aberrated; the rasterised lines follow it
                 const auto observer = MovingCameraObserver(ctx);
@@ -1401,12 +1442,22 @@ namespace MoleHole
                 m_PredictionSpan = span;
                 m_PredictionExclude = exclude;
                 m_Predictions = PredictedOrbitsOverlay(scene, span, 240, exclude);
+                ++m_PredictionRevision;
             }
 
             RenderResources& m_Res;
             ObjectPathTracker& m_Tracker;
             std::mutex& m_Mutex;
             std::vector<OverlaySegment> m_Predictions;
+            std::uint64_t m_PredictionRevision{0};
+            std::vector<OverlaySegment> m_Radii;
+            std::vector<RenderSegment> m_Render;
+            std::vector<RenderSegment> m_Simplified;
+            std::vector<RenderSegment> m_Raster;
+            std::uint64_t m_CacheKey{0};
+            bool m_CacheValid{false};
+            bool m_TrailsActive{false};
+            float m_TrailsHalfWidth{0.0f};
             std::vector<std::array<double, 4>> m_PredictionKey;
             float m_PredictionSpan{0.0f};
             std::uint64_t m_PredictionExclude{0};

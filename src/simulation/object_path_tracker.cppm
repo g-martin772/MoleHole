@@ -16,9 +16,16 @@ export namespace MoleHole
         {
             m_MeshHistories.clear();
             m_SphereHistories.clear();
+            ++m_Revision;
         }
 
-        void SetMaxHistorySize(std::size_t size) noexcept { m_MaxHistorySize = size; }
+        void SetMaxHistorySize(std::size_t size) noexcept
+        {
+            m_MaxHistorySize = size;
+            ++m_Revision;
+        }
+
+        [[nodiscard]] std::uint64_t Revision() const noexcept { return m_Revision; }
         [[nodiscard]] std::size_t MaxHistorySize() const noexcept { return m_MaxHistorySize; }
 
         [[nodiscard]] const std::unordered_map<std::uint64_t, std::deque<glm::dvec3>>& MeshHistories() const noexcept
@@ -35,5 +42,6 @@ export namespace MoleHole
         std::unordered_map<std::uint64_t, std::deque<glm::dvec3>> m_MeshHistories;
         std::unordered_map<std::uint64_t, std::deque<glm::dvec3>> m_SphereHistories;
         std::size_t m_MaxHistorySize = 2000;
+        std::uint64_t m_Revision = 0;
     };
 }

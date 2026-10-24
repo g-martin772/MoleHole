@@ -411,3 +411,47 @@ TEST_CASE("Dense trail polylines are thinned without moving them", "[rendering][
         CHECK(nearest <= 0.0101f);
     }
 }
+
+TEST_CASE("Rebuilding trails into reused storage matches a fresh build", "[rendering][overlay][trails]")
+{
+    const auto make = [](const int count, const float offset)
+    {
+        std::vector<RenderSegment> segments;
+        for (int i = 0; i < count; ++i)
+        {
+            const float t = 0.05f * static_cast<float>(i);
+            segments.push_back({glm::vec3(8.0f * std::cos(t), offset, 8.0f * std::sin(t)),
+                                glm::vec3(8.0f * std::cos(t + 0.05f), offset, 8.0f * std::sin(t + 0.05f)), glm::vec3(1.0f, 0.5f, 0.0f)});
+        }
+        return segments;
+    };
+    const glm::vec3 axis(0.0f, 1.0f, 0.0f);
+    TracedTrails reused;
+    std::vector<RenderSegment> outsideReused;
+    BuildTracedTrails(reused, make(400, 1.0f), glm::vec3(0.0f), axis, 50.0f, 0.1f, outsideReused);
+
+    outsideReused.clear();
+    const auto second = make(60, -2.0f);
+    BuildTracedTrails(reused, second, glm::vec3(0.0f), axis, 50.0f, 0.1f, outsideReused);
+    std::vector<RenderSegment> outsideFresh;
+    const auto fresh = SplitTrailsForTracer(second, glm::vec3(0.0f), axis, 50.0f, 0.1f, outsideFresh);
+
+    CHECK(reused.Segments.size() == fresh.Segments.size());
+    CHECK(std::ranges::equal(reused.Cells, fresh.Cells, [](const TrailCell& a, const TrailCell& b)
+                             { return a.Key == b.Key && a.Start == b.Start && a.Count == b.Count; }));
+    CHECK(reused.CellSegments == fresh.CellSegments);
+    CHECK(reused.Coarse == fresh.Coarse);
+    CHECK(outsideReused.size() == outsideFresh.size());
+}
+
+TEST_CASE("Simplifying into a buffer matches the returning overload", "[rendering][overlay][trails]")
+{
+    std::vector<RenderSegment> segments;
+    for (int i = 0; i < 300; ++i)
+        segments.push_back({glm::vec3(0.1f * i, 0.0f, 0.0f), glm::vec3(0.1f * (i + 1), 0.0f, 0.0f), glm::vec3(1.0f)});
+    std::vector<RenderSegment> out(5);
+    SimplifyTrails(segments, 0.01f, out);
+    const auto returned = SimplifyTrails(segments, 0.01f);
+    REQUIRE(out.size() == returned.size());
+    for (std::size_t i = 0; i < out.size(); ++i) CHECK((out[i].A == returned[i].A && out[i].B == returned[i].B));
+}

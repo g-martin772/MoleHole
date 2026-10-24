@@ -24,6 +24,7 @@ namespace MoleHole
 
     void ObjectPathTracker::RecordPositions(const GPP::Scene& scene)
     {
+        ++m_Revision;
         for (auto [entity, mesh, transform] :
              scene.Registry().view<const GPP::MeshComponent, const GPP::TransformComponent>().each())
         {
