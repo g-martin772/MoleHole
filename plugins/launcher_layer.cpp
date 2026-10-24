@@ -33,6 +33,7 @@ namespace
             m_Data.Templates = CollectTemplates();
             RefreshRecents();
             RefreshCrashNotice();
+            RefreshRecoveryNotices();
             m_Hooks.DrawSettings = [this] { DrawSettings(); };
         }
 
@@ -110,6 +111,7 @@ namespace
                     m_Data.Templates = CollectTemplates();
                     RefreshRecents();
                     RefreshCrashNotice();
+                    RefreshRecoveryNotices();
                     break;
                 case LauncherAction::Quit: Application::Instance().Stop(); break;
                 case LauncherAction::Custom: HandleCustom(action.Path); break;
@@ -126,8 +128,39 @@ namespace
                              .DismissId = "crash:dismiss"};
         }
 
+        void RefreshRecoveryNotices()
+        {
+            m_Recoveries = m_UiState->Recovery.Scan();
+            m_Data.Notices.clear();
+            const auto now = RecentList::Now();
+            for (const auto& entry : m_Recoveries)
+            {
+                const auto name = entry.ScenePath.empty() ? entry.SceneName : std::filesystem::path(entry.ScenePath).stem().string();
+                m_Data.Notices.push_back({std::format("Recover unsaved changes: {} ({})", name, RelativeTimeText(entry.Modified, now)),
+                                          "Restore", "recover:restore:" + entry.File.string(),
+                                          "recover:discard:" + entry.File.string(), "Discard"});
+            }
+        }
+
+        bool HandleRecoveryAction(const std::string& id)
+        {
+            constexpr std::string_view kRestore = "recover:restore:";
+            constexpr std::string_view kDiscard = "recover:discard:";
+            const bool restore = id.starts_with(kRestore);
+            if (!restore && !id.starts_with(kDiscard)) return false;
+            const std::filesystem::path file = id.substr(restore ? kRestore.size() : kDiscard.size());
+            if (restore) m_UiState->RequestRelaunch({"--recover", file.string(), "--skip-intro"});
+            else
+            {
+                RecoveryStore::Remove(file);
+                RefreshRecoveryNotices();
+            }
+            return true;
+        }
+
         void HandleCustom(const std::string& id)
         {
+            if (HandleRecoveryAction(id)) return;
             if (!m_CrashReport) return;
             if (id == "crash:open")
             {
@@ -220,6 +253,7 @@ namespace
         LauncherData m_Data;
         LauncherHooks m_Hooks;
         std::optional<std::filesystem::path> m_CrashReport;
+        std::vector<RecoveryEntry> m_Recoveries;
     };
 }
 

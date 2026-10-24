@@ -125,6 +125,16 @@ int main(int argc, char* argv[])
         uiState->LauncherMode = launcherMode;
         uiState->PendingNewScene = startupArgs.New;
         if (startupArgs.Template) uiState->PendingLoadTemplatePath.Set(*startupArgs.Template);
+        uiState->Recovery.Configure(builder.FS.ResolvePath(paths.StateDir() / "autosave", PathAnchor::WorkingDir),
+                                    CurrentProcessId());
+        if (startupArgs.Recover)
+        {
+            uiState->StartupScenePath = *startupArgs.Recover;
+            if (const auto header = uiState->Recovery.ReadHeader(*startupArgs.Recover))
+            {
+                uiState->RecoveredFrom = RecoveredScene{*startupArgs.Recover, header->ScenePath, header->SceneName};
+            }
+        }
     }
     if (startupArgs.Scene) uiState->StartupScenePath = startupArgs.Scene;
     builder.Services.AddSingleton<UiState>([uiState](ServiceProvider&) -> std::shared_ptr<IService> { return uiState; });

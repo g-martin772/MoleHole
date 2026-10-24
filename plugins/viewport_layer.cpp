@@ -492,11 +492,19 @@ namespace
             if (!result) return;
 
             using Kind = SceneLoader::Result::Kind;
+            const auto recovered = result->Ok && result->LoadKind == Kind::Startup && m_UiState->RecoveredFrom
+                                           && m_UiState->RecoveredFrom->File == result->Path
+                                       ? m_UiState->RecoveredFrom
+                                       : std::nullopt;
             if (result->Ok)
             {
                 if (result->LoadKind == Kind::Template)
                 {
                     m_UiState->CurrentScenePath.clear();
+                }
+                else if (recovered)
+                {
+                    m_UiState->CurrentScenePath = recovered->ScenePath;
                 }
                 else
                 {
@@ -544,6 +552,7 @@ namespace
                                                     "render-warning");
                 }
                 StartSimulationFor(result->SceneName);
+                if (recovered) AdoptRecovery(*recovered);
             }
             else if (result->LoadKind == Kind::Startup)
             {
@@ -563,6 +572,16 @@ namespace
                 m_Logger->Notifications()->Post(NotificationKind::Error, "Scene failed to load",
                                                 std::format("{}: {}", result->Path, result->Error), 0.0f, "scene-load");
             }
+        }
+
+        void AdoptRecovery(const RecoveredScene& recovered)
+        {
+            m_UiState->SceneState.MarkSaved(m_UiState->SceneState.LiveRevision(), false);
+            if (const auto adopted = m_UiState->Recovery.Adopt(recovered.File); !adopted)
+                m_Logger->Warn("ViewportLayer: could not adopt recovery copy: {}", adopted.error());
+            m_Logger->Notifications()->Post(NotificationKind::Info, "Unsaved changes restored",
+                                            recovered.ScenePath.empty() ? recovered.SceneName : recovered.ScenePath,
+                                            0.0f, "scene-recovery");
         }
 
         void ReportInitErrors(SimulationRunner& runner)

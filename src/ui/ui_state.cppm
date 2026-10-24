@@ -6,6 +6,7 @@ import GPP;
 import imgui;
 import :Rendering.Frame;
 import :Application.SceneDirty;
+import :Application.Autosave;
 import :Simulation.ObserverReadout;
 
 export namespace MoleHole
@@ -130,6 +131,12 @@ export namespace MoleHole
         std::string CurrentScenePath;
         SceneDirty SceneState;
         UnsavedPrompt UnsavedChanges;
+        bool AutosaveEnabled = false;
+        int AutosaveDelaySeconds = kDefaultAutosaveDelaySeconds;
+        AutosaveScheduler Autosave;
+        RecoveryStore Recovery;
+        std::atomic<bool> DiscardOnExit{false};
+        std::optional<RecoveredScene> RecoveredFrom;
         // Set on the main thread when the window was asked to close while the scene has unsaved changes
         std::atomic<bool> QuitRequested{false};
         OneShot<std::string> PendingLoadScenePath;

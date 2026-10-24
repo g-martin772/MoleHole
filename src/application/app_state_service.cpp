@@ -54,6 +54,7 @@ namespace MoleHole
 
     Task<void> AppStateService::StopAsync()
     {
+        if (m_Persist && (m_UiState->DiscardOnExit || !m_UiState->SceneState.IsDirty())) m_UiState->Recovery.Clear();
         Save();
         co_return;
     }
@@ -114,6 +115,11 @@ namespace MoleHole
                 }
                 if (const auto v = ui["ShowAnimationGraphWindow"])
                     m_UiState->ShowAnimationGraphWindow = v.as<bool>();
+            }
+            if (const auto autosave = node["Autosave"])
+            {
+                if (const auto v = autosave["Enabled"]) m_UiState->AutosaveEnabled = v.as<bool>();
+                if (const auto v = autosave["DelaySeconds"]) m_UiState->AutosaveDelaySeconds = std::max(v.as<int>(), 1);
             }
             if (const auto render = node["Render"])
             {
@@ -231,6 +237,9 @@ namespace MoleHole
             root["UI"]["ShowScienceWindow"] = m_UiState->ShowScienceWindow;
             root["UI"]["DisplayUnits"] = std::string(Units::DisplayPresetName(Units::GetDisplayPreset()));
             root["UI"]["ShowAnimationGraphWindow"] = m_UiState->ShowAnimationGraphWindow;
+
+            root["Autosave"]["Enabled"] = m_UiState->AutosaveEnabled;
+            root["Autosave"]["DelaySeconds"] = m_UiState->AutosaveDelaySeconds;
 
             root["Render"]["ShowCameraGizmos"] = m_UiState->ShowCameraGizmos;
             root["RenderDefaults"] = m_RenderSettings->Defaults().ToYaml();

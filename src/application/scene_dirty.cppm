@@ -25,6 +25,8 @@ export namespace MoleHole
             m_Saved.store(exact ? revision : kNeverSaved, std::memory_order_release);
         }
 
+        [[nodiscard]] std::uint64_t LiveRevision() const noexcept { return m_Live.load(std::memory_order_acquire); }
+
         [[nodiscard]] bool IsDirty() const noexcept
         {
             return m_Live.load(std::memory_order_acquire) != m_Saved.load(std::memory_order_acquire);

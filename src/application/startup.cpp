@@ -12,7 +12,7 @@ namespace MoleHole
         constexpr std::array kValueFlags{
             "--export-image", "--export-video", "--width", "--height", "--duration", "--fps", "--sim-start",
             "--time-scale", "--export-timeout", "--profile", "--set", "--ray-step-size", "--max-ray-steps",
-            "--gpu-precision", "--metric", "--prefix", "--scene", "--template", "--validate-scene"};
+            "--gpu-precision", "--metric", "--prefix", "--scene", "--template", "--recover", "--validate-scene"};
     }
 
     StartupArgs ParseStartupArgs(const std::span<const std::string> args)
@@ -28,6 +28,7 @@ namespace MoleHole
 
             if (arg == "--scene") result.Scene = next();
             else if (arg == "--template") result.Template = next();
+            else if (arg == "--recover") result.Recover = next();
             else if (arg == "--new") result.New = true;
             else if (arg == "--launcher") result.Launcher = true;
             else if (arg == "--no-launcher") result.NoLauncher = true;
@@ -73,7 +74,7 @@ namespace MoleHole
 
     StartupMode SelectStartupMode(const StartupArgs& args, const StartupPrefs& prefs)
     {
-        if (args.Export || args.Scene || args.Template || args.New) return StartupMode::Editor;
+        if (args.Export || args.Scene || args.Template || args.Recover || args.New) return StartupMode::Editor;
         if (args.Launcher) return StartupMode::Launcher;
         if (args.NoLauncher) return StartupMode::Editor;
         return prefs.ShowLauncher || !prefs.LastSceneExists ? StartupMode::Launcher : StartupMode::Editor;

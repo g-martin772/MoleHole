@@ -31,6 +31,13 @@ namespace
 
         void OnAttach() override
         {
+            if (const auto found = m_UiState->Recovery.Scan(); !found.empty() && !m_UiState->RecoveredFrom)
+            {
+                m_Logger->Notifications()->Post(NotificationKind::Warning, "Unsaved changes found",
+                                                std::format("{} recovery cop{} from an earlier session.\nOpen the launcher to restore.",
+                                                            found.size(), found.size() == 1 ? "y" : "ies"),
+                                                0.0f, "autosave-found");
+            }
             m_Windows->SetCloseGuard([state = m_UiState]
             {
                 if (!state->SceneState.IsDirty()) return true;
@@ -52,6 +59,7 @@ namespace
             RenderSettingsPopup();
             RenderExportDialog();
             RenderUnsavedPrompt();
+            TickAutosave();
             UpdateWindowTitle();
         }
 
@@ -79,8 +87,14 @@ namespace
             case SceneAction::Kind::NewScene: m_UiState->PendingNewScene = true; break;
             case SceneAction::Kind::OpenFile: m_UiState->PendingLoadScenePath.Set(action.Path); break;
             case SceneAction::Kind::OpenTemplate: m_UiState->PendingLoadTemplatePath.Set(action.Path); break;
-            case SceneAction::Kind::CloseToLauncher: m_UiState->RequestRelaunch({"--launcher"}); break;
-            case SceneAction::Kind::Quit: Application::Instance().Stop(); break;
+            case SceneAction::Kind::CloseToLauncher:
+                m_UiState->DiscardOnExit = true;
+                m_UiState->RequestRelaunch({"--launcher"});
+                break;
+            case SceneAction::Kind::Quit:
+                m_UiState->DiscardOnExit = true;
+                Application::Instance().Stop();
+                break;
             case SceneAction::Kind::None: break;
             }
         }
@@ -210,43 +224,110 @@ namespace
             m_Logger->Notifications()->Post(NotificationKind::Error, "Save failed", reason, 0.0f, "scene-save");
         }
 
-        bool SaveLiveSceneTo(const std::filesystem::path& path)
+        struct LiveYaml
+        {
+            std::string Yaml;
+            std::uint64_t Revision = 0;
+            bool Running = false;
+        };
+
+        [[nodiscard]] std::expected<LiveYaml, std::string> SerializeLiveScene() const
         {
             try
             {
                 const auto runner = m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
-                if (!runner)
-                {
-                    SaveFailed(std::format("no active simulation for '{}'", m_UiState->CurrentSceneName));
-                    return false;
-                }
-                std::string yaml;
-                std::uint64_t revision = 0;
-                {
-                    auto sceneLock = runner->LockRenderScene();
-                    yaml = sceneLock->SerializeToYaml();
-                    revision = sceneLock.ContentRevision();
-                }
-                if (const auto saved = SaveSceneFile(path, yaml); !saved)
-                {
-                    SaveFailed(saved.error());
-                    return false;
-                }
-                const bool running = !runner->IsPaused();
-                m_UiState->CurrentScenePath = path.string();
-                m_UiState->SceneState.MarkSaved(revision, !running);
-                m_Logger->Info("Scene saved to '{}'", m_UiState->CurrentScenePath);
-                m_Logger->Notifications()->Post(NotificationKind::Success, "Scene saved",
-                                                running ? path.string() + "\nSaved while running: this is the simulated state"
-                                                        : path.string(),
-                                                0.0f, "scene-save");
-                m_AppState->NotifySceneOpened(m_UiState->CurrentScenePath);
-                return true;
+                if (!runner) return std::unexpected(std::format("no active simulation for '{}'", m_UiState->CurrentSceneName));
+                LiveYaml live;
+                auto sceneLock = runner->LockRenderScene();
+                live.Yaml = sceneLock->SerializeToYaml();
+                live.Revision = sceneLock.ContentRevision();
+                live.Running = !runner->IsPaused();
+                return live;
             }
             catch (const std::exception& error)
             {
-                SaveFailed(error.what());
+                return std::unexpected(std::string(error.what()));
+            }
+        }
+
+        bool SaveLiveSceneTo(const std::filesystem::path& path)
+        {
+            const auto live = SerializeLiveScene();
+            if (!live)
+            {
+                SaveFailed(live.error());
                 return false;
+            }
+            if (const auto saved = SaveSceneFile(path, live->Yaml); !saved)
+            {
+                SaveFailed(saved.error());
+                return false;
+            }
+            m_UiState->CurrentScenePath = path.string();
+            m_UiState->SceneState.MarkSaved(live->Revision, !live->Running);
+            m_Logger->Info("Scene saved to '{}'", m_UiState->CurrentScenePath);
+            m_Logger->Notifications()->Post(NotificationKind::Success, "Scene saved",
+                                            live->Running ? path.string() + "\nSaved while running: this is the simulated state"
+                                                          : path.string(),
+                                            0.0f, "scene-save");
+            m_AppState->NotifySceneOpened(m_UiState->CurrentScenePath);
+            return true;
+        }
+
+        void TickAutosave()
+        {
+            auto& ui = *m_UiState;
+            using Scheduler = AutosaveScheduler;
+            const auto now = Scheduler::Clock::now();
+            const auto delay = std::chrono::seconds(std::max(ui.AutosaveDelaySeconds, 1));
+            auto config = ui.Autosave.Settings();
+            config.FileEnabled = ui.AutosaveEnabled;
+            config.Delay = delay;
+            ui.Autosave.Configure(config);
+
+            const bool dirty = ui.SceneState.IsDirty();
+            const auto runner = ui.CurrentSceneName.empty() ? nullptr : m_Scenes->GetSimulation(ui.CurrentSceneName);
+            const auto action = ui.Autosave.Update({.Now = now,
+                                                    .Dirty = dirty,
+                                                    .Revision = ui.SceneState.LiveRevision(),
+                                                    .Playing = runner && !runner->IsPaused(),
+                                                    .ModalOpen = ui.UnsavedChanges.Open(),
+                                                    .HasPath = !ui.CurrentScenePath.empty()});
+            if (!dirty)
+            {
+                ui.Recovery.Clear();
+                return;
+            }
+            if (action == Scheduler::Action::None || ui.DiscardOnExit) return;
+
+            std::string failure;
+            if (const auto live = SerializeLiveScene(); !live)
+            {
+                failure = live.error();
+            }
+            else if (action == Scheduler::Action::SaveFile)
+            {
+                if (const auto saved = SaveSceneFile(ui.CurrentScenePath, live->Yaml); !saved) failure = saved.error();
+                else
+                {
+                    ui.SceneState.MarkSaved(live->Revision, !live->Running);
+                    ui.Autosave.Succeeded(action, now);
+                    m_Logger->Info("Autosaved '{}'", ui.CurrentScenePath);
+                }
+            }
+            else
+            {
+                if (const auto written = ui.Recovery.Write(ui.CurrentScenePath, ui.CurrentSceneName, live->Yaml); !written)
+                    failure = written.error();
+                else ui.Autosave.Succeeded(action, now);
+            }
+
+            if (failure.empty()) return;
+            const int streak = ui.Autosave.Failed(action, now);
+            m_Logger->Error("Autosave failed ({} in a row): {}", streak, failure);
+            if (streak == 1)
+            {
+                m_Logger->Notifications()->Post(NotificationKind::Error, "Autosave failed", failure, 0.0f, "autosave");
             }
         }
 
@@ -315,6 +396,19 @@ namespace
                 if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S"))
                 {
                     DoSaveAs();
+                }
+                ImGui::MenuItem("Auto Save", nullptr, &m_UiState->AutosaveEnabled);
+                if (ImGui::BeginMenu("Auto Save Delay"))
+                {
+                    for (const int seconds : kAutosaveDelaysSeconds)
+                    {
+                        if (ImGui::MenuItem(std::format("{} s", seconds).c_str(), nullptr,
+                                            m_UiState->AutosaveDelaySeconds == seconds))
+                        {
+                            m_UiState->AutosaveDelaySeconds = seconds;
+                        }
+                    }
+                    ImGui::EndMenu();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Close Scene (Launcher)"))

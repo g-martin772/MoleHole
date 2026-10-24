@@ -10,6 +10,7 @@ export namespace MoleHole
     {
         std::optional<std::string> Scene;
         std::optional<std::string> Template;
+        std::optional<std::string> Recover;
         bool New = false;
         bool Launcher = false;
         bool NoLauncher = false;
