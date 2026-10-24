@@ -90,12 +90,14 @@ namespace
 
         void OnUpdate(float deltaTime) override
         {
+            GPP::ProfileZone updateZone("Viewport.Update");
             PollSceneLoad();
             CheckPendingSceneSwitch();
             UpdateCamera(deltaTime);
             TrackCamera();
             m_Export.Update();
             UpdateRenderSettings();
+            auto render = m_RenderSettings->Effective();
             std::uint64_t sceneKey = 0;
             if (const auto sim = m_Sim.Load(); sim->Runner)
             {
@@ -109,25 +111,24 @@ namespace
                 // freshly started simulation).
                 if (sim->Runner->GetTickRate() != m_UiState->SimulationTickRate)
                     sim->Runner->SetTickRate(m_UiState->SimulationTickRate);
-                if (!sim->Runner->IsPaused()) m_Pipeline.RecordObjectPaths(*sim->Runner->AcquireSnapshot());
                 const auto published = sim->Runner->AcquireSnapshot();
                 SignatureHasher key;
                 key.Pointer(sim->Runner.get());
                 key.Value(published.Generation());
                 sceneKey = key.Digest();
+                RecordPaths(render.ShowObjectPaths, !sim->Runner->IsPaused(), sceneKey, *published);
                 m_UiState->SceneState.Observe(published.ContentRevision());
                 if (m_UiState->PendingSelectGuid != 0 && published->IsValid(published->FindByGuid(m_UiState->PendingSelectGuid)))
                 {
                     m_UiState->SelectedEntityGuid = std::exchange(m_UiState->PendingSelectGuid, 0);
                 }
             }
-            auto render = m_RenderSettings->Effective();
             const auto step = StepRefinement(render, sceneKey);
             render.ResolutionScale *= step.Scale;
             render.Accumulate = render.Accumulate && step.Accumulate;
             m_UiState->RenderScaleApplied = step.Scale;
             LogRefinement(step);
-            PublishObserverReadout(render);
+            PublishObserverReadout(render, sceneKey);
             const bool interactive = m_ActiveContext != RenderContext::Export;
             RequestFrameOnChange(sceneKey, interactive, step);
             m_FrameParams.Publish(ViewportFrameParams{m_Camera, std::move(render), m_ObserverGuid, sceneKey, interactive});
@@ -984,11 +985,41 @@ namespace
             return true;
         }
 
-        // What the camera's observer measures, for the camera window; the renderer applies the same observer.
-        void PublishObserverReadout(const RenderSettings& render)
+        void RecordPaths(const bool shown, const bool playing, const std::uint64_t sceneKey, const Scene& scene)
         {
+            constexpr auto kMinInterval = std::chrono::milliseconds(15);
+            const auto now = std::chrono::steady_clock::now();
+            if (!shown)
+            {
+                if (std::exchange(m_PathsRecording, false)) m_Pipeline.ClearObjectPaths();
+                return;
+            }
+            if (!playing) return;
+            if (m_PathsRecording && (sceneKey == m_LastPathKey || now - m_LastPathTime < kMinInterval)) return;
+            m_PathsRecording = true;
+            m_LastPathKey = sceneKey;
+            m_LastPathTime = now;
+            m_Pipeline.RecordObjectPaths(scene);
+        }
+
+        // What the camera's observer measures, for the camera window; the renderer applies the same observer.
+        void PublishObserverReadout(const RenderSettings& render, const std::uint64_t sceneKey)
+        {
+            GPP::ProfileZone zone("Observer.Readout");
             const auto sim = m_Sim.Load();
             if (!sim->Runner) return;
+            SignatureHasher key;
+            key.Value(sceneKey);
+            key.Value(render.Solution);
+            key.Value(render.Observer);
+            key.Value(render.ObserverOrbit);
+            key.Value(render.TransportMode);
+            key.Value(m_UiState->ViewPositionM);
+            key.Value(m_ObserverGuid);
+            const auto digest = key.Digest();
+            if (m_ReadoutKeyValid && digest == m_ReadoutKey) return;
+            m_ReadoutKey = digest;
+            m_ReadoutKeyValid = true;
             const auto snapshot = sim->Runner->AcquireSnapshot();
             auto readout = ComputeObserverReadout(
                 *snapshot, static_cast<std::int32_t>(render.Solution), static_cast<ObserverKind>(render.Observer),
@@ -1035,6 +1066,11 @@ namespace
         std::uint64_t m_FocusGuid{0};
         std::uint64_t m_ObserverGuid{0}; // possessed scene camera entity while it is active
         std::uint64_t m_LastInputs{0};
+        std::uint64_t m_LastPathKey{0};
+        std::chrono::steady_clock::time_point m_LastPathTime;
+        bool m_PathsRecording{false};
+        std::uint64_t m_ReadoutKey{0};
+        bool m_ReadoutKeyValid{false};
         std::uint64_t m_StillHash{0};
         std::chrono::steady_clock::time_point m_StillSince;
         RefinementLadder m_Ladder;

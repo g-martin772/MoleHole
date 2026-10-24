@@ -1615,6 +1615,7 @@ namespace MoleHole
 
     void RenderPipeline::RecordObjectPaths(const Scene& scene)
     {
+        GPP_ZONE("Paths.Record");
         std::scoped_lock lock(m_Impl->PathMutex);
         m_Impl->Paths.RecordPositions(scene);
     }
