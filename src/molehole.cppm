@@ -60,6 +60,7 @@ export import :Rendering.Camera;
 export import :Rendering.Lut;
 export import :Rendering.Latex;
 export import :UI.EditLogic;
+export import :UI.TransportLogic;
 export import :UI.StatusBar;
 export import :UI.State;
 export import :UI.WidgetLogic;

@@ -162,6 +162,8 @@ namespace MoleHole
                 }
                 if (const auto v = simulation["TickRate"])
                     m_UiState->SimulationTickRate = std::clamp(v.as<float>(), 1.0f, 2000.0f);
+                if (const auto v = simulation["StepCount"])
+                    m_UiState->TransportStepCount = static_cast<std::int32_t>(ClampStepCount(v.as<long long>()));
             }
             if (const auto v = node["DefaultExportDirectory"]; v && v.IsScalar() && !v.as<std::string>().empty())
             {
@@ -257,6 +259,7 @@ namespace MoleHole
             root["RenderDefaults"] = m_RenderSettings->Defaults().ToYaml();
 
             root["Simulation"]["TickRate"] = m_UiState->SimulationTickRate;
+            root["Simulation"]["StepCount"] = m_UiState->TransportStepCount;
             root["Simulation"]["Precision"] = std::string(Units::PrecisionName(m_UiState->SimulationPrecision));
 
             root["LastExportDirectory"] = GetLastExportDirectory();

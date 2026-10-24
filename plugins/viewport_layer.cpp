@@ -197,6 +197,7 @@ namespace
                     DrawRenderStatsOverlay(min, m_Renderer->GetBufferTargetStats(kViewportBufferId), *m_RenderSettings,
                                            m_UiState->RenderGovernorScale);
 
+                m_UiState->ViewportToolbarLeft = max.x;
                 if (!m_UiState->ExportActive)
                 {
                     const bool toolbarHovered = RenderGizmoToolbar(min, max);
@@ -256,6 +257,7 @@ namespace
             constexpr float kInnerPadding = 8.0f;
             const ImVec2 panelSize(contentWidth + kInnerPadding * 2.0f, rowHeight + kInnerPadding * 2.0f);
             const ImVec2 panelMin(viewportMax.x - panelSize.x - kOuterPadding, viewportMin.y + kOuterPadding);
+            m_UiState->ViewportToolbarLeft = panelMin.x;
 
             ImGui::GetWindowDrawList()->AddRectFilled(
                 panelMin, ImVec2(panelMin.x + panelSize.x, panelMin.y + panelSize.y),
@@ -668,6 +670,10 @@ namespace
             {
                 if (sim->Play->Resume(sim->Runner)) m_Pipeline.ClearObjectPaths();
             }
+            for (const auto& request : m_UiState->Transport.Take())
+            {
+                if (sim->Runner) ApplyTransportRequest(*sim, request);
+            }
             m_UiState->PlaySessionActive = sim->Runner && sim->Play->Active();
 
             if (m_UiState->PendingStopSimulation.exchange(false) && sim->Runner)
@@ -677,6 +683,24 @@ namespace
                 sim->Play->Stop(sim->Runner, m_RenderSettings->PersistsToScene()
                                                  ? std::optional(m_RenderSettings->SceneYaml())
                                                  : std::nullopt);
+            }
+            m_UiState->Bookmarks.Set(sim->Runner ? sim->Play->Bookmarks() : std::vector<BookmarkInfo>{});
+        }
+
+        void ApplyTransportRequest(const SimBinding& sim, const TransportRequest& request)
+        {
+            switch (request.What)
+            {
+            case TransportRequest::Kind::Step:
+                if (!sim.Runner->IsPaused()) break;
+                if (!sim.Play->Active() && sim.Play->Resume(sim.Runner, false)) m_Pipeline.ClearObjectPaths();
+                sim.Runner->Step(request.Ticks);
+                break;
+            case TransportRequest::Kind::Snapshot:
+                if (!sim.Play->Active() && sim.Play->Resume(sim.Runner, false)) m_Pipeline.ClearObjectPaths();
+                sim.Play->Capture(sim.Runner);
+                break;
+            case TransportRequest::Kind::Restore: sim.Play->Restore(sim.Runner, request.Index); break;
             }
         }
 

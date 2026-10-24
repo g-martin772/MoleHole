@@ -61,6 +61,7 @@ namespace
                                     : m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
             DrawTiming(runner);
             DrawTickRate();
+            DrawStepping();
             DrawPhysics(runner);
             DrawPrecision();
             ImGui::End();
@@ -138,6 +139,21 @@ namespace
                 ImGui::SameLine();
             }
             ImGui::NewLine();
+        }
+
+        void DrawStepping()
+        {
+            SectionHeader("STEPPING");
+            int count = m_UiState->TransportStepCount;
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputInt("##stepcount", &count, 1, 10))
+            {
+                m_UiState->TransportStepCount = static_cast<std::int32_t>(ClampStepCount(count));
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Ticks advanced by Shift+. and the +N button of the transport bar while paused.");
+            }
         }
 
         void DrawPhysics(const std::shared_ptr<SimulationRunner>& runner)

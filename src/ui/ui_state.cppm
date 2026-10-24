@@ -9,6 +9,7 @@ import :Application.SceneDirty;
 import :Application.Autosave;
 import :Simulation.ObserverReadout;
 import :UI.EditLogic;
+import :UI.TransportLogic;
 
 export namespace MoleHole
 {
@@ -125,6 +126,9 @@ export namespace MoleHole
 
         std::uint64_t SelectedEntityGuid = 0;
         EditRequests Edits;
+        TransportRequests Transport;
+        BookmarkView Bookmarks;
+        std::int32_t TransportStepCount = static_cast<std::int32_t>(kDefaultStepTicks);
         bool GraphEditorFocused = false;
         int UndoHistoryCapacity = static_cast<int>(GPP::CommandHistory::kDefaultCapacity);
         GizmoOperation ActiveGizmoOperation = GizmoOperation::Translate;
@@ -185,6 +189,7 @@ export namespace MoleHole
 
         glm::vec2 ViewportScreenMin{0.0f};
         glm::vec2 ViewportScreenMax{0.0f};
+        float ViewportToolbarLeft = 0.0f;
 
         ImFont* IconFont = nullptr;
         std::filesystem::path FontDirectory{"font"};
