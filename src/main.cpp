@@ -64,6 +64,22 @@ int main(int argc, char* argv[])
     }
     EnsureRuntimeDirectories(paths);
 
+    const auto logger = std::make_shared<Logger>();
+    PruneLogFiles(paths.LogDir(), "molehole");
+    const auto logFile = LogFilePath(paths.LogDir(), "molehole", CurrentProcessId());
+    logger->CreateRotatingMultiLogger("GPP APP", logFile.string(), std::size_t{5} << 20, 5);
+#ifdef NDEBUG
+    logger->SetLevel(LogLevel::Info);
+#else
+    logger->SetLevel(LogLevel::Trace);
+#endif
+    builder.Services.AddSingleton<Logger>([logger](ServiceProvider&) -> std::shared_ptr<IService> { return logger; });
+    InstallCrashHandler({.ReportDir = paths.LogDir(),
+                         .AppName = "molehole",
+                         .LogFile = logFile.string(),
+                         .Buffer = logger->Buffer(),
+                         .Flush = [logger] { logger->Flush(); }});
+
     builder.Configuration
            .AddJsonFile((paths.ResourceDir() / "config.json").string())
            .AddJsonFile((paths.ConfigDir() / "config.json").string(), true);
@@ -76,6 +92,15 @@ int main(int argc, char* argv[])
     const bool launcherMode = mode == StartupMode::Launcher;
 
     if (launcherMode) builder.Configuration.AddInMemory(LauncherWindowOverrides(appInfo.Name));
+    if (!launcherMode && !exportArgs)
+    {
+        if (const auto report = FindPendingCrashReport(paths.LogDir()))
+        {
+            logger->Notifications()->Post(NotificationKind::Warning, "Last run crashed",
+                                          std::format("Report: {}", report->string()), 0.0f, "crash-report");
+            MarkCrashReportSeen(*report);
+        }
+    }
     builder.Configuration
            .AddEnvironmentVariables()
            .AddCommandLine(argc, argv);

@@ -25,7 +25,7 @@ namespace MoleHole
     void EnsureRuntimeDirectories(const AppPaths& paths)
     {
         std::vector<std::filesystem::path> directories{
-            paths.CacheDir() / "hot-reload-cache", paths.CacheDir() / "shader-cache", paths.ConfigDir(),
+            paths.CacheDir() / "hot-reload-cache", paths.CacheDir() / "shader-cache", paths.ConfigDir(), paths.LogDir(),
             paths.UserSubdir("exports")};
         if (paths.IsInstalled())
         {

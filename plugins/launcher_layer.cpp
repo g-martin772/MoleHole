@@ -32,6 +32,7 @@ namespace
             m_Data.ShowOnStartup = m_AppState->GetShowLauncher();
             m_Data.Templates = CollectTemplates();
             RefreshRecents();
+            RefreshCrashNotice();
             m_Hooks.DrawSettings = [this] { DrawSettings(); };
         }
 
@@ -106,7 +107,34 @@ namespace
                     RefreshRecents();
                     break;
                 case LauncherAction::Quit: Application::Instance().Stop(); break;
+                case LauncherAction::Custom: HandleCustom(action.Path); break;
                 default: break;
+            }
+        }
+
+        void RefreshCrashNotice()
+        {
+            m_CrashReport = FindPendingCrashReport(m_AppPaths->LogDir());
+            m_Data.Notice = {};
+            if (!m_CrashReport) return;
+            m_Data.Notice = {.Text = "Last run crashed", .ActionLabel = "Open report", .ActionId = "crash:open",
+                             .DismissId = "crash:dismiss"};
+        }
+
+        void HandleCustom(const std::string& id)
+        {
+            if (!m_CrashReport) return;
+            if (id == "crash:open")
+            {
+                if (const auto opened = OpenPath(*m_CrashReport); !opened)
+                {
+                    m_Logger->Warn("Could not open crash report {}: {}", m_CrashReport->string(), opened.error());
+                }
+            }
+            else if (id == "crash:dismiss")
+            {
+                MarkCrashReportSeen(*m_CrashReport);
+                RefreshCrashNotice();
             }
         }
 
@@ -186,6 +214,7 @@ namespace
         bool m_IconTried = false;
         LauncherData m_Data;
         LauncherHooks m_Hooks;
+        std::optional<std::filesystem::path> m_CrashReport;
     };
 }
 
