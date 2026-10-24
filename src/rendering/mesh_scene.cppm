@@ -107,6 +107,8 @@ export namespace MoleHole
             UploadLighting(slot, out);
 
             if (!tlas) return out;
+            for (const auto& draw : out.Draws) Cached(draw);
+            FlushBlas();
             for (const auto& draw : out.Draws)
             {
                 const auto* cached = Cached(draw);
@@ -202,6 +204,7 @@ export namespace MoleHole
             return m_Dfg->GetBuffer();
         }
 
+        // Creates the BLAS without building it; FlushBlas builds everything created since in one submit
         const CachedPrimitive* Cached(const MeshDraw& draw)
         {
             const auto& primitive = *draw.Primitive;
@@ -213,10 +216,11 @@ export namespace MoleHole
                 entry.Vertices = primitive.VertexBuffer.GetDeviceAddress();
                 entry.Indices = primitive.IndexBuffer.GetDeviceAddress();
                 entry.Structure = std::make_unique<GPP::Blas>(
-                    m_Device, *m_UploadPool, m_Device->GetBackgroundQueue(),
+                    m_Device,
                     GPP::BlasTriangles{.VertexAddress = entry.Vertices, .VertexStride = sizeof(GPP::GltfVertex),
                                        .VertexCount = primitive.VertexCount, .IndexAddress = entry.Indices,
                                        .IndexCount = primitive.IndexCount});
+                m_UnbuiltBlas.push_back(&primitive);
             }
             catch (const std::exception& error)
             {
@@ -227,6 +231,24 @@ export namespace MoleHole
             return stored.Structure ? &stored : nullptr;
         }
 
+        void FlushBlas()
+        {
+            if (m_UnbuiltBlas.empty()) return;
+            std::vector<GPP::Blas*> blases;
+            blases.reserve(m_UnbuiltBlas.size());
+            for (const auto* primitive : m_UnbuiltBlas) blases.push_back(m_Primitives.at(primitive).Structure.get());
+            try
+            {
+                GPP::BuildBlasBatch(m_Device, *m_UploadPool, m_Device->GetBackgroundQueue(), blases);
+            }
+            catch (const std::exception& error)
+            {
+                m_Logger->Warn("Mesh tracing: BLAS build failed: {}", error.what());
+                for (const auto* primitive : m_UnbuiltBlas) m_Primitives.at(primitive).Structure.reset();
+            }
+            m_UnbuiltBlas.clear();
+        }
+
         std::shared_ptr<GPP::VulkanDevice> m_Device;
         std::shared_ptr<MeshCache> m_Meshes;
         std::shared_ptr<GPP::Logger> m_Logger;
@@ -234,6 +256,7 @@ export namespace MoleHole
         MeshMaterialTable m_Materials;
         DiskLightCache m_DiskCache;
         std::unordered_map<const GPP::GltfPrimitive*, CachedPrimitive> m_Primitives;
+        std::vector<const GPP::GltfPrimitive*> m_UnbuiltBlas;
         std::unique_ptr<GPP::VulkanBuffer> m_Dfg;
         std::array<Slot, kSlots> m_Slots;
         std::size_t m_NextSlot = 0;
