@@ -1,6 +1,9 @@
 .idea/
 build/
 build-release/
+build-asan/
+build-tsan/
+vcpkg_installed/
 cmake-build-debug/
 cmake-build-debug-mingw/
 .cache/

@@ -22,6 +22,34 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_PREFIX": "$env{HOME}/.local"
       }
+    },
+    {
+      "name": "asan-ubsan",
+      "inherits": "vcpkg",
+      "displayName": "Vcpkg - ASAN + UBSAN",
+      "binaryDir": "${sourceDir}/build-asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-sanitize=vptr -fno-sanitize-recover=undefined -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined -fno-sanitize=vptr -fno-sanitize-recover=undefined -fno-omit-frame-pointer",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined -fno-sanitize=vptr -fno-sanitize-recover=undefined -fno-omit-frame-pointer",
+        "CMAKE_MODULE_LINKER_FLAGS": "-fsanitize=address,undefined -fno-sanitize=vptr -fno-sanitize-recover=undefined -fno-omit-frame-pointer",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed"
+      }
+    },
+    {
+      "name": "tsan",
+      "inherits": "vcpkg",
+      "displayName": "Vcpkg - TSAN",
+      "binaryDir": "${sourceDir}/build-tsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_MODULE_LINKER_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed"
+      }
     }
   ],
   "buildPresets": [
@@ -34,6 +62,16 @@
       "name": "release-vcpkg",
       "configurePreset": "release-vcpkg",
       "jobs": 8
+    },
+    {
+      "name": "asan-ubsan",
+      "configurePreset": "asan-ubsan",
+      "jobs": 4
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "jobs": 4
     }
   ]
 }
