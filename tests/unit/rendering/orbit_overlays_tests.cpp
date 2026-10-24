@@ -455,3 +455,33 @@ TEST_CASE("Simplifying into a buffer matches the returning overload", "[renderin
     REQUIRE(out.size() == returned.size());
     for (std::size_t i = 0; i < out.size(); ++i) CHECK((out[i].A == returned[i].A && out[i].B == returned[i].B));
 }
+
+TEST_CASE("Changed chunks report only the bytes that differ", "[rendering][overlay][trails]")
+{
+    std::vector<std::byte> before(10000, std::byte{1});
+    auto after = before;
+    CHECK(ChangedChunks(before, after, 4096).empty());
+
+    after[5000] = std::byte{9};
+    const auto one = ChangedChunks(before, after, 4096);
+    REQUIRE(one.size() == 1);
+    CHECK(one[0] == std::pair<std::size_t, std::size_t>{4096, 4096});
+
+    after[9999] = std::byte{9};
+    after[4095] = std::byte{9};
+    const auto merged = ChangedChunks(before, after, 4096);
+    REQUIRE(merged.size() == 1);
+    CHECK(merged[0] == std::pair<std::size_t, std::size_t>{0, 10000});
+
+    after = before;
+    after[9999] = std::byte{7};
+    const auto tail = ChangedChunks(before, after, 4096);
+    REQUIRE(tail.size() == 1);
+    CHECK(tail[0] == std::pair<std::size_t, std::size_t>{8192, 1808});
+
+    const std::vector<std::byte> shorter(100, std::byte{1});
+    const auto resized = ChangedChunks(before, shorter, 4096);
+    REQUIRE(resized.size() == 1);
+    CHECK(resized[0] == std::pair<std::size_t, std::size_t>{0, 100});
+    CHECK(ChangedChunks(before, std::span<const std::byte>{}, 4096).empty());
+}

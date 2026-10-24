@@ -387,6 +387,26 @@ export namespace MoleHole
         return traced;
     }
 
+    [[nodiscard]] inline std::vector<std::pair<std::size_t, std::size_t>> ChangedChunks(
+        const std::span<const std::byte> previous, const std::span<const std::byte> next, const std::size_t chunk)
+    {
+        std::vector<std::pair<std::size_t, std::size_t>> ranges;
+        if (next.empty()) return ranges;
+        if (previous.size() != next.size())
+        {
+            ranges.emplace_back(0, next.size());
+            return ranges;
+        }
+        for (std::size_t offset = 0; offset < next.size(); offset += chunk)
+        {
+            const std::size_t size = std::min(chunk, next.size() - offset);
+            if (std::memcmp(previous.data() + offset, next.data() + offset, size) == 0) continue;
+            if (!ranges.empty() && ranges.back().first + ranges.back().second == offset) ranges.back().second += size;
+            else ranges.emplace_back(offset, size);
+        }
+        return ranges;
+    }
+
     // Closest distance between segments p0-p1 and q0-q1; `s` is the parameter of the closest point on p0-p1.
     // Mirrors segmentDistance in shaders/trails.glsl.
     [[nodiscard]] inline float SegmentDistance(const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& q0, const glm::vec3& q1, float& s)

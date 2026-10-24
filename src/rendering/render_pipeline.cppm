@@ -69,6 +69,8 @@ export namespace MoleHole
         // the trails the integrated tracer draws lensed
         std::vector<float> OverlayVertices;
         TracedTrails Trails;
+        std::uint64_t TrailsRevision{0};
+        std::uint64_t TrailsHash{0};
         float TrailAngularHalfWidth{0.0f};
         bool TrailsActive{false};
     };

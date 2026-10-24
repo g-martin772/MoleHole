@@ -548,24 +548,33 @@ namespace MoleHole
                 const auto& trails = m_Res.Trails;
                 if (m_Res.TrailsActive && params.IsPhysicallyAccurate == 1)
                 {
-                    m_TrailSegments->Upload(trails.Segments.data(), trails.Segments.size() * sizeof(TracedTrailSegment));
-                    m_TrailCells->Upload(trails.Cells.data(), trails.Cells.size() * sizeof(TrailCell));
-                    m_TrailCoarse->Upload(trails.Coarse.data(), trails.Coarse.size() * sizeof(std::uint32_t));
-                    if (!trails.CellSegments.empty())
-                    {
-                        m_TrailIndices->Upload(trails.CellSegments.data(), trails.CellSegments.size() * sizeof(std::uint32_t));
-                    }
+                    UploadTrails(trails);
                     params.TrailGrid = glm::vec4(trails.Radius, static_cast<float>(kTrailGridCells), 1.0f, m_Res.TrailAngularHalfWidth);
                     params.TrailGrid2 = glm::vec4(static_cast<float>(trails.Cells.size()), 0.0f, 0.0f, 0.0f);
-                    auto& signature = m_Res.Signature;
-                    signature.Span<TracedTrailSegment>(trails.Segments);
-                    signature.Span<TrailCell>(trails.Cells);
-                    signature.Span<std::uint32_t>(trails.Coarse);
-                    signature.Span<std::uint32_t>(trails.CellSegments);
+                    m_Res.Signature.Value(m_Res.TrailsHash);
                 }
 
                 m_Res.Signature.Value(params);
                 m_ParamsBuffer->Upload(&params, sizeof(params));
+            }
+
+            void UploadTrails(const TracedTrails& trails)
+            {
+                if (m_TrailsUploaded == m_Res.TrailsRevision) return;
+                GPP_ZONE("Trails.Upload");
+                const auto upload = [](VulkanBuffer& buffer, std::vector<std::byte>& mirror, const void* data, const std::size_t size)
+                {
+                    if (size == 0) return;
+                    const std::span<const std::byte> next(static_cast<const std::byte*>(data), size);
+                    for (const auto [offset, length] : ChangedChunks(mirror, next, kTrailUploadChunk))
+                        buffer.Upload(next.data() + offset, length, offset);
+                    mirror.assign(next.begin(), next.end());
+                };
+                upload(*m_TrailSegments, m_TrailMirror[0], trails.Segments.data(), trails.Segments.size() * sizeof(TracedTrailSegment));
+                upload(*m_TrailCells, m_TrailMirror[1], trails.Cells.data(), trails.Cells.size() * sizeof(TrailCell));
+                upload(*m_TrailCoarse, m_TrailMirror[2], trails.Coarse.data(), trails.Coarse.size() * sizeof(std::uint32_t));
+                upload(*m_TrailIndices, m_TrailMirror[3], trails.CellSegments.data(), trails.CellSegments.size() * sizeof(std::uint32_t));
+                m_TrailsUploaded = m_Res.TrailsRevision;
             }
 
             [[nodiscard]] TraceBindings MakeBindings()
@@ -778,6 +787,9 @@ namespace MoleHole
             std::shared_ptr<ShaderPipeline> m_MeshPipelineF64;
             std::unique_ptr<VulkanBuffer> m_ParamsBuffer;
             MetricCache m_MetricCache;
+            static constexpr std::size_t kTrailUploadChunk = 4096;
+            std::array<std::vector<std::byte>, 4> m_TrailMirror;
+            std::uint64_t m_TrailsUploaded{std::numeric_limits<std::uint64_t>::max()};
             std::unique_ptr<VulkanBuffer> m_TrailSegments;
             std::unique_ptr<VulkanBuffer> m_TrailCells;
             std::unique_ptr<VulkanBuffer> m_TrailIndices;
@@ -1393,6 +1405,13 @@ namespace MoleHole
                         BuildTracedTrails(m_Res.Trails, m_Render, center, axis, radius, pad, m_Raster);
                         m_TrailsHalfWidth = halfWidth;
                         m_TrailsActive = !m_Res.Trails.Segments.empty();
+                        ++m_Res.TrailsRevision;
+                        SignatureHasher content;
+                        content.Span<TracedTrailSegment>(m_Res.Trails.Segments);
+                        content.Span<TrailCell>(m_Res.Trails.Cells);
+                        content.Span<std::uint32_t>(m_Res.Trails.Coarse);
+                        content.Span<std::uint32_t>(m_Res.Trails.CellSegments);
+                        m_Res.TrailsHash = content.Digest();
                     }
                     else
                     {
