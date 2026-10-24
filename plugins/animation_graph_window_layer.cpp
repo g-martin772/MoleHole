@@ -26,8 +26,6 @@ namespace
 
     constexpr int kNavigateToContentRetryFrames = 15;
     constexpr float kMinEditorExtent = 64.0f;
-    constexpr double kMinEditorZoom = 0.05;
-    constexpr double kMaxEditorViewMagnitude = 1.0e6;
     constexpr std::uint64_t kHighlightTicks = 30;
 
     ImVec4 PinColor(const PinType type) { return ToVec4(GraphPinColor(type)); }
@@ -101,24 +99,6 @@ namespace
     {
         for (const auto& entity : entities) { if (entity.Guid == guid) return &entity; }
         return nullptr;
-    }
-
-    bool EditorViewSane(std::string_view json)
-    {
-        static constexpr std::string_view kZoomKey = "\"zoom\":";
-        const std::size_t zoomAt = json.find(kZoomKey);
-        if (zoomAt == std::string_view::npos) return false;
-        for (std::size_t i = 0; i < json.size();)
-        {
-            const char c = json[i];
-            if (c != '-' && c != '.' && !(c >= '0' && c <= '9')) { ++i; continue; }
-            double value = 0.0;
-            const auto [end, ec] = std::from_chars(json.data() + i, json.data() + json.size(), value);
-            if (ec != std::errc{} || !std::isfinite(value) || std::abs(value) > kMaxEditorViewMagnitude) return false;
-            if (i == zoomAt + kZoomKey.size() && value < kMinEditorZoom) return false;
-            i = static_cast<std::size_t>(end - json.data());
-        }
-        return true;
     }
 
     bool EntityMatchesCategory(const EntityOption& entity, const Node& node)
@@ -927,25 +907,29 @@ namespace
             std::ifstream file(viewPath, std::ios::binary);
             if (!file) return 0;
             const std::string json((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-            if (!EditorViewSane(json))
+            if (!NodeEditorViewSane(json))
             {
-                static_cast<AnimationGraphWindowLayer*>(user)->m_Logger->Error("[AnimationGraph] Discarding corrupt node editor view '{}'", viewPath.string());
+                static_cast<AnimationGraphWindowLayer*>(user)->m_Logger->Warn("[AnimationGraph] Discarding unusable node editor view '{}'", viewPath.string());
                 file.close();
                 std::error_code ec;
                 std::filesystem::remove(viewPath, ec);
                 return 0;
             }
-            if (data) std::memcpy(data, json.data(), json.size());
-            return json.size();
+            const std::string stripped = StripVisibleRect(json);
+            if (data) std::memcpy(data, stripped.data(), stripped.size());
+            return stripped.size();
         }
 
         static bool SaveEditorView(const char* data, std::size_t size, ed::SaveReasonFlags, void* user)
         {
-            if (!EditorViewSane({data, size}))
+            if (!NodeEditorViewSane({data, size}))
             {
-                static_cast<AnimationGraphWindowLayer*>(user)->m_Logger->Error("[AnimationGraph] Refusing to save corrupt node editor view");
-                return false;
+                auto* self = static_cast<AnimationGraphWindowLayer*>(user);
+                if (!std::exchange(self->m_ViewRefusalLogged, true))
+                    self->m_Logger->Warn("[AnimationGraph] Not saving node editor view while it is out of range");
+                return true;
             }
+            static_cast<AnimationGraphWindowLayer*>(user)->m_ViewRefusalLogged = false;
             return WriteFileAtomic(EditorViewPath(user), std::string_view(data, size)).has_value();
         }
 
@@ -956,6 +940,7 @@ namespace
             config.LoadSettings = &LoadEditorView;
             config.SaveSettings = &SaveEditorView;
             config.UserPointer = this;
+            config.CanvasSizeMode = ed::CanvasSizeMode::CenterOnly;
             config.EnableSmoothZoom = true;
             config.SmoothZoomPower = 1.15f;
             return ed::CreateEditor(&config);
@@ -2560,6 +2545,7 @@ namespace
         bool m_PaletteFocus = false;
         bool m_NeedsPositionRestore = true;
         int m_PendingNavigateFrames = 0;
+        bool m_ViewRefusalLogged = false;
         int m_SelectedNodeId = 0;
 
         struct ParamEdit

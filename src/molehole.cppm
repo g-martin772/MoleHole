@@ -68,6 +68,7 @@ export import :UI.FuzzySearch;
 export import :UI.AssetCatalog;
 export import :UI.AssetPicker;
 export import :UI.GraphStyle;
+export import :UI.NodeEditorView;
 export import :UI.Widgets;
 export import :UI.RenderSettingsWidgets;
 export import :UI.IntroTimeline;
