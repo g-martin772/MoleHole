@@ -106,6 +106,11 @@ namespace
                     m_AppState->RemoveRecent(action.Path);
                     RefreshRecents();
                     break;
+                case LauncherAction::Rescan:
+                    m_Data.Templates = CollectTemplates();
+                    RefreshRecents();
+                    RefreshCrashNotice();
+                    break;
                 case LauncherAction::Quit: Application::Instance().Stop(); break;
                 case LauncherAction::Custom: HandleCustom(action.Path); break;
                 default: break;
