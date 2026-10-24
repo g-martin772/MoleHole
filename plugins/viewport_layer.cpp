@@ -656,6 +656,7 @@ namespace
             {
                 if (sim->Play->Resume(sim->Runner)) m_Pipeline.ClearObjectPaths();
             }
+            m_UiState->PlaySessionActive = sim->Runner && sim->Play->Active();
 
             if (m_UiState->PendingStopSimulation.exchange(false) && sim->Runner)
             {

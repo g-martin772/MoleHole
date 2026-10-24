@@ -35,21 +35,6 @@ namespace
         return changed;
     }
 
-    std::string FormatSimTime(const double seconds)
-    {
-        const double magnitude = std::abs(seconds);
-        if (magnitude == 0.0) return "0 s";
-        if (magnitude < 1e-3) return std::format("{:.3f} us", seconds * 1e6);
-        if (magnitude < 1.0) return std::format("{:.3f} ms", seconds * 1e3);
-        if (magnitude < 60.0) return std::format("{:.3f} s", seconds);
-        constexpr double kYear = 365.25 * 86400.0;
-        if (magnitude >= kYear) return std::format("{:.4f} yr", seconds / kYear);
-        const auto whole = static_cast<long long>(seconds);
-        const auto days = whole / 86400;
-        const auto clock = std::format("{:02}:{:02}:{:02}", whole / 3600 % 24, whole / 60 % 60, whole % 60);
-        return days > 0 ? std::format("{} d {}", days, clock) : clock;
-    }
-
     struct SimulationWindowLayer final : public HotReloadableLayer
     {
         using Dependencies = std::tuple<Logger, SceneManager, UiState>;

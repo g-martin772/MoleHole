@@ -41,6 +41,7 @@ set(MOLEHOLE_UI_PLUGINS
         launcher_layer
         intro_layer
         dock_layout_layer
+        status_bar_layer
         sidebar_layer
         topbar_layer
         scene_window_layer

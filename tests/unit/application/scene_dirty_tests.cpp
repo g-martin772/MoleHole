@@ -148,3 +148,15 @@ TEST_CASE("A failed save keeps the previous file intact", "[scene-dirty][save]")
     for ([[maybe_unused]] const auto& entry : fs::directory_iterator(locked))
         CHECK(entry.path().extension() != ".tmp");
 }
+
+TEST_CASE("SceneDirty remembers when it was saved", "[scene-dirty]")
+{
+    SceneDirty state;
+    CHECK_FALSE(state.SavedAt().has_value());
+    const auto before = SceneDirty::Clock::now();
+    state.MarkSaved(1);
+    REQUIRE(state.SavedAt());
+    CHECK(*state.SavedAt() >= before);
+    state.Reset(5);
+    CHECK_FALSE(state.SavedAt().has_value());
+}

@@ -11,10 +11,13 @@ export namespace MoleHole
     public:
         static constexpr std::uint64_t kNeverSaved = std::numeric_limits<std::uint64_t>::max();
 
+        using Clock = std::chrono::steady_clock;
+
         void Reset(const std::uint64_t revision) noexcept
         {
             m_Saved.store(revision, std::memory_order_release);
             m_Live.store(revision, std::memory_order_release);
+            m_SavedAtTicks.store(0, std::memory_order_release);
         }
 
         void Observe(const std::uint64_t revision) noexcept { m_Live.store(revision, std::memory_order_release); }
@@ -23,6 +26,14 @@ export namespace MoleHole
         void MarkSaved(const std::uint64_t revision, const bool exact = true) noexcept
         {
             m_Saved.store(exact ? revision : kNeverSaved, std::memory_order_release);
+            m_SavedAtTicks.store(Clock::now().time_since_epoch().count(), std::memory_order_release);
+        }
+
+        [[nodiscard]] std::optional<Clock::time_point> SavedAt() const noexcept
+        {
+            const auto ticks = m_SavedAtTicks.load(std::memory_order_acquire);
+            if (ticks == 0) return std::nullopt;
+            return Clock::time_point(Clock::duration(ticks));
         }
 
         [[nodiscard]] std::uint64_t LiveRevision() const noexcept { return m_Live.load(std::memory_order_acquire); }
@@ -35,6 +46,7 @@ export namespace MoleHole
     private:
         std::atomic<std::uint64_t> m_Saved{0};
         std::atomic<std::uint64_t> m_Live{0};
+        std::atomic<Clock::rep> m_SavedAtTicks{0};
     };
 
     struct SceneAction

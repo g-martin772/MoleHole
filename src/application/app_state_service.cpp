@@ -116,6 +116,7 @@ namespace MoleHole
                 if (const auto v = ui["ShowAnimationGraphWindow"])
                     m_UiState->ShowAnimationGraphWindow = v.as<bool>();
                 if (const auto v = ui["ShowUndoHistoryWindow"]) m_UiState->ShowUndoHistoryWindow = v.as<bool>();
+                if (const auto v = ui["ShowStatusBar"]) m_UiState->ShowStatusBar = v.as<bool>();
                 if (const auto v = ui["UndoHistoryCapacity"]) m_UiState->UndoHistoryCapacity = std::clamp(v.as<int>(), 16, 100000);
             }
             if (const auto autosave = node["Autosave"])
@@ -244,6 +245,7 @@ namespace MoleHole
             root["UI"]["DisplayUnits"] = std::string(Units::DisplayPresetName(Units::GetDisplayPreset()));
             root["UI"]["ShowAnimationGraphWindow"] = m_UiState->ShowAnimationGraphWindow;
             root["UI"]["ShowUndoHistoryWindow"] = m_UiState->ShowUndoHistoryWindow;
+            root["UI"]["ShowStatusBar"] = m_UiState->ShowStatusBar;
             root["UI"]["UndoHistoryCapacity"] = m_UiState->UndoHistoryCapacity;
 
             root["Autosave"]["Enabled"] = m_UiState->AutosaveEnabled;

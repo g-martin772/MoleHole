@@ -485,6 +485,7 @@ namespace
                 ImGui::MenuItem("Profiler", nullptr, &m_UiState->ShowProfilerWindow);
                 ImGui::MenuItem("Log", nullptr, &m_UiState->ShowLogWindow);
                 ImGui::MenuItem("Undo History", nullptr, &m_UiState->ShowUndoHistoryWindow);
+                ImGui::MenuItem("Status Bar", nullptr, &m_UiState->ShowStatusBar);
                 ImGui::MenuItem("Scene", nullptr, &m_UiState->ShowSceneWindow);
                 ImGui::MenuItem("Render", nullptr, &m_UiState->ShowRenderWindow);
                 ImGui::MenuItem("Simulation", nullptr, &m_UiState->ShowSimulationWindow);

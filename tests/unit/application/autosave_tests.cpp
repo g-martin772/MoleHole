@@ -272,3 +272,13 @@ TEST_CASE("Startup parses --recover as an explicit editor start", "[autosave]")
     CHECK_FALSE(parsed.Scene);
     CHECK(SelectStartupMode(parsed, StartupPrefs{}) == StartupMode::Editor);
 }
+
+TEST_CASE("Autosave reports failing until the next success", "[autosave]")
+{
+    auto scheduler = FileScheduler();
+    CHECK_FALSE(scheduler.Failing());
+    scheduler.Failed(Action::SaveFile, kStart);
+    CHECK(scheduler.Failing());
+    scheduler.Succeeded(Action::SaveFile, kStart + 10s);
+    CHECK_FALSE(scheduler.Failing());
+}

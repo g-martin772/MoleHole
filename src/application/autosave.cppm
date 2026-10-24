@@ -93,6 +93,8 @@ export namespace MoleHole
             return streak;
         }
 
+        [[nodiscard]] bool Failing() const noexcept { return m_Failures[0] > 0 || m_Failures[1] > 0; }
+
         [[nodiscard]] Clock::duration Backoff(const int streak) const
         {
             auto wait = m_Config.BackoffBase;
