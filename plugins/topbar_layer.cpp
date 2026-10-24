@@ -58,6 +58,7 @@ namespace
             ApplyHistoryCapacity();
             HandleShortcuts();
             HandleHistoryShortcuts();
+            HandleActionRequests();
             RenderMenuBar();
             RenderCreatePopup();
             RenderSettingsPopup();
@@ -68,8 +69,6 @@ namespace
         }
 
     private:
-        struct TemplateEntry { std::string Label; std::string Path; };
-
         void HandleShortcuts()
         {
             if (ImGui::GetIO().WantTextInput) return;
@@ -77,6 +76,33 @@ namespace
             else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_S)) DoSave();
             else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_O)) DoOpen();
             else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_N)) DoNewScene();
+        }
+
+        void HandleActionRequests()
+        {
+            for (const auto& request : m_UiState->Actions.Take({"file.", "edit.undo", "edit.redo"}))
+            {
+                const auto& id = request.Id;
+                if (id == "file.new") DoNewScene();
+                else if (id == "file.open") DoOpen();
+                else if (id == "file.save") DoSave();
+                else if (id == "file.save_as") DoSaveAs();
+                else if (id == "file.close") RequestAction({SceneAction::Kind::CloseToLauncher, {}});
+                else if (id == "file.launcher") OpenLauncherWindow();
+                else if (id == "file.export") OpenExportDialog();
+                else if (id == "file.quit") RequestAction({SceneAction::Kind::Quit, {}});
+                else if (id == "file.template") RequestAction({SceneAction::Kind::OpenTemplate, request.Arg});
+                else if (id == "edit.undo") StepHistory(false);
+                else if (id == "edit.redo") StepHistory(true);
+            }
+        }
+
+        void OpenLauncherWindow()
+        {
+            if (const auto spawned = SpawnSelf(std::vector<std::string>{"--launcher"}); !spawned)
+            {
+                m_Logger->Error("Failed to open the launcher: {}", spawned.error());
+            }
         }
 
         [[nodiscard]] std::shared_ptr<SimulationRunner> CurrentRunner() const
@@ -381,35 +407,19 @@ namespace
             }
         }
 
-        [[nodiscard]] std::vector<TemplateEntry> CollectTemplatePaths() const
-        {
-            std::vector<TemplateEntry> result;
-            std::error_code ec;
-            const auto dir = m_FileSystem->ResolvePath("templates");
-            if (!std::filesystem::exists(dir, ec)) return result;
-            for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
-            {
-                if (ec) break;
-                if (entry.path().extension() != ".yaml") continue;
-                result.push_back({entry.path().stem().string(), entry.path().string()});
-            }
-            std::ranges::sort(result, {}, &TemplateEntry::Label);
-            return result;
-        }
-
         void RenderMenuBar()
         {
             if (!ImGui::BeginMainMenuBar()) return;
 
             if (ImGui::BeginMenu("File"))
             {
-                if (ImGui::MenuItem("New Scene", "Ctrl+N"))
+                if (ImGui::MenuItem("New Scene", ActionShortcut("file.new").c_str()))
                 {
                     DoNewScene();
                 }
                 if (ImGui::BeginMenu("New from Template"))
                 {
-                    const auto templates = CollectTemplatePaths();
+                    const auto templates = CollectTemplates(m_FileSystem->ResolvePath("templates"));
                     if (templates.empty())
                     {
                         ImGui::TextDisabled("(no templates found)");
@@ -423,7 +433,7 @@ namespace
                     }
                     ImGui::EndMenu();
                 }
-                if (ImGui::MenuItem("Open Scene...", "Ctrl+O"))
+                if (ImGui::MenuItem("Open Scene...", ActionShortcut("file.open").c_str()))
                 {
                     DoOpen();
                 }
@@ -439,11 +449,11 @@ namespace
                     }
                     ImGui::EndMenu();
                 }
-                if (ImGui::MenuItem("Save Scene", "Ctrl+S"))
+                if (ImGui::MenuItem("Save Scene", ActionShortcut("file.save").c_str()))
                 {
                     DoSave();
                 }
-                if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S"))
+                if (ImGui::MenuItem("Save Scene As...", ActionShortcut("file.save_as").c_str()))
                 {
                     DoSaveAs();
                 }
@@ -467,10 +477,7 @@ namespace
                 }
                 if (ImGui::MenuItem("Launcher..."))
                 {
-                    if (const auto spawned = SpawnSelf(std::vector<std::string>{"--launcher"}); !spawned)
-                    {
-                        m_Logger->Error("Failed to open the launcher: {}", spawned.error());
-                    }
+                    OpenLauncherWindow();
                 }
                 if (ImGui::IsItemHovered())
                 {
@@ -512,6 +519,9 @@ namespace
                     StartTutorial(*m_UiState);
                 }
                 ImGui::Separator();
+                if (ImGui::MenuItem("Command Palette...", ActionShortcut("help.palette").c_str())) m_UiState->PaletteRequested = true;
+                if (ImGui::MenuItem("Keyboard Shortcuts", ActionShortcut("help.shortcuts").c_str())) m_UiState->ShowShortcutSheet = true;
+                ImGui::Separator();
                 if (ImGui::MenuItem("About"))
                 {
                     m_UiState->ShowSettingsWindow = true;
@@ -522,9 +532,9 @@ namespace
             ImGui::EndMainMenuBar();
         }
 
-        static void HistoryMenuEntry(const HistoryMenuItem& item, const std::function<void()>& run)
+        static void HistoryMenuEntry(const HistoryMenuItem& item, const char* id, const std::function<void()>& run)
         {
-            if (ImGui::MenuItem(item.Text.c_str(), item.Shortcut.c_str(), false, item.Enabled)) run();
+            if (ImGui::MenuItem(item.Text.c_str(), ActionShortcut(id).c_str(), false, item.Enabled)) run();
             if (!item.Enabled && !item.Reason.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                 ImGui::SetTooltip("%s", item.Reason.c_str());
         }
@@ -539,26 +549,26 @@ namespace
             const bool redoAvailable = runner && runner->CanRedo();
 
             HistoryMenuEntry(MakeHistoryMenuItem(false, hasScene, playing, undoAvailable, undoAvailable ? runner->UndoLabel() : ""),
-                             [&] { StepHistory(false); });
+                             "edit.undo", [&] { StepHistory(false); });
             HistoryMenuEntry(MakeHistoryMenuItem(true, hasScene, playing, redoAvailable, redoAvailable ? runner->RedoLabel() : ""),
-                             [&] { StepHistory(true); });
+                             "edit.redo", [&] { StepHistory(true); });
             ImGui::MenuItem("Undo History...", nullptr, &m_UiState->ShowUndoHistoryWindow);
             ImGui::Separator();
 
             auto& edits = m_UiState->Edits;
-            const bool selected = hasScene && m_UiState->SelectedEntityGuid != 0;
-            const auto entry = [&](const char* label, const char* shortcut, const bool enabled, const EditAction action,
-                                   const char* reason)
+            const auto context = MakeActionContext(*m_UiState, runner.get());
+            const auto entry = [&](const char* label, const char* id, const EditAction action)
             {
-                if (ImGui::MenuItem(label, shortcut, false, enabled)) edits.Push(action);
-                if (!enabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", reason);
+                const auto reason = ActionDisabledReason(id, context);
+                if (ImGui::MenuItem(label, ActionShortcut(id).c_str(), false, reason.empty())) edits.Push(action);
+                if (!reason.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", reason.c_str());
             };
-            entry("Select All", "Ctrl+A", hasScene, EditAction::SelectAll, "No scene loaded");
-            entry("Duplicate", "Ctrl+D", selected, EditAction::Duplicate, "No entity selected");
-            entry("Delete", "Del", selected, EditAction::Delete, "No entity selected");
-            entry("Rename", "F2", selected, EditAction::Rename, "No entity selected");
-            entry("Frame Selected", "F", selected, EditAction::FrameSelected, "No entity selected");
-            entry("Deselect", "Esc", selected, EditAction::Deselect, "No entity selected");
+            entry("Select All", "edit.select_all", EditAction::SelectAll);
+            entry("Duplicate", "edit.duplicate", EditAction::Duplicate);
+            entry("Delete", "edit.delete", EditAction::Delete);
+            entry("Rename", "edit.rename", EditAction::Rename);
+            entry("Frame Selected", "edit.frame", EditAction::FrameSelected);
+            entry("Deselect", "edit.deselect", EditAction::Deselect);
             ImGui::Separator();
             if (ImGui::MenuItem("Preferences...")) m_UiState->ShowSettingsWindow = true;
             ImGui::EndMenu();
