@@ -2,6 +2,7 @@ export module MoleHole;
 export import :Application.State;
 export import :Application.Startup;
 export import :Application.SceneLoader;
+export import :Application.SceneDirty;
 export import :Application.Export;
 export import :Application.Cli;
 export import :Application.ReplayCli;

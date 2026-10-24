@@ -242,8 +242,8 @@ namespace
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) HandleSceneUndoShortcuts(*runner);
 
             ImFont* icons = m_UiState->IconFont;
-            ImGui::TextDisabled("%s", m_UiState->CurrentScenePath.empty() ? "(unsaved)"
-                                                                          : m_UiState->CurrentScenePath.c_str());
+            ImGui::TextDisabled("%s%s", m_UiState->SceneState.IsDirty() ? "* " : "",
+                                m_UiState->CurrentScenePath.empty() ? "(unsaved)" : m_UiState->CurrentScenePath.c_str());
             ImGui::TextDisabled("%s", runner->IsPaused() ? "Paused" : "Running");
 
             if (BeginSection(icons, "Outliner"))

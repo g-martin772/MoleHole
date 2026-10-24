@@ -12,26 +12,47 @@ namespace
     struct TopBarLayer final : public HotReloadableLayer
     {
         using Dependencies = std::tuple<Logger, FileDialog, SceneManager, UiPreferences, FontAssetCatalog, UiState,
-                                        AppStateService, IFileSystem, RenderSettingsService, AppPaths>;
+                                        AppStateService, IFileSystem, RenderSettingsService, AppPaths, WindowManager,
+                                        AppInfo>;
 
         TopBarLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<FileDialog> fileDialog,
                    std::shared_ptr<SceneManager> scenes, std::shared_ptr<UiPreferences> uiPreferences,
                    std::shared_ptr<FontAssetCatalog> fontAssets, std::shared_ptr<UiState> uiState,
                    std::shared_ptr<AppStateService> appState, std::shared_ptr<IFileSystem> fileSystem,
-                   std::shared_ptr<RenderSettingsService> renderSettings, std::shared_ptr<AppPaths> appPaths)
+                   std::shared_ptr<RenderSettingsService> renderSettings, std::shared_ptr<AppPaths> appPaths,
+                   std::shared_ptr<WindowManager> windows, std::shared_ptr<AppInfo> appInfo)
             : HotReloadableLayer(logger), m_FileDialog(std::move(fileDialog)), m_Scenes(std::move(scenes)),
               m_UiPreferences(std::move(uiPreferences)), m_FontAssets(std::move(fontAssets)),
               m_UiState(std::move(uiState)), m_AppState(std::move(appState)), m_FileSystem(std::move(fileSystem)),
-              m_RenderSettings(std::move(renderSettings)), m_AppPaths(std::move(appPaths))
+              m_RenderSettings(std::move(renderSettings)), m_AppPaths(std::move(appPaths)), m_Windows(std::move(windows)),
+              m_AppInfo(std::move(appInfo))
         {
+        }
+
+        void OnAttach() override
+        {
+            m_Windows->SetCloseGuard([state = m_UiState]
+            {
+                if (!state->SceneState.IsDirty()) return true;
+                state->QuitRequested = true;
+                return false;
+            });
+        }
+
+        void OnDetach() override
+        {
+            m_Windows->SetCloseGuard({});
         }
 
         void OnUiRender() override
         {
+            if (m_UiState->QuitRequested.exchange(false)) RequestAction({SceneAction::Kind::Quit, {}});
             HandleShortcuts();
             RenderMenuBar();
             RenderSettingsPopup();
             RenderExportDialog();
+            RenderUnsavedPrompt();
+            UpdateWindowTitle();
         }
 
     private:
@@ -46,9 +67,106 @@ namespace
             else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_N)) DoNewScene();
         }
 
+        void RequestAction(SceneAction action)
+        {
+            if (m_UiState->UnsavedChanges.Request(action, m_UiState->SceneState.IsDirty())) RunAction(action);
+        }
+
+        void RunAction(const SceneAction& action)
+        {
+            switch (action.What)
+            {
+            case SceneAction::Kind::NewScene: m_UiState->PendingNewScene = true; break;
+            case SceneAction::Kind::OpenFile: m_UiState->PendingLoadScenePath.Set(action.Path); break;
+            case SceneAction::Kind::OpenTemplate: m_UiState->PendingLoadTemplatePath.Set(action.Path); break;
+            case SceneAction::Kind::CloseToLauncher: m_UiState->RequestRelaunch({"--launcher"}); break;
+            case SceneAction::Kind::Quit: Application::Instance().Stop(); break;
+            case SceneAction::Kind::None: break;
+            }
+        }
+
         void DoNewScene()
         {
-            m_UiState->PendingNewScene = true;
+            RequestAction({SceneAction::Kind::NewScene, {}});
+        }
+
+        [[nodiscard]] std::string DisplayName() const
+        {
+            if (!m_UiState->CurrentScenePath.empty())
+                return std::filesystem::path(m_UiState->CurrentScenePath).stem().string();
+            return m_UiState->CurrentSceneName;
+        }
+
+        void UpdateWindowTitle()
+        {
+            const auto name = DisplayName();
+            auto title = name.empty() ? m_AppInfo->Name
+                                      : std::format("{}{} - {}", name, m_UiState->SceneState.IsDirty() ? "*" : "", m_AppInfo->Name);
+            if (title == m_WindowTitle) return;
+            m_WindowTitle = title;
+            m_Windows->SetMainWindowTitle(std::move(title));
+        }
+
+        [[nodiscard]] static const char* ActionVerb(const SceneAction::Kind kind)
+        {
+            switch (kind)
+            {
+            case SceneAction::Kind::NewScene: return "creating a new scene";
+            case SceneAction::Kind::OpenFile:
+            case SceneAction::Kind::OpenTemplate: return "opening another scene";
+            case SceneAction::Kind::CloseToLauncher: return "closing the scene";
+            case SceneAction::Kind::Quit: return "quitting";
+            case SceneAction::Kind::None: break;
+            }
+            return "continuing";
+        }
+
+        void RenderUnsavedPrompt()
+        {
+            auto& prompt = m_UiState->UnsavedChanges;
+            if (!prompt.Open())
+            {
+                m_PromptFrames = 0;
+                return;
+            }
+            if (!ImGui::IsPopupOpen("Unsaved Changes")) ImGui::OpenPopup("Unsaved Changes");
+
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+            if (!ImGui::BeginPopupModal("Unsaved Changes", nullptr,
+                                        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
+            {
+                return;
+            }
+
+            ImGui::Text("\"%s\" has unsaved changes.", DisplayName().c_str());
+            ImGui::TextDisabled("Save them before %s?", ActionVerb(prompt.Pending().What));
+            ImGui::Spacing();
+
+            std::optional<UnsavedChoice> choice;
+            if (ImGui::Button("Save", ImVec2(110, 0))) choice = UnsavedChoice::Save;
+            if (m_PromptFrames == 0) ImGui::SetItemDefaultFocus();
+            ImGui::SameLine();
+            if (ImGui::Button("Discard", ImVec2(110, 0))) choice = UnsavedChoice::Discard;
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(110, 0))) choice = UnsavedChoice::Cancel;
+            ImGui::TextDisabled("Enter = Save   Esc = Cancel");
+
+            if (m_PromptFrames++ > 0 && !choice)
+            {
+                if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter))
+                    choice = UnsavedChoice::Save;
+                else if (ImGui::IsKeyPressed(ImGuiKey_Escape)) choice = UnsavedChoice::Cancel;
+            }
+
+            if (choice)
+            {
+                const bool saved = *choice == UnsavedChoice::Save && SaveCurrent();
+                const auto action = prompt.Resolve(*choice, saved);
+                if (!prompt.Open()) ImGui::CloseCurrentPopup();
+                if (action) RunAction(*action);
+            }
+            ImGui::EndPopup();
         }
 
         [[nodiscard]] std::filesystem::path ScenesDirectory() const
@@ -60,61 +178,75 @@ namespace
         {
             if (const auto path = m_FileDialog->OpenFile({FileDialogFilter{"Scene", "yaml"}}, ScenesDirectory()))
             {
-                m_UiState->PendingLoadScenePath.Set(path->string());
+                RequestAction({SceneAction::Kind::OpenFile, path->string()});
             }
+        }
+
+        bool SaveCurrent()
+        {
+            return m_UiState->CurrentScenePath.empty() ? DoSaveAs() : SaveLiveSceneTo(m_UiState->CurrentScenePath);
         }
 
         void DoSave()
         {
-            if (m_UiState->CurrentScenePath.empty())
-            {
-                DoSaveAs();
-                return;
-            }
-            SaveLiveSceneTo(m_UiState->CurrentScenePath);
+            SaveCurrent();
         }
 
-        void DoSaveAs()
+        bool DoSaveAs()
         {
             const auto defaultName = m_UiState->CurrentSceneName.empty()
                                          ? std::string("scene.yaml")
                                          : m_UiState->CurrentSceneName + ".yaml";
             if (const auto path = m_FileDialog->SaveFile({FileDialogFilter{"Scene", "yaml"}}, defaultName, ScenesDirectory()))
             {
-                SaveLiveSceneTo(*path);
+                return SaveLiveSceneTo(*path);
             }
+            return false;
         }
 
-        void SaveLiveSceneTo(const std::filesystem::path& path)
+        void SaveFailed(const std::string& reason)
+        {
+            m_Logger->Error("Failed to save scene: {}", reason);
+            m_Logger->Notifications()->Post(NotificationKind::Error, "Save failed", reason, 0.0f, "scene-save");
+        }
+
+        bool SaveLiveSceneTo(const std::filesystem::path& path)
         {
             try
             {
                 const auto runner = m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
                 if (!runner)
                 {
-                    m_Logger->Error("Failed to save scene: no active simulation for '{}'",
-                                   m_UiState->CurrentSceneName);
-                    return;
+                    SaveFailed(std::format("no active simulation for '{}'", m_UiState->CurrentSceneName));
+                    return false;
                 }
                 std::string yaml;
+                std::uint64_t revision = 0;
                 {
                     auto sceneLock = runner->LockRenderScene();
                     yaml = sceneLock->SerializeToYaml();
+                    revision = sceneLock.ContentRevision();
                 }
-                std::ofstream file(path, std::ios::binary | std::ios::trunc);
-                if (!file)
+                if (const auto saved = SaveSceneFile(path, yaml); !saved)
                 {
-                    m_Logger->Error("Failed to save scene: could not open '{}' for writing", path.string());
-                    return;
+                    SaveFailed(saved.error());
+                    return false;
                 }
-                file << yaml;
+                const bool running = !runner->IsPaused();
                 m_UiState->CurrentScenePath = path.string();
+                m_UiState->SceneState.MarkSaved(revision, !running);
                 m_Logger->Info("Scene saved to '{}'", m_UiState->CurrentScenePath);
+                m_Logger->Notifications()->Post(NotificationKind::Success, "Scene saved",
+                                                running ? path.string() + "\nSaved while running: this is the simulated state"
+                                                        : path.string(),
+                                                0.0f, "scene-save");
                 m_AppState->NotifySceneOpened(m_UiState->CurrentScenePath);
+                return true;
             }
             catch (const std::exception& error)
             {
-                m_Logger->Error("Failed to save scene: {}", error.what());
+                SaveFailed(error.what());
+                return false;
             }
         }
 
@@ -155,7 +287,7 @@ namespace
                     {
                         if (ImGui::MenuItem(entry.Label.c_str()))
                         {
-                            m_UiState->PendingLoadTemplatePath.Set(entry.Path);
+                            RequestAction({SceneAction::Kind::OpenTemplate, entry.Path});
                         }
                     }
                     ImGui::EndMenu();
@@ -171,7 +303,7 @@ namespace
                     {
                         if (ImGui::MenuItem(scene.c_str()))
                         {
-                            m_UiState->PendingLoadScenePath.Set(scene);
+                            RequestAction({SceneAction::Kind::OpenFile, scene});
                         }
                     }
                     ImGui::EndMenu();
@@ -187,7 +319,7 @@ namespace
                 ImGui::Separator();
                 if (ImGui::MenuItem("Close Scene (Launcher)"))
                 {
-                    m_UiState->RequestRelaunch({"--launcher"});
+                    RequestAction({SceneAction::Kind::CloseToLauncher, {}});
                 }
                 if (ImGui::MenuItem("Launcher..."))
                 {
@@ -501,6 +633,10 @@ namespace
         std::shared_ptr<RenderSettingsService> m_RenderSettings;
         std::shared_ptr<AppPaths> m_AppPaths;
 
+        std::shared_ptr<WindowManager> m_Windows;
+        std::shared_ptr<AppInfo> m_AppInfo;
+        std::string m_WindowTitle;
+        int m_PromptFrames = 0;
         std::string m_ExportProfile;
         bool m_ShowExportDialog = false;
         int m_ExportKind = 0; // 0 = Image, 1 = Video

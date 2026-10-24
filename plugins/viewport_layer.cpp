@@ -105,6 +105,7 @@ namespace
                 if (sim->Runner->GetTickRate() != m_UiState->SimulationTickRate)
                     sim->Runner->SetTickRate(m_UiState->SimulationTickRate);
                 if (!sim->Runner->IsPaused()) m_Pipeline.RecordObjectPaths(*sim->Runner->AcquireSnapshot());
+                m_UiState->SceneState.Observe(sim->Runner->AcquireSnapshot().ContentRevision());
             }
             auto render = m_RenderSettings->Effective();
             render.ResolutionScale *= m_UiState->RenderGovernorScale;
@@ -596,6 +597,7 @@ namespace
             runner->Start();
             runner->SetPaused(true);
             m_Sim.Publish(SimBinding{runner});
+            m_UiState->SceneState.Reset(runner->AcquireSnapshot().ContentRevision());
             m_UiState->CurrentSceneName = sceneName;
             m_UiState->SelectedEntityGuid = 0;
             m_Pipeline.ClearObjectPaths();

@@ -905,10 +905,10 @@ namespace
                 flush();
                 if (write.AsClosure())
                 {
-                    runner.EnqueueEdit([fn = write.AsClosure(), r = &runner](Scene& scene)
+                    runner.EnqueueSystemEdit([fn = write.AsClosure(), r = &runner](Scene& scene)
                     {
                         if (!r->IsPaused()) fn(scene);
-                    });
+                    }, false);
                 }
             }
             flush();

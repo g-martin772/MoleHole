@@ -12,13 +12,14 @@ export namespace MoleHole
         bool Resume(const std::shared_ptr<GPP::SimulationRunner>& runner)
         {
             const bool fresh = !m_Active.exchange(true);
-            runner->EnqueueTrackedEdit([self = shared_from_this(), runner = runner.get(), fresh](GPP::Scene& scene)
+            runner->EnqueueSystemEdit([self = shared_from_this(), runner = runner.get(), fresh](GPP::Scene& scene)
             {
                 if (fresh)
                 {
                     std::scoped_lock lock(self->m_Mutex);
                     self->m_Snapshot = scene.Clone();
                     self->m_Hidden = runner->CaptureState();
+                    self->m_Revision = runner->ContentRevision();
                 }
                 runner->ClearHistory();
                 runner->SetPaused(false);
@@ -29,21 +30,31 @@ export namespace MoleHole
         void Stop(const std::shared_ptr<GPP::SimulationRunner>& runner, std::optional<std::string> renderExtension)
         {
             m_Active = false;
-            runner->EnqueueEdit([self = shared_from_this(), runner = runner.get(), renderExtension = std::move(renderExtension)](GPP::Scene& scene)
+            runner->EnqueueSystemEdit([self = shared_from_this(), runner = runner.get(), renderExtension = std::move(renderExtension)](GPP::Scene& scene)
             {
                 std::optional<GPP::Scene> snapshot;
                 std::optional<GPP::RunnerState> hidden;
+                std::uint64_t revision = 0;
                 {
                     std::scoped_lock lock(self->m_Mutex);
                     snapshot = std::exchange(self->m_Snapshot, std::nullopt);
                     hidden = std::exchange(self->m_Hidden, std::nullopt);
+                    revision = self->m_Revision;
                 }
-                if (snapshot) GPP::Scene::SyncInto(*snapshot, scene);
-                if (renderExtension) StoreRenderExtension(scene, *renderExtension);
+                if (snapshot)
+                {
+                    GPP::Scene::SyncInto(*snapshot, scene);
+                    runner->RestoreContentRevision(revision);
+                }
+                if (renderExtension && *renderExtension != RenderExtensionText(scene))
+                {
+                    StoreRenderExtension(scene, *renderExtension);
+                    runner->MarkContentChanged();
+                }
                 if (hidden) runner->RestoreState(*hidden);
                 runner->ClearHistory();
                 runner->SetPaused(true);
-            });
+            }, false);
         }
 
         [[nodiscard]] bool Active() const noexcept { return m_Active.load(); }
@@ -52,6 +63,7 @@ export namespace MoleHole
         std::mutex m_Mutex;
         std::optional<GPP::Scene> m_Snapshot;
         std::optional<GPP::RunnerState> m_Hidden;
+        std::uint64_t m_Revision = 0;
         std::atomic<bool> m_Active{false};
     };
 }
