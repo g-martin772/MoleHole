@@ -90,7 +90,7 @@ namespace MoleHole
         {
             builder.AddHotReloadableLayer("intro", "molehole_intro_layer.so").SetBufferTarget(kIntroBufferId);
             for (const auto* id : {"dock-layout", "sidebar", "topbar", "scene-window", "camera-window",
-                                   "simulation-window", "render-window", "system-window", "viewport-hud",
+                                   "simulation-window", "render-window", "system-window", "profiler-window", "viewport-hud",
                                    "simulation-controls", "general-relativity-window", "science-window",
                                    "animation-graph-window", "tutorial-overlay", "log-window", "notifications"})
             {

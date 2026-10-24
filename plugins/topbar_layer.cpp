@@ -339,6 +339,7 @@ namespace
             {
                 ImGui::MenuItem("Camera", nullptr, &m_UiState->ShowCameraWindow);
                 ImGui::MenuItem("System", nullptr, &m_UiState->ShowSystemWindow);
+                ImGui::MenuItem("Profiler", nullptr, &m_UiState->ShowProfilerWindow);
                 ImGui::MenuItem("Log", nullptr, &m_UiState->ShowLogWindow);
                 ImGui::MenuItem("Scene", nullptr, &m_UiState->ShowSceneWindow);
                 ImGui::MenuItem("Render", nullptr, &m_UiState->ShowRenderWindow);

@@ -48,6 +48,7 @@ set(MOLEHOLE_UI_PLUGINS
         simulation_window_layer
         render_window_layer
         system_window_layer
+        profiler_window_layer
         log_window_layer
         notifications_layer
         viewport_hud_layer

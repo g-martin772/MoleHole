@@ -1,3 +1,5 @@
+module;
+#include <gpp/profile.h>
 module MoleHole;
 
 import :Rendering.Pipeline;
@@ -1505,6 +1507,7 @@ namespace MoleHole
 
     void RenderPipeline::Build(RenderGraph& graph, const RenderInputs& inputs)
     {
+        GPP_ZONE("Pipeline.Build");
         auto& impl = *m_Impl;
         auto& res = impl.Res;
         const auto colorTarget = graph.GetPrimaryColorTarget();
@@ -1535,7 +1538,7 @@ namespace MoleHole
         res.MeshTrace = {};
         res.TrailsActive = false;
         res.Textures->SetMaxSize(static_cast<std::uint32_t>(std::max(inputs.Settings.BodyTextureMaxSize, 0)));
-        res.Textures->Update(*res.UploadPool, res.Device->GetBackgroundQueue());
+        { GPP_ZONE("Textures.Update"); res.Textures->Update(*res.UploadPool, res.Device->GetBackgroundQueue()); }
         res.OverlayVertices.clear();
 
         // A debug view shows the tracer's raw output: no glow, flare, smoothing or tone mapping on top of it
@@ -1561,6 +1564,7 @@ namespace MoleHole
         for (const auto& stage : impl.Stages)
         {
             if (!stage->Enabled(settings)) continue;
+            ProfileZone stageZone(Profiler::IsEnabled() ? Profiler::Intern(std::format("Stage.{}", stage->Name())) : "Stage");
             graph.BeginScope(std::string(stage->Name()));
             stage->Record(context);
             graph.EndScope();
