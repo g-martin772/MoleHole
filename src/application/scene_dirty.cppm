@@ -5,7 +5,6 @@ import GPP;
 
 export namespace MoleHole
 {
-    // The open scene differs from the file when the content revision moved since the last save.
     class SceneDirty
     {
     public:
@@ -58,11 +57,9 @@ export namespace MoleHole
 
     enum class UnsavedChoice { Save, Discard, Cancel };
 
-    // Holds an action back until the user decided what happens to unsaved changes.
     class UnsavedPrompt
     {
     public:
-        // True when the action may run now; false when the prompt is open for it (or another action is waiting).
         [[nodiscard]] bool Request(SceneAction action, const bool dirty)
         {
             if (!dirty) return true;
@@ -74,7 +71,6 @@ export namespace MoleHole
         [[nodiscard]] bool Open() const noexcept { return m_Pending.What != SceneAction::Kind::None; }
         [[nodiscard]] const SceneAction& Pending() const noexcept { return m_Pending; }
 
-        // Save keeps the prompt open unless `saved`. Returns the action to run.
         [[nodiscard]] std::optional<SceneAction> Resolve(const UnsavedChoice choice, const bool saved = false)
         {
             switch (choice)

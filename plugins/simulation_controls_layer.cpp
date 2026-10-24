@@ -13,8 +13,8 @@ namespace
     constexpr const char* kIconPlay = "\xef\x81\x8b"; // U+F04B
     constexpr const char* kIconPause = "\xef\x81\x8c"; // U+F04C
     constexpr const char* kIconStop = "\xef\x81\x8d"; // U+F04D
-    constexpr const char* kIconStep = "\xef\x81\x91"; // U+F051
-    constexpr const char* kIconSnapshot = "\xef\x80\xb0"; // U+F030
+    constexpr const char* kIconStep = "\xef\x81\x91";
+    constexpr const char* kIconSnapshot = "\xef\x80\xb0";
 
     using ViewportToolbar::kIconWidth;
     constexpr float kGroupGap = 14.0f;

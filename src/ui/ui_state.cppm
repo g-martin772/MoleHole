@@ -152,7 +152,6 @@ export namespace MoleHole
         RecoveryStore Recovery;
         std::atomic<bool> DiscardOnExit{false};
         std::optional<RecoveredScene> RecoveredFrom;
-        // Set on the main thread when the window was asked to close while the scene has unsaved changes
         std::atomic<bool> QuitRequested{false};
         OneShot<std::string> PendingLoadScenePath;
         OneShot<std::string> PendingLoadTemplatePath;
