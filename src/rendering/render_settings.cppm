@@ -64,8 +64,8 @@ export namespace MoleHole
         FrameMode LengthUnit = FrameMode::PrimaryBlackHole;
 
         float ResolutionScale = 100.0f;
-        bool FrameGovernor = false;
-        float FrameBudgetMs = 33.3f;
+        bool FrameGovernor = true;
+        float FrameBudgetMs = 25.0f;
         bool Accumulate = true;
         int AccumulateMax = 64;
 
@@ -106,24 +106,48 @@ export namespace MoleHole
 
     [[nodiscard]] const GPP::SettingRegistry<RenderSettings>& RenderSettingRegistry();
 
-    // Frame-time governor: next multiplier (0.25..1) on the resolution scale. Shrinks when the frame time is over
-    // budget (pixel count is roughly proportional to frame time, so by the square root of the ratio), recovers slowly
-    // when well under it, and moves in 5 % steps so the tracer targets are not reallocated for tiny changes.
+    inline constexpr double kGovernorLowerAbove = 1.1;
+    inline constexpr double kGovernorRaiseBelow = 0.7;
+    inline constexpr double kGovernorSevereAbove = 2.0;
+    inline constexpr int kGovernorWindowsToMove = 2;
+
+    // One resolution step (multiplier 0.25..1): by the square root of the budget ratio when over budget (pixel
+    // count is roughly proportional to frame time), 5 % up when under. Moves in 5 % steps so the tracer targets
+    // are not reallocated for tiny changes.
     [[nodiscard]] inline float GovernorStep(const float scale, const double frameMs, const double budgetMs)
     {
         constexpr float kMin = 0.25f;
         float next = scale;
-        if (frameMs > budgetMs * 1.15 && frameMs > 0.0)
+        if (frameMs > budgetMs * kGovernorLowerAbove && frameMs > 0.0)
             next = scale * static_cast<float>(std::clamp(std::sqrt(budgetMs / frameMs), 0.75, 0.97));
-        else if (frameMs < budgetMs * 0.7)
+        else if (frameMs < budgetMs * kGovernorRaiseBelow)
             next = scale * 1.05f;
         next = std::round(std::clamp(next, kMin, 1.0f) * 20.0f) / 20.0f;
-        if (next == scale && frameMs > budgetMs * 1.15 && scale > kMin) next = std::max(kMin, scale - 0.05f);
-        if (next == scale && frameMs < budgetMs * 0.7 && scale < 1.0f) next = std::min(1.0f, scale + 0.05f);
+        if (next == scale && frameMs > budgetMs * kGovernorLowerAbove && scale > kMin) next = std::max(kMin, scale - 0.05f);
+        if (next == scale && frameMs < budgetMs * kGovernorRaiseBelow && scale < 1.0f) next = std::min(1.0f, scale + 0.05f);
         return next;
     }
 
-    // Applies GovernorStep twice a second; `active` false (reference views, exports, governor off) resets it to 1
+    struct GovernorState
+    {
+        int Over = 0;
+        int Under = 0;
+    };
+
+    // A change needs two consecutive windows outside the 0.7x..1.1x deadband (one above 2x the budget)
+    [[nodiscard]] inline float GovernorAdvance(GovernorState& state, const float scale, const double frameMs, const double budgetMs)
+    {
+        const bool over = frameMs > budgetMs * kGovernorLowerAbove;
+        const bool under = frameMs < budgetMs * kGovernorRaiseBelow;
+        state.Over = over ? state.Over + 1 : 0;
+        state.Under = under ? state.Under + 1 : 0;
+        const bool severe = frameMs > budgetMs * kGovernorSevereAbove;
+        if (!(severe || state.Over >= kGovernorWindowsToMove || state.Under >= kGovernorWindowsToMove)) return scale;
+        state = {};
+        return GovernorStep(scale, frameMs, budgetMs);
+    }
+
+    // Applies GovernorAdvance twice a second; `active` false (reference views, exports, governor off) resets it to 1
     class FrameGovernor
     {
     public:
@@ -134,13 +158,14 @@ export namespace MoleHole
             if (!active)
             {
                 m_Scale = 1.0f;
+                m_State = {};
                 return m_Scale;
             }
             if (now < m_HoldUntil) return m_Scale;
             if (now - m_Last >= std::chrono::milliseconds(500) && frameMs > 0.0)
             {
                 m_Last = now;
-                m_Scale = GovernorStep(m_Scale, frameMs, budgetMs);
+                m_Scale = GovernorAdvance(m_State, m_Scale, frameMs, budgetMs);
             }
             return m_Scale;
         }
@@ -150,10 +175,12 @@ export namespace MoleHole
         {
             m_HoldUntil = until;
             m_Last = until;
+            m_State = {};
         }
 
     private:
         float m_Scale = 1.0f;
+        GovernorState m_State;
         std::chrono::steady_clock::time_point m_HoldUntil;
         std::chrono::steady_clock::time_point m_Last;
     };

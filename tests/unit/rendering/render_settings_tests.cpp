@@ -676,3 +676,124 @@ TEST_CASE("The governor shrinks over budget, recovers with headroom and holds in
     CHECK(GovernorStep(1.0f, 33.0 * 1.16, 33.0) < 1.0f);
     CHECK(GovernorStep(0.5f, 33.0 * 0.69, 33.0) > 0.5f);
 }
+
+namespace
+{
+    double LoadMs(const float scale, const double fullMs) { return fullMs * scale * scale; }
+
+    float RunGovernor(GovernorState& state, float scale, const double fullMs, const double budgetMs, const int windows,
+                      std::vector<float>* history = nullptr)
+    {
+        for (int i = 0; i < windows; ++i)
+        {
+            scale = GovernorAdvance(state, scale, LoadMs(scale, fullMs), budgetMs);
+            if (history) history->push_back(scale);
+        }
+        return scale;
+    }
+}
+
+TEST_CASE("The governor needs two windows on one side to move and ignores the deadband", "[rendering][governor]")
+{
+    GovernorState state;
+    CHECK(GovernorAdvance(state, 1.0f, 25.0 * 1.2, 25.0) == 1.0f);
+    CHECK(GovernorAdvance(state, 1.0f, 25.0 * 1.2, 25.0) < 1.0f);
+
+    state = {};
+    CHECK(GovernorAdvance(state, 0.5f, 25.0 * 1.2, 25.0) == 0.5f);
+    CHECK(GovernorAdvance(state, 0.5f, 25.0 * 0.9, 25.0) == 0.5f);
+    CHECK(GovernorAdvance(state, 0.5f, 25.0 * 1.2, 25.0) == 0.5f);
+
+    state = {};
+    CHECK(GovernorAdvance(state, 0.5f, 25.0 * 0.6, 25.0) == 0.5f);
+    CHECK(GovernorAdvance(state, 0.5f, 25.0 * 0.6, 25.0) > 0.5f);
+
+    state = {};
+    for (int i = 0; i < 10; ++i) CHECK(GovernorAdvance(state, 0.8f, 25.0 * (i % 2 ? 1.09 : 0.71), 25.0) == 0.8f);
+
+    state = {};
+    CHECK(GovernorAdvance(state, 1.0f, 25.0 * 2.5, 25.0) < 1.0f);
+}
+
+TEST_CASE("A stable load converges and then stays put", "[rendering][governor]")
+{
+    for (const double fullMs : {40.0, 90.0, 400.0})
+    {
+        GovernorState state;
+        std::vector<float> history;
+        const float settled = RunGovernor(state, 1.0f, fullMs, 25.0, 60, &history);
+        INFO("full-scale frame " << fullMs << " ms");
+        CHECK(LoadMs(settled, fullMs) <= 25.0 * kGovernorLowerAbove);
+        CHECK(std::ranges::all_of(history | std::views::drop(30), [&](const float v) { return v == settled; }));
+    }
+}
+
+TEST_CASE("A light load keeps full resolution", "[rendering][governor]")
+{
+    GovernorState state;
+    std::vector<float> history;
+    RunGovernor(state, 1.0f, 12.0, 25.0, 40, &history);
+    CHECK(std::ranges::all_of(history, [](const float v) { return v == 1.0f; }));
+}
+
+TEST_CASE("After a load spike the governor drops and then recovers without oscillating", "[rendering][governor]")
+{
+    GovernorState state;
+    float scale = RunGovernor(state, 1.0f, 15.0, 25.0, 10);
+    CHECK(scale == 1.0f);
+
+    std::vector<float> history;
+    scale = RunGovernor(state, scale, 120.0, 25.0, 40, &history);
+    CHECK(scale < 0.6f);
+    CHECK(scale >= 0.25f);
+
+    history.clear();
+    scale = RunGovernor(state, scale, 15.0, 25.0, 60, &history);
+    CHECK(scale == 1.0f);
+    CHECK(std::ranges::is_sorted(history));
+
+    int reversals = 0;
+    float previous = 1.0f;
+    int direction = 0;
+    scale = 1.0f;
+    for (int i = 0; i < 100; ++i)
+    {
+        scale = GovernorAdvance(state, scale, LoadMs(scale, 70.0), 25.0);
+        if (i < 30) continue;
+        const int now = scale > previous ? 1 : scale < previous ? -1 : 0;
+        if (now != 0 && direction != 0 && now != direction) ++reversals;
+        if (now != 0) direction = now;
+        previous = scale;
+    }
+    CHECK(reversals == 0);
+}
+
+TEST_CASE("The governor is on by default for Flat, Lensed and Traced, off for Reference", "[rendering][governor][profiles]")
+{
+    const RenderProfileSet set;
+    for (const char* name : {"Flat", "Lensed", "Traced"}) CHECK(set.Find(name)->Settings.FrameGovernor);
+    CHECK_FALSE(set.Find("Reference")->Settings.FrameGovernor);
+    CHECK(set.Find("Lensed")->Settings.FrameBudgetMs == 25.0f);
+}
+
+TEST_CASE("Stored profiles keep an explicit governor choice and pick up the new default otherwise", "[rendering][governor][profiles]")
+{
+    const auto node = YAML::Load(R"(
+Version: 1
+Contexts: {Edit: Quiet, Play: Plain}
+Profiles:
+  - Name: Quiet
+    Base: Lensed
+    Set: {sampling.governor: false, disk.height: 0.153}
+  - Name: Plain
+    Base: Lensed
+    Set: {disk.height: 0.153}
+)");
+    const auto set = RenderProfileSet::FromYaml(node);
+    CHECK_FALSE(set.Find("Quiet")->Settings.FrameGovernor);
+    CHECK(set.Find("Plain")->Settings.FrameGovernor);
+
+    const auto saved = RenderProfileSet::FromYaml(set.ToYaml());
+    CHECK_FALSE(saved.Find("Quiet")->Settings.FrameGovernor);
+    CHECK(saved.Find("Plain")->Settings.FrameGovernor);
+}

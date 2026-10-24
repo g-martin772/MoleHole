@@ -393,6 +393,7 @@ namespace MoleHole
             reference.AccretionDiskVolumetric = true;
             reference.LensFlare = false;
             reference.Accumulate = false;
+            reference.FrameGovernor = false;
             reference.RayStepSize = 0.01f;
             reference.MaxRaySteps = 100000;
             profiles.push_back(MakeBuiltIn("Reference", "Geodesic integration at reference tolerance with the volumetric disk. For final renders.", reference));

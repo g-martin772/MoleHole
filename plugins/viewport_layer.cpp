@@ -729,8 +729,12 @@ namespace
             const bool active = settings.FrameGovernor && (context == RenderContext::Edit || context == RenderContext::Play);
             if (m_LastStep.Rung > 0) m_Governor.Hold(std::chrono::steady_clock::now() + std::chrono::milliseconds(700));
             const auto stats = active ? m_Renderer->GetBufferTargetStats(kViewportBufferId) : std::nullopt;
+            const float previous = m_UiState->RenderGovernorScale;
             m_UiState->RenderGovernorScale = m_Governor.Update(active && stats && stats->Visible,
                                                                stats ? stats->AverageFrameMs : 0.0, settings.FrameBudgetMs);
+            if (m_UiState->RenderGovernorScale != previous)
+                m_Logger->Trace("Governor: {:.0f}% -> {:.0f}% (frame {:.1f} ms, budget {:.1f} ms)", previous * 100.0f,
+                                m_UiState->RenderGovernorScale * 100.0f, stats ? stats->AverageFrameMs : 0.0, settings.FrameBudgetMs);
         }
 
         LadderStep StepRefinement(const RenderSettings& settings, const std::uint64_t sceneKey)
