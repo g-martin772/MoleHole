@@ -116,6 +116,24 @@ TEST_CASE("Status items describe the simulation and autosave state", "[ui][statu
     CHECK_FALSE(Has(items.Right, "shader-error"));
 }
 
+TEST_CASE("An idle viewport shows idle instead of a zero frame rate", "[ui][status]")
+{
+    auto model = Busy();
+    model.Fps = 0.0;
+    model.ViewportIdle = true;
+    auto items = BuildStatusItems(model);
+    auto fps = std::ranges::find(items.Right, "fps", &StatusItem::Id);
+    REQUIRE(fps != items.Right.end());
+    CHECK(fps->Text[0] == "idle");
+    CHECK(fps->Tone == StatusTone::Dim);
+
+    model.ViewportIdle = false;
+    model.Fps = 58.0;
+    items = BuildStatusItems(model);
+    fps = std::ranges::find(items.Right, "fps", &StatusItem::Id);
+    CHECK(fps->Text[0] == "58 fps");
+}
+
 TEST_CASE("Status layout drops low priority items first and keeps the shader error", "[ui][status]")
 {
     const auto items = BuildStatusItems(Busy());

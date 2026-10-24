@@ -29,6 +29,7 @@ export namespace MoleHole
 
         std::optional<double> GpuMs;
         std::optional<double> Fps;
+        bool ViewportIdle = false;
         float TracerPercent = 100.0f;
         bool ResolutionLowered = false;
 
@@ -237,7 +238,12 @@ export namespace MoleHole
             items.Right.push_back({"gpu", {std::format("GPU {:.1f} ms", *m.GpuMs), std::format("{:.1f} ms", *m.GpuMs)}, 65,
                                    StatusTone::Normal, "Viewport GPU time of the last frame", false});
         }
-        if (m.Fps)
+        if (m.Fps && m.ViewportIdle)
+        {
+            items.Right.push_back({"fps", {"idle"}, 60, StatusTone::Dim,
+                                   "Nothing changed, so the viewport stopped rendering", false});
+        }
+        else if (m.Fps)
         {
             items.Right.push_back({"fps", {std::format("{:.0f} fps", *m.Fps)}, 60, StatusTone::Normal, "Viewport frame rate", false});
         }
