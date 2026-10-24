@@ -1,5 +1,6 @@
 module;
 #include <cstddef>
+#include <gpp/profile.h>
 export module MoleHole:Rendering.MeshScene;
 
 import std;
@@ -64,9 +65,12 @@ export namespace MoleHole
         MeshSceneFrame Prepare(GPP::RenderGraph& graph, const GPP::Scene& scene, const RenderFrame& frame,
                                const RenderSettings& settings, const bool buildTlas, const GPP::VulkanImage& fallbackTexture)
         {
+            GPP_ZONE("Mesh.Prepare");
             MeshSceneFrame out;
-            std::vector<MeshInstanceGpu> records;
-            std::vector<GPP::TlasInstance> instances;
+            auto& records = m_Records;
+            auto& instances = m_TlasInstances;
+            records.clear();
+            instances.clear();
             glm::vec4 bounds{0.0f};
 
             for (auto [entity, meshComponent, transform] :
@@ -138,10 +142,13 @@ export namespace MoleHole
             }
             slot.Records->Upload(records.data(), bytes);
 
+            const auto previousScope = graph.CurrentScope();
+            graph.BeginScope("MeshAccel");
             graph.AddComputePass("MeshAccel", {}, {}, [tlas = slot.Tlas.get()](const vk::CommandBuffer cmd, GPP::RenderGraph&)
             {
                 tlas->RecordBuild(cmd);
             });
+            graph.BeginScope(previousScope);
 
             out.HasTlas = true;
             out.Tlas = slot.Tlas->GetHandle();
@@ -257,6 +264,8 @@ export namespace MoleHole
         DiskLightCache m_DiskCache;
         std::unordered_map<const GPP::GltfPrimitive*, CachedPrimitive> m_Primitives;
         std::vector<const GPP::GltfPrimitive*> m_UnbuiltBlas;
+        std::vector<MeshInstanceGpu> m_Records;
+        std::vector<GPP::TlasInstance> m_TlasInstances;
         std::unique_ptr<GPP::VulkanBuffer> m_Dfg;
         std::array<Slot, kSlots> m_Slots;
         std::size_t m_NextSlot = 0;
