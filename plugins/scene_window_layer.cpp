@@ -54,7 +54,8 @@ namespace
     // The single place a descriptor field becomes a widget; returns the edited value when the user changed it.
     std::optional<FieldValue> DrawField(ImFont* icons, const FieldInfo& field, const FieldValue& current,
                                         const FieldValue* fallback, const std::vector<EntityChoice>& entities,
-                                        const AssetBrowser& browse = {})
+                                        const AssetBrowser& browse = {}, AssetPicker* picker = nullptr,
+                                        const AssetPickerHost* pickerHost = nullptr)
     {
         const auto& meta = field.Meta;
         const std::string label = meta.Label.empty() ? SpacedName(field.Name) : meta.Label;
@@ -150,11 +151,21 @@ namespace
                 if (asset)
                 {
                     ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-                    if (ImGui::Button("...", ImVec2(ImGui::GetFrameHeight(), 0.0f)))
+                    if (picker && pickerHost)
                     {
-                        if (auto picked = browse(field)) edited = std::move(*picked);
+                        if (auto picked = picker->Draw(*pickerHost, meta.Asset, text, [&] { return browse(field); }))
+                        {
+                            edited = std::move(*picked);
+                        }
                     }
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pick a file; images outside the project are imported");
+                    else
+                    {
+                        if (ImGui::Button("...", ImVec2(ImGui::GetFrameHeight(), 0.0f)))
+                        {
+                            if (auto picked = browse(field)) edited = std::move(*picked);
+                        }
+                        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pick a file; images outside the project are imported");
+                    }
                 }
                 break;
             }
@@ -934,6 +945,10 @@ namespace
             ImFont* icons = m_UiState->IconFont;
             if (!info.Note.empty()) ImGui::TextDisabled("%s", info.Note.c_str());
             const auto& defaults = DefaultsFor(m_Defaults, info);
+            const AssetPickerHost pickerHost{.Catalog = &m_AssetCatalog,
+                                             .ConfigFor = [this](const AssetFieldKind kind) { return AssetConfig(kind); },
+                                             .Recents = m_AppState->GetRecentAssets(),
+                                             .Remember = [this](const std::string& path) { m_AppState->PushRecentAsset(path); }};
 
             std::vector<std::string> categories{""};
             for (const auto& field : info.Fields)
@@ -960,7 +975,8 @@ namespace
                     ImGui::PushID(field.Name.c_str());
                     if (auto edited = DrawField(icons, field, current,
                                                 def != defaults.end() ? &def->second : nullptr, choices,
-                                                [this](const FieldInfo& picked) { return BrowseAsset(picked); }))
+                                                [this](const FieldInfo& picked) { return BrowseAsset(picked); },
+                                                &m_AssetPicker, &pickerHost))
                     {
                         EditField(runner, guid, info.Name, field.Name, std::move(*edited));
                     }
@@ -971,6 +987,27 @@ namespace
                     ImGui::PopID();
                 }
             }
+        }
+
+        [[nodiscard]] AssetScanConfig AssetConfig(const AssetFieldKind kind) const
+        {
+            AssetScanConfig config;
+            config.ProjectRoot = m_FileSystem->GetWorkingDirectory();
+            if (kind == AssetFieldKind::Script)
+            {
+                config.Roots.push_back(m_FileSystem->ResolvePath("scripts"));
+                return config;
+            }
+            config.Roots.push_back(m_FileSystem->ResolvePath("assets"));
+            if (m_AppPaths->IsInstalled())
+            {
+                config.Roots.push_back(m_AppPaths->UserSubdir(kind == AssetFieldKind::Mesh ? "models" : "textures"));
+            }
+            if (kind == AssetFieldKind::Mesh)
+            {
+                for (const auto& directory : m_AppState->GetMeshScanDirectories()) config.Roots.emplace_back(directory);
+            }
+            return config;
         }
 
         // AssetPath fields: textures are imported into the project, other assets are referenced where they are
@@ -997,6 +1034,8 @@ namespace
             return result.AssetPath;
         }
 
+        AssetCatalog m_AssetCatalog;
+        AssetPicker m_AssetPicker;
         std::pair<std::string, std::string> m_ImportNote; // field name, message shown under it
         std::shared_ptr<SceneManager> m_Scenes;
         std::shared_ptr<UiState> m_UiState;

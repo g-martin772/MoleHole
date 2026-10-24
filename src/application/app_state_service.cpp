@@ -170,6 +170,10 @@ namespace MoleHole
             {
                 m_TutorialCompleted = v.as<bool>();
             }
+            if (const auto assets = node["RecentAssets"]; assets && assets.IsSequence())
+            {
+                for (const auto& entry : assets) m_RecentAssets.push_back(entry.as<std::string>());
+            }
             if (const auto scanDirs = node["MeshScanDirectories"]; scanDirs && scanDirs.IsSequence())
             {
                 for (const auto& entry : scanDirs)
@@ -260,6 +264,10 @@ namespace MoleHole
                 }
             }
             root["MeshScanDirectories"] = scanDirsNode;
+            {
+                std::scoped_lock lock(m_Mutex);
+                for (const auto& path : m_RecentAssets) root["RecentAssets"].push_back(path);
+            }
 
             auto backupPath = m_StatePath;
             backupPath += ".backup";
@@ -412,5 +420,17 @@ namespace MoleHole
     {
         std::scoped_lock lock(m_Mutex);
         return m_MeshScanDirectories;
+    }
+
+    void AppStateService::PushRecentAsset(const std::string& path)
+    {
+        std::scoped_lock lock(m_Mutex);
+        m_RecentAssets = MoleHole::PushRecentAsset(std::move(m_RecentAssets), path);
+    }
+
+    std::vector<std::string> AppStateService::GetRecentAssets() const
+    {
+        std::scoped_lock lock(m_Mutex);
+        return m_RecentAssets;
     }
 }

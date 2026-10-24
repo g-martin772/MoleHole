@@ -322,19 +322,24 @@ namespace MoleHole
                     GPP::Field("SpinAxis", &SphereComponent::SpinAxis,
                                {.Label = "Spin Axis", .Speed = 0.01, .Kind = GPP::FieldKind::Direction}),
                     GPP::Field("TexturePath", &SphereComponent::TexturePath,
-                               {.Label = "Texture", .Kind = GPP::FieldKind::AssetPath}),
+                               {.Label = "Texture", .Kind = GPP::FieldKind::AssetPath,
+                                .Asset = GPP::AssetFieldKind::Texture}),
                 }});
 
             GPP::RegisterComponent<SurfaceComponent>("Surface", GPP::ComponentDescription<SurfaceComponent>{
                 .Fields = {
                     GPP::Field("Albedo", &SurfaceComponent::Albedo,
-                               {.Label = "Albedo map", .Category = "Maps", .Kind = GPP::FieldKind::AssetPath}),
+                               {.Label = "Albedo map", .Category = "Maps", .Kind = GPP::FieldKind::AssetPath,
+                                .Asset = GPP::AssetFieldKind::Texture}),
                     GPP::Field("Normal", &SurfaceComponent::Normal,
-                               {.Label = "Normal map", .Category = "Maps", .Kind = GPP::FieldKind::AssetPath}),
+                               {.Label = "Normal map", .Category = "Maps", .Kind = GPP::FieldKind::AssetPath,
+                                .Asset = GPP::AssetFieldKind::Texture}),
                     GPP::Field("Roughness", &SurfaceComponent::Roughness,
-                               {.Label = "Roughness map", .Category = "Maps", .Kind = GPP::FieldKind::AssetPath}),
+                               {.Label = "Roughness map", .Category = "Maps", .Kind = GPP::FieldKind::AssetPath,
+                                .Asset = GPP::AssetFieldKind::Texture}),
                     GPP::Field("Emissive", &SurfaceComponent::Emissive,
-                               {.Label = "Emissive map", .Category = "Maps", .Kind = GPP::FieldKind::AssetPath}),
+                               {.Label = "Emissive map", .Category = "Maps", .Kind = GPP::FieldKind::AssetPath,
+                                .Asset = GPP::AssetFieldKind::Texture}),
                     GPP::Field("Tint", &SurfaceComponent::Tint,
                                {.Label = "Tint", .Category = "Material", .Kind = GPP::FieldKind::Color}),
                     GPP::Field("RoughnessFactor", &SurfaceComponent::RoughnessFactor,
@@ -389,7 +394,8 @@ namespace MoleHole
                 .DisplayName = "Cloud Layer",
                 .Fields = {
                     GPP::Field("Coverage", &CloudLayerComponent::Coverage,
-                               {.Label = "Coverage map", .Kind = GPP::FieldKind::AssetPath}),
+                               {.Label = "Coverage map", .Kind = GPP::FieldKind::AssetPath,
+                                .Asset = GPP::AssetFieldKind::Texture}),
                     GPP::Field("Altitude", &CloudLayerComponent::Altitude,
                                {.Label = "Altitude", .Min = 0.0, .Speed = 10.0, .Dim = GPP::Units::Dimension::Length}),
                     GPP::Field("Opacity", &CloudLayerComponent::Opacity,
@@ -401,7 +407,8 @@ namespace MoleHole
 
             GPP::RegisterComponent<TerrainComponent>("Terrain", GPP::ComponentDescription<TerrainComponent>{
                 .Fields = {
-                    GPP::Field("Height", &TerrainComponent::Height, {.Label = "Height map", .Kind = GPP::FieldKind::AssetPath}),
+                    GPP::Field("Height", &TerrainComponent::Height, {.Label = "Height map", .Kind = GPP::FieldKind::AssetPath,
+                                .Asset = GPP::AssetFieldKind::Texture}),
                     GPP::Field("HeightMin", &TerrainComponent::HeightMin,
                                {.Label = "Height of black", .Speed = 10.0, .Dim = GPP::Units::Dimension::Length}),
                     GPP::Field("HeightMax", &TerrainComponent::HeightMax,
@@ -420,7 +427,8 @@ namespace MoleHole
 
             GPP::RegisterComponent<RingComponent>("Ring", GPP::ComponentDescription<RingComponent>{
                 .Fields = {
-                    GPP::Field("Texture", &RingComponent::Texture, {.Label = "Radial strip", .Kind = GPP::FieldKind::AssetPath}),
+                    GPP::Field("Texture", &RingComponent::Texture, {.Label = "Radial strip", .Kind = GPP::FieldKind::AssetPath,
+                                .Asset = GPP::AssetFieldKind::Texture}),
                     GPP::Field("InnerRadius", &RingComponent::InnerRadius,
                                {.Label = "Inner radius", .Min = 0.0, .Speed = 1.0e5, .Dim = GPP::Units::Dimension::Length}),
                     GPP::Field("OuterRadius", &RingComponent::OuterRadius,
