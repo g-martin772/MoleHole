@@ -223,6 +223,19 @@ namespace MoleHole
                 .Label = "Frame budget", .Group = "Sampling", .Doc = kDoc, .Min = 4.0, .Max = 500.0,
                 .Scale = SettingScale::Log, .Format = "%.1f ms", .VisibleWhen = "sampling.governor"}));
 
+            registry.Add(Setting("sampling.accumulate", &R::Accumulate, {
+                .Label = "Progressive refinement", .Group = "Sampling",
+                .Tooltip = "While the view and the scene stand still, keeps rendering with sub-pixel jitter and averages the\n"
+                           "frames: smooth edges for free, then the GPU goes idle. Any change restarts it.\n"
+                           "Costs one extra pass per refining frame and one float image of the tracer's size.\n"
+                           "Never active in exports.",
+                .Doc = kDoc}));
+            registry.Add(Setting("sampling.accumulate_max", &R::AccumulateMax, {
+                .Label = "Refinement frames", .Group = "Sampling",
+                .Tooltip = "Frames averaged before the viewport stops rendering. More frames are smoother and keep the GPU\n"
+                           "busy longer (frames x frame time).",
+                .Doc = kDoc, .Min = 2, .Max = 1024, .Scale = SettingScale::Log, .VisibleWhen = "sampling.accumulate"}));
+
             registry.Add(Setting("post.tonemap", &R::ToneMapping, {
                 .Label = "Tone mapping", .Group = "Post",
                 .Tooltip = "Maps the HDR radiance of the tracer to the screen. None keeps the raw values (legacy look).",
@@ -379,6 +392,7 @@ namespace MoleHole
             reference.TransportMode = Transport::Integrated;
             reference.AccretionDiskVolumetric = true;
             reference.LensFlare = false;
+            reference.Accumulate = false;
             reference.RayStepSize = 0.01f;
             reference.MaxRaySteps = 100000;
             profiles.push_back(MakeBuiltIn("Reference", "Geodesic integration at reference tolerance with the volumetric disk. For final renders.", reference));

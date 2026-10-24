@@ -48,6 +48,7 @@ export import :Rendering.Frame;
 export import :Rendering.Settings;
 export import :Rendering.DebugLegend;
 export import :Rendering.SettingsService;
+export import :Rendering.Accumulation;
 export import :Rendering.Sidecar;
 export import :Rendering.Meshes;
 export import :Rendering.MeshTrace;

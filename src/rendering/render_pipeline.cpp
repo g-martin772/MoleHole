@@ -1,4 +1,5 @@
 module;
+#include <cstddef>
 #include <gpp/profile.h>
 module MoleHole;
 
@@ -58,6 +59,50 @@ namespace MoleHole
             return options;
         }
 
+        void RegisterPipeline(const RenderResources& res, const std::shared_ptr<ShaderPipeline>& pipeline)
+        {
+            std::scoped_lock lock(res.PipelineMutex);
+            res.Pipelines.push_back(pipeline);
+        }
+
+        void HashPipelines(SignatureHasher& hasher, const RenderResources& res)
+        {
+            std::scoped_lock lock(res.PipelineMutex);
+            std::erase_if(res.Pipelines, [](const auto& weak) { return weak.expired(); });
+            for (const auto& weak : res.Pipelines)
+            {
+                if (const auto pipeline = weak.lock())
+                {
+                    hasher.Pointer(pipeline.get());
+                    hasher.Pointer(pipeline->GetPipeline().get());
+                    hasher.Value(pipeline->GetCompilationProgress().generation);
+                }
+            }
+        }
+
+        void HashMeshFrame(SignatureHasher& hasher, const MeshSceneFrame& frame)
+        {
+            hasher.Value(frame.HasTlas);
+            hasher.Value(frame.InstanceCount);
+            hasher.Value(frame.Bounds);
+            for (const auto& draw : frame.Draws)
+            {
+                hasher.Value(draw.Model);
+                hasher.Value(draw.MaterialIndex);
+                hasher.Pointer(draw.Primitive);
+            }
+            hasher.Bytes(&frame.Lighting.Lights, frame.Lighting.Lights.UsedBytes());
+            hasher.Value(frame.Lighting.Params);
+            if (frame.Textures)
+            {
+                for (const auto& info : *frame.Textures)
+                {
+                    hasher.Value(static_cast<VkSampler>(info.sampler));
+                    hasher.Value(static_cast<VkImageView>(info.imageView));
+                }
+            }
+        }
+
         std::shared_ptr<ShaderPipeline> MakeComputePipeline(const RenderResources& res, std::string fileName,
                                                             std::unordered_map<std::string, std::string> defines = {})
         {
@@ -78,6 +123,7 @@ namespace MoleHole
             {
                 res.Logger->Error("RenderPipeline: failed to compile compute shader '{}'", fileName);
             }
+            RegisterPipeline(res, pipeline);
             return pipeline;
         }
 
@@ -114,6 +160,7 @@ namespace MoleHole
             {
                 res.Logger->Error("RenderPipeline: failed to compile {} shader", what);
             }
+            RegisterPipeline(res, pipeline);
             return pipeline;
         }
 
@@ -381,6 +428,7 @@ namespace MoleHole
                     if (VariantsCompiled(RequiredTraceVariants(ctx.Settings, demand)))
                     {
                         auto frame = m_Res.Mesh->Prepare(ctx.Graph, ctx.Scene, ctx.Frame, ctx.Settings, true, *m_Res.DummyWhiteTexture);
+                        HashMeshFrame(m_Res.Signature, frame);
                         if (frame.HasTlas)
                         {
                             m_Res.MeshTrace.Active = true;
@@ -432,6 +480,13 @@ namespace MoleHole
                                           sizeof(push), push.data());
                         cmd.dispatch(slice.Count, 1, 1);
                     });
+            }
+
+            [[nodiscard]] bool Settled() const noexcept { return m_ProbeFramesSettled; }
+
+            void ApplyJitter(const glm::vec2 jitter)
+            {
+                m_ParamsBuffer->Upload(&jitter, sizeof(jitter), offsetof(RaytraceParamsGpu, JitterX));
             }
 
         private:
@@ -502,8 +557,14 @@ namespace MoleHole
                     }
                     params.TrailGrid = glm::vec4(trails.Radius, static_cast<float>(kTrailGridCells), 1.0f, m_Res.TrailAngularHalfWidth);
                     params.TrailGrid2 = glm::vec4(static_cast<float>(trails.Cells.size()), 0.0f, 0.0f, 0.0f);
+                    auto& signature = m_Res.Signature;
+                    signature.Span<TracedTrailSegment>(trails.Segments);
+                    signature.Span<TrailCell>(trails.Cells);
+                    signature.Span<std::uint32_t>(trails.Coarse);
+                    signature.Span<std::uint32_t>(trails.CellSegments);
                 }
 
+                m_Res.Signature.Value(params);
                 m_ParamsBuffer->Upload(&params, sizeof(params));
             }
 
@@ -596,6 +657,7 @@ namespace MoleHole
                     lights.PatchCamera = glm::vec4(local.CameraOffset,
                                                    static_cast<float>(std::clamp(ctx.Settings.TerrainSteps, 8, 512)));
                 }
+                m_Res.Signature.Value(lights);
                 m_LightBuffer->Upload(&lights, sizeof(lights));
 
                 m_BodySlots.Clear();
@@ -611,6 +673,8 @@ namespace MoleHole
                     m_Res.Logger->Warn("Bodies use more than {} textures, the rest are drawn untextured", kBodyTextureSlots);
                     m_WarnedBodySlots = true;
                 }
+                m_Res.Signature.Value(bodies);
+                for (const auto* image : m_BodySlots.Images()) m_Res.Signature.Pointer(image);
                 m_BodyBuffer->Upload(bodies.data(), sizeof(bodies));
             }
 
@@ -731,6 +795,50 @@ namespace MoleHole
             bool m_ProbeFramesSettled = true;
             TextureSlotTable<kBodyTextureSlots> m_BodySlots;
             bool m_WarnedBodySlots = false;
+        };
+
+        class AccumulateStage final : public IRenderStage
+        {
+        public:
+            explicit AccumulateStage(RenderResources& res) : m_Res(res)
+            {
+                m_Pipeline = MakeComputePipeline(res, "accumulate.comp");
+            }
+
+            [[nodiscard]] std::string_view Name() const override { return "Accumulate"; }
+            [[nodiscard]] bool Enabled(const RenderSettings& settings) const override { return settings.Accumulate; }
+            [[nodiscard]] bool Ready() const override { return Compiled(m_Pipeline); }
+            [[nodiscard]] std::optional<std::string> Failure() const override { return CompileFailure(Name(), {&m_Pipeline}); }
+
+            void Record(RenderFrameContext& ctx) override
+            {
+                const auto device = m_Res.Device;
+                auto* res = &m_Res;
+                const auto accumulate = m_Pipeline;
+                const auto groupsX = ctx.GroupsX;
+                const auto groupsY = ctx.GroupsY;
+                ctx.Graph.AddComputePass(
+                    "Accumulate", {}, {},
+                    [device, res, accumulate, groupsX, groupsY](const vk::CommandBuffer cmd, RenderGraph& g)
+                    {
+                        const auto pipeline = accumulate->GetPipeline();
+                        if (!pipeline || !res->Plan.Accumulate || !res->HistoryImage) return;
+                        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->GetPipeline());
+                        const auto set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
+                        DescriptorSetWriter(device->GetDevice())
+                            .WriteStorageImage(set, 0, res->RaytraceImage->GetImageView())
+                            .WriteStorageImage(set, 1, res->HistoryImage->GetImageView())
+                            .Update();
+                        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline->GetLayout(), 0, set, {});
+                        const float weight = res->Plan.Weight;
+                        cmd.pushConstants(pipeline->GetLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(weight), &weight);
+                        cmd.dispatch(groupsX, groupsY, 1);
+                    });
+            }
+
+        private:
+            RenderResources& m_Res;
+            std::shared_ptr<ShaderPipeline> m_Pipeline;
         };
 
         // Meters the traced image and writes the tone mapper's exposure to a 1x1 image (always 1 without tone mapping)
@@ -1037,6 +1145,7 @@ namespace MoleHole
                 params.Opacity = kGravityGridOpacity;
                 params.Color = glm::vec3(kGravityGridColor.R, kGravityGridColor.G, kGravityGridColor.B);
                 FillGravityGridData(params, ctx.Scene, ctx.Frame);
+                m_Res.Signature.Value(params);
                 m_ParamsBuffer->Upload(&params, sizeof(params));
 
                 const auto device = m_Res.Device;
@@ -1159,6 +1268,7 @@ namespace MoleHole
 
                 m_Lines.EnsurePipeline(m_Res, ctx.ColorFormat);
                 if (!m_Lines.Pipeline) return;
+                m_Res.Signature.Span<float>(vertices);
                 m_Lines.Upload(m_Res, m_Buffer, vertices);
                 RecordLinePass(ctx, "PhysicsDebug", m_Lines, m_Buffer.get(),
                                static_cast<std::uint32_t>(lines.size()) * 2);
@@ -1320,6 +1430,7 @@ namespace MoleHole
                 if (vertices.empty()) return;
                 m_Lines.EnsurePipeline(m_Res, ctx.ColorFormat);
                 if (!m_Lines.Pipeline) return;
+                m_Res.Signature.Span<float>(vertices);
                 m_Lines.Upload(m_Res, m_Buffer, vertices);
                 // 6 floats (pos+color) per vertex, 2 vertices per segment
                 RecordLinePass(ctx, "OverlayLines", m_Lines, m_Buffer.get(), static_cast<std::uint32_t>(vertices.size() / 6));
@@ -1362,6 +1473,7 @@ namespace MoleHole
                 }
                 auto frame = m_Res.Mesh->Prepare(ctx.Graph, ctx.Scene, ctx.Frame, ctx.Settings, shadows,
                                                  *m_Res.DummyWhiteTexture);
+                HashMeshFrame(m_Res.Signature, frame);
                 if (!m_Pipeline || frame.Draws.empty() || (shadows && !frame.HasTlas)) return;
 
                 MeshCameraParamsGpu params{};
@@ -1369,6 +1481,7 @@ namespace MoleHole
                 params.Projection = ctx.ViewCamera.GetProjectionMatrix();
                 params.CameraPos = ctx.Frame.ToRender(ctx.ViewCamera.GetPosition());
                 params.ToneMapping = static_cast<std::int32_t>(ctx.Settings.ToneMapping);
+                m_Res.Signature.Value(params);
                 m_CameraBuffer->Upload(&params, sizeof(params));
 
                 const auto device = m_Res.Device;
@@ -1439,6 +1552,11 @@ namespace MoleHole
         DebugLines Lines;
         std::chrono::steady_clock::time_point StartTime{std::chrono::steady_clock::now()};
         std::vector<std::unique_ptr<IRenderStage>> Stages;
+        TraceStage* Trace = nullptr;
+        AccumulationPlanner Planner;
+        std::atomic<std::uint32_t> RefinementSamples{0};
+        std::atomic<std::uint32_t> RefinementMax{0};
+        std::atomic<bool> RefinementIdle{false};
         mutable std::mutex RecordedMutex;
         std::vector<std::string> Recorded;
         bool Initialized = false;
@@ -1474,7 +1592,9 @@ namespace MoleHole
         impl.Stages.push_back(std::make_unique<OverlayGeometryStage>(res, impl.Paths, impl.PathMutex));
         auto trace = std::make_unique<TraceStage>(res, impl.StartTime);
         trace->Initialize();
+        impl.Trace = trace.get();
         impl.Stages.push_back(std::move(trace));
+        impl.Stages.push_back(std::make_unique<AccumulateStage>(res));
         impl.Stages.push_back(std::make_unique<ExposureStage>(res));
         impl.Stages.push_back(std::make_unique<BloomStage>(res));
         impl.Stages.push_back(std::make_unique<LensFlareStage>(res));
@@ -1524,6 +1644,7 @@ namespace MoleHole
                                                                          : vk::Format::eUndefined;
 
         const auto traceExtent = ScaledTraceExtent(extent, inputs.Settings.ResolutionScale);
+        const bool accumulate = inputs.Settings.Accumulate && inputs.Interactive && inputs.Settings.Debug == DebugView::None;
         if (res.TraceExtent.width != traceExtent.width || res.TraceExtent.height != traceExtent.height || !res.RaytraceImage)
         {
             CreateOrResize(res, res.RaytraceImage, traceExtent, "ViewportRaytrace");
@@ -1532,6 +1653,12 @@ namespace MoleHole
             CreateOrResize(res, res.BloomBlurImages[1], traceExtent, "ViewportBloomBlur1");
             CreateOrResize(res, res.LensFlareImage, traceExtent, "ViewportLensFlare");
             res.TraceExtent = traceExtent;
+        }
+        if (accumulate)
+        {
+            const auto history = res.HistoryImage ? res.HistoryImage->GetSpecification().extent : vk::Extent3D{};
+            if (!res.HistoryImage || history.width != traceExtent.width || history.height != traceExtent.height)
+                CreateOrResize(res, res.HistoryImage, traceExtent, "ViewportHistory");
         }
         if (!res.ExposureImage) CreateOrResize(res, res.ExposureImage, vk::Extent3D{1, 1, 1}, "ViewportExposure");
         res.BloomResult = res.BloomBlurImages[0].get();
@@ -1543,6 +1670,7 @@ namespace MoleHole
 
         // A debug view shows the tracer's raw output: no glow, flare, smoothing or tone mapping on top of it
         RenderSettings settings = inputs.Settings;
+        settings.Accumulate = accumulate;
         if (settings.Debug != DebugView::None)
         {
             settings.Bloom = false;
@@ -1560,6 +1688,19 @@ namespace MoleHole
             .DisplayExtent = extent, .TraceExtent = traceExtent,
             .GroupsX = (traceExtent.width + 15u) / 16u, .GroupsY = (traceExtent.height + 15u) / 16u};
 
+        auto& signature = res.Signature;
+        signature.Reset();
+        signature.Value(extent);
+        signature.Value(traceExtent);
+        signature.Value(camera.GetPosition());
+        signature.Value(camera.GetFront());
+        signature.Value(camera.GetUp());
+        signature.Value(camera.GetRight());
+        signature.Value(camera.GetFov());
+        signature.Value(inputs.ObserverGuid);
+        signature.Value(inputs.SceneKey);
+        HashSettings(signature, settings);
+
         std::vector<std::string> recorded;
         for (const auto& stage : impl.Stages)
         {
@@ -1570,8 +1711,33 @@ namespace MoleHole
             graph.EndScope();
             recorded.emplace_back(stage->Name());
         }
-        std::scoped_lock lock(impl.RecordedMutex);
-        impl.Recorded = std::move(recorded);
+        {
+            std::scoped_lock lock(impl.RecordedMutex);
+            impl.Recorded = std::move(recorded);
+        }
+
+        HashPipelines(signature, res);
+        if (inputs.Interactive)
+        {
+            res.Plan = impl.Planner.Next({.Signature = signature.Digest(), .Accumulate = settings.Accumulate,
+                                          .MaxSamples = static_cast<std::uint32_t>(std::max(settings.AccumulateMax, 1)),
+                                          .Settled = impl.Trace->Settled()});
+        }
+        else
+        {
+            impl.Planner.Reset();
+            res.Plan = {};
+        }
+        impl.RefinementSamples.store(res.Plan.Samples, std::memory_order_relaxed);
+        impl.RefinementMax.store(settings.Accumulate ? static_cast<std::uint32_t>(std::max(settings.AccumulateMax, 1)) : 0,
+                                 std::memory_order_relaxed);
+        impl.RefinementIdle.store(!res.Plan.Render, std::memory_order_relaxed);
+        if (!res.Plan.Render)
+        {
+            graph.DiscardPasses();
+            return;
+        }
+        if (res.Plan.Accumulate) impl.Trace->ApplyJitter(res.Plan.Jitter);
     }
 
     bool RenderPipeline::AllStagesReady() const
@@ -1599,6 +1765,12 @@ namespace MoleHole
     const GpuCapabilities& RenderPipeline::Capabilities() const
     {
         return m_Impl->Res.Device->GetCapabilities();
+    }
+
+    RefinementStatus RenderPipeline::Refinement() const
+    {
+        return {m_Impl->RefinementSamples.load(std::memory_order_relaxed), m_Impl->RefinementMax.load(std::memory_order_relaxed),
+                m_Impl->RefinementIdle.load(std::memory_order_relaxed)};
     }
 
     std::vector<std::string> RenderPipeline::LastRecordedStages() const

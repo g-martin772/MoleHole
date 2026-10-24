@@ -27,6 +27,8 @@ namespace
         Camera ViewCamera;
         RenderSettings Render;
         std::uint64_t ObserverGuid = 0; // possessed scene camera entity, for a camera riding a Geodesic Body
+        std::uint64_t SceneKey = 0;
+        bool Interactive = true;
     };
 
     struct SimBinding
@@ -94,6 +96,7 @@ namespace
             TrackCamera();
             m_Export.Update();
             UpdateRenderSettings();
+            std::uint64_t sceneKey = 0;
             if (const auto sim = m_Sim.Load(); sim->Runner)
             {
                 ReportInitErrors(*sim->Runner);
@@ -108,6 +111,10 @@ namespace
                     sim->Runner->SetTickRate(m_UiState->SimulationTickRate);
                 if (!sim->Runner->IsPaused()) m_Pipeline.RecordObjectPaths(*sim->Runner->AcquireSnapshot());
                 const auto published = sim->Runner->AcquireSnapshot();
+                SignatureHasher key;
+                key.Pointer(sim->Runner.get());
+                key.Value(published.Generation());
+                sceneKey = key.Digest();
                 m_UiState->SceneState.Observe(published.ContentRevision());
                 if (m_UiState->PendingSelectGuid != 0 && published->IsValid(published->FindByGuid(m_UiState->PendingSelectGuid)))
                 {
@@ -115,9 +122,15 @@ namespace
                 }
             }
             auto render = m_RenderSettings->Effective();
-            render.ResolutionScale *= m_UiState->RenderGovernorScale;
+            const auto step = StepRefinement(render, sceneKey);
+            render.ResolutionScale *= step.Scale;
+            render.Accumulate = render.Accumulate && step.Accumulate;
+            m_UiState->RenderScaleApplied = step.Scale;
+            LogRefinement(step);
             PublishObserverReadout(render);
-            m_FrameParams.Publish(ViewportFrameParams{m_Camera, std::move(render), m_ObserverGuid});
+            const bool interactive = m_ActiveContext != RenderContext::Export;
+            RequestFrameOnChange(sceneKey, interactive, step);
+            m_FrameParams.Publish(ViewportFrameParams{m_Camera, std::move(render), m_ObserverGuid, sceneKey, interactive});
         }
 
         void OnRender() override
@@ -147,6 +160,8 @@ namespace
             inputs.Settings = frameParams->Render;
             inputs.Physics = sim->Runner->GetModule<PhysicsSimulationModule>();
             inputs.ObserverGuid = frameParams->ObserverGuid;
+            inputs.SceneKey = frameParams->SceneKey;
+            inputs.Interactive = frameParams->Interactive;
             const auto sceneLock = sim->Runner->AcquireSnapshot();
             inputs.Scene = &*sceneLock;
             m_Pipeline.Build(graph, inputs);
@@ -200,7 +215,7 @@ namespace
                 m_UiState->ViewportScreenMax = {max.x, max.y};
                 if (m_UiState->ShowRenderStats)
                     DrawRenderStatsOverlay(min, m_Renderer->GetBufferTargetStats(kViewportBufferId), *m_RenderSettings,
-                                           m_UiState->RenderGovernorScale);
+                                           m_UiState->RenderScaleApplied, m_Pipeline.Refinement(), m_LastStep);
 
                 m_UiState->ViewportToolbarLeft = max.x;
                 if (!m_UiState->ExportActive)
@@ -712,9 +727,67 @@ namespace
         {
             const auto& settings = m_RenderSettings->Effective();
             const bool active = settings.FrameGovernor && (context == RenderContext::Edit || context == RenderContext::Play);
+            if (m_LastStep.Rung > 0) m_Governor.Hold(std::chrono::steady_clock::now() + std::chrono::milliseconds(700));
             const auto stats = active ? m_Renderer->GetBufferTargetStats(kViewportBufferId) : std::nullopt;
             m_UiState->RenderGovernorScale = m_Governor.Update(active && stats && stats->Visible,
                                                                stats ? stats->AverageFrameMs : 0.0, settings.FrameBudgetMs);
+        }
+
+        LadderStep StepRefinement(const RenderSettings& settings, const std::uint64_t sceneKey)
+        {
+            const auto now = std::chrono::steady_clock::now();
+            SignatureHasher still;
+            still.Value(m_Camera.GetPosition());
+            still.Value(m_Camera.GetFront());
+            still.Value(m_Camera.GetUp());
+            still.Value(m_Camera.GetFov());
+            still.Pointer(m_RenderSettings->Snapshot().get());
+            still.Value(m_ObserverGuid);
+            still.Value(sceneKey);
+            still.Value(m_ActiveContext);
+            if (still.Digest() != std::exchange(m_StillHash, still.Digest())) m_StillSince = now;
+
+            const bool enabled = settings.FrameGovernor && m_ActiveContext == RenderContext::Edit;
+            std::uint64_t frames = 0;
+            if (enabled)
+            {
+                if (const auto stats = m_Renderer->GetBufferTargetStats(kViewportBufferId)) frames = stats->FramesRendered;
+            }
+            m_LastStep = m_Ladder.Next({.Enabled = enabled, .InteractiveScale = m_UiState->RenderGovernorScale,
+                                        .StillMs = std::chrono::duration<double, std::milli>(now - m_StillSince).count(),
+                                        .FramesDone = frames});
+            return m_LastStep;
+        }
+
+        void LogRefinement(const LadderStep& step)
+        {
+            auto status = m_Pipeline.Refinement();
+            status.Idle = status.Idle && status.Samples > 0;
+            const bool checkpoint = status.Samples != m_LoggedSamples && (status.Samples % 16 == 0 || status.Samples == status.MaxSamples);
+            if (step.Rung == m_LoggedRung && step.Scale == m_LoggedScale && status.Idle == m_LoggedIdle && !checkpoint) return;
+            m_LoggedRung = step.Rung;
+            m_LoggedScale = step.Scale;
+            m_LoggedIdle = status.Idle;
+            m_LoggedSamples = status.Samples;
+            m_Logger->Trace("Refinement: rung {} scale {:.0f}% samples {}/{}{}", step.Rung, step.Scale * 100.0f, status.Samples,
+                            status.MaxSamples, status.Idle ? " idle" : "");
+        }
+
+        void RequestFrameOnChange(const std::uint64_t sceneKey, const bool interactive, const LadderStep& step)
+        {
+            SignatureHasher inputs;
+            inputs.Value(m_Camera.GetPosition());
+            inputs.Value(m_Camera.GetFront());
+            inputs.Value(m_Camera.GetUp());
+            inputs.Value(m_Camera.GetFov());
+            inputs.Pointer(m_RenderSettings->Snapshot().get());
+            inputs.Value(step.Scale);
+            inputs.Value(step.Accumulate);
+            inputs.Value(m_ObserverGuid);
+            inputs.Value(sceneKey);
+            inputs.Value(interactive);
+            if (inputs.Digest() == std::exchange(m_LastInputs, inputs.Digest())) return;
+            m_Renderer->RequestViewportFrame();
         }
 
         // The profile for what the viewport is doing, scripts' overrides, and the mirror of edits into the scene
@@ -725,6 +798,7 @@ namespace
             if (m_UiState->ExportActive) context = RenderContext::Export;
             else if (m_UiState->ReferenceView) context = RenderContext::Reference;
             else if (sim->Runner && !sim->Runner->IsPaused()) context = RenderContext::Play;
+            m_ActiveContext = context;
             m_RenderSettings->SetActiveContext(context);
             UpdateGovernor(context);
 
@@ -956,6 +1030,16 @@ namespace
         bool m_MouseLookActive{false};
         std::uint64_t m_FocusGuid{0};
         std::uint64_t m_ObserverGuid{0}; // possessed scene camera entity while it is active
+        std::uint64_t m_LastInputs{0};
+        std::uint64_t m_StillHash{0};
+        std::chrono::steady_clock::time_point m_StillSince;
+        RefinementLadder m_Ladder;
+        LadderStep m_LastStep;
+        int m_LoggedRung{-1};
+        float m_LoggedScale{0.0f};
+        bool m_LoggedIdle{false};
+        std::uint32_t m_LoggedSamples{0};
+        RenderContext m_ActiveContext{RenderContext::Edit};
         double m_FocusDistance{10.0};
         double m_FocusMinDistance{0.1};
         std::atomic<bool> m_FocusRequest{false};

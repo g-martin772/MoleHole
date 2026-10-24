@@ -1,0 +1,28 @@
+#version 450
+
+// Folds the tracer's image into the running average of a still view: history = mix(history, frame, weight), and the
+// average replaces the frame so bloom, exposure and the composite read it unchanged. Weight 1 starts a new average.
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0, rgba32f) uniform image2D u_frame;
+layout(set = 0, binding = 1, rgba32f) uniform image2D u_history;
+
+layout(push_constant) uniform PushConstants
+{
+    float u_weight;
+};
+
+void main() {
+    ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(texel, imageSize(u_frame)))) return;
+
+    vec4 frame = imageLoad(u_frame, texel);
+    vec4 result = frame;
+    if (u_weight < 1.0) {
+        vec4 history = imageLoad(u_history, texel);
+        bool finite = !(any(isnan(frame)) || any(isinf(frame)));
+        result = finite ? mix(history, frame, u_weight) : history;
+    }
+    imageStore(u_history, texel, result);
+    imageStore(u_frame, texel, result);
+}

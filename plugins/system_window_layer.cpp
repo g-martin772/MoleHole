@@ -99,9 +99,9 @@ namespace
             ImGui::Text("%s -> %s", std::string(RenderContextLabel(context)).c_str(),
                         m_RenderSettings->ProfileFor(context).Name.c_str());
             const auto trace = ScaledTraceExtent(vk::Extent3D{stats->Extent.x, stats->Extent.y, 1},
-                                                 effective.ResolutionScale * m_UiState->RenderGovernorScale);
+                                                 effective.ResolutionScale * m_UiState->RenderScaleApplied);
             ImGui::Text("Tracer %ux%u (%.0f%% of the viewport)", trace.width, trace.height,
-                        effective.ResolutionScale * m_UiState->RenderGovernorScale);
+                        effective.ResolutionScale * m_UiState->RenderScaleApplied);
             if (m_UiState->RenderGovernorScale < 1.0f)
                 ImGui::TextDisabled("Governor: %.0f%% of the profile's scale", m_UiState->RenderGovernorScale * 100.0f);
             ImGui::Text("Ray steps: up to %d at %.4f", effective.MaxRaySteps, effective.RayStepSize);

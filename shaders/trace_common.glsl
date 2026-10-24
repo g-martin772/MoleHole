@@ -50,8 +50,8 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
     vec4 u_meshBounds;
     int u_numMeshInstances;
     float _meshPad0;
-    float _meshPad1;
-    float _meshPad2;
+    float u_jitterX;
+    float u_jitterY;
 
     float u_diskAccretionRate;     // Eddington ratio
     float u_diskOpacity;           // vertical optical depth
@@ -99,7 +99,7 @@ bool traceTexel(out ivec2 texCoords) {
 
 void cameraRay(ivec2 texCoords, out vec3 rayOrigin, out vec3 rayDir) {
     ivec2 imageSize = imageSize(l_outputImage);
-    vec2 uv = (vec2(texCoords) + 0.5f) / vec2(imageSize);
+    vec2 uv = (vec2(texCoords) + 0.5f + vec2(u_jitterX, u_jitterY)) / vec2(imageSize);
     uv = uv * 2.0f - 1.0f;
     uv.x *= u_aspect;
     uv.y = -uv.y;

@@ -9,6 +9,7 @@ import :UI.Widgets;
 import :Rendering.Settings;
 import :Rendering.DebugLegend;
 import :Rendering.SettingsService;
+import :Rendering.Accumulation;
 
 export namespace MoleHole
 {
@@ -224,13 +225,20 @@ export namespace MoleHole
     }
 
     inline void DrawRenderStatsOverlay(const ImVec2 corner, const std::optional<GPP::Renderer::BufferTargetStats>& stats,
-                                       const RenderSettingsService& settings, const float governorScale)
+                                       const RenderSettingsService& settings, const float appliedScale,
+                                       const RefinementStatus& refinement = {}, const LadderStep& ladder = {})
     {
         if (!stats) return;
         const auto context = settings.ActiveContext();
-        const auto text = std::format("{}: {} | {:.1f} fps, GPU {:.1f} ms | tracer {:.0f}%", RenderContextLabel(context),
+        std::string state;
+        if (stats->Idle && refinement.MaxSamples > 0 && refinement.Samples >= refinement.MaxSamples) state = " | converged, idle";
+        else if (stats->Idle) state = " | idle";
+        else if (ladder.Climbing && ladder.Rung > 0) state = std::format(" | sharpening, step {}", ladder.Rung);
+        else if (refinement.MaxSamples > 0 && refinement.Samples > 0)
+            state = std::format(" | refining {}/{}", refinement.Samples, refinement.MaxSamples);
+        const auto text = std::format("{}: {} | {:.1f} fps, GPU {:.1f} ms | tracer {:.0f}%{}", RenderContextLabel(context),
                                       settings.ProfileFor(context).Name, stats->FramesPerSecond, stats->GpuMs,
-                                      settings.Effective().ResolutionScale * governorScale);
+                                      settings.Effective().ResolutionScale * appliedScale, state);
         const ImVec2 headerSize = ImGui::CalcTextSize(text.c_str());
         const ImVec2 pos(corner.x + 8.0f, corner.y + 8.0f);
         const float lineHeight = ImGui::GetTextLineHeightWithSpacing();

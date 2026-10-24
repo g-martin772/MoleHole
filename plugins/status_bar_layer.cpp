@@ -122,8 +122,8 @@ namespace
                 model.GpuMs = stats->GpuMs;
                 model.Fps = stats->FramesPerSecond;
             }
-            model.ResolutionLowered = ui.RenderGovernorScale < 0.999f;
-            model.TracerPercent = m_RenderSettings->Effective().ResolutionScale * ui.RenderGovernorScale;
+            model.ResolutionLowered = ui.RenderScaleApplied < 0.999f;
+            model.TracerPercent = m_RenderSettings->Effective().ResolutionScale * ui.RenderScaleApplied;
 
             model.Dirty = runner && ui.SceneState.IsDirty();
             model.AutosaveEnabled = ui.AutosaveEnabled;

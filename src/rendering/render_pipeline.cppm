@@ -7,6 +7,7 @@ import GPP;
 import :Rendering.Frame;
 import :Rendering.Camera;
 import :Rendering.Settings;
+import :Rendering.Accumulation;
 import :Rendering.Meshes;
 import :Rendering.MeshTrace;
 import :Rendering.MeshScene;
@@ -22,6 +23,8 @@ export namespace MoleHole
         RenderSettings Settings;
         std::shared_ptr<GPP::PhysicsSimulationModule> Physics;
         std::uint64_t ObserverGuid = 0; // entity whose world line the camera rides (possessed scene camera), 0 = none
+        std::uint64_t SceneKey = 0;
+        bool Interactive = true; // false: every frame is drawn, never skipped or accumulated (exports)
     };
 
     struct MeshTraceFrame
@@ -53,6 +56,11 @@ export namespace MoleHole
         std::array<std::unique_ptr<GPP::VulkanImage>, 2> BloomBlurImages;
         std::unique_ptr<GPP::VulkanImage> LensFlareImage;
         std::unique_ptr<GPP::VulkanImage> ExposureImage; // 1x1, written by the Exposure stage
+        std::unique_ptr<GPP::VulkanImage> HistoryImage;
+        SignatureHasher Signature;
+        AccumulationPlan Plan;
+        mutable std::mutex PipelineMutex;
+        mutable std::vector<std::weak_ptr<GPP::ShaderPipeline>> Pipelines;
         GPP::VulkanImage* BloomResult = nullptr;
 
         MeshTraceFrame MeshTrace;
@@ -117,6 +125,8 @@ export namespace MoleHole
         [[nodiscard]] std::optional<std::string> FirstFailure() const;
         [[nodiscard]] const GPP::GpuCapabilities& Capabilities() const;
         [[nodiscard]] std::vector<std::string> LastRecordedStages() const;
+
+        [[nodiscard]] RefinementStatus Refinement() const;
 
     private:
         struct Impl;

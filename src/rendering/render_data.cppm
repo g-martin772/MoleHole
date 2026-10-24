@@ -92,8 +92,8 @@ export namespace MoleHole
         glm::vec4 MeshBounds{0.0f};
         std::int32_t NumMeshInstances{0};
         float _MeshPad0{0.0f};
-        float _MeshPad1{0.0f};
-        float _MeshPad2{0.0f};
+        float JitterX{0.0f};
+        float JitterY{0.0f};
 
         float DiskAccretionRate{0.1f};
         float DiskOpacity{2.0f};

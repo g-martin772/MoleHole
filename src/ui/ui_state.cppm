@@ -109,6 +109,7 @@ export namespace MoleHole
         bool ShowRenderStats = false;
         // Multiplier the frame-time governor puts on the resolution scale (1 = off or idle)
         float RenderGovernorScale = 1.0f;
+        float RenderScaleApplied = 1.0f;
         bool ShowViewportHud = false;
         bool ShowCameraGizmos = true;
         bool ShowSettingsWindow = false;

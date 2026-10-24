@@ -66,6 +66,8 @@ export namespace MoleHole
         float ResolutionScale = 100.0f;
         bool FrameGovernor = false;
         float FrameBudgetMs = 33.3f;
+        bool Accumulate = true;
+        int AccumulateMax = 64;
 
         bool Fxaa = true;
         bool Bloom = true;
@@ -134,6 +136,7 @@ export namespace MoleHole
                 m_Scale = 1.0f;
                 return m_Scale;
             }
+            if (now < m_HoldUntil) return m_Scale;
             if (now - m_Last >= std::chrono::milliseconds(500) && frameMs > 0.0)
             {
                 m_Last = now;
@@ -143,8 +146,15 @@ export namespace MoleHole
         }
         [[nodiscard]] float Scale() const noexcept { return m_Scale; }
 
+        void Hold(const std::chrono::steady_clock::time_point until) noexcept
+        {
+            m_HoldUntil = until;
+            m_Last = until;
+        }
+
     private:
         float m_Scale = 1.0f;
+        std::chrono::steady_clock::time_point m_HoldUntil;
         std::chrono::steady_clock::time_point m_Last;
     };
 
