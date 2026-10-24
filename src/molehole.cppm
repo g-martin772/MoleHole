@@ -67,6 +67,7 @@ export import :UI.StatusBar;
 export import :UI.CreateCatalog;
 export import :UI.ActionLogic;
 export import :UI.State;
+export import :UI.LayoutLogic;
 export import :UI.WidgetLogic;
 export import :UI.FuzzySearch;
 export import :UI.AssetCatalog;

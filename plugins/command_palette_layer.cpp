@@ -14,13 +14,15 @@ namespace
 
     struct CommandPaletteLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, SceneManager, UiState, RenderSettingsService, IFileSystem, AssetDirectories>;
+        using Dependencies = std::tuple<Logger, SceneManager, UiState, RenderSettingsService, IFileSystem, AssetDirectories, AppPaths>;
 
         CommandPaletteLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<SceneManager> scenes,
                             std::shared_ptr<UiState> uiState, std::shared_ptr<RenderSettingsService> renderSettings,
-                            std::shared_ptr<IFileSystem> fileSystem, std::shared_ptr<AssetDirectories> assets)
+                            std::shared_ptr<IFileSystem> fileSystem, std::shared_ptr<AssetDirectories> assets,
+                            std::shared_ptr<AppPaths> appPaths)
             : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState)),
-              m_Render(std::move(renderSettings)), m_FileSystem(std::move(fileSystem)), m_Assets(std::move(assets))
+              m_Render(std::move(renderSettings)), m_FileSystem(std::move(fileSystem)), m_Assets(std::move(assets)),
+              m_AppPaths(std::move(appPaths))
         {
         }
 
@@ -62,6 +64,7 @@ namespace
             ActionSources sources;
             sources.Templates = CollectTemplates(m_FileSystem->ResolvePath("templates"));
             for (const auto& profile : m_Render->Profiles().Profiles()) sources.ProfileNames.push_back(profile.Name);
+            sources.LayoutNames = LayoutChoices(m_AppPaths->ConfigDir() / "layouts");
 
             auto entries = BuiltinCreateEntries();
             const auto scripts = m_Assets ? ListScripts(*m_Assets) : std::vector<std::string>{};
@@ -234,6 +237,7 @@ namespace
         std::shared_ptr<RenderSettingsService> m_Render;
         std::shared_ptr<IFileSystem> m_FileSystem;
         std::shared_ptr<AssetDirectories> m_Assets;
+        std::shared_ptr<AppPaths> m_AppPaths;
         ActionSources m_Sources;
         std::string m_Query;
         std::string m_SheetFilter;

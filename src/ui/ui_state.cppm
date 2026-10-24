@@ -138,6 +138,7 @@ export namespace MoleHole
         RecentActions RecentActionIds;
         bool ShowShortcutSheet = false;
         bool PaletteRequested = false;
+        bool LayoutSaveRequested = false;
         TransportRequests Transport;
         BookmarkView Bookmarks;
         std::int32_t TransportStepCount = static_cast<std::int32_t>(kDefaultStepTicks);

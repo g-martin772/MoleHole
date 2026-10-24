@@ -9,12 +9,14 @@ Open from sidebar or View menu.
 | System | tick rate, perf, system info |
 | Log | console |
 | Render | render profiles, every render setting, stats, GPU capabilities |
-| Debug | display units, CPU precision, overlays, debug view |
+| Simulation | tick rate, stepping, physics, CPU precision |
+| Profiler | CPU zone timings and GPU pass times |
+| Undo History | undo/redo list |
 | Viewport HUD | stats overlay |
 | General Relativity | theory + metric info |
 | Science | science info |
 | Animation Graph | graph editor |
-| Settings | UI scale, font, intro |
+| Settings | UI scale, font, intro, units, export folder (Edit > Preferences) |
 
 ## Basics
 - File → New / Open / Save / Save As / templates / recent
@@ -92,10 +94,17 @@ Open from sidebar or View menu.
 - Each setting shows a cost badge (5 pips), a tooltip with its key, and a reset button when it differs from the profile's base
 - See [Render profiles and settings](#render-profiles-and-settings)
 
-### Debug
-- Display units, CPU simulation precision
-- Overlays (gravity grid, collider wireframe, object paths) and the debug view of the active profile
+### Overlays and debug
+- Overlays (gravity grid, collider wireframe, object paths) and the debug view of the active profile: Render window (groups Overlays, Debug)
+- Display units: Settings. CPU simulation precision: Simulation window
+- Dear ImGui metrics: System window, DEBUG section
 - View menu → Camera Gizmos
+
+### Layout
+- View → Layout → Reset Layout rebuilds the default docking arrangement
+- Built-in layouts Edit, Render and Graph set the window arrangement and which windows are open
+- Save Layout As... stores the current arrangement and open windows under a name (`<config dir>/layouts/<name>.ini`, a plain Dear ImGui ini); pick it from the same menu to apply it, Delete Layout removes it
+- The same entries exist in the command palette (Ctrl+P, type "layout")
 
 ### Config files
 - `config.json`: window size, fullscreen, shader dirs, hot reload, fonts, script dirs, combo dirs

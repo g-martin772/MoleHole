@@ -61,6 +61,7 @@ namespace
             HandleActionRequests();
             RenderMenuBar();
             RenderCreatePopup();
+            RenderLayoutSavePopup();
             RenderSettingsPopup();
             RenderExportDialog();
             RenderUnsavedPrompt();
@@ -503,6 +504,9 @@ namespace
                 ImGui::MenuItem("Camera Gizmos", nullptr, &m_UiState->ShowCameraGizmos);
                 ImGui::MenuItem("General Relativity", nullptr, &m_UiState->ShowGeneralRelativityWindow);
                 ImGui::MenuItem("Science", nullptr, &m_UiState->ShowScienceWindow);
+                ImGui::MenuItem("Animation Graph", nullptr, &m_UiState->ShowAnimationGraphWindow);
+                ImGui::Separator();
+                RenderLayoutMenu();
                 ImGui::EndMenu();
             }
 
@@ -530,6 +534,67 @@ namespace
             }
 
             ImGui::EndMainMenuBar();
+        }
+
+        void RenderLayoutMenu()
+        {
+            if (!ImGui::BeginMenu("Layout")) return;
+            auto& actions = m_UiState->Actions;
+            if (ImGui::MenuItem("Reset Layout")) actions.Push({"layout.reset", {}});
+            if (ImGui::MenuItem("Save Layout As...")) m_UiState->LayoutSaveRequested = true;
+            ImGui::Separator();
+            const auto layouts = std::filesystem::path(m_AppPaths->ConfigDir() / "layouts");
+            for (const auto& name : LayoutChoices(layouts))
+            {
+                if (ImGui::MenuItem(name.c_str())) actions.Push({"layout.apply", name});
+            }
+            if (const auto user = ListUserLayouts(layouts); !user.empty() && ImGui::BeginMenu("Delete Layout"))
+            {
+                for (const auto& name : user)
+                {
+                    if (ImGui::MenuItem(name.c_str())) actions.Push({"layout.delete", name});
+                }
+                ImGui::EndMenu();
+            }
+            ImGui::EndMenu();
+        }
+
+        void RenderLayoutSavePopup()
+        {
+            constexpr const char* kPopup = "Save Layout";
+            if (std::exchange(m_UiState->LayoutSaveRequested, false))
+            {
+                m_LayoutName.fill('\0');
+                m_LayoutNameFocus = true;
+                ImGui::OpenPopup(kPopup);
+            }
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+            if (!ImGui::BeginPopupModal(kPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) return;
+
+            if (std::exchange(m_LayoutNameFocus, false)) ImGui::SetKeyboardFocusHere();
+            const bool entered = ImGui::InputTextWithHint("##LayoutName", "Layout name", m_LayoutName.data(), m_LayoutName.size(),
+                                                          ImGuiInputTextFlags_EnterReturnsTrue);
+            const auto name = SanitizeLayoutName(m_LayoutName.data());
+            const bool reserved = name && IsReservedLayoutName(*name);
+            const bool exists = name && !reserved && std::filesystem::exists(LayoutPath(m_AppPaths->ConfigDir() / "layouts", *name));
+            if (reserved) ImGui::TextDisabled("Built-in layout names are taken");
+            else if (exists) ImGui::TextDisabled("Replaces the saved layout '%s'", name->c_str());
+            else ImGui::TextDisabled("Saves window positions, docking and which windows are open");
+
+            const bool valid = name && !reserved;
+            ImGui::BeginDisabled(!valid);
+            const bool save = ImGui::Button(exists ? "Replace" : "Save", ImVec2(110, 0)) || (entered && valid);
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            const bool cancel = ImGui::Button("Cancel", ImVec2(110, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape);
+            if (save)
+            {
+                m_UiState->Actions.Push({"layout.write", *name});
+                ImGui::CloseCurrentPopup();
+            }
+            else if (cancel) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
         }
 
         static void HistoryMenuEntry(const HistoryMenuItem& item, const char* id, const std::function<void()>& run)
@@ -978,6 +1043,8 @@ namespace
         std::array<char, 512> m_ExportPathBuffer{};
         std::array<char, 512> m_ExportFolderBuffer{};
         std::array<char, 128> m_ExportNameBuffer{};
+        std::array<char, 64> m_LayoutName{};
+        bool m_LayoutNameFocus = false;
     };
 }
 

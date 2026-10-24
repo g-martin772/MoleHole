@@ -25,6 +25,7 @@ export namespace MoleHole
         std::vector<TemplateInfo> Templates;
         std::vector<CreateEntry> CreateEntries;
         std::vector<std::string> ProfileNames;
+        std::vector<std::string> LayoutNames;
     };
 
     struct ActionHost
@@ -184,7 +185,7 @@ export namespace MoleHole
             b.Add("edit.preferences", "Preferences...", "Edit", [ui] { if (ui) ui->ShowSettingsWindow = true; });
         }
 
-        inline void AddView(Builder& b)
+        inline void AddView(Builder& b, const ActionSources& sources)
         {
             auto* ui = b.Host().Ui;
             static bool none = false;
@@ -202,6 +203,15 @@ export namespace MoleHole
             b.Window("view.gr", "General Relativity", flag(&UiState::ShowGeneralRelativityWindow));
             b.Window("view.science", "Science", flag(&UiState::ShowScienceWindow));
             b.Window("view.graph", "Animation Graph", flag(&UiState::ShowAnimationGraphWindow));
+            b.Defer("layout.reset", "Reset Layout", "View").Keywords = "layout dock windows default arrange";
+            b.Add("layout.save", "Save Layout As...", "View", [ui] { if (ui) ui->LayoutSaveRequested = true; }).Keywords =
+                "layout dock windows preset store";
+            for (const auto& name : sources.LayoutNames)
+            {
+                auto& action = b.Defer("layout.apply", "Layout: " + name, "View", {}, name);
+                action.Id += ":" + name;
+                action.Keywords = "layout dock windows preset apply";
+            }
         }
 
         inline void AddGizmo(Builder& b)
@@ -306,7 +316,7 @@ export namespace MoleHole
         ActionDetail::Builder builder(host);
         ActionDetail::AddFile(builder, sources);
         ActionDetail::AddEdit(builder);
-        ActionDetail::AddView(builder);
+        ActionDetail::AddView(builder, sources);
         ActionDetail::AddGizmo(builder);
         ActionDetail::AddSimulation(builder);
         ActionDetail::AddRender(builder, sources);
