@@ -314,30 +314,19 @@ namespace
             }
         }
 
-        void RenderToolbar(SimulationRunner& runner, const Scene& scene)
+        void RenderToolbar(SimulationRunner& runner, const Scene&)
         {
-            const auto spawn = [&](const char* label, const std::string_view preset, const glm::dvec3& position,
-                                   const std::optional<glm::quat>& rotation = std::nullopt)
+            ImFont* icons = m_UiState->IconFont;
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+            const float height = ImGui::GetFrameHeight();
+            if (ImGui::Button("      Create", ImVec2(0.0f, height)))
             {
-                if (const auto command = MakeSpawnPresetCommand(scene, GPP::GenerateGuid(), preset, position, rotation))
-                {
-                    runner.EnqueueCommand(*command, UndoStep(runner, std::string("Add ") + label));
-                }
-            };
-            constexpr double kSpawnUnitM = Units::kSolarGravitationalRadius;
-            if (ImGui::Button("Black Hole")) spawn("Black Hole", "BlackHole", glm::dvec3(0.0, 0.0, -10.0) * kSpawnUnitM);
-            ImGui::SameLine();
-            if (ImGui::Button("Sphere")) spawn("Sphere", "Sphere", glm::dvec3(5.0, 0.0, 0.0) * kSpawnUnitM);
-            ImGui::SameLine();
-            if (ImGui::Button("Camera"))
-            {
-                const glm::dvec3 position = m_UiState->ViewPositionM;
-                spawn("Camera", "Camera", position,
-                      GPP::LookAtRotation(glm::vec3(0.0f), m_UiState->ViewFront, m_UiState->ViewUp));
+                m_UiState->CreatePopup.RequestAt({pos.x, pos.y + height});
             }
-            ImGui::SameLine();
-            if (ImGui::Button("Empty")) SpawnEmpty(runner, 0);
-            ImGui::SameLine();
+            DrawIcon(ImGui::GetWindowDrawList(), icons, Icon::Plus, "+", ImVec2(pos.x + 14.0f, pos.y + height * 0.5f), 12.0f,
+                     ToU32(HexColor(0xe0e0e0)));
+            Tooltip("Add an entity: body, black hole, light, camera, mesh, script... (Shift+A)");
+            if (m_UiState->OpenAddMeshDialog) OpenAddMeshPopup();
             RenderAddMeshPopup(runner);
             ImGui::Spacing();
         }
@@ -602,6 +591,7 @@ namespace
                 m_Selection.clear();
                 m_UiState->SelectedEntityGuid = 0;
             }
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) m_UiState->CreatePopup.RequestAtMouse();
             if (ImGui::BeginDragDropTarget())
             {
                 if (ImGui::AcceptDragDropPayload("OUTLINER_ENTITY"))
@@ -625,6 +615,11 @@ namespace
                 }
             }
 
+            if ((focused || ImGui::IsWindowHovered()) && !ImGui::IsAnyItemActive() && m_RenameGuid == 0 &&
+                ImGui::IsKeyChordPressed(ImGuiMod_Shift | ImGuiKey_A))
+            {
+                m_UiState->CreatePopup.RequestAtMouse();
+            }
             if (focused && !ImGui::IsAnyItemActive() && m_RenameGuid == 0)
             {
                 auto& edits = m_UiState->Edits;
@@ -645,13 +640,15 @@ namespace
             std::ranges::copy(entry.Name.substr(0, count), m_RenameBuffer.begin());
         }
 
+        void OpenAddMeshPopup()
+        {
+            m_UiState->OpenAddMeshDialog = false;
+            std::ranges::fill(m_MeshPathBuffer, '\0');
+            ImGui::OpenPopup("Add Mesh");
+        }
+
         void RenderAddMeshPopup(SimulationRunner& runner)
         {
-            if (ImGui::Button("Add Mesh"))
-            {
-                std::ranges::fill(m_MeshPathBuffer, '\0');
-                ImGui::OpenPopup("Add Mesh");
-            }
 
             const ImGuiViewport* viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));

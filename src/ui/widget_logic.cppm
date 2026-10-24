@@ -140,6 +140,12 @@ export namespace MoleHole
         if (typeTag == "Sphere") return 0xf0ac;
         if (typeTag == "Mesh") return 0xf1b2;
         if (typeTag == "Camera") return 0xf03d;
+        if (typeTag == "Star") return 0xf005;
+        if (typeTag == "DirectionalLight") return 0xf185;
+        if (typeTag == "PointLight" || typeTag == "SpotLight" || typeTag == "AreaLight" || typeTag == "Light") return 0xf0eb;
+        if (typeTag == "ParticleEmitter" || typeTag == "ParticleSink" || typeTag == "ParticleCollider") return 0xe4dc;
+        if (typeTag == "Collider") return 0xf466;
+        if (typeTag == "Empty") return 0xf0e8;
         return 0xf1b3;
     }
 

@@ -10,6 +10,7 @@ import :Application.Autosave;
 import :Simulation.ObserverReadout;
 import :UI.EditLogic;
 import :UI.TransportLogic;
+import :UI.CreateCatalog;
 
 export namespace MoleHole
 {
@@ -125,6 +126,9 @@ export namespace MoleHole
         int TutorialStep = 0;
 
         std::uint64_t SelectedEntityGuid = 0;
+        std::uint64_t PendingSelectGuid = 0;
+        CreatePopupRequest CreatePopup;
+        bool OpenAddMeshDialog = false;
         EditRequests Edits;
         TransportRequests Transport;
         BookmarkView Bookmarks;

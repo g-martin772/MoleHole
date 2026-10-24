@@ -107,7 +107,12 @@ namespace
                 if (sim->Runner->GetTickRate() != m_UiState->SimulationTickRate)
                     sim->Runner->SetTickRate(m_UiState->SimulationTickRate);
                 if (!sim->Runner->IsPaused()) m_Pipeline.RecordObjectPaths(*sim->Runner->AcquireSnapshot());
-                m_UiState->SceneState.Observe(sim->Runner->AcquireSnapshot().ContentRevision());
+                const auto published = sim->Runner->AcquireSnapshot();
+                m_UiState->SceneState.Observe(published.ContentRevision());
+                if (m_UiState->PendingSelectGuid != 0 && published->IsValid(published->FindByGuid(m_UiState->PendingSelectGuid)))
+                {
+                    m_UiState->SelectedEntityGuid = std::exchange(m_UiState->PendingSelectGuid, 0);
+                }
             }
             auto render = m_RenderSettings->Effective();
             render.ResolutionScale *= m_UiState->RenderGovernorScale;
@@ -310,6 +315,13 @@ namespace
             if (m_UiState->SelectedEntityGuid != 0 && sim->Runner)
             {
                 gizmoActive = ManipulateSelectedEntity(*sim);
+            }
+
+            if (imageHovered && !toolbarHovered && !ImGui::GetIO().WantTextInput && sim->Runner &&
+                (ImGui::IsKeyChordPressed(ImGuiMod_Shift | ImGuiKey_A) ||
+                 (ImGui::IsMouseReleased(ImGuiMouseButton_Right) && !ImGui::IsMouseDragPastThreshold(ImGuiMouseButton_Right, 4.0f))))
+            {
+                m_UiState->CreatePopup.RequestAtMouse();
             }
 
             if (imageHovered && !toolbarHovered && !gizmoActive && !ImGuizmo::IsOver() && sim->Runner &&

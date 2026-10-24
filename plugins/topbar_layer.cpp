@@ -13,19 +13,20 @@ namespace
     {
         using Dependencies = std::tuple<Logger, FileDialog, SceneManager, UiPreferences, FontAssetCatalog, UiState,
                                         AppStateService, IFileSystem, RenderSettingsService, AppPaths, WindowManager,
-                                        AppInfo>;
+                                        AppInfo, AssetDirectories>;
 
         TopBarLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<FileDialog> fileDialog,
                    std::shared_ptr<SceneManager> scenes, std::shared_ptr<UiPreferences> uiPreferences,
                    std::shared_ptr<FontAssetCatalog> fontAssets, std::shared_ptr<UiState> uiState,
                    std::shared_ptr<AppStateService> appState, std::shared_ptr<IFileSystem> fileSystem,
                    std::shared_ptr<RenderSettingsService> renderSettings, std::shared_ptr<AppPaths> appPaths,
-                   std::shared_ptr<WindowManager> windows, std::shared_ptr<AppInfo> appInfo)
+                   std::shared_ptr<WindowManager> windows, std::shared_ptr<AppInfo> appInfo,
+                   std::shared_ptr<AssetDirectories> assets)
             : HotReloadableLayer(logger), m_FileDialog(std::move(fileDialog)), m_Scenes(std::move(scenes)),
               m_UiPreferences(std::move(uiPreferences)), m_FontAssets(std::move(fontAssets)),
               m_UiState(std::move(uiState)), m_AppState(std::move(appState)), m_FileSystem(std::move(fileSystem)),
               m_RenderSettings(std::move(renderSettings)), m_AppPaths(std::move(appPaths)), m_Windows(std::move(windows)),
-              m_AppInfo(std::move(appInfo))
+              m_AppInfo(std::move(appInfo)), m_Assets(std::move(assets))
         {
         }
 
@@ -58,6 +59,7 @@ namespace
             HandleShortcuts();
             HandleHistoryShortcuts();
             RenderMenuBar();
+            RenderCreatePopup();
             RenderSettingsPopup();
             RenderExportDialog();
             RenderUnsavedPrompt();
@@ -565,6 +567,73 @@ namespace
             ImGui::EndMenu();
         }
 
+        [[nodiscard]] AssetScanConfig MeshScanConfig() const
+        {
+            AssetScanConfig config;
+            config.ProjectRoot = m_FileSystem->GetWorkingDirectory();
+            config.Roots.push_back(m_FileSystem->ResolvePath("assets"));
+            if (m_AppPaths->IsInstalled()) config.Roots.push_back(m_AppPaths->UserSubdir("models"));
+            for (const auto& directory : m_AppState->GetMeshScanDirectories()) config.Roots.emplace_back(directory);
+            return config;
+        }
+
+        void RefreshCreateCatalog()
+        {
+            const auto meshes = m_CreateAssets.Get(AssetFieldKind::Mesh, MeshScanConfig());
+            auto scripts = m_Assets ? ListScripts(*m_Assets) : std::vector<std::string>{};
+            if (meshes.Items == m_CreateMeshes && scripts == m_CreateScripts && !m_CreateEntries.empty()) return;
+            m_CreateMeshes = meshes.Items;
+            m_CreateScripts = std::move(scripts);
+
+            auto entries = BuiltinCreateEntries();
+            if (m_CreateMeshes)
+            {
+                std::vector<std::string> paths;
+                paths.reserve(m_CreateMeshes->size());
+                for (const auto& asset : *m_CreateMeshes) paths.push_back(asset.Path);
+                auto found = MeshCreateEntries(paths);
+                std::ranges::move(found, std::back_inserter(entries));
+            }
+            auto scriptEntries = ScriptCreateEntries(m_CreateScripts);
+            std::ranges::move(scriptEntries, std::back_inserter(entries));
+            m_CreateEntries = SupportedCreateEntries(std::move(entries), [](const std::string& name)
+            {
+                return ComponentRegistry::Instance().FindByName(name) != nullptr;
+            });
+            m_CreateTree = BuildCreateTree(m_CreateEntries);
+        }
+
+        [[nodiscard]] CreateMenuHost CreateHost() const
+        {
+            return {m_CreateEntries, &m_CreateTree, m_UiState->IconFont};
+        }
+
+        void PickCreateEntry(const std::optional<std::size_t> picked)
+        {
+            if (!picked) return;
+            if (const auto runner = CurrentRunner()) CreateFromEntry(*runner, *m_UiState, m_CreateEntries[*picked]);
+        }
+
+        void RenderCreatePopup()
+        {
+            constexpr const char* kPopup = "##CreatePopup";
+            auto& request = m_UiState->CreatePopup;
+            if (request.Open && CurrentRunner())
+            {
+                m_CreateMenu.Reset();
+                if (!request.AtMouse) ImGui::SetNextWindowPos(ImVec2(request.Position.x, request.Position.y));
+                ImGui::OpenPopup(kPopup);
+            }
+            request.Open = false;
+            if (!ImGui::BeginPopup(kPopup)) return;
+            RefreshCreateCatalog();
+            const bool appearing = ImGui::IsWindowAppearing();
+            const auto picked = m_CreateMenu.Draw(CreateHost(), appearing);
+            PickCreateEntry(picked);
+            if (picked || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
         void RenderSettingsPopup()
         {
             if (m_UiState->ShowSettingsWindow && !ImGui::IsPopupOpen("Settings"))
@@ -823,6 +892,13 @@ namespace
         std::shared_ptr<AppPaths> m_AppPaths;
         std::shared_ptr<WindowManager> m_Windows;
         std::shared_ptr<AppInfo> m_AppInfo;
+        std::shared_ptr<AssetDirectories> m_Assets;
+        AssetCatalog m_CreateAssets;
+        AssetCatalog::Entries m_CreateMeshes;
+        std::vector<std::string> m_CreateScripts;
+        std::vector<CreateEntry> m_CreateEntries;
+        CreateNode m_CreateTree;
+        CreateMenu m_CreateMenu;
         std::string m_WindowTitle;
         int m_PromptFrames = 0;
         std::weak_ptr<SimulationRunner> m_CapacityRunner;
