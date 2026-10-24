@@ -32,7 +32,11 @@ KEYS = {
     "a": 30, "s": 31, "d": 32, "f": 33, "g": 34, "h": 35, "j": 36, "k": 37, "l": 38, "shift": 42,
     "z": 44, "x": 45, "c": 46, "v": 47, "b": 48, "n": 49, "m": 50, "alt": 56, "space": 57, ".": 52, "-": 12, "delete": 111,
     "f1": 59, "f2": 60, "f3": 61, "f4": 62, "f5": 63, "up": 103, "left": 105, "right": 106, "down": 108,
+    "home": 102, "end": 107, "pageup": 104, "pagedown": 109, "/": 53,
 }
+KEYS["escape"] = KEYS["esc"]
+KEYS["return"] = KEYS["enter"]
+KEYS["del"] = KEYS["delete"]
 
 
 def hypr(*args):
