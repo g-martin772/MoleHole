@@ -35,6 +35,11 @@ KEYS = {
     "home": 102, "end": 107, "pageup": 104, "pagedown": 109, "/": 53,
 }
 KEYS["escape"] = KEYS["esc"]
+CHORDS = {}
+if os.environ.get("UI_DRIVE_LAYOUT", "de") == "de":
+    KEYS["y"], KEYS["z"] = KEYS["z"], KEYS["y"]
+    KEYS["-"] = 53
+    CHORDS["/"] = [KEYS["shift"], 8]
 KEYS["return"] = KEYS["enter"]
 KEYS["del"] = KEYS["delete"]
 
@@ -211,7 +216,7 @@ def cmd_key(*names):
     dev = Uinput()
     dispatch(f"hl.dsp.focus({{window='address:{window()['address']}'}})")
     for chord in names:
-        codes = [KEYS[part] for part in chord.split("+")]
+        codes = [code for part in chord.split("+") for code in CHORDS.get(part, [KEYS[part]])]
         for code in codes:
             dev.emit(EV_KEY, code, 1)
         time.sleep(0.05)
