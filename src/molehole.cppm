@@ -74,6 +74,7 @@ export import :UI.AssetCatalog;
 export import :UI.AssetPicker;
 export import :UI.CreateMenu;
 export import :UI.Actions;
+export import :UI.Hotkeys;
 export import :UI.GraphStyle;
 export import :UI.NodeEditorView;
 export import :UI.Widgets;

@@ -42,12 +42,7 @@ namespace
         void HandleHotkeys()
         {
             const bool anyPopup = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
-            bool open = std::exchange(m_UiState->PaletteRequested, false);
-            open |= ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P) || ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_P);
-            if (open && !m_Open && !anyPopup) OpenPalette();
-
-            if (!ImGui::GetIO().WantTextInput && !anyPopup && ImGui::IsKeyChordPressed(ImGuiKey_F1))
-                m_UiState->ShowShortcutSheet = !m_UiState->ShowShortcutSheet;
+            if (std::exchange(m_UiState->PaletteRequested, false) && !m_Open && !anyPopup) OpenPalette();
         }
 
         void OpenPalette()

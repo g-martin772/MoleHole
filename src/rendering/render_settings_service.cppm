@@ -144,6 +144,23 @@ export namespace MoleHole
         [[nodiscard]] const RenderProfileSet& Defaults() const noexcept { return m_Defaults; }
         void UseCurrentAsDefaults() { m_Defaults = m_Set; }
 
+        void SetDefaultProfile(const RenderContext context, const std::string_view name)
+        {
+            if (!m_Defaults.Assign(context, name)) return;
+            SyncUnadopted();
+        }
+
+        void ResetDefaultProfiles()
+        {
+            const RenderProfileSet factory;
+            for (int i = 0; i < kRenderContextCount; ++i)
+            {
+                const auto context = static_cast<RenderContext>(i);
+                m_Defaults.Assign(context, factory.ProfileName(context));
+            }
+            SyncUnadopted();
+        }
+
         void SetProfileOverride(std::string name)
         {
             m_ProfileOverride = std::move(name);
@@ -196,6 +213,13 @@ export namespace MoleHole
         }
 
     private:
+        void SyncUnadopted()
+        {
+            if (m_Adopted) return;
+            m_Set = m_Defaults;
+            Rebuild();
+        }
+
         static bool SettingsEqual(const RenderSettings& a, const RenderSettings& b)
         {
             return RenderSettingRegistry().Diff(a, b).empty();

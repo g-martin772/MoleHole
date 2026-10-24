@@ -76,9 +76,21 @@ Open from sidebar or View menu.
 
 ## Options
 ### Settings
-- Play intro on startup
-- UI scale
-- Font + font size
+Edit → Preferences (or the gear in the sidebar). Each section has a Reset button that restores its defaults.
+- Interface: play intro on startup, UI scale, font + font size
+- Keyboard: rebind global shortcuts (see Rebinding shortcuts below)
+- Editing: auto save on/off and delay (same as File → Auto Save), max undo steps (16 to 100000; also editable in the Undo History window)
+- Rendering: default render profile for the Edit, Play and Export contexts, used for new scenes and scenes without their own render settings (a scene's own assignments win)
+- Units: display units
+- Export: default export folder
+- Settings are stored in `molehole_state.yaml` (`Shortcuts:` holds only the keys you changed)
+
+#### Rebinding shortcuts
+- Keyboard section → Change, press the new combination; Esc cancels, Unbind removes the key, Use default / Default restores it
+- A combination that another action already uses is refused and the action holding it is shown; unbind or change that one first
+- Plain Enter, Tab, Space, Backspace, arrows and W A S D Q E are reserved (menus, camera movement); use Ctrl or Alt with them
+- Rebindable: every action in the command palette that is not tied to a window (File, Undo/Redo, View window toggles, Layout, Simulation step and speed, Render toggles, Help)
+- Fixed (not rebindable): viewport keys (W A S D E Q, F, Del, T R S / 1 2 3, Shift+A), scene window keys (Del, F2, Ctrl+D, Ctrl+A, Shift+A), all Animation Graph editor keys, Esc/Enter/arrows in popups and the palette. F1 lists them; they show as Scene / Viewport or Graph Editor
 
 ### Camera
 - FOV, speed, mouse sensitivity

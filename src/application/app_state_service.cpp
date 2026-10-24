@@ -119,7 +119,17 @@ namespace MoleHole
                     m_UiState->ShowAnimationGraphWindow = v.as<bool>();
                 if (const auto v = ui["ShowUndoHistoryWindow"]) m_UiState->ShowUndoHistoryWindow = v.as<bool>();
                 if (const auto v = ui["ShowStatusBar"]) m_UiState->ShowStatusBar = v.as<bool>();
-                if (const auto v = ui["UndoHistoryCapacity"]) m_UiState->UndoHistoryCapacity = std::clamp(v.as<int>(), 16, 100000);
+                if (const auto v = ui["UndoHistoryCapacity"]) m_UiState->UndoHistoryCapacity = ClampUndoCapacity(v.as<int>());
+            }
+            if (const auto shortcuts = node["Shortcuts"]; shortcuts && shortcuts.IsMap())
+            {
+                ShortcutOverrides raw;
+                for (const auto& entry : shortcuts)
+                {
+                    if (entry.first.IsScalar() && (entry.second.IsScalar() || entry.second.IsNull()))
+                        raw[entry.first.as<std::string>()] = entry.second.IsNull() ? std::string() : entry.second.as<std::string>();
+                }
+                ShortcutOverrideStore::Instance().Set(SanitizeShortcutOverrides(raw, DefaultActions()));
             }
             if (const auto autosave = node["Autosave"])
             {
@@ -252,6 +262,8 @@ namespace MoleHole
             root["UI"]["ShowUndoHistoryWindow"] = m_UiState->ShowUndoHistoryWindow;
             root["UI"]["ShowStatusBar"] = m_UiState->ShowStatusBar;
             root["UI"]["UndoHistoryCapacity"] = m_UiState->UndoHistoryCapacity;
+
+            for (const auto& [id, chord] : ShortcutOverrideStore::Instance().Overrides()) root["Shortcuts"][id] = chord;
 
             root["Autosave"]["Enabled"] = m_UiState->AutosaveEnabled;
             root["Autosave"]["DelaySeconds"] = m_UiState->AutosaveDelaySeconds;

@@ -170,8 +170,14 @@ export namespace MoleHole
         {
             auto* ui = b.Host().Ui;
             const auto history = ActionNeed::Scene | ActionNeed::Paused;
-            b.Defer("edit.undo", "Undo", "Edit", "Ctrl+Z").Needs = history | ActionNeed::CanUndo;
-            b.Defer("edit.redo", "Redo", "Edit", "Ctrl+Shift+Z / Ctrl+Y").Needs = history | ActionNeed::CanRedo;
+            auto& undo = b.Defer("edit.undo", "Undo", "Edit", "Ctrl+Z");
+            undo.Needs = history | ActionNeed::CanUndo;
+            undo.Repeat = true;
+            undo.OwnGuard = true;
+            auto& redo = b.Defer("edit.redo", "Redo", "Edit", "Ctrl+Shift+Z / Ctrl+Y");
+            redo.Needs = history | ActionNeed::CanRedo;
+            redo.Repeat = true;
+            redo.OwnGuard = true;
             b.Edit("edit.select_all", "Select All", "Ctrl+A", EditAction::SelectAll).Needs = ActionNeed::Scene;
             b.Edit("edit.duplicate", "Duplicate", "Ctrl+D", EditAction::Duplicate);
             b.Edit("edit.delete", "Delete", "Del", EditAction::Delete);
@@ -239,11 +245,11 @@ export namespace MoleHole
             b.Transport("sim.step", "Step One Tick", ".", [ui = host.Ui]
             {
                 if (ui) ui->Transport.Push({TransportRequest::Kind::Step, StepTicks(false, ui->TransportStepCount)});
-            }, ActionNeed::Scene | ActionNeed::Paused);
+            }, ActionNeed::Scene | ActionNeed::Paused).Repeat = true;
             b.Transport("sim.step_n", "Step Several Ticks", "Shift+.", [ui = host.Ui]
             {
                 if (ui) ui->Transport.Push({TransportRequest::Kind::Step, StepTicks(true, ui->TransportStepCount)});
-            }, ActionNeed::Scene | ActionNeed::Paused);
+            }, ActionNeed::Scene | ActionNeed::Paused).Repeat = true;
             b.Transport("sim.slower", "Slower (previous speed preset)", "[ / Num -", [host] { SetSpeed(host, -1); });
             b.Transport("sim.faster", "Faster (next speed preset)", "] / Num +", [host] { SetSpeed(host, 1); });
             b.Transport("sim.snapshot", "Take Snapshot", {}, [ui = host.Ui]
@@ -311,7 +317,7 @@ export namespace MoleHole
         }
     }
 
-    [[nodiscard]] inline std::vector<ActionDescriptor> BuildActions(const ActionHost& host, const ActionSources& sources = {})
+    [[nodiscard]] inline std::vector<ActionDescriptor> BuildBaseActions(const ActionHost& host, const ActionSources& sources = {})
     {
         ActionDetail::Builder builder(host);
         ActionDetail::AddFile(builder, sources);
@@ -326,9 +332,28 @@ export namespace MoleHole
         return builder.Take();
     }
 
+    [[nodiscard]] inline std::vector<ActionDescriptor> BuildActions(const ActionHost& host, const ActionSources& sources = {})
+    {
+        auto actions = BuildBaseActions(host, sources);
+        ApplyShortcutOverrides(actions, ShortcutOverrideStore::Instance().Overrides());
+        return actions;
+    }
+
+    [[nodiscard]] inline const std::vector<ActionDescriptor>& DefaultActions()
+    {
+        static const auto actions = BuildBaseActions({});
+        return actions;
+    }
+
     [[nodiscard]] inline const std::vector<ActionDescriptor>& StaticActions()
     {
-        static const auto actions = BuildActions({});
+        static std::vector<ActionDescriptor> actions;
+        static std::uint64_t revision = std::numeric_limits<std::uint64_t>::max();
+        if (const auto current = ShortcutOverrideStore::Instance().Revision(); current != revision || actions.empty())
+        {
+            actions = BuildActions({});
+            revision = current;
+        }
         return actions;
     }
 

@@ -89,6 +89,32 @@ export namespace MoleHole
         ImGui::Spacing();
     }
 
+    inline bool SectionHeaderWithReset(const char* title, const char* resetId, const char* tooltip = "Restore this section's defaults")
+    {
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(Palette::Accent));
+        ImGui::TextUnformatted(title);
+        ImGui::PopStyleColor();
+        const char* label = "Reset";
+        const float width = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        ImGui::SameLine(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - width);
+        ImGui::PushID(resetId);
+        const bool clicked = ImGui::SmallButton(label);
+        ImGui::PopID();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip);
+        ImGui::Separator();
+        ImGui::Spacing();
+        return clicked;
+    }
+
+    inline bool UndoCapacityInput(const char* label, int* capacity)
+    {
+        int value = *capacity;
+        const bool edited = ImGui::DragInt(label, &value, 8.0f, kMinUndoCapacity, kMaxUndoCapacity, "%d steps", ImGuiSliderFlags_AlwaysClamp);
+        if (edited) *capacity = ClampUndoCapacity(value);
+        return edited;
+    }
+
     inline void TextDisabledWrapped(const std::string_view text)
     {
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));

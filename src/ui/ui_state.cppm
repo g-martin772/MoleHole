@@ -18,6 +18,15 @@ export namespace MoleHole
     constexpr std::uint32_t kViewportBufferId = 1;
     constexpr std::uint32_t kIntroBufferId = 2;
 
+    inline constexpr int kMinUndoCapacity = 16;
+    inline constexpr int kMaxUndoCapacity = 100000;
+    inline constexpr int kDefaultUndoCapacity = static_cast<int>(GPP::CommandHistory::kDefaultCapacity);
+
+    [[nodiscard]] constexpr int ClampUndoCapacity(const int value) noexcept
+    {
+        return std::clamp(value, kMinUndoCapacity, kMaxUndoCapacity);
+    }
+
     enum class GizmoOperation { Translate, Rotate, Scale };
     enum class GizmoMode { Local, World };
 
@@ -143,7 +152,7 @@ export namespace MoleHole
         BookmarkView Bookmarks;
         std::int32_t TransportStepCount = static_cast<std::int32_t>(kDefaultStepTicks);
         bool GraphEditorFocused = false;
-        int UndoHistoryCapacity = static_cast<int>(GPP::CommandHistory::kDefaultCapacity);
+        int UndoHistoryCapacity = kDefaultUndoCapacity;
         GizmoOperation ActiveGizmoOperation = GizmoOperation::Translate;
         GizmoMode ActiveGizmoMode = GizmoMode::World;
         bool GizmoSnapEnabled = false;

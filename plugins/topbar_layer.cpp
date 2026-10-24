@@ -11,19 +11,17 @@ namespace
 {
     struct TopBarLayer final : public HotReloadableLayer
     {
-        using Dependencies = std::tuple<Logger, FileDialog, SceneManager, UiPreferences, FontAssetCatalog, UiState,
+        using Dependencies = std::tuple<Logger, FileDialog, SceneManager, UiState,
                                         AppStateService, IFileSystem, RenderSettingsService, AppPaths, WindowManager,
                                         AppInfo, AssetDirectories>;
 
         TopBarLayer(const std::shared_ptr<Logger>& logger, std::shared_ptr<FileDialog> fileDialog,
-                   std::shared_ptr<SceneManager> scenes, std::shared_ptr<UiPreferences> uiPreferences,
-                   std::shared_ptr<FontAssetCatalog> fontAssets, std::shared_ptr<UiState> uiState,
+                   std::shared_ptr<SceneManager> scenes, std::shared_ptr<UiState> uiState,
                    std::shared_ptr<AppStateService> appState, std::shared_ptr<IFileSystem> fileSystem,
                    std::shared_ptr<RenderSettingsService> renderSettings, std::shared_ptr<AppPaths> appPaths,
                    std::shared_ptr<WindowManager> windows, std::shared_ptr<AppInfo> appInfo,
                    std::shared_ptr<AssetDirectories> assets)
             : HotReloadableLayer(logger), m_FileDialog(std::move(fileDialog)), m_Scenes(std::move(scenes)),
-              m_UiPreferences(std::move(uiPreferences)), m_FontAssets(std::move(fontAssets)),
               m_UiState(std::move(uiState)), m_AppState(std::move(appState)), m_FileSystem(std::move(fileSystem)),
               m_RenderSettings(std::move(renderSettings)), m_AppPaths(std::move(appPaths)), m_Windows(std::move(windows)),
               m_AppInfo(std::move(appInfo)), m_Assets(std::move(assets))
@@ -56,13 +54,11 @@ namespace
         {
             if (m_UiState->QuitRequested.exchange(false)) RequestAction({SceneAction::Kind::Quit, {}});
             ApplyHistoryCapacity();
-            HandleShortcuts();
-            HandleHistoryShortcuts();
+            HandleHotkeys();
             HandleActionRequests();
             RenderMenuBar();
             RenderCreatePopup();
             RenderLayoutSavePopup();
-            RenderSettingsPopup();
             RenderExportDialog();
             RenderUnsavedPrompt();
             TickAutosave();
@@ -70,13 +66,26 @@ namespace
         }
 
     private:
-        void HandleShortcuts()
+        void HandleHotkeys()
         {
-            if (ImGui::GetIO().WantTextInput) return;
-            if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S)) DoSaveAs();
-            else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_S)) DoSave();
-            else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_O)) DoOpen();
-            else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_N)) DoNewScene();
+            const bool graphEditor = std::exchange(m_UiState->GraphEditorFocused, false);
+            const auto revision = ShortcutOverrideStore::Instance().Revision();
+            if (revision != m_HotkeyRevision)
+            {
+                m_Hotkeys = CollectHotkeys(StaticActions());
+                m_HotkeyRevision = revision;
+            }
+            const ImGuiIO& io = ImGui::GetIO();
+            const HotkeyFrame frame{io.WantTextInput, ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel),
+                                    ImGui::IsAnyItemActive(), graphEditor};
+            const auto id = PollHotkey(m_Hotkeys, frame);
+            if (!id) return;
+            const auto runner = CurrentRunner();
+            const auto actions = BuildActions({m_UiState.get(), runner, m_RenderSettings.get()});
+            const auto* action = FindAction(actions, *id);
+            if (!action || !action->Invoke) return;
+            if (!action->OwnGuard && !DisabledReason(action->Needs, MakeActionContext(*m_UiState, runner.get())).empty()) return;
+            action->Invoke();
         }
 
         void HandleActionRequests()
@@ -134,21 +143,6 @@ namespace
             if (!runner || !available) return;
             if (redo) runner->Redo();
             else runner->Undo();
-        }
-
-        void HandleHistoryShortcuts()
-        {
-            const bool graphEditor = std::exchange(m_UiState->GraphEditorFocused, false);
-            const ImGuiIO& io = ImGui::GetIO();
-            if (io.WantTextInput || ImGui::IsAnyItemActive() || graphEditor) return;
-            if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) return;
-            constexpr auto repeat = ImGuiInputFlags_Repeat;
-            if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z, repeat) ||
-                ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Y, repeat))
-            {
-                StepHistory(true);
-            }
-            else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Z, repeat)) StepHistory(false);
         }
 
         void RequestAction(SceneAction action)
@@ -463,7 +457,7 @@ namespace
                 {
                     for (const int seconds : kAutosaveDelaysSeconds)
                     {
-                        if (ImGui::MenuItem(std::format("{} s", seconds).c_str(), nullptr,
+                        if (ImGui::MenuItem(FormatAutosaveDelay(seconds).c_str(), nullptr,
                                             m_UiState->AutosaveDelaySeconds == seconds))
                         {
                             m_UiState->AutosaveDelaySeconds = seconds;
@@ -706,110 +700,6 @@ namespace
             ImGui::EndPopup();
         }
 
-        void RenderSettingsPopup()
-        {
-            if (m_UiState->ShowSettingsWindow && !ImGui::IsPopupOpen("Settings"))
-            {
-                ImGui::OpenPopup("Settings");
-            }
-
-            const ImGuiViewport* viewport = ImGui::GetMainViewport();
-            ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowSize(ImVec2(480, 520), ImGuiCond_Appearing);
-
-            if (ImGui::BeginPopupModal("Settings", &m_UiState->ShowSettingsWindow, ImGuiWindowFlags_NoResize))
-            {
-                SectionHeader("MOLEHOLE");
-                ImGui::TextWrapped(
-                    "A relativistic black hole visualizer -- gravitational lensing, accretion disks, "
-                    "and spacetime curvature rendered in real time.");
-
-                SectionHeader("INTERFACE");
-                ImGui::Checkbox("Play intro animation on startup", &m_UiState->IntroEnabled);
-                float scale = m_UiPreferences->GetUiScale();
-                if (ImGui::SliderFloat("UI Scale", &scale, 0.5f, 2.0f, "%.2f"))
-                {
-                    m_UiPreferences->SetUiScale(scale);
-                }
-
-                const auto currentFont = m_UiPreferences->GetFontName();
-                const auto currentSize = m_UiPreferences->GetFontSize();
-                const auto availableFonts = m_FontAssets->GetAvailableFonts();
-                if (ImGui::BeginCombo("Font", currentFont.c_str()))
-                {
-                    for (const auto& font : availableFonts)
-                    {
-                        const bool isSelected = font.Name == currentFont;
-                        if (ImGui::Selectable(font.Name.c_str(), isSelected))
-                        {
-                            m_UiPreferences->SetFont(font.Name, currentSize);
-                        }
-                        if (isSelected) ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                float fontSize = currentSize;
-                if (ImGui::SliderFloat("Font Size", &fontSize, 10.0f, 32.0f, "%.0f"))
-                {
-                    m_UiPreferences->SetFont(currentFont, fontSize);
-                }
-
-                SectionHeader("UNITS");
-                {
-                    const auto current = Units::GetDisplayPreset();
-                    ImGui::SetNextItemWidth(ImGui::CalcItemWidth());
-                    if (ImGui::BeginCombo("Display units", std::string(Units::DisplayPresetName(current)).c_str()))
-                    {
-                        for (const auto preset : Units::kDisplayPresets)
-                        {
-                            if (ImGui::Selectable(std::string(Units::DisplayPresetName(preset)).c_str(), preset == current))
-                            {
-                                Units::SetDisplayPreset(preset);
-                            }
-                        }
-                        ImGui::EndCombo();
-                    }
-                    if (ImGui::IsItemHovered())
-                    {
-                        ImGui::SetTooltip("Which units the inspector prefers for lengths, masses and times.\n"
-                                          "Auto picks by magnitude; Human = m/km/kg, Stellar = Rsun/AU/Msun, Galactic = pc/Msun/yr.\n"
-                                          "Right-click a value to force one unit for that field.");
-                    }
-                }
-
-                SectionHeader("EXPORT");
-                {
-                    std::array<char, 512> exportDir{};
-                    const auto current = m_AppState->GetDefaultExportDirectory();
-                    std::ranges::copy(current.substr(0, exportDir.size() - 1), exportDir.begin());
-                    if (ImGui::InputText("Default Folder", exportDir.data(), exportDir.size()))
-                    {
-                        m_AppState->SetDefaultExportDirectory(exportDir.data());
-                    }
-                    if (ImGui::Button("Browse...##ExportFolder"))
-                    {
-                        if (const auto folder = m_FileDialog->PickFolder(m_FileSystem->ResolvePath(current)))
-                        {
-                            m_AppState->SetDefaultExportDirectory(folder->string());
-                        }
-                    }
-                    ImGui::SameLine();
-                    if (ImGui::Button("Reset##ExportFolder")) m_AppState->SetDefaultExportDirectory(m_AppPaths->UserSubdir("exports").string());
-                    ImGui::TextDisabled("Relative paths start at the working directory");
-                }
-
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-                if (ImGui::Button("Close", ImVec2(120, 0)))
-                {
-                    m_UiState->ShowSettingsWindow = false;
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::EndPopup();
-            }
-        }
-
         void RenderExportDialog()
         {
             if (m_ShowExportDialog && !ImGui::IsPopupOpen("Export Render"))
@@ -1018,8 +908,6 @@ namespace
         std::shared_ptr<FileDialog> m_FileDialog;
         std::shared_ptr<IFileSystem> m_FileSystem;
         std::shared_ptr<SceneManager> m_Scenes;
-        std::shared_ptr<UiPreferences> m_UiPreferences;
-        std::shared_ptr<FontAssetCatalog> m_FontAssets;
         std::shared_ptr<UiState> m_UiState;
         std::shared_ptr<AppStateService> m_AppState;
         std::shared_ptr<RenderSettingsService> m_RenderSettings;
@@ -1037,6 +925,8 @@ namespace
         int m_PromptFrames = 0;
         std::weak_ptr<SimulationRunner> m_CapacityRunner;
         std::size_t m_AppliedCapacity = 0;
+        std::vector<HotkeyBinding> m_Hotkeys;
+        std::uint64_t m_HotkeyRevision = std::numeric_limits<std::uint64_t>::max();
 
         bool m_ShowExportDialog = false;
         ExportSettings m_ExportForm;

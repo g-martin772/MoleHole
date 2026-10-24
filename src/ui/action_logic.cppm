@@ -54,8 +54,21 @@ export namespace MoleHole
         std::string Keywords;
         ActionNeed Needs = ActionNeed::None;
         const bool* Toggle = nullptr;
+        bool Repeat = false;
+        bool OwnGuard = false;
         std::function<void()> Invoke;
     };
+
+    inline constexpr auto kBindableKeys = std::to_array<std::string_view>({
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V",
+        "W", "X", "Y", "Z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9",
+        "F10", "F11", "F12", "Del", "Enter", "Backspace", "Tab", "Space", ".", ",", "[", "]", "-", "=", ";", "'", "`", "\\", "Up",
+        "Down", "Left", "Right", "Home", "End", "PageUp", "PageDown", "Insert", "Num +", "Num -",
+    });
+
+    inline constexpr auto kReservedBareKeys = std::to_array<std::string_view>({
+        "Enter", "Tab", "Space", "Backspace", "Up", "Down", "Left", "Right", "W", "A", "S", "D", "Q", "E",
+    });
 
     namespace ShortcutDetail
     {
@@ -82,6 +95,9 @@ export namespace MoleHole
             if (lower == "backspace") return "Backspace";
             if (lower == "tab") return "Tab";
             if (lower == "space") return "Space";
+            if (const auto known = std::ranges::find_if(kBindableKeys, [&](const std::string_view name) { return Lower(name) == lower; });
+                known != kBindableKeys.end() && key.size() > 1)
+                return std::string(*known);
             if (lower.size() >= 2 && lower.front() == 'f' && std::ranges::all_of(lower.substr(1), [](const char c)
                                                                                   { return std::isdigit(static_cast<unsigned char>(c)); }))
                 return "F" + lower.substr(1);
@@ -172,11 +188,165 @@ export namespace MoleHole
         return conflicts;
     }
 
+    struct Chord
+    {
+        bool Ctrl = false;
+        bool Alt = false;
+        bool Shift = false;
+        std::string Key;
+    };
+
+    [[nodiscard]] inline Chord ParseChord(const std::string_view text)
+    {
+        const auto normalized = NormalizeShortcut(text);
+        Chord chord;
+        std::string_view rest = normalized;
+        for (bool again = true; again;)
+        {
+            again = false;
+            for (const auto& [prefix, flag] : {std::pair<std::string_view, bool Chord::*>{"Ctrl+", &Chord::Ctrl},
+                                               {"Alt+", &Chord::Alt}, {"Shift+", &Chord::Shift}})
+            {
+                if (rest.starts_with(prefix) && rest.size() > prefix.size())
+                {
+                    chord.*flag = true;
+                    rest.remove_prefix(prefix.size());
+                    again = true;
+                }
+            }
+        }
+        chord.Key = std::string(rest);
+        return chord;
+    }
+
+    [[nodiscard]] inline std::string ChordProblem(const std::string_view text)
+    {
+        if (text.find('/') != std::string_view::npos) return "One key combination only";
+        const auto chord = ParseChord(text);
+        if (chord.Key.empty()) return "No key pressed";
+        if (!std::ranges::contains(kBindableKeys, std::string_view(chord.Key))) return "This key cannot be bound";
+        if (!chord.Ctrl && !chord.Alt && std::ranges::contains(kReservedBareKeys, std::string_view(chord.Key)))
+            return "Reserved for navigation and camera movement without Ctrl or Alt";
+        return {};
+    }
+
+    [[nodiscard]] inline bool IsRebindable(const ActionDescriptor& action)
+    {
+        return action.Scope.empty() && action.Id.find(':') == std::string::npos && static_cast<bool>(action.Invoke);
+    }
+
+    using ShortcutOverrides = std::map<std::string, std::string>;
+
+    inline void ApplyShortcutOverrides(const std::span<ActionDescriptor> actions, const ShortcutOverrides& overrides)
+    {
+        for (auto& action : actions)
+        {
+            if (!IsRebindable(action)) continue;
+            if (const auto found = overrides.find(action.Id); found != overrides.end()) action.Shortcut = found->second;
+        }
+    }
+
     [[nodiscard]] inline const ActionDescriptor* FindAction(const std::span<const ActionDescriptor> actions, const std::string_view id)
     {
         const auto found = std::ranges::find(actions, id, &ActionDescriptor::Id);
         return found == actions.end() ? nullptr : &*found;
     }
+
+    [[nodiscard]] inline std::vector<const ActionDescriptor*> FindChordHolders(const std::span<const ActionDescriptor> actions,
+                                                                             const std::string_view excludeId,
+                                                                             const std::string_view chord)
+    {
+        std::vector<const ActionDescriptor*> holders;
+        const auto wanted = NormalizeShortcut(chord);
+        for (const auto& action : actions)
+        {
+            if (action.Id == excludeId || action.Scope == "Graph Editor") continue;
+            if (std::ranges::contains(SplitShortcuts(action.Shortcut), wanted)) holders.push_back(&action);
+        }
+        return holders;
+    }
+
+    struct RebindOutcome
+    {
+        bool Applied = false;
+        std::string Problem;
+        std::vector<std::string> Holders;
+    };
+
+    [[nodiscard]] inline RebindOutcome TrySetShortcut(ShortcutOverrides& overrides, const std::span<const ActionDescriptor> defaults,
+                                                      const std::string_view id, const std::string_view chordText)
+    {
+        RebindOutcome outcome;
+        const auto* base = FindAction(defaults, id);
+        if (!base || !IsRebindable(*base))
+        {
+            outcome.Problem = "This action cannot be rebound";
+            return outcome;
+        }
+        const auto chord = NormalizeShortcut(chordText);
+        if (outcome.Problem = ChordProblem(chord); !outcome.Problem.empty()) return outcome;
+
+        auto effective = std::vector<ActionDescriptor>(defaults.begin(), defaults.end());
+        ApplyShortcutOverrides(effective, overrides);
+        for (const auto* holder : FindChordHolders(effective, id, chord))
+            outcome.Holders.push_back(holder->Label + (holder->Scope.empty() ? std::string() : " (" + holder->Scope + ")"));
+        if (!outcome.Holders.empty()) return outcome;
+
+        if (chord == FormatShortcuts(base->Shortcut)) overrides.erase(std::string(id));
+        else overrides[std::string(id)] = chord;
+        outcome.Applied = true;
+        return outcome;
+    }
+
+    inline void ClearShortcut(ShortcutOverrides& overrides, const std::span<const ActionDescriptor> defaults, const std::string_view id)
+    {
+        const auto* base = FindAction(defaults, id);
+        if (!base || !IsRebindable(*base)) return;
+        if (base->Shortcut.empty()) overrides.erase(std::string(id));
+        else overrides[std::string(id)] = {};
+    }
+
+    inline void ResetShortcut(ShortcutOverrides& overrides, const std::string_view id) { overrides.erase(std::string(id)); }
+
+    [[nodiscard]] inline ShortcutOverrides SanitizeShortcutOverrides(const ShortcutOverrides& raw,
+                                                                    const std::span<const ActionDescriptor> defaults)
+    {
+        ShortcutOverrides clean;
+        for (const auto& [id, text] : raw)
+        {
+            if (text.empty())
+            {
+                ClearShortcut(clean, defaults, id);
+                continue;
+            }
+            (void)TrySetShortcut(clean, defaults, id, text);
+        }
+        return clean;
+    }
+
+    class ShortcutOverrideStore
+    {
+    public:
+        [[nodiscard]] static ShortcutOverrideStore& Instance()
+        {
+            static ShortcutOverrideStore store;
+            return store;
+        }
+
+        [[nodiscard]] const ShortcutOverrides& Overrides() const noexcept { return m_Overrides; }
+        [[nodiscard]] std::uint64_t Revision() const noexcept { return m_Revision; }
+
+        void Set(ShortcutOverrides overrides)
+        {
+            if (overrides == m_Overrides) return;
+            m_Overrides = std::move(overrides);
+            ++m_Revision;
+        }
+
+    private:
+        ShortcutOverrides m_Overrides;
+        std::uint64_t m_Revision = 0;
+    };
 
     class RecentActions
     {

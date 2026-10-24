@@ -55,8 +55,11 @@ namespace
             const auto now = std::chrono::steady_clock::now();
             const auto rows = BuildHistoryRows(m_View, now);
 
-            ImGui::TextDisabled("%zu undo  |  %zu redo  |  capacity %d", m_View.UndoCount, m_View.RedoCount,
-                                m_UiState->UndoHistoryCapacity);
+            ImGui::TextDisabled("%zu undo  |  %zu redo", m_View.UndoCount, m_View.RedoCount);
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 9.0f);
+            UndoCapacityInput("Capacity##undo", &m_UiState->UndoHistoryCapacity);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Maximum undo steps kept (also in Settings)");
             if (playing) ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.3f, 1.0f), "Pause the simulation to undo or redo");
 
             const bool empty = m_View.UndoCount == 0 && m_View.RedoCount == 0;

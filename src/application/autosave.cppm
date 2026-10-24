@@ -8,6 +8,8 @@ export namespace MoleHole
     inline constexpr std::array kAutosaveDelaysSeconds{1, 5, 30};
     inline constexpr int kDefaultAutosaveDelaySeconds = 5;
 
+    [[nodiscard]] inline std::string FormatAutosaveDelay(const int seconds) { return std::format("{} s", seconds); }
+
     class AutosaveScheduler
     {
     public:

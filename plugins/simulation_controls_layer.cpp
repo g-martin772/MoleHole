@@ -66,8 +66,6 @@ namespace
             frame.Bookmarks = m_UiState->Bookmarks.Get();
             if (const auto snapshot = runner->AcquireSnapshot()) frame.SimTime = snapshot->Clock().Time;
 
-            HandleShortcuts(frame);
-
             const float padding = ViewportToolbar::kPadding;
             const float besideGizmo = m_UiState->ViewportToolbarLeft - 8.0f;
             const bool stacked = besideGizmo - min.x - ViewportToolbar::kMargin - 2.0f * padding < ViewportToolbar::kIconWidth;
@@ -303,23 +301,6 @@ namespace
                 if (frame.Bookmarks.empty()) ImGui::TextDisabled("No snapshots");
                 ImGui::EndPopup();
             }
-        }
-
-        void HandleShortcuts(const Frame& frame)
-        {
-            const ImGuiIO& io = ImGui::GetIO();
-            if (io.WantTextInput || ImGui::IsAnyItemActive() || m_UiState->GraphEditorFocused) return;
-            if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) return;
-
-            if (frame.Paused)
-            {
-                if (ImGui::IsKeyChordPressed(ImGuiKey_Period, ImGuiInputFlags_Repeat)) RequestStep(false);
-                else if (ImGui::IsKeyChordPressed(ImGuiMod_Shift | ImGuiKey_Period, ImGuiInputFlags_Repeat)) RequestStep(true);
-            }
-            if (ImGui::IsKeyChordPressed(ImGuiKey_LeftBracket) || ImGui::IsKeyChordPressed(ImGuiKey_KeypadSubtract))
-                SetTimeScale(frame, NextSpeedPreset(frame.TimeScale, -1));
-            else if (ImGui::IsKeyChordPressed(ImGuiKey_RightBracket) || ImGui::IsKeyChordPressed(ImGuiKey_KeypadAdd))
-                SetTimeScale(frame, NextSpeedPreset(frame.TimeScale, 1));
         }
 
         void RequestStep(const bool multi)

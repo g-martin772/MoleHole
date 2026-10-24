@@ -53,6 +53,7 @@ set(MOLEHOLE_UI_PLUGINS
         profiler_window_layer
         log_window_layer
         undo_history_window_layer
+        settings_window_layer
         notifications_layer
         viewport_hud_layer
         simulation_controls_layer
