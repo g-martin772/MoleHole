@@ -310,6 +310,7 @@ namespace
                 SaveFailed(saved.error());
                 return false;
             }
+            m_AppState->CarrySceneCamera(m_UiState->CurrentScenePath, path.string());
             m_UiState->CurrentScenePath = path.string();
             m_UiState->SceneState.MarkSaved(live->Revision, !live->Running);
             m_Logger->Info("Scene saved to '{}'", m_UiState->CurrentScenePath);

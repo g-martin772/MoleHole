@@ -36,6 +36,7 @@ namespace MoleHole
         m_StatePath = m_FileSystem->ResolvePath(m_AppPaths->ConfigDir() / "molehole_state.yaml", PathAnchor::WorkingDir);
         m_Persist = !m_UiState->ExitWhenExportDone;
         Load();
+        LoadSceneCameras();
         if (m_UiState->LauncherMode)
         {
             m_UiState->CurrentScenePath = m_LastScenePath;
@@ -56,6 +57,7 @@ namespace MoleHole
     {
         if (m_Persist && (m_UiState->DiscardOnExit || !m_UiState->SceneState.IsDirty())) m_UiState->Recovery.Clear();
         Save();
+        FlushSceneCameras();
         co_return;
     }
 
@@ -297,6 +299,56 @@ namespace MoleHole
         {
             m_Logger->Error("AppStateService: failed to save '{}': {}", m_StatePath.string(), error.what());
         }
+    }
+
+    namespace
+    {
+        std::int64_t UnixNow()
+        {
+            return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        }
+    }
+
+    void AppStateService::LoadSceneCameras()
+    {
+        std::scoped_lock lock(m_Mutex);
+        m_SceneCameras = SceneCameraCache(m_StatePath.parent_path() / "scene_cameras.yaml");
+        if (const auto problem = m_SceneCameras.Load(); !problem.empty())
+            m_Logger->Warn("AppStateService: ignoring scene camera cache '{}': {}", m_SceneCameras.File().string(), problem);
+        m_SceneCameras.Prune();
+    }
+
+    std::optional<SceneCameraPose> AppStateService::LookupSceneCamera(const std::string& scenePath) const
+    {
+        if (scenePath.empty()) return std::nullopt;
+        const auto key = SceneCameraCache::KeyFor(m_FileSystem->ResolvePath(scenePath, PathAnchor::WorkingDir));
+        std::scoped_lock lock(m_Mutex);
+        return m_SceneCameras.Lookup(key);
+    }
+
+    void AppStateService::StoreSceneCamera(const std::string& scenePath, const SceneCameraPose& pose)
+    {
+        if (!m_Persist || scenePath.empty()) return;
+        const auto key = SceneCameraCache::KeyFor(m_FileSystem->ResolvePath(scenePath, PathAnchor::WorkingDir));
+        std::scoped_lock lock(m_Mutex);
+        m_SceneCameras.Store(key, pose, UnixNow());
+    }
+
+    void AppStateService::CarrySceneCamera(const std::string& fromPath, const std::string& toPath)
+    {
+        if (!m_Persist || fromPath.empty() || toPath.empty()) return;
+        const auto from = SceneCameraCache::KeyFor(m_FileSystem->ResolvePath(fromPath, PathAnchor::WorkingDir));
+        const auto to = SceneCameraCache::KeyFor(m_FileSystem->ResolvePath(toPath, PathAnchor::WorkingDir));
+        std::scoped_lock lock(m_Mutex);
+        m_SceneCameras.Carry(from, to, UnixNow());
+    }
+
+    void AppStateService::FlushSceneCameras()
+    {
+        if (!m_Persist) return;
+        std::scoped_lock lock(m_Mutex);
+        if (const auto saved = m_SceneCameras.Save(); !saved)
+            m_Logger->Warn("AppStateService: failed to write '{}': {}", m_SceneCameras.File().string(), saved.error());
     }
 
     std::string AppStateService::GetLastScenePath() const

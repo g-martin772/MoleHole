@@ -3,6 +3,7 @@ export module MoleHole:Application.State;
 import std;
 import GPP;
 import :UI.State;
+import :Application.SceneCameras;
 import :Rendering.SettingsService;
 
 export namespace MoleHole
@@ -43,11 +44,17 @@ export namespace MoleHole
         void AddMeshScanDirectory(const std::string& directory);
         [[nodiscard]] std::vector<std::string> GetMeshScanDirectories() const;
 
+        [[nodiscard]] std::optional<SceneCameraPose> LookupSceneCamera(const std::string& scenePath) const;
+        void StoreSceneCamera(const std::string& scenePath, const SceneCameraPose& pose);
+        void CarrySceneCamera(const std::string& fromPath, const std::string& toPath);
+        void FlushSceneCameras();
+
         void PushRecentAsset(const std::string& path);
         [[nodiscard]] std::vector<std::string> GetRecentAssets() const;
 
     private:
         void Load();
+        void LoadSceneCameras();
         void Save() const;
 
         std::shared_ptr<UiState> m_UiState;
@@ -59,6 +66,7 @@ export namespace MoleHole
 
         std::filesystem::path m_StatePath;
         bool m_Persist = true;
+        SceneCameraCache m_SceneCameras;
 
         mutable std::mutex m_Mutex;
         std::string m_LastScenePath;

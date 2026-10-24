@@ -80,6 +80,7 @@ namespace
         void OnDetach() override
         {
             m_Loader.WaitIdle();
+            CommitCamera();
             m_RenderSettings->HoldForReload();
             if (const auto sim = m_Sim.Load(); sim->Runner) sim->Runner->Stop();
             m_Logger->Info("ViewportLayer detached");
@@ -90,6 +91,7 @@ namespace
             PollSceneLoad();
             CheckPendingSceneSwitch();
             UpdateCamera(deltaTime);
+            TrackCamera();
             m_Export.Update();
             UpdateRenderSettings();
             if (const auto sim = m_Sim.Load(); sim->Runner)
@@ -506,6 +508,7 @@ namespace
                                        : std::nullopt;
             if (result->Ok)
             {
+                CommitCamera();
                 if (result->LoadKind == Kind::Template)
                 {
                     m_UiState->CurrentScenePath.clear();
@@ -545,7 +548,14 @@ namespace
                         0.0f, "scene-warnings");
                 }
                 m_RenderSettings->LoadScene(result->RenderExtension, m_UiState->CurrentScenePath);
-                if (const auto& view = result->Editor)
+                if (const auto cached = m_AppState->LookupSceneCamera(m_UiState->CurrentScenePath))
+                {
+                    m_UiState->CameraPositionM = cached->PositionM;
+                    m_UiState->CameraYaw = cached->Yaw;
+                    m_UiState->CameraPitch = cached->Pitch;
+                    if (cached->SpeedMs > 0.0) m_UiState->CameraSpeedMs = cached->SpeedMs;
+                }
+                else if (const auto& view = result->Editor)
                 {
                     m_UiState->CameraPositionM = view->PositionM;
                     m_UiState->CameraYaw = view->Yaw;
@@ -553,6 +563,7 @@ namespace
                     m_UiState->CameraFov = view->Fov;
                     if (view->SpeedMs) m_UiState->CameraSpeedMs = *view->SpeedMs;
                 }
+                m_TrackedPose = CurrentCameraPose();
                 for (const auto& warning : m_RenderSettings->Warnings())
                 {
                     m_Logger->Warn("ViewportLayer: {}", warning);
@@ -635,6 +646,7 @@ namespace
             if (m_UiState->PendingNewScene.exchange(false))
             {
                 const auto name = "Untitled-" + std::to_string(++m_SceneCounter);
+                CommitCamera();
                 CreateDefaultScene(name, "Black Hole");
                 m_UiState->CurrentScenePath.clear();
                 m_RenderSettings->LoadScene({});
@@ -703,6 +715,37 @@ namespace
                     m_LastRenderWrite = now;
                 }
             }
+        }
+
+        [[nodiscard]] SceneCameraPose CurrentCameraPose() const
+        {
+            return {m_UiState->CameraPositionM, m_UiState->CameraYaw, m_UiState->CameraPitch, m_UiState->CameraSpeedMs};
+        }
+
+        void CommitCamera()
+        {
+            if (!m_CameraPending) return;
+            m_CameraPending = false;
+            if (m_UiState->CurrentScenePath.empty()) return;
+            m_AppState->StoreSceneCamera(m_UiState->CurrentScenePath, CurrentCameraPose());
+            m_AppState->FlushSceneCameras();
+        }
+
+        void TrackCamera()
+        {
+            if (m_UiState->IntroActive || m_UiState->ExportActive || m_UiState->SceneCameraActive) return;
+            const auto pose = CurrentCameraPose();
+            const auto now = std::chrono::steady_clock::now();
+            if (!m_TrackedPose || !m_TrackedPose->SamePose(pose))
+            {
+                if (m_TrackedPose)
+                {
+                    m_CameraPending = true;
+                    m_CameraChangedAt = now;
+                }
+                m_TrackedPose = pose;
+            }
+            if (m_CameraPending && now - m_CameraChangedAt >= std::chrono::seconds(2)) CommitCamera();
         }
 
         void UpdateCamera(float deltaTime)
@@ -862,6 +905,9 @@ namespace
         std::shared_ptr<InputState> m_Input;
         std::shared_ptr<UiState> m_UiState;
         std::shared_ptr<AppStateService> m_AppState;
+        std::optional<SceneCameraPose> m_TrackedPose;
+        bool m_CameraPending = false;
+        std::chrono::steady_clock::time_point m_CameraChangedAt;
         std::shared_ptr<RenderSettingsService> m_RenderSettings;
         std::shared_ptr<MeshCache> m_Meshes;
         SceneLoader m_Loader;
