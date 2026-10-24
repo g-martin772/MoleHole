@@ -11,6 +11,7 @@ import :Simulation.ObserverReadout;
 import :UI.EditLogic;
 import :UI.TransportLogic;
 import :UI.CreateCatalog;
+import :UI.ActionLogic;
 
 export namespace MoleHole
 {
@@ -133,6 +134,10 @@ export namespace MoleHole
         CreatePopupRequest CreatePopup;
         bool OpenAddMeshDialog = false;
         EditRequests Edits;
+        ActionRequests Actions;
+        RecentActions RecentActionIds;
+        bool ShowShortcutSheet = false;
+        bool PaletteRequested = false;
         TransportRequests Transport;
         BookmarkView Bookmarks;
         std::int32_t TransportStepCount = static_cast<std::int32_t>(kDefaultStepTicks);
