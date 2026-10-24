@@ -137,3 +137,22 @@ TEST_CASE("Edit requests are taken only by the layer that handles them", "[ui][e
     CHECK(requests.Take({EditAction::FrameSelected}).size() == 1);
     CHECK(requests.Take({EditAction::FrameSelected}).empty());
 }
+
+TEST_CASE("Gizmo matrix change ignores float noise but not real moves", "[ui][edit]")
+{
+    glm::mat4 before(1.0f);
+    before[3] = glm::vec4(120.0f, -4.0f, 77.0f, 1.0f);
+    CHECK_FALSE(GizmoMatrixChanged(before, before));
+
+    auto noisy = before;
+    noisy[3][0] += 1e-5f;
+    CHECK_FALSE(GizmoMatrixChanged(before, noisy));
+
+    auto moved = before;
+    moved[3][0] += 0.05f;
+    CHECK(GizmoMatrixChanged(before, moved));
+
+    auto scaled = before;
+    scaled[1][1] = 1.01f;
+    CHECK(GizmoMatrixChanged(before, scaled));
+}

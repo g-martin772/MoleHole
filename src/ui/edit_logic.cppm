@@ -44,6 +44,18 @@ export namespace MoleHole
         return std::string(text.substr(0, cut)) + "...";
     }
 
+    [[nodiscard]] inline bool GizmoMatrixChanged(const glm::mat4& before, const glm::mat4& after,
+                                                 const float relativeTolerance = 1e-6f)
+    {
+        float scale = 1.0f;
+        for (int c = 0; c < 4; ++c)
+            for (int r = 0; r < 4; ++r) scale = std::max(scale, std::abs(before[c][r]));
+        for (int c = 0; c < 4; ++c)
+            for (int r = 0; r < 4; ++r)
+                if (std::abs(after[c][r] - before[c][r]) > relativeTolerance * scale) return true;
+        return false;
+    }
+
     struct HistoryMenuItem
     {
         std::string Text;

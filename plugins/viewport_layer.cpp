@@ -374,9 +374,10 @@ namespace
                 snapPtr = snapValues;
             }
 
+            const glm::mat4 before = model;
             const bool manipulated = ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(projection),
                                                            operation, mode, glm::value_ptr(model), nullptr, snapPtr);
-            if (manipulated)
+            if (manipulated && GizmoMatrixChanged(before, model))
             {
                 float t[3], r[3], s[3];
                 ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(model), t, r, s);
@@ -464,7 +465,7 @@ namespace
                 const auto gltfScene = m_Meshes->GetOrLoad(assetPath);
                 if (!gltfScene || gltfScene->Geometry.Vertices.empty()) continue;
                 auto points = gltfScene->Geometry.Vertices;
-                sim->Runner->EnqueueEdit([guid, points = std::move(points)](Scene& scene)
+                sim->Runner->EnqueueSystemEdit([guid, points = std::move(points)](Scene& scene)
                 {
                     const auto entity = scene.FindByGuid(guid);
                     if (scene.IsValid(entity) && scene.Registry().all_of<ColliderComponent>(entity))
