@@ -633,11 +633,11 @@ namespace
         std::shared_ptr<AppStateService> m_AppState;
         std::shared_ptr<RenderSettingsService> m_RenderSettings;
         std::shared_ptr<AppPaths> m_AppPaths;
-
         std::shared_ptr<WindowManager> m_Windows;
         std::shared_ptr<AppInfo> m_AppInfo;
         std::string m_WindowTitle;
         int m_PromptFrames = 0;
+
         std::string m_ExportProfile;
         bool m_ShowExportDialog = false;
         int m_ExportKind = 0; // 0 = Image, 1 = Video

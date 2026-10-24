@@ -29,7 +29,6 @@ export namespace MoleHole
         return args;
     }
 
-    // The simulation module set the viewport runs, without UI state.
     [[nodiscard]] std::vector<std::shared_ptr<GPP::ISimulationModule>> MakeHeadlessModules()
     {
         auto logger = std::make_shared<GPP::Logger>();
@@ -40,7 +39,6 @@ export namespace MoleHole
                 std::make_shared<NBodySimulationModule>(logger), std::make_shared<BodyRotationModule>()};
     }
 
-    // Headless: no window, no Vulkan. Exit 0 when every recorded hash matches, 1 on divergence, 2 on usage or load errors.
     [[nodiscard]] int RunReplay(const ReplayArgs& args)
     {
         if (args.Path.empty())

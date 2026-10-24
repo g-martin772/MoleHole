@@ -512,7 +512,6 @@ namespace
                     std::format("{} ({} mesh{}, {:.1f} s)", result->SceneName, result->MeshCount,
                                 result->MeshCount == 1 ? "" : "es", result->Seconds),
                     0.0f, "scene-load");
-                if (result->WarningCount > 0)
                 if (!result->FailedMeshes.empty())
                 {
                     m_Logger->Notifications()->Post(
@@ -521,6 +520,7 @@ namespace
                                     result->SceneName, result->FailedMeshes.front()),
                         0.0f, "scene-meshes");
                 }
+                if (result->WarningCount > 0)
                 {
                     m_Logger->Notifications()->Post(
                         NotificationKind::Warning, "Scene warnings",
@@ -565,7 +565,6 @@ namespace
             }
         }
 
-        void StartSimulationFor(const std::string& sceneName)
         void ReportInitErrors(SimulationRunner& runner)
         {
             for (const auto& error : runner.TakeInitErrors())
@@ -576,6 +575,7 @@ namespace
             }
         }
 
+        void StartSimulationFor(const std::string& sceneName)
         {
             if (const auto previous = m_Sim.Load(); previous->Runner && !m_UiState->CurrentSceneName.empty())
             {

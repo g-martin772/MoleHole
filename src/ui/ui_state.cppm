@@ -128,11 +128,11 @@ export namespace MoleHole
 
         std::string CurrentSceneName;
         std::string CurrentScenePath;
-        OneShot<std::string> PendingLoadScenePath;
         SceneDirty SceneState;
         UnsavedPrompt UnsavedChanges;
         // Set on the main thread when the window was asked to close while the scene has unsaved changes
         std::atomic<bool> QuitRequested{false};
+        OneShot<std::string> PendingLoadScenePath;
         OneShot<std::string> PendingLoadTemplatePath;
         std::atomic<bool> PendingNewScene{false};
         std::atomic<bool> PendingSnapshotForPlay{false};
