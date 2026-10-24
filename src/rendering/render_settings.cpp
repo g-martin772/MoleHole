@@ -85,7 +85,7 @@ namespace MoleHole
                 .Doc = kDoc, .Min = 0.0, .Max = 2.0, .VisibleWhen = "disk.enabled & transport.mode>=1"}));
             registry.Add(Setting("disk.speed", &R::AccDiskSpeed, {
                 .Label = "Speed", .Group = "Disk",
-                .Tooltip = "Angular speed of the inner edge in rad/s of wall time. Gas further out follows Kepler's\n"
+                .Tooltip = "Angular speed of the inner edge in rad/s of simulation time. Gas further out follows Kepler's\n"
                            "law of the active metric, so the disk shears instead of turning rigidly.",
                 .Doc = kDoc, .Min = 0.0, .Max = 5.0, .VisibleWhen = "disk.enabled"}));
             registry.Add(Setting("disk.noise_scale", &R::AccDiskNoiseScale, {
