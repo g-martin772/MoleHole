@@ -1,5 +1,6 @@
 export module MoleHole;
 export import :Application.SceneCameras;
+export import :Application.ExportSupport;
 export import :Application.State;
 export import :Application.Startup;
 export import :Application.SceneLoader;

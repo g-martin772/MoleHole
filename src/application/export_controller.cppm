@@ -30,6 +30,8 @@ export namespace MoleHole
             std::atomic<bool> WriteFailed{false};
             std::atomic<bool> EncodeFinished{false};
             std::atomic<bool> EncodeFailed{false};
+            std::atomic<bool> Cancelled{false};
+            std::atomic<int> EncoderPid{0};
         };
 
         void Start(const ExportRequest& request);
@@ -39,6 +41,11 @@ export namespace MoleHole
         void LogProgress();
         void WriteSidecar();
         void Abort(int exitCode, const std::string& reason);
+        void Cancel();
+        void Teardown();
+        void DiscardTempDir();
+        void UpdateTiming();
+        [[nodiscard]] std::filesystem::path SidecarOutput() const;
         void CheckWatchdog();
         void SyncTask();
 
@@ -69,6 +76,9 @@ export namespace MoleHole
         std::chrono::steady_clock::time_point m_StartTime;
         std::chrono::steady_clock::time_point m_LastLog;
         bool m_StartedPlay{false};
+        bool m_ManualStepping{false};
+        std::chrono::steady_clock::time_point m_FirstFrameTime;
+        std::chrono::steady_clock::time_point m_LastCaptureTime;
         double m_TickDebt{0.0};
         double m_SimStart{0.0};
         double m_TimeScale{1.0};

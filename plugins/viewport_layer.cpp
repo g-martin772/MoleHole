@@ -232,11 +232,15 @@ namespace
 
             if (m_UiState->ExportActive)
             {
-                ImGui::SetCursorPos(ImVec2(8, ImGui::GetFrameHeight() + 8));
+                ImGui::SetCursorPos(ImVec2(8, std::max(ImGui::GetFrameHeight() + 8.0f, ImGui::GetWindowHeight() - 112.0f)));
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.6f));
-                ImGui::BeginChild("##ExportProgress", ImVec2(260, 48), true, ImGuiWindowFlags_NoScrollbar);
+                ImGui::BeginChild("##ExportProgress", ImVec2(300, 0), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY,
+                                  ImGuiWindowFlags_NoScrollbar);
                 ImGui::TextUnformatted(m_UiState->ExportStatus.c_str());
                 ImGui::ProgressBar(m_UiState->ExportProgress, ImVec2(-1, 0));
+                ImGui::TextUnformatted(
+                    FormatExportTiming(m_UiState->ExportElapsedSeconds, m_UiState->ExportRemainingSeconds).c_str());
+                if (ImGui::Button("Cancel")) m_UiState->ExportCancelRequested = true;
                 ImGui::EndChild();
                 ImGui::PopStyleColor();
             }

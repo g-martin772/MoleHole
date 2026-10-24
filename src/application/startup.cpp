@@ -10,7 +10,7 @@ namespace MoleHole
     namespace
     {
         constexpr std::array kValueFlags{
-            "--export-image", "--export-video", "--width", "--height", "--duration", "--fps", "--sim-start",
+            "--export-image", "--export-video", "--export-sequence", "--sequence-name", "--width", "--height", "--duration", "--fps", "--sim-start",
             "--time-scale", "--export-timeout", "--profile", "--set", "--ray-step-size", "--max-ray-steps",
             "--gpu-precision", "--metric", "--prefix", "--scene", "--template", "--recover", "--validate-scene"};
     }
@@ -33,7 +33,7 @@ namespace MoleHole
             else if (arg == "--launcher") result.Launcher = true;
             else if (arg == "--no-launcher") result.NoLauncher = true;
             else if (arg == "--skip-intro") result.SkipIntro = true;
-            else if (arg == "--export-image" || arg == "--export-video")
+            else if (arg == "--export-image" || arg == "--export-video" || arg == "--export-sequence")
             {
                 result.Export = true;
                 ++i;

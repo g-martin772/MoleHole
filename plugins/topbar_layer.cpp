@@ -501,10 +501,7 @@ namespace
 
             if (ImGui::BeginMenu("Export"))
             {
-                if (ImGui::MenuItem("Export Render..."))
-                {
-                    m_ShowExportDialog = true;
-                }
+                if (ImGui::MenuItem("Export Render...")) OpenExportDialog();
                 ImGui::EndMenu();
             }
 
@@ -755,88 +752,114 @@ namespace
             }
 
             const bool exporting = m_UiState->ExportActive;
+            auto& form = m_ExportForm;
+            int kind = static_cast<int>(form.Format);
 
             ImGui::BeginDisabled(exporting);
 
             SectionHeader("FORMAT");
-            ImGui::RadioButton("Image (PNG)", &m_ExportKind, 0);
+            ImGui::RadioButton("Image (PNG)", &kind, 0);
             ImGui::SameLine();
-            ImGui::RadioButton("Video (MP4)", &m_ExportKind, 1);
+            ImGui::RadioButton("Video (MP4)", &kind, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("Image sequence", &kind, 2);
+            form.Format = static_cast<ExportFormat>(kind);
 
             SectionHeader("RESOLUTION");
-            ImGui::InputInt("Width", &m_ExportWidth);
-            ImGui::InputInt("Height", &m_ExportHeight);
-            if (ImGui::Button("1280x720")) { m_ExportWidth = 1280; m_ExportHeight = 720; }
+            ImGui::InputInt("Width", &form.Width);
+            ImGui::InputInt("Height", &form.Height);
+            if (ImGui::Button("1280x720")) { form.Width = 1280; form.Height = 720; }
             ImGui::SameLine();
-            if (ImGui::Button("1920x1080")) { m_ExportWidth = 1920; m_ExportHeight = 1080; }
+            if (ImGui::Button("1920x1080")) { form.Width = 1920; form.Height = 1080; }
             ImGui::SameLine();
-            if (ImGui::Button("3840x2160")) { m_ExportWidth = 3840; m_ExportHeight = 2160; }
-            m_ExportWidth = std::max(1, m_ExportWidth);
-            m_ExportHeight = std::max(1, m_ExportHeight);
+            if (ImGui::Button("3840x2160")) { form.Width = 3840; form.Height = 2160; }
 
-            if (m_ExportKind == 1)
+            if (form.Format != ExportFormat::Image)
             {
-                SectionHeader("VIDEO");
-                ImGui::InputFloat("Duration (s)", &m_ExportDuration);
-                ImGui::InputInt("Framerate", &m_ExportFps);
-                m_ExportDuration = std::max(0.1f, m_ExportDuration);
-                m_ExportFps = std::clamp(m_ExportFps, 1, 240);
+                SectionHeader(form.Format == ExportFormat::Video ? "VIDEO" : "SEQUENCE");
+                ImGui::InputFloat("Duration (s)", &form.DurationSeconds);
+                ImGui::InputInt("Framerate", &form.Framerate);
+                form.DurationSeconds = std::max(0.1f, form.DurationSeconds);
+                form.Framerate = std::clamp(form.Framerate, 1, 240);
+                ImGui::TextDisabled("%d frames", std::max(1, static_cast<int>(form.DurationSeconds * form.Framerate)));
             }
 
             SectionHeader("QUALITY");
             {
                 const auto& set = m_RenderSettings->Profiles();
                 const std::string defaultLabel = "Export context: " + set.ProfileFor(RenderContext::Export).Name;
-                const char* preview = m_ExportProfile.empty() ? defaultLabel.c_str() : m_ExportProfile.c_str();
+                const char* preview = form.Profile.empty() ? defaultLabel.c_str() : form.Profile.c_str();
                 ImGui::SetNextItemWidth(ImGui::CalcItemWidth());
                 if (ImGui::BeginCombo("Render profile", preview))
                 {
-                    if (ImGui::Selectable(defaultLabel.c_str(), m_ExportProfile.empty())) m_ExportProfile.clear();
+                    if (ImGui::Selectable(defaultLabel.c_str(), form.Profile.empty())) form.Profile.clear();
                     for (const auto& profile : set.Profiles())
                     {
-                        if (ImGui::Selectable(profile.Name.c_str(), profile.Name == m_ExportProfile))
-                            m_ExportProfile = profile.Name;
+                        if (ImGui::Selectable(profile.Name.c_str(), profile.Name == form.Profile))
+                            form.Profile = profile.Name;
                         if (ImGui::IsItemHovered() && !profile.Description.empty())
                             ImGui::SetTooltip("%s", profile.Description.c_str());
                     }
                     ImGui::EndCombo();
                 }
-                if (m_ExportProfile.empty() || !set.Find(m_ExportProfile)) m_ExportProfile.clear();
+                if (form.Profile.empty() || !set.Find(form.Profile)) form.Profile.clear();
             }
-            ImGui::Checkbox("Override ray-march quality", &m_ExportOverrideQuality);
-            if (m_ExportOverrideQuality)
+            ImGui::Checkbox("Override ray-march quality", &form.OverrideQuality);
+            if (form.OverrideQuality)
             {
-                ImGui::SliderFloat("Ray Step Size", &m_ExportRayStepSize, 0.001f, 0.05f, "%.4f");
-                ImGui::InputInt("Max Ray Steps", &m_ExportMaxRaySteps);
-                m_ExportMaxRaySteps = std::max(1000, m_ExportMaxRaySteps);
+                ImGui::SliderFloat("Ray Step Size", &form.RayStepSize, 0.001f, 0.05f, "%.4f");
+                ImGui::InputInt("Max Ray Steps", &form.MaxRaySteps);
+                form.MaxRaySteps = std::max(1000, form.MaxRaySteps);
             }
 
             SectionHeader("OUTPUT");
-            ImGui::InputTextWithHint("##ExportPath", "Auto-named in the default export folder", m_ExportPathBuffer.data(),
-                                     m_ExportPathBuffer.size());
-            ImGui::SameLine();
-            if (ImGui::Button("Browse..."))
+            if (form.Format == ExportFormat::Sequence)
             {
-                const auto defaultName = m_ExportKind == 0 ? "render.png" : "render.mp4";
-                const auto filter = m_ExportKind == 0 ? FileDialogFilter{"PNG Image", "png"}
-                                                       : FileDialogFilter{"MP4 Video", "mp4"};
-                if (const auto path = m_FileDialog->SaveFile({filter}, defaultName, m_AppState->GetLastExportDirectory()))
+                ImGui::InputTextWithHint("Folder", "Auto-named in the default export folder", m_ExportFolderBuffer.data(),
+                                         m_ExportFolderBuffer.size());
+                ImGui::SameLine();
+                if (ImGui::Button("Browse...##SequenceFolder"))
                 {
-                    const auto str = path->string();
-                    std::ranges::fill(m_ExportPathBuffer, '\0');
-                    const auto count = std::min(str.size(), m_ExportPathBuffer.size() - 1);
-                    std::ranges::copy(str.substr(0, count), m_ExportPathBuffer.begin());
+                    if (const auto folder = m_FileDialog->PickFolder(m_AppState->GetLastExportDirectory()))
+                        FillBuffer(m_ExportFolderBuffer, folder->string());
+                }
+                ImGui::InputText("File name", m_ExportNameBuffer.data(), m_ExportNameBuffer.size());
+                const auto folder = m_ExportFolderBuffer[0] != '\0' ? std::filesystem::path(m_ExportFolderBuffer.data())
+                                                                    : m_AppState->NextSequenceFolder();
+                ImGui::TextDisabled("Saves %s to %s", SequenceFramePath("", m_ExportNameBuffer.data(), 1).string().c_str(),
+                                    folder.string().c_str());
+            }
+            else
+            {
+                ImGui::InputTextWithHint("##ExportPath", "Auto-named in the default export folder", m_ExportPathBuffer.data(),
+                                         m_ExportPathBuffer.size());
+                ImGui::SameLine();
+                if (ImGui::Button("Browse..."))
+                {
+                    const bool image = form.Format == ExportFormat::Image;
+                    const auto defaultName = image ? "render.png" : "render.mp4";
+                    const auto filter = image ? FileDialogFilter{"PNG Image", "png"} : FileDialogFilter{"MP4 Video", "mp4"};
+                    if (const auto path = m_FileDialog->SaveFile({filter}, defaultName, m_AppState->GetLastExportDirectory()))
+                        FillBuffer(m_ExportPathBuffer, path->string());
+                }
+
+                if (m_ExportPathBuffer[0] == '\0')
+                {
+                    const auto next = m_AppState->NextExportPath(form.Format == ExportFormat::Image ? ExportRequest::Kind::Image
+                                                                                                    : ExportRequest::Kind::Video);
+                    ImGui::TextDisabled("Saves to %s", next.string().c_str());
                 }
             }
 
-            if (m_ExportPathBuffer[0] == '\0')
-            {
-                const auto next = m_AppState->NextExportPath(m_ExportKind == 0 ? ExportRequest::Kind::Image
-                                                                                : ExportRequest::Kind::Video);
-                ImGui::TextDisabled("Saves to %s", next.string().c_str());
-            }
-
             ImGui::EndDisabled();
+
+            form.SequenceFolder = m_ExportFolderBuffer.data();
+            form.SequenceName = m_ExportNameBuffer.data();
+            if (!exporting)
+            {
+                form.Clamp();
+                if (form != m_AppState->GetExportSettings()) m_AppState->SetExportSettings(form);
+            }
 
             ImGui::Spacing();
             ImGui::Separator();
@@ -846,25 +869,47 @@ namespace
             {
                 ImGui::TextUnformatted(m_UiState->ExportStatus.c_str());
                 ImGui::ProgressBar(m_UiState->ExportProgress);
+                ImGui::TextUnformatted(
+                    FormatExportTiming(m_UiState->ExportElapsedSeconds, m_UiState->ExportRemainingSeconds).c_str());
+                if (ImGui::Button("Cancel Export", ImVec2(120, 0))) m_UiState->ExportCancelRequested = true;
+                ImGui::SameLine();
+                if (ImGui::Button("Close", ImVec2(120, 0)))
+                {
+                    m_ShowExportDialog = false;
+                    ImGui::CloseCurrentPopup();
+                }
             }
             else
             {
                 if (ImGui::Button("Start Export", ImVec2(120, 0)))
                 {
                     ExportRequest request;
-                    request.RequestKind =
-                        m_ExportKind == 0 ? ExportRequest::Kind::Image : ExportRequest::Kind::Video;
-                    request.OutputPath = m_ExportPathBuffer[0] != '\0' ? std::string(m_ExportPathBuffer.data())
-                                                                       : m_AppState->NextExportPath(request.RequestKind).string();
-                    request.Width = static_cast<std::uint32_t>(m_ExportWidth);
-                    request.Height = static_cast<std::uint32_t>(m_ExportHeight);
-                    request.DurationSeconds = m_ExportDuration;
-                    request.Framerate = m_ExportFps;
-                    if (!m_ExportProfile.empty()) request.Profile = m_ExportProfile;
-                    if (m_ExportOverrideQuality)
+                    switch (form.Format)
                     {
-                        request.Overrides.emplace_back("transport.step_size", std::format("{}", m_ExportRayStepSize));
-                        request.Overrides.emplace_back("transport.max_steps", std::format("{}", m_ExportMaxRaySteps));
+                    case ExportFormat::Image: request.RequestKind = ExportRequest::Kind::Image; break;
+                    case ExportFormat::Video: request.RequestKind = ExportRequest::Kind::Video; break;
+                    case ExportFormat::Sequence: request.RequestKind = ExportRequest::Kind::Sequence; break;
+                    }
+                    if (form.Format == ExportFormat::Sequence)
+                    {
+                        request.OutputPath = m_ExportFolderBuffer[0] != '\0' ? std::string(m_ExportFolderBuffer.data())
+                                                                             : m_AppState->NextSequenceFolder().string();
+                        request.SequenceName = SanitizeSequenceName(form.SequenceName);
+                    }
+                    else
+                    {
+                        request.OutputPath = m_ExportPathBuffer[0] != '\0' ? std::string(m_ExportPathBuffer.data())
+                                                                           : m_AppState->NextExportPath(request.RequestKind).string();
+                    }
+                    request.Width = static_cast<std::uint32_t>(form.Width);
+                    request.Height = static_cast<std::uint32_t>(form.Height);
+                    request.DurationSeconds = form.DurationSeconds;
+                    request.Framerate = form.Framerate;
+                    if (!form.Profile.empty()) request.Profile = form.Profile;
+                    if (form.OverrideQuality)
+                    {
+                        request.Overrides.emplace_back("transport.step_size", std::format("{}", form.RayStepSize));
+                        request.Overrides.emplace_back("transport.max_steps", std::format("{}", form.MaxRaySteps));
                     }
                     m_UiState->PendingExport.Set(request);
                     m_ShowExportDialog = false;
@@ -879,6 +924,20 @@ namespace
             }
 
             ImGui::EndPopup();
+        }
+
+        static void FillBuffer(std::span<char> buffer, const std::string& text)
+        {
+            std::ranges::fill(buffer, '\0');
+            std::ranges::copy(text.substr(0, buffer.size() - 1), buffer.begin());
+        }
+
+        void OpenExportDialog()
+        {
+            m_ExportForm = m_AppState->GetExportSettings();
+            FillBuffer(m_ExportFolderBuffer, m_ExportForm.SequenceFolder);
+            FillBuffer(m_ExportNameBuffer, m_ExportForm.SequenceName);
+            m_ShowExportDialog = true;
         }
 
         std::shared_ptr<FileDialog> m_FileDialog;
@@ -904,17 +963,11 @@ namespace
         std::weak_ptr<SimulationRunner> m_CapacityRunner;
         std::size_t m_AppliedCapacity = 0;
 
-        std::string m_ExportProfile;
         bool m_ShowExportDialog = false;
-        int m_ExportKind = 0; // 0 = Image, 1 = Video
-        int m_ExportWidth = 1920;
-        int m_ExportHeight = 1080;
-        float m_ExportDuration = 5.0f;
-        int m_ExportFps = 30;
-        bool m_ExportOverrideQuality = false;
-        float m_ExportRayStepSize = 0.01f;
-        int m_ExportMaxRaySteps = 100000;
+        ExportSettings m_ExportForm;
         std::array<char, 512> m_ExportPathBuffer{};
+        std::array<char, 512> m_ExportFolderBuffer{};
+        std::array<char, 128> m_ExportNameBuffer{};
     };
 }
 

@@ -4,6 +4,7 @@ import std;
 import GPP;
 import :UI.State;
 import :Application.SceneCameras;
+import :Application.ExportSupport;
 import :Rendering.SettingsService;
 
 export namespace MoleHole
@@ -37,6 +38,9 @@ export namespace MoleHole
         [[nodiscard]] std::string GetDefaultExportDirectory() const;
         void SetDefaultExportDirectory(std::string directory);
         [[nodiscard]] std::filesystem::path NextExportPath(ExportRequest::Kind kind) const;
+        [[nodiscard]] std::filesystem::path NextSequenceFolder() const;
+        [[nodiscard]] ExportSettings GetExportSettings() const;
+        void SetExportSettings(const ExportSettings& settings);
 
         [[nodiscard]] bool GetTutorialCompleted() const;
         void SetTutorialCompleted(bool completed);
@@ -75,6 +79,7 @@ export namespace MoleHole
         bool m_ShowLauncher = true;
         std::string m_LastExportDirectory;
         std::string m_DefaultExportDirectory;
+        ExportSettings m_ExportSettings;
         std::vector<std::string> m_MeshScanDirectories;
         std::vector<std::string> m_RecentAssets;
         bool m_TutorialCompleted = false;

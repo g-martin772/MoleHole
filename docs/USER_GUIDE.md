@@ -298,8 +298,9 @@ CLI, headless. Output PNG / MP4 (needs ffmpeg).
 ```sh
 ./build/MoleHole --export-image out.png --width 1920 --height 1080 --scene templates/test-scene.yaml
 ./build/MoleHole --export-video out.mp4 --duration 10 --fps 60
+./build/MoleHole --export-sequence frames/ --sequence-name shot --duration 10 --fps 60
 ```
-- GUI: Export → Export Render… (pick a render profile, default: the Export context's)
+- GUI: Export → Export Render… (pick a render profile, default: the Export context's; format Image, Video or Image sequence, i.e. `<name>_00001.png`... in a folder). The last settings are remembered. While exporting, the viewport shows elapsed time, ETA and a Cancel button; cancelling removes partial video/image files and keeps the sequence frames already written
 - Flags: `--width --height --duration --fps --scene --sim-start S --time-scale X --profile NAME --set key=value --list-settings`; the older `--ray-step-size --max-ray-steps --gpu-precision --physically-accurate --metric` still work
 - Every export writes `<output>.render.yaml` (scene hash, profile and all settings, camera, git commit, GPU, GPU ms, wall time)
 - The disk follows the simulation clock `t_sim` (physical seconds, shown as Sim time in the Simulation window, frozen while paused, restored on Stop), not the wall clock: exports are reproducible. `--sim-start S` sets the first frame's `t_sim`, `--time-scale X` the physical seconds per second of video (the scene's Time Scale); frame k of a video sits at `S + k X / fps`

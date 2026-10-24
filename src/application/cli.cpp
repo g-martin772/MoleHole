@@ -65,6 +65,13 @@ namespace MoleHole
                 args.Request.RequestKind = ExportRequest::Kind::Video;
                 args.Request.OutputPath = next();
             }
+            else if (arg == "--export-sequence")
+            {
+                args.Requested = true;
+                args.Request.RequestKind = ExportRequest::Kind::Sequence;
+                args.Request.OutputPath = next();
+            }
+            else if (arg == "--sequence-name") args.Request.SequenceName = SanitizeSequenceName(next());
             else if (arg == "--width") args.Request.Width = static_cast<std::uint32_t>(std::stoul(next()));
             else if (arg == "--height") args.Request.Height = static_cast<std::uint32_t>(std::stoul(next()));
             else if (arg == "--duration") args.Request.DurationSeconds = std::stof(next());

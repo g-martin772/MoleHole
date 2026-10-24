@@ -34,6 +34,8 @@ The disk noise still follows the wall clock, so two exports of the same scene ar
 |---|---|---|---|
 | `--export-image <path>` | — | — | Request a single-frame image export to `<path>` (PNG) |
 | `--export-video <path>` | — | — | Request a video export to `<path>` (MP4, via ffmpeg) |
+| `--export-sequence <dir>` | — | — | Request a PNG sequence into `<dir>` (created if missing), files `<name>_00001.png`, `<name>_00002.png`, ...; uses `--duration` and `--fps` like a video |
+| `--sequence-name <name>` | sequence | `frame` | File name prefix of the sequence |
 | `--width <px>` | both | 1920 | Output width |
 | `--height <px>` | both | 1080 | Output height |
 | `--duration <seconds>` | video | 10.0 | Length of the output video |

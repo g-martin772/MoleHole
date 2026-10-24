@@ -22,8 +22,9 @@ export namespace MoleHole
 
     struct ExportRequest
     {
-        enum class Kind { Image, Video } RequestKind = Kind::Image;
+        enum class Kind { Image, Video, Sequence } RequestKind = Kind::Image;
         std::string OutputPath;
+        std::string SequenceName = "frame";
         std::uint32_t Width = 1920;
         std::uint32_t Height = 1080;
         float DurationSeconds = 10.0f;
@@ -204,6 +205,9 @@ export namespace MoleHole
         glm::uvec2 ExportResolution{1920, 1080};
         float ExportProgress = 0.0f;
         std::string ExportStatus;
+        std::atomic<bool> ExportCancelRequested{false};
+        double ExportElapsedSeconds = 0.0;
+        double ExportRemainingSeconds = -1.0;
         bool ExitWhenExportDone = false;
         float ExportTimeoutSeconds = 120.0f;
         int ExportExitCode = 0;

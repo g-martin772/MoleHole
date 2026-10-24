@@ -173,6 +173,7 @@ namespace MoleHole
             {
                 m_LastExportDirectory = v.as<std::string>();
             }
+            m_ExportSettings = ExportSettings::FromYaml(node["Export"]);
             if (const auto v = node["TutorialCompleted"]; v && v.IsScalar())
             {
                 m_TutorialCompleted = v.as<bool>();
@@ -264,6 +265,7 @@ namespace MoleHole
 
             root["LastExportDirectory"] = GetLastExportDirectory();
             root["DefaultExportDirectory"] = GetDefaultExportDirectory();
+            root["Export"] = GetExportSettings().ToYaml();
             root["TutorialCompleted"] = GetTutorialCompleted();
 
             YAML::Node scanDirsNode;
@@ -441,6 +443,26 @@ namespace MoleHole
         std::filesystem::create_directories(directory, error);
         const bool image = kind == ExportRequest::Kind::Image;
         return NextNumberedPath(directory, image ? "render" : "video", image ? "png" : "mp4");
+    }
+
+    std::filesystem::path AppStateService::NextSequenceFolder() const
+    {
+        auto directory = m_FileSystem->ResolvePath(GetDefaultExportDirectory());
+        std::error_code error;
+        std::filesystem::create_directories(directory, error);
+        return NextSequenceDirectory(directory);
+    }
+
+    ExportSettings AppStateService::GetExportSettings() const
+    {
+        std::scoped_lock lock(m_Mutex);
+        return m_ExportSettings;
+    }
+
+    void AppStateService::SetExportSettings(const ExportSettings& settings)
+    {
+        std::scoped_lock lock(m_Mutex);
+        m_ExportSettings = settings;
     }
 
     std::string AppStateService::GetLastExportDirectory() const
