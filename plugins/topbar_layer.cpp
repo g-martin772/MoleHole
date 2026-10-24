@@ -500,6 +500,8 @@ namespace
                 ImGui::MenuItem("Science", nullptr, &m_UiState->ShowScienceWindow);
                 ImGui::MenuItem("Animation Graph", nullptr, &m_UiState->ShowAnimationGraphWindow);
                 ImGui::Separator();
+                RenderViewportMenu();
+                ImGui::Separator();
                 RenderLayoutMenu();
                 ImGui::EndMenu();
             }
@@ -596,6 +598,16 @@ namespace
             if (ImGui::MenuItem(item.Text.c_str(), ActionShortcut(id).c_str(), false, item.Enabled)) run();
             if (!item.Enabled && !item.Reason.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                 ImGui::SetTooltip("%s", item.Reason.c_str());
+        }
+
+        void RenderViewportMenu()
+        {
+            const auto runner = CurrentRunner();
+            const auto context = MakeActionContext(*m_UiState, runner.get());
+            const auto reason = ActionDisabledReason("view.frame_all", context);
+            if (ImGui::MenuItem("Frame All", ActionShortcut("view.frame_all").c_str(), false, reason.empty()))
+                m_UiState->View.Push({ViewRequest::Kind::FrameAll});
+            if (!reason.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", reason.c_str());
         }
 
         void RenderEditMenu()

@@ -184,6 +184,7 @@ namespace
                 {
                     if (ImGui::IsKeyPressed(ImGuiKey_F, false)) m_UiState->Edits.Push(EditAction::FrameSelected);
                     if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) m_UiState->Edits.Push(EditAction::Delete);
+                    if (ImGui::IsKeyChordPressed(ImGuiKey_Home)) m_UiState->View.Push({ViewRequest::Kind::FrameAll});
                 }
             }
             m_Renderer->SetBufferTargetVisible(m_LayerTarget.Id, viewportOpen || m_UiState->ExportActive);
@@ -218,6 +219,7 @@ namespace
                     DrawRenderStatsOverlay(min, m_Renderer->GetBufferTargetStats(kViewportBufferId), *m_RenderSettings,
                                            m_UiState->RenderScaleApplied, m_Pipeline.Refinement(), m_LastStep);
 
+                DrawFlySpeedReadout(min, max);
                 m_UiState->ViewportToolbarLeft = max.x;
                 if (!m_UiState->ExportActive)
                 {
@@ -249,6 +251,27 @@ namespace
         }
 
     private:
+        void DrawFlySpeedReadout(const ImVec2 min, const ImVec2 max)
+        {
+            constexpr float kHoldSeconds = 1.2f;
+            constexpr float kFadeSeconds = 0.5f;
+            const auto changedAt = m_SpeedReadoutAt.load(std::memory_order_relaxed);
+            if (changedAt == 0) return;
+            const auto age = std::chrono::duration<float>(std::chrono::steady_clock::now() -
+                                                          std::chrono::steady_clock::time_point(std::chrono::steady_clock::duration(changedAt)))
+                                 .count();
+            if (age > kHoldSeconds + kFadeSeconds) return;
+            const float alpha = std::clamp((kHoldSeconds + kFadeSeconds - age) / kFadeSeconds, 0.0f, 1.0f);
+            const std::string text = FormatFlySpeed(m_UiState->CameraSpeedMs);
+            const ImVec2 size = ImGui::CalcTextSize(text.c_str());
+            const ImVec2 pad(12.0f, 6.0f);
+            const ImVec2 origin((min.x + max.x - size.x) * 0.5f, max.y - size.y - pad.y * 2.0f - 24.0f);
+            auto* drawList = ImGui::GetWindowDrawList();
+            drawList->AddRectFilled(ImVec2(origin.x - pad.x, origin.y - pad.y), ImVec2(origin.x + size.x + pad.x, origin.y + size.y + pad.y),
+                                    ImGui::GetColorU32(ImVec4(0.08f, 0.08f, 0.08f, 0.85f * alpha)), 6.0f);
+            drawList->AddText(origin, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, alpha)), text.c_str());
+        }
+
         [[nodiscard]] bool RenderGizmoToolbar(ImVec2 viewportMin, ImVec2 viewportMax)
         {
             struct ButtonSpec { const char* Label; GizmoOperation Op; const char* Tooltip; };
@@ -307,11 +330,11 @@ namespace
         {
             if (imageHovered && !ImGui::GetIO().WantTextInput)
             {
-                if (ImGui::IsKeyPressed(ImGuiKey_1) || ImGui::IsKeyPressed(ImGuiKey_T))
+                if (ImGui::IsKeyChordPressed(ImGuiKey_1) || ImGui::IsKeyChordPressed(ImGuiKey_T))
                     m_UiState->ActiveGizmoOperation = GizmoOperation::Translate;
-                if (ImGui::IsKeyPressed(ImGuiKey_2) || ImGui::IsKeyPressed(ImGuiKey_R))
+                if (ImGui::IsKeyChordPressed(ImGuiKey_2) || ImGui::IsKeyChordPressed(ImGuiKey_R))
                     m_UiState->ActiveGizmoOperation = GizmoOperation::Rotate;
-                if (ImGui::IsKeyPressed(ImGuiKey_3) || ImGui::IsKeyPressed(ImGuiKey_S))
+                if (ImGui::IsKeyChordPressed(ImGuiKey_3) || ImGui::IsKeyChordPressed(ImGuiKey_S))
                     m_UiState->ActiveGizmoOperation = GizmoOperation::Scale;
                 if (ImGui::IsKeyPressed(ImGuiKey_Escape)) m_UiState->SelectedEntityGuid = 0;
             }
@@ -870,6 +893,7 @@ namespace
             m_Camera.SetClipPlanes(0.1f, 10000.0f);
 
             if (m_FocusRequest.exchange(false, std::memory_order_relaxed)) BeginFocus();
+            ProcessViewRequests();
             const float scroll = m_PendingScroll.exchange(0.0f, std::memory_order_relaxed);
 
             const bool keysEnabled = m_CameraKeysEnabled.load(std::memory_order_relaxed);
@@ -887,6 +911,11 @@ namespace
             if (m_FocusGuid != 0 && scroll != 0.0f)
             {
                 m_FocusDistance = std::clamp(m_FocusDistance * std::pow(0.9, static_cast<double>(scroll)), m_FocusMinDistance, 1.0e30);
+            }
+            else if (scroll != 0.0f)
+            {
+                m_UiState->CameraSpeedMs = ScaleFlySpeed(m_UiState->CameraSpeedMs, static_cast<double>(scroll));
+                m_SpeedReadoutAt.store(std::chrono::steady_clock::now().time_since_epoch().count(), std::memory_order_relaxed);
             }
             if (forward != 0.0f || right != 0.0f || up != 0.0f)
             {
@@ -915,6 +944,7 @@ namespace
             {
                 m_HasLastMouse = false;
             }
+            ApplyPan(mouseX, mouseY);
             m_LastMouseX = mouseX;
             m_LastMouseY = mouseY;
 
@@ -924,6 +954,89 @@ namespace
             m_UiState->CameraYaw = m_Camera.GetYaw();
             m_UiState->CameraPitch = m_Camera.GetPitch();
             PublishView();
+        }
+
+        void ApplyPan(const float mouseX, const float mouseY)
+        {
+            const bool middleDown = m_Input->IsMouseButtonDown(MouseButton::Middle);
+            if (!middleDown)
+            {
+                m_PanActive = false;
+                return;
+            }
+            if (!m_PanActive)
+            {
+                if (!m_CameraMouseHover.load(std::memory_order_relaxed)) return;
+                m_PanActive = true;
+                m_PanDistanceM = PanReferenceDistance();
+                return;
+            }
+            const double height = static_cast<double>(m_UiState->ViewportScreenMax.y - m_UiState->ViewportScreenMin.y);
+            const double perPixel = PanPerPixel(m_PanDistanceM, m_Camera.GetFov(), height);
+            const double dx = static_cast<double>(mouseX - m_LastMouseX) * perPixel;
+            const double dy = static_cast<double>(mouseY - m_LastMouseY) * perPixel;
+            if (dx == 0.0 && dy == 0.0) return;
+            m_FocusGuid = 0;
+            m_Camera.SetPosition(m_Camera.GetPosition() - glm::dvec3(m_Camera.GetRight()) * dx + glm::dvec3(m_Camera.GetUp()) * dy);
+        }
+
+        [[nodiscard]] double PanReferenceDistance()
+        {
+            const auto fallback = std::max(m_UiState->CameraSpeedMs, 1.0);
+            const auto sim = m_Sim.Load();
+            if (!sim->Runner) return fallback;
+            const auto sceneLock = sim->Runner->AcquireSnapshot();
+            const Scene& scene = *sceneLock;
+            const auto selected = scene.FindByGuid(m_UiState->SelectedEntityGuid);
+            if (scene.IsValid(selected))
+            {
+                if (const auto* transform = scene.Registry().try_get<const TransformComponent>(selected))
+                    return std::max(glm::distance(transform->Position, m_Camera.GetPosition()), 1.0);
+            }
+            if (const auto bounds = SceneBounds(scene)) return std::max(glm::distance(bounds->Center, m_Camera.GetPosition()), 1.0);
+            return fallback;
+        }
+
+        [[nodiscard]] std::optional<BoundingSphere> SceneBounds(const Scene& scene) const
+        {
+            std::vector<BoundingSphere> spheres;
+            const auto radiusOverride = MeshRadiusOverride();
+            for (auto [entity, transform] : scene.Registry().view<const TransformComponent>().each())
+                spheres.push_back({transform.Position, BoundingRadiusOf(scene, entity, radiusOverride)});
+            return EnclosingSphere(spheres);
+        }
+
+        void ProcessViewRequests()
+        {
+            for (const auto& request : m_UiState->View.Take())
+            {
+                switch (request.What)
+                {
+                case ViewRequest::Kind::FrameAll: FrameAll(); break;
+                }
+            }
+        }
+
+        void FrameAll()
+        {
+            const auto sim = m_Sim.Load();
+            if (!sim->Runner) return;
+            std::optional<BoundingSphere> bounds;
+            {
+                const auto sceneLock = sim->Runner->AcquireSnapshot();
+                bounds = SceneBounds(*sceneLock);
+            }
+            if (!bounds)
+            {
+                m_Logger->Notifications()->Post(NotificationKind::Info, "Nothing to frame", {}, 0.0f, "view-frame");
+                return;
+            }
+            const float width = m_UiState->ViewportScreenMax.x - m_UiState->ViewportScreenMin.x;
+            const float height = m_UiState->ViewportScreenMax.y - m_UiState->ViewportScreenMin.y;
+            const double aspect = width > 0.0f && height > 0.0f ? static_cast<double>(width / height) : 16.0 / 9.0;
+            const double distance = FrameDistance(bounds->Radius, m_Camera.GetFov(), aspect);
+            m_FocusGuid = 0;
+            m_Camera.SetPosition(bounds->Center - glm::dvec3(m_Camera.GetFront()) * distance);
         }
 
         std::optional<std::pair<glm::dvec3, double>> FindFocusTarget(std::uint64_t guid)
@@ -1090,6 +1203,9 @@ namespace
         std::atomic<float> m_PendingScroll{0.0f};
         std::atomic<bool> m_CameraKeysEnabled{false};
         std::atomic<bool> m_CameraMouseHover{false};
+        std::atomic<std::chrono::steady_clock::rep> m_SpeedReadoutAt{0};
+        bool m_PanActive{false};
+        double m_PanDistanceM{1.0};
         float m_LastMouseX{0.0f};
         float m_LastMouseY{0.0f};
     };

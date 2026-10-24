@@ -12,6 +12,7 @@ import :UI.EditLogic;
 import :UI.TransportLogic;
 import :UI.CreateCatalog;
 import :UI.ActionLogic;
+import :UI.ViewportNav;
 
 export namespace MoleHole
 {
@@ -143,6 +144,7 @@ export namespace MoleHole
         CreatePopupRequest CreatePopup;
         bool OpenAddMeshDialog = false;
         EditRequests Edits;
+        ViewRequests View;
         ActionRequests Actions;
         RecentActions RecentActionIds;
         bool ShowShortcutSheet = false;
