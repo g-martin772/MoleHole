@@ -7,6 +7,10 @@ Exports with a static disk (`disk.speed=0`), so a profile's image is byte-identi
   tools/bench.py --profiles Flat Lensed --runs 3 --json out.json
   tools/bench.py --save-golden .gpp/golden         # store the images
   tools/bench.py --compare .gpp/golden --min-psnr 60   # exit 1 when an image drifted
+  tools/bench.py --runs 3 --json .gpp/bench-baseline.json    # record a baseline
+  tools/bench.py --runs 3 --check .gpp/bench-baseline.json   # exit 1 when median GPU ms regressed > 10%
+
+Baselines are machine and build specific: keep them untracked (.gpp/ is gitignored).
 """
 import argparse
 import json
@@ -41,6 +45,30 @@ def psnr(a, b):
     return float("inf") if match and match.group(1) == "inf" else float(match.group(1)) if match else 0.0
 
 
+def check_regressions(results, baseline, max_regression, min_delta_ms):
+    index = {(r["profile"], r["scene"], r["width"], r["height"]): r for r in baseline}
+    rows, failed = [], False
+    for row in results:
+        ref = index.get((row["profile"], row["scene"], row["width"], row["height"]))
+        if ref is None:
+            rows.append((row["profile"], None, row["gpu_ms"], None, "NO BASELINE"))
+            failed = True
+            continue
+        delta = row["gpu_ms"] - ref["gpu_ms"]
+        change = delta / ref["gpu_ms"] if ref["gpu_ms"] > 0 else 0.0
+        regressed = change > max_regression and delta > min_delta_ms
+        failed |= regressed
+        rows.append((row["profile"], ref["gpu_ms"], row["gpu_ms"], change, "REGRESSED" if regressed else "ok"))
+    return rows, failed
+
+
+def print_check(rows):
+    print(f"{'profile':<10} {'base ms':>9} {'now ms':>9} {'change':>8}  status")
+    for profile, base, now, change, status in rows:
+        print(f"{profile:<10} {'-' if base is None else format(base, '9.2f'):>9} {now:9.2f} "
+              f"{'-' if change is None else format(change * 100, '+7.1f') + '%':>8}  {status}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--scene", default="templates/dev.yaml")
@@ -54,6 +82,9 @@ def main():
     parser.add_argument("--save-golden", metavar="DIR")
     parser.add_argument("--compare", metavar="DIR")
     parser.add_argument("--min-psnr", type=float, default=60.0)
+    parser.add_argument("--check", metavar="BASELINE", help="fail when median GPU ms regressed against a --json file")
+    parser.add_argument("--max-regression", type=float, default=0.10, help="allowed GPU ms increase, fraction")
+    parser.add_argument("--min-delta-ms", type=float, default=0.2, help="ignore increases below this many ms")
     args = parser.parse_args()
 
     results, failed = [], False
@@ -80,6 +111,11 @@ def main():
     if args.json:
         with open(args.json, "w") as f:
             json.dump(results, f, indent=2)
+    if args.check:
+        with open(args.check) as f:
+            rows, regressed = check_regressions(results, json.load(f), args.max_regression, args.min_delta_ms)
+        print_check(rows)
+        failed |= regressed
     sys.exit(1 if failed else 0)
 
 

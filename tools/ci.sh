@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: tools/ci.sh [configure|build|test|format|scenes ...]   (default: all)
+# Usage: tools/ci.sh [configure|build|test|format|scenes|bench ...]   (default: all)
 # Needs VCPKG_ROOT, CMake >= 4.4, Ninja, GCC 16. GPU tests are tagged [gpu] and skipped.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -43,13 +43,23 @@ scenes()
     done
 }
 
+bench()
+{
+    local baseline=.gpp/bench-baseline.json
+    if [[ ! -f $baseline ]]; then echo "bench: no $baseline, skipped"; return 0; fi
+    if tools/bench.py --runs 3 --check "$baseline"; then return 0; fi
+    echo "bench: GPU time regressed"
+    [[ "${CI_STRICT_BENCH:-0}" == 1 ]] && return 1
+    return 0
+}
+
 steps=("$@")
-[[ ${#steps[@]} -eq 0 ]] && steps=(configure build test format scenes)
+[[ ${#steps[@]} -eq 0 ]] && steps=(configure build test format scenes bench)
 for step in "${steps[@]}"; do
     echo "== $step =="
     case "$step" in
         test) test_all ;;
-        configure | build | format | scenes) "$step" ;;
+        configure | build | format | scenes | bench) "$step" ;;
         *) echo "unknown step: $step" >&2; exit 2 ;;
     esac
 done
