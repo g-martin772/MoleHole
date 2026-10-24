@@ -150,4 +150,52 @@ export namespace MoleHole
         if (tracedMeshes) return f64 ? TraceKernel::MarcherMeshesF64 : TraceKernel::MarcherMeshes;
         return f64 ? TraceKernel::MarcherF64 : TraceKernel::Marcher;
     }
+
+    // Compute pipelines of the trace stage; each is compiled the first time a frame needs it
+    struct TraceVariants
+    {
+        bool Flat = false;
+        bool Marcher = false;
+        bool MarcherF64 = false;
+        bool Mesh = false;
+        bool MeshF64 = false;
+        bool Probe = false;
+        bool ProbeF64 = false;
+        bool Reduce = false;
+
+        bool operator==(const TraceVariants&) const = default;
+    };
+
+    struct TraceDemand
+    {
+        bool F64Supported = false;
+        bool MeshTraceSupported = false;
+        bool SceneHasMeshes = false;
+        bool ProbesWanted = false;
+    };
+
+    // Everything a frame with these settings must have compiled before it is complete. The plain marcher stays in
+    // the set next to a mesh kernel: it draws the frames while mesh assets are still loading.
+    [[nodiscard]] inline TraceVariants RequiredTraceVariants(const RenderSettings& settings, const TraceDemand& demand)
+    {
+        const bool meshes = demand.MeshTraceSupported && demand.SceneHasMeshes && WantsTracedMeshes(settings);
+        const auto kernel = SelectTraceKernel(settings, demand.F64Supported, meshes);
+        TraceVariants variants;
+        switch (kernel)
+        {
+        case TraceKernel::Flat: variants.Flat = true; break;
+        case TraceKernel::Marcher: variants.Marcher = true; break;
+        case TraceKernel::MarcherF64: variants.MarcherF64 = true; break;
+        case TraceKernel::MarcherMeshes: variants.Marcher = variants.Mesh = true; break;
+        case TraceKernel::MarcherMeshesF64: variants.MarcherF64 = variants.MeshF64 = true; break;
+        }
+        if (demand.ProbesWanted && kernel != TraceKernel::Flat)
+        {
+            const bool f64 = kernel == TraceKernel::MarcherF64 || kernel == TraceKernel::MarcherMeshesF64;
+            variants.Probe = !f64;
+            variants.ProbeF64 = f64;
+            variants.Reduce = true;
+        }
+        return variants;
+    }
 }

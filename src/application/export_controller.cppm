@@ -22,6 +22,7 @@ export namespace MoleHole
         void SetPipelineFailure(std::optional<std::string> failure);
 
     private:
+        bool FramesSettled() const;
         struct Job
         {
             std::atomic<int> WritesInFlight{0};

@@ -127,7 +127,7 @@ namespace MoleHole
         {
             PollCompletion();
         }
-        else if (m_PipelinesReady.load(std::memory_order_acquire))
+        else if (m_PipelinesReady.load(std::memory_order_acquire) && FramesSettled())
         {
             if (!m_ReadySeen)
             {
@@ -150,6 +150,14 @@ namespace MoleHole
             }
             else m_UiState->ExportStatus = "Compiling shaders...";
         }
+    }
+
+    // Pipelines are created for the settings a frame is built with, so readiness only counts once frames built
+    // with the export's own settings are being rendered
+    bool ExportController::FramesSettled() const
+    {
+        const auto stats = m_Renderer->GetBufferTargetStats(m_BufferTargetId);
+        return stats && stats->FramesRendered >= m_MinSerial;
     }
 
     void ExportController::Start(const ExportRequest& request)

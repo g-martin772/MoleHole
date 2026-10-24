@@ -321,41 +321,6 @@ namespace MoleHole
 
             void Initialize()
             {
-                std::unordered_map<std::string, std::string> defines;
-                // Bodies sample their maps with non-uniform indices; without descriptor indexing they stay untextured
-                if (m_Res.Device->GetCapabilities().DescriptorIndexing) defines["GPP_BODY_TEXTURES"] = "1";
-                const auto with = [&defines](std::initializer_list<std::pair<const std::string, std::string>> extra)
-                {
-                    auto all = defines;
-                    all.insert(extra);
-                    return all;
-                };
-                m_Pipeline = MakeComputePipeline(m_Res, "black_hole_rendering.comp", defines);
-                m_FlatPipeline = MakeComputePipeline(m_Res, "flat_rendering.comp", defines);
-                if (m_Res.Device->SupportsShaderFloat64())
-                {
-                    m_PipelineF64 = MakeComputePipeline(m_Res, "black_hole_rendering.comp", with({{"GPP_PRECISION_F64", "1"}}));
-                }
-                m_ProbePipeline = MakeComputePipeline(m_Res, "black_hole_rendering.comp", with({{"GPP_BODY_PROBE", "1"}}));
-                if (m_PipelineF64)
-                {
-                    m_ProbePipelineF64 = MakeComputePipeline(m_Res, "black_hole_rendering.comp",
-                                                             with({{"GPP_BODY_PROBE", "1"}, {"GPP_PRECISION_F64", "1"}}));
-                }
-                m_ReducePipeline = MakeComputePipeline(m_Res, "body_probe_reduce.comp", {});
-                if (MeshTraceSupported(m_Res.Device->GetCapabilities()))
-                {
-                    auto meshDefines = MeshShaderDefines(m_Res.Device->GetCapabilities(),
-                                                         GltfTextureCapacity(m_Res.Device->GetCapabilities()), false);
-                    meshDefines.emplace("GPP_MESH_TRACE", "1");
-                    for (const auto& [name, value] : defines) meshDefines.emplace(name, value);
-                    m_MeshPipeline = MakeComputePipeline(m_Res, "black_hole_rendering.comp", meshDefines);
-                    if (m_PipelineF64)
-                    {
-                        meshDefines.emplace("GPP_PRECISION_F64", "1");
-                        m_MeshPipelineF64 = MakeComputePipeline(m_Res, "black_hole_rendering.comp", meshDefines);
-                    }
-                }
                 m_ParamsBuffer = std::make_unique<VulkanBuffer>(
                     m_Res.Device, MakeUniformBufferSpecification(sizeof(RaytraceParamsGpu)), m_Res.Logger);
                 const auto storage = [&](const std::size_t bytes)
@@ -390,48 +355,68 @@ namespace MoleHole
 
             [[nodiscard]] bool Ready() const override
             {
-                return Compiled(m_Pipeline) && Compiled(m_FlatPipeline) && (!m_PipelineF64 || Compiled(m_PipelineF64))
-                       && MeshPipelinesReady() && Compiled(m_ProbePipeline) && Compiled(m_ReducePipeline)
-                       && (!m_ProbePipelineF64 || Compiled(m_ProbePipelineF64))
-                       && (!m_Res.Textures || m_Res.Textures->PendingCount() == 0) && m_ProbeFramesSettled;
+                {
+                    std::scoped_lock lock(m_VariantMutex);
+                    if (!m_HaveDemand || !VariantsCompiled(m_Demand)) return false;
+                }
+                return (!m_Res.Textures || m_Res.Textures->PendingCount() == 0) && m_ProbeFramesSettled;
             }
 
             [[nodiscard]] std::optional<std::string> Failure() const override
             {
+                std::scoped_lock lock(m_VariantMutex);
                 return CompileFailure(Name(), {&m_Pipeline, &m_FlatPipeline, &m_PipelineF64, &m_MeshPipeline, &m_MeshPipelineF64,
                                                &m_ProbePipeline, &m_ProbePipelineF64, &m_ReducePipeline});
             }
 
             void Record(RenderFrameContext& ctx) override
             {
-                if (m_MeshPipeline && WantsTracedMeshes(ctx.Settings) && MeshPipelinesReady())
+                TraceDemand demand{.F64Supported = m_Res.Device->SupportsShaderFloat64(),
+                                   .MeshTraceSupported = MeshTraceSupported(m_Res.Device->GetCapabilities()),
+                                   .SceneHasMeshes = SceneHasMeshes(ctx.Scene)};
+                if (demand.MeshTraceSupported && demand.SceneHasMeshes && WantsTracedMeshes(ctx.Settings))
                 {
-                    auto frame = m_Res.Mesh->Prepare(ctx.Graph, ctx.Scene, ctx.Frame, ctx.Settings, true, *m_Res.DummyWhiteTexture);
-                    if (frame.HasTlas)
+                    if (VariantsCompiled(RequiredTraceVariants(ctx.Settings, demand)))
                     {
-                        m_Res.MeshTrace.Active = true;
-                        m_Res.MeshTrace.Scene = std::move(frame);
+                        auto frame = m_Res.Mesh->Prepare(ctx.Graph, ctx.Scene, ctx.Frame, ctx.Settings, true, *m_Res.DummyWhiteTexture);
+                        if (frame.HasTlas)
+                        {
+                            m_Res.MeshTrace.Active = true;
+                            m_Res.MeshTrace.Scene = std::move(frame);
+                        }
                     }
                 }
                 UploadParams(ctx);
 
-                const auto kernel = SelectTraceKernel(ctx.Settings, Compiled(m_PipelineF64), m_Res.MeshTrace.Active);
-                const std::shared_ptr<ShaderPipeline> raytracePipeline = kernel == TraceKernel::Flat ? m_FlatPipeline
-                                                                         : kernel == TraceKernel::MarcherF64 ? m_PipelineF64
-                                                                         : kernel == TraceKernel::MarcherMeshes ? m_MeshPipeline
-                                                                         : kernel == TraceKernel::MarcherMeshesF64 ? m_MeshPipelineF64
-                                                                         : m_Pipeline;
+                demand.ProbesWanted = m_ProbesActive && m_NumSpheres > 0;
+                const auto wanted = RequiredTraceVariants(ctx.Settings, demand);
+                // Settings that change for a moment (an export starting or ending) must not start compiles that are not needed
+                const auto now = std::chrono::steady_clock::now();
+                if (!(wanted == m_RequestedDemand))
+                {
+                    m_RequestedDemand = wanted;
+                    m_RequestedSince = now;
+                }
+                if (now - m_RequestedSince >= kVariantSettleTime) Ensure(wanted);
+                {
+                    std::scoped_lock lock(m_VariantMutex);
+                    m_Demand = wanted;
+                    m_HaveDemand = true;
+                }
+
+                const auto kernel = SelectTraceKernel(ctx.Settings, demand.F64Supported, m_Res.MeshTrace.Active);
+                const auto [raytracePipeline, f64Used] = ChooseTracePipeline(kernel);
                 const std::uint32_t groupsX = ctx.GroupsX;
                 const TraceBindings bindings = MakeBindings();
 
-                RecordProbes(ctx, kernel == TraceKernel::MarcherF64 || kernel == TraceKernel::MarcherMeshesF64, bindings);
+                RecordProbes(ctx, f64Used, bindings);
 
                 ctx.Graph.AddBudgetedComputePass(
                     "Trace", {}, {}, ctx.GroupsX * ctx.GroupsY,
                     [groupsX, raytracePipeline, bindings, set = vk::DescriptorSet{}](
                         const vk::CommandBuffer cmd, RenderGraph& g, const RenderGraphWorkSlice& slice) mutable
                     {
-                        const auto pipeline = raytracePipeline->GetPipeline();
+                        const auto pipeline = raytracePipeline ? raytracePipeline->GetPipeline() : nullptr;
                         if (!pipeline) return;
                         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->GetPipeline());
                         if (!set)
@@ -546,8 +531,14 @@ namespace MoleHole
                     m_ProbeFrames = 0;
                     return;
                 }
-                const auto probe = f64 && Compiled(m_ProbePipelineF64) ? m_ProbePipelineF64 : m_ProbePipeline;
-                if (!Compiled(probe) || !Compiled(m_ReducePipeline)) return;
+                std::shared_ptr<ShaderPipeline> probe;
+                std::shared_ptr<ShaderPipeline> reduceCompiled;
+                {
+                    std::scoped_lock lock(m_VariantMutex);
+                    probe = f64 && Compiled(m_ProbePipelineF64) ? m_ProbePipelineF64 : m_ProbePipeline;
+                    reduceCompiled = m_ReducePipeline;
+                }
+                if (!Compiled(probe) || !Compiled(reduceCompiled)) return;
                 ++m_ProbeFrames;
                 const auto count = static_cast<std::uint32_t>(m_NumSpheres);
                 auto* probeImage = m_ProbeImage.get();
@@ -564,7 +555,7 @@ namespace MoleHole
                         // The probe main ignores the camera trace's work slicing, so it has no push constants
                         cmd.dispatch(kProbeWidth / 16, count * kProbeHeight / 16, 1);
                     });
-                auto reduce = m_ReducePipeline;
+                auto reduce = reduceCompiled;
                 auto* lighting = m_LightingBuffer.get();
                 const auto device = m_Res.Device;
                 ctx.Graph.AddComputePass(
@@ -621,13 +612,99 @@ namespace MoleHole
                 m_BodyBuffer->Upload(bodies.data(), sizeof(bodies));
             }
 
-            [[nodiscard]] bool MeshPipelinesReady() const
+            [[nodiscard]] static bool SceneHasMeshes(const Scene& scene)
             {
-                return (!m_MeshPipeline || Compiled(m_MeshPipeline)) && (!m_MeshPipelineF64 || Compiled(m_MeshPipelineF64));
+                for (const auto [entity, mesh] : scene.Registry().view<const MeshComponent>().each())
+                {
+                    if (!mesh.AssetPath.empty()) return true;
+                }
+                return false;
+            }
+
+            [[nodiscard]] bool VariantsCompiled(const TraceVariants& v) const
+            {
+                const auto ok = [](const bool wanted, const std::shared_ptr<ShaderPipeline>& pipeline)
+                {
+                    return !wanted || Compiled(pipeline);
+                };
+                return ok(v.Flat, m_FlatPipeline) && ok(v.Marcher, m_Pipeline) && ok(v.MarcherF64, m_PipelineF64)
+                       && ok(v.Mesh, m_MeshPipeline) && ok(v.MeshF64, m_MeshPipelineF64) && ok(v.Probe, m_ProbePipeline)
+                       && ok(v.ProbeF64, m_ProbePipelineF64) && ok(v.Reduce, m_ReducePipeline);
+            }
+
+            // Starts compiling whichever of the wanted variants does not exist yet; compilation runs on the thread pool
+            void Ensure(const TraceVariants& wanted)
+            {
+                std::scoped_lock lock(m_VariantMutex);
+                std::unordered_map<std::string, std::string> defines;
+                // Bodies sample their maps with non-uniform indices; without descriptor indexing they stay untextured
+                if (m_Res.Device->GetCapabilities().DescriptorIndexing) defines["GPP_BODY_TEXTURES"] = "1";
+                const auto with = [&defines](std::initializer_list<std::pair<const std::string, std::string>> extra)
+                {
+                    auto all = defines;
+                    all.insert(extra);
+                    return all;
+                };
+                const auto make = [this](std::shared_ptr<ShaderPipeline>& slot, const bool wantedVariant, const char* file,
+                                         std::unordered_map<std::string, std::string> variantDefines)
+                {
+                    if (wantedVariant && !slot) slot = MakeComputePipeline(m_Res, file, std::move(variantDefines));
+                };
+                const auto meshDefines = [&](const bool f64)
+                {
+                    auto all = MeshShaderDefines(m_Res.Device->GetCapabilities(),
+                                                 GltfTextureCapacity(m_Res.Device->GetCapabilities()), false);
+                    all.emplace("GPP_MESH_TRACE", "1");
+                    for (const auto& [name, value] : defines) all.emplace(name, value);
+                    if (f64) all.emplace("GPP_PRECISION_F64", "1");
+                    return all;
+                };
+                make(m_Pipeline, wanted.Marcher, "black_hole_rendering.comp", defines);
+                make(m_FlatPipeline, wanted.Flat, "flat_rendering.comp", defines);
+                make(m_PipelineF64, wanted.MarcherF64, "black_hole_rendering.comp", with({{"GPP_PRECISION_F64", "1"}}));
+                make(m_ProbePipeline, wanted.Probe, "black_hole_rendering.comp", with({{"GPP_BODY_PROBE", "1"}}));
+                make(m_ProbePipelineF64, wanted.ProbeF64, "black_hole_rendering.comp",
+                     with({{"GPP_BODY_PROBE", "1"}, {"GPP_PRECISION_F64", "1"}}));
+                make(m_ReducePipeline, wanted.Reduce, "body_probe_reduce.comp", {});
+                make(m_MeshPipeline, wanted.Mesh, "black_hole_rendering.comp", meshDefines(false));
+                make(m_MeshPipelineF64, wanted.MeshF64, "black_hole_rendering.comp", meshDefines(true));
+            }
+
+            // The pipeline for the kernel if it is compiled, else the closest compiled one so the viewport keeps drawing
+            [[nodiscard]] std::pair<std::shared_ptr<ShaderPipeline>, bool> ChooseTracePipeline(const TraceKernel kernel) const
+            {
+                std::scoped_lock lock(m_VariantMutex);
+                struct Candidate
+                {
+                    const std::shared_ptr<ShaderPipeline>* Pipeline;
+                    bool F64;
+                };
+                std::vector<Candidate> order;
+                switch (kernel)
+                {
+                case TraceKernel::Flat: order = {{&m_FlatPipeline, false}}; break;
+                case TraceKernel::MarcherMeshesF64:
+                    order = {{&m_MeshPipelineF64, true}, {&m_MeshPipeline, false}, {&m_PipelineF64, true}, {&m_Pipeline, false}};
+                    break;
+                case TraceKernel::MarcherMeshes: order = {{&m_MeshPipeline, false}, {&m_Pipeline, false}}; break;
+                case TraceKernel::MarcherF64: order = {{&m_PipelineF64, true}, {&m_Pipeline, false}}; break;
+                case TraceKernel::Marcher: order = {{&m_Pipeline, false}}; break;
+                }
+                for (const auto& candidate : order)
+                {
+                    if (Compiled(*candidate.Pipeline)) return {*candidate.Pipeline, candidate.F64};
+                }
+                return {*order.front().Pipeline, order.front().F64};
             }
 
             RenderResources& m_Res;
             std::chrono::steady_clock::time_point m_StartTime;
+            mutable std::mutex m_VariantMutex;
+            TraceVariants m_Demand;
+            bool m_HaveDemand = false;
+            TraceVariants m_RequestedDemand;
+            std::chrono::steady_clock::time_point m_RequestedSince = std::chrono::steady_clock::now();
+            static constexpr std::chrono::milliseconds kVariantSettleTime{200};
             std::shared_ptr<ShaderPipeline> m_Pipeline;
             std::shared_ptr<ShaderPipeline> m_PipelineF64;
             std::shared_ptr<ShaderPipeline> m_FlatPipeline;
@@ -1363,6 +1440,8 @@ namespace MoleHole
         mutable std::mutex RecordedMutex;
         std::vector<std::string> Recorded;
         bool Initialized = false;
+        std::chrono::steady_clock::time_point InitializeStart{};
+        mutable std::atomic<bool> ReadyLogged{false};
     };
 
     RenderPipeline::RenderPipeline(std::shared_ptr<Renderer> renderer, std::shared_ptr<IFileSystem> fileSystem,
@@ -1383,6 +1462,7 @@ namespace MoleHole
     {
         auto& impl = *m_Impl;
         auto& res = impl.Res;
+        impl.InitializeStart = std::chrono::steady_clock::now();
         res.Device = res.Renderer->GetDevice();
         res.UploadPool = std::make_unique<VulkanCommandPool>(res.Device, res.Logger, res.Device->GetQueueIndices().Graphics);
         const auto queue = res.Device->GetBackgroundQueue();
@@ -1492,7 +1572,15 @@ namespace MoleHole
 
     bool RenderPipeline::AllStagesReady() const
     {
-        return !m_Impl->Stages.empty() && std::ranges::all_of(m_Impl->Stages, [](const auto& stage) { return stage->Ready(); });
+        const bool ready = !m_Impl->Stages.empty()
+                           && std::ranges::all_of(m_Impl->Stages, [](const auto& stage) { return stage->Ready(); });
+        if (ready && !m_Impl->ReadyLogged.exchange(true))
+        {
+            const auto elapsed = std::chrono::steady_clock::now() - m_Impl->InitializeStart;
+            m_Impl->Res.Logger->Info("Render pipelines ready in {} ms",
+                                     std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+        }
+        return ready;
     }
 
     std::optional<std::string> RenderPipeline::FirstFailure() const
