@@ -75,3 +75,4 @@ export import :UI.Widgets;
 export import :UI.RenderSettingsWidgets;
 export import :UI.IntroTimeline;
 export import :UI.TutorialState;
+export import :UI.ViewportToolbar;

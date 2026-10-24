@@ -238,57 +238,47 @@ namespace
                 {"Scale", GizmoOperation::Scale, "Scale (S / 3)"},
             }};
             const char* modeLabel = m_UiState->ActiveGizmoMode == GizmoMode::Local ? "Local" : "World";
+            const char* snapLabel = "Snap";
 
-            const ImVec2 framePad = ImGui::GetStyle().FramePadding;
             const float spacing = ImGui::GetStyle().ItemSpacing.x;
-            const float rowHeight = ImGui::GetFrameHeight();
-            const auto buttonSize = [&](const char* label)
-            {
-                return ImVec2(ImGui::CalcTextSize(label).x + framePad.x * 2.0f, rowHeight);
-            };
-
-            std::array<ImVec2, operationButtons.size()> opSizes{};
+            std::array<float, operationButtons.size()> opWidths{};
             float contentWidth = 0.0f;
             for (std::size_t i = 0; i < operationButtons.size(); ++i)
             {
-                opSizes[i] = buttonSize(operationButtons[i].Label);
-                contentWidth += opSizes[i].x + spacing;
+                opWidths[i] = ViewportToolbar::TextButtonWidth(operationButtons[i].Label);
+                contentWidth += opWidths[i] + spacing;
             }
-            const ImVec2 modeSize = buttonSize(modeLabel);
-            contentWidth += modeSize.x + spacing;
-            contentWidth += rowHeight + spacing + ImGui::CalcTextSize("Snap").x;
+            const float modeWidth = ViewportToolbar::TextButtonWidth(modeLabel);
+            const float snapWidth = ViewportToolbar::TextButtonWidth(snapLabel);
+            contentWidth += modeWidth + spacing + snapWidth;
 
-            constexpr float kOuterPadding = 8.0f;
-            constexpr float kInnerPadding = 8.0f;
-            const ImVec2 panelSize(contentWidth + kInnerPadding * 2.0f, rowHeight + kInnerPadding * 2.0f);
-            const ImVec2 panelMin(viewportMax.x - panelSize.x - kOuterPadding, viewportMin.y + kOuterPadding);
+            const ImVec2 panelSize(ViewportToolbar::BarWidth(contentWidth), ViewportToolbar::Height());
+            const ImVec2 panelMin(std::max(viewportMax.x - panelSize.x - ViewportToolbar::kMargin, viewportMin.x + ViewportToolbar::kMargin),
+                                  ViewportToolbar::Top(viewportMin.y));
             m_UiState->ViewportToolbarLeft = panelMin.x;
 
-            ImGui::GetWindowDrawList()->AddRectFilled(
-                panelMin, ImVec2(panelMin.x + panelSize.x, panelMin.y + panelSize.y),
-                ImGui::GetColorU32(ImGuiCol_ChildBg), 4.0f);
-
-            ImGui::SetCursorScreenPos(ImVec2(panelMin.x + kInnerPadding, panelMin.y + kInnerPadding));
-            ImGui::BeginGroup();
-            for (std::size_t i = 0; i < operationButtons.size(); ++i)
+            if (ViewportToolbar::Begin("##GizmoToolbar", panelMin))
             {
-                const auto& button = operationButtons[i];
-                const bool active = m_UiState->ActiveGizmoOperation == button.Op;
-                if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-                if (ImGui::Button(button.Label, opSizes[i])) m_UiState->ActiveGizmoOperation = button.Op;
-                if (active) ImGui::PopStyleColor();
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", button.Tooltip);
+                for (std::size_t i = 0; i < operationButtons.size(); ++i)
+                {
+                    const auto& button = operationButtons[i];
+                    if (ViewportToolbar::Button(button.Label, opWidths[i], m_UiState->ActiveGizmoOperation == button.Op))
+                        m_UiState->ActiveGizmoOperation = button.Op;
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", button.Tooltip);
+                    ImGui::SameLine();
+                }
+                if (ViewportToolbar::Button(modeLabel, modeWidth))
+                {
+                    m_UiState->ActiveGizmoMode =
+                        m_UiState->ActiveGizmoMode == GizmoMode::Local ? GizmoMode::World : GizmoMode::Local;
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Gizmo space: local or world axes");
                 ImGui::SameLine();
+                if (ViewportToolbar::Button(snapLabel, snapWidth, m_UiState->GizmoSnapEnabled))
+                    m_UiState->GizmoSnapEnabled = !m_UiState->GizmoSnapEnabled;
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Snap the gizmo to the configured steps");
             }
-
-            if (ImGui::Button(modeLabel, modeSize))
-            {
-                m_UiState->ActiveGizmoMode =
-                    m_UiState->ActiveGizmoMode == GizmoMode::Local ? GizmoMode::World : GizmoMode::Local;
-            }
-            ImGui::SameLine();
-            ImGui::Checkbox("Snap", &m_UiState->GizmoSnapEnabled);
-            ImGui::EndGroup();
+            ViewportToolbar::End();
 
             return ImGui::IsMouseHoveringRect(panelMin, ImVec2(panelMin.x + panelSize.x, panelMin.y + panelSize.y));
         }

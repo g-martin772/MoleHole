@@ -16,16 +16,11 @@ namespace
     constexpr const char* kIconStep = "\xef\x81\x91"; // U+F051
     constexpr const char* kIconSnapshot = "\xef\x80\xb0"; // U+F030
 
-    constexpr float kButtonHeight = 34.0f;
-    constexpr float kIconWidth = 38.0f;
+    using ViewportToolbar::kIconWidth;
     constexpr float kGroupGap = 14.0f;
     constexpr double kMinTimeScale = 1.0e-12;
     constexpr double kMaxTimeScale = 1.0e12;
 
-    constexpr ImVec4 kAccent{180.0f / 255.0f, 100.0f / 255.0f, 40.0f / 255.0f, 1.0f};
-    constexpr ImVec4 kAccentHover{200.0f / 255.0f, 120.0f / 255.0f, 50.0f / 255.0f, 1.0f};
-    constexpr ImVec4 kIdle{0.16f, 0.16f, 0.16f, 1.0f};
-    constexpr ImVec4 kIdleHover{0.26f, 0.26f, 0.26f, 1.0f};
 
     struct Frame
     {
@@ -73,24 +68,18 @@ namespace
 
             HandleShortcuts(frame);
 
-            const float padding = 10.0f;
-            const float right = std::min(max.x - 16.0f, m_UiState->ViewportToolbarLeft - 8.0f);
+            const float padding = ViewportToolbar::kPadding;
+            const float besideGizmo = m_UiState->ViewportToolbarLeft - 8.0f;
+            const bool stacked = besideGizmo - min.x - ViewportToolbar::kMargin - 2.0f * padding < ViewportToolbar::kIconWidth;
+            const float right = stacked ? max.x - ViewportToolbar::kMargin : std::min(max.x - ViewportToolbar::kMargin, besideGizmo);
+            const float top = ViewportToolbar::Top(min.y) + (stacked ? ViewportToolbar::Height() + 8.0f : 0.0f);
             const auto widths = TierWidths(frame);
-            const auto tier = PickTransportTier(right - min.x - 16.0f - 2.0f * padding, widths);
-            const float barWidth = widths[tier] + 2.0f * padding;
-            const float left = std::clamp((min.x + max.x - barWidth) * 0.5f, min.x + 16.0f, std::max(min.x + 16.0f, right - barWidth));
-            ImGui::SetNextWindowPos(ImVec2(left, min.y + 16.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padding, padding));
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.08f, 0.08f, 0.85f));
+            const auto tier = PickTransportTier(right - min.x - ViewportToolbar::kMargin - 2.0f * padding, widths);
+            const float barWidth = ViewportToolbar::BarWidth(widths[tier]);
+            const float left = std::clamp((min.x + max.x - barWidth) * 0.5f, min.x + ViewportToolbar::kMargin,
+                                          std::max(min.x + ViewportToolbar::kMargin, right - barWidth));
 
-            constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                                               ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                                               ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoDocking |
-                                               ImGuiWindowFlags_AlwaysAutoResize |
-                                               ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings;
-
-            if (ImGui::Begin("##SimulationControls", nullptr, flags))
+            if (ViewportToolbar::Begin("##SimulationControls", ImVec2(left, top)))
             {
                 switch (tier)
                 {
@@ -101,16 +90,13 @@ namespace
                 }
                 DrawPopups(frame);
             }
-            ImGui::End();
-
-            ImGui::PopStyleColor();
-            ImGui::PopStyleVar(2);
+            ViewportToolbar::End();
         }
 
     private:
         static float TextButtonWidth(const std::string& label)
         {
-            return ImGui::CalcTextSize(label.c_str()).x + 16.0f;
+            return ViewportToolbar::TextButtonWidth(label);
         }
 
         std::string StepLabel() const { return std::format("+{}", m_UiState->TransportStepCount); }
@@ -152,7 +138,7 @@ namespace
 
             ImGui::SameLine();
             ImGui::BeginDisabled(!frame.Session);
-            if (IconButton(kIconStop, "[]", kIdle, kIdleHover))
+            if (IconButton(kIconStop, "[]", false))
             {
                 m_UiState->PendingStopSimulation = true;
             }
@@ -161,7 +147,7 @@ namespace
 
             ImGui::SameLine();
             ImGui::BeginDisabled(!canStep);
-            if (IconButton(kIconStep, ">|", kIdle, kIdleHover)) RequestStep(false);
+            if (IconButton(kIconStep, ">|", false)) RequestStep(false);
             ImGui::EndDisabled();
             Tip("Step one tick (.), only while paused.\nFrom Edit mode this starts a paused Play session: Stop restores the scene.");
 
@@ -169,7 +155,7 @@ namespace
             {
                 ImGui::SameLine();
                 ImGui::BeginDisabled(!canStep);
-                if (ImGui::Button(StepLabel().c_str(), ImVec2(TextButtonWidth(StepLabel()), kButtonHeight)))
+                if (ViewportToolbar::Button(StepLabel().c_str(), TextButtonWidth(StepLabel())))
                 {
                     RequestStep(true);
                 }
@@ -213,11 +199,11 @@ namespace
             {
                 ImGui::SameLine(0.0f, kGroupGap);
                 const auto label = std::format("t = {}##readout", FormatSimTime(frame.SimTime));
-                if (ImGui::Button(label.c_str(), ImVec2(ReadoutWidth(), kButtonHeight))) m_OpenJump = true;
+                if (ViewportToolbar::Button(label.c_str(), ReadoutWidth())) m_OpenJump = true;
                 Tip("Simulation time (physical seconds of a distant observer). Click to jump to a time.");
 
                 ImGui::SameLine(0.0f, kGroupGap);
-                if (IconButton(kIconSnapshot, "S", kIdle, kIdleHover))
+                if (IconButton(kIconSnapshot, "S", false))
                 {
                     m_UiState->Transport.Push({TransportRequest::Kind::Snapshot});
                 }
@@ -225,7 +211,7 @@ namespace
                 ImGui::SameLine();
                 const auto count = std::format("{}##snapshots", frame.Bookmarks.size());
                 ImGui::BeginDisabled(frame.Bookmarks.empty());
-                if (ImGui::Button(count.c_str(), ImVec2(TextButtonWidth("00"), kButtonHeight))) m_OpenSnapshots = true;
+                if (ViewportToolbar::Button(count.c_str(), TextButtonWidth("00"))) m_OpenSnapshots = true;
                 ImGui::EndDisabled();
                 Tip("Restore a snapshot");
             }
@@ -234,7 +220,7 @@ namespace
         void DrawPlay(const Frame& frame)
         {
             const bool paused = frame.Paused;
-            if (IconButton(paused ? kIconPlay : kIconPause, paused ? ">" : "||", kAccent, kAccentHover))
+            if (IconButton(paused ? kIconPlay : kIconPause, paused ? ">" : "||", true))
             {
                 if (paused) m_UiState->PendingSnapshotForPlay = true;
                 else frame.Runner->SetPaused(true);
@@ -354,27 +340,14 @@ namespace
             }
         }
 
-        bool IconButton(const char* icon, const char* fallback, const ImVec4& color, const ImVec4& hover)
+        bool IconButton(const char* icon, const char* fallback, const bool accent)
         {
-            const bool hasIconFont = m_UiState->IconFont != nullptr;
-            ImGui::PushStyleColor(ImGuiCol_Button, color);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-            if (hasIconFont) ImGui::PushFont(m_UiState->IconFont);
-            const bool pressed = ImGui::Button(hasIconFont ? icon : fallback, ImVec2(kIconWidth, kButtonHeight));
-            if (hasIconFont) ImGui::PopFont();
-            ImGui::PopStyleColor(3);
-            return pressed;
+            return ViewportToolbar::IconButton(m_UiState->IconFont, icon, fallback, accent);
         }
 
         static bool SpeedButton(const std::string& label, const bool active)
         {
-            ImGui::PushStyleColor(ImGuiCol_Button, active ? kAccent : kIdle);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? kAccentHover : kIdleHover);
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-            const bool pressed = ImGui::Button((label + "##speed" + label).c_str(), ImVec2(TextButtonWidth(label), kButtonHeight));
-            ImGui::PopStyleColor(3);
-            return pressed;
+            return ViewportToolbar::Button((label + "##speed" + label).c_str(), TextButtonWidth(label), active);
         }
 
         static void Tip(const std::string& text)
