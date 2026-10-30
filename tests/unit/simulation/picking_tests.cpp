@@ -170,3 +170,51 @@ TEST_CASE("EntitiesInScreenRect selects entities whose centres project inside th
     const auto all = EntitiesInScreenRect(scene, frame, viewportMin, viewportSize, view, projection, {800.0f, 800.0f}, {0.0f, 0.0f});
     CHECK(all.size() == 2);
 }
+
+TEST_CASE("Hidden and locked entities are neither picked nor box selected", "[simulation][picking]")
+{
+    RegisterComponents();
+
+    Scene scene("PickingFlagsTest");
+    const auto near = scene.CreateEntity("Near");
+    scene.Registry().emplace<TransformComponent>(near, TransformComponent{.Position = {0.0f, 0.0f, 5.0f}});
+    scene.Registry().emplace<SphereComponent>(near, SphereComponent{.Radius = 1.0f});
+    const auto far = scene.CreateEntity("Far");
+    scene.Registry().emplace<TransformComponent>(far, TransformComponent{.Position = {0.0f, 0.0f, 10.0f}});
+    scene.Registry().emplace<SphereComponent>(far, SphereComponent{.Radius = 1.0f});
+
+    scene.Registry().emplace<EditorFlagsComponent>(near, EditorFlagsComponent{.Hidden = true});
+    auto hit = PickClosestEntity(scene, glm::dvec3(0.0), glm::dvec3(0.0, 0.0, 1.0));
+    REQUIRE(hit.has_value());
+    CHECK(hit->Entity == far);
+
+    scene.Registry().get<EditorFlagsComponent>(near) = {.Hidden = false, .Locked = true};
+    hit = PickClosestEntity(scene, glm::dvec3(0.0), glm::dvec3(0.0, 0.0, 1.0));
+    REQUIRE(hit.has_value());
+    CHECK(hit->Entity == far);
+
+    scene.Registry().emplace<EditorFlagsComponent>(far, EditorFlagsComponent{.Locked = true});
+    CHECK_FALSE(PickClosestEntity(scene, glm::dvec3(0.0), glm::dvec3(0.0, 0.0, 1.0)).has_value());
+
+    scene.Registry().remove<EditorFlagsComponent>(near);
+    CHECK(PickClosestEntity(scene, glm::dvec3(0.0), glm::dvec3(0.0, 0.0, 1.0))->Entity == near);
+}
+
+TEST_CASE("EditorFlags round-trip through the scene YAML", "[simulation][picking]")
+{
+    RegisterComponents();
+
+    Scene scene("FlagsYamlTest");
+    const auto hidden = scene.CreateEntity("Hidden");
+    scene.Registry().emplace<EditorFlagsComponent>(hidden, EditorFlagsComponent{.Hidden = true});
+    const auto plain = scene.CreateEntity("Plain");
+
+    Scene loaded("Loaded");
+    loaded.DeserializeFromYaml(scene.SerializeToYaml());
+    const auto loadedHidden = loaded.FindByGuid(scene.Registry().get<MetadataComponent>(hidden).Guid);
+    const auto loadedPlain = loaded.FindByGuid(scene.Registry().get<MetadataComponent>(plain).Guid);
+    CHECK(IsHidden(loaded.Registry(), loadedHidden));
+    CHECK_FALSE(IsLocked(loaded.Registry(), loadedHidden));
+    CHECK_FALSE(IsHidden(loaded.Registry(), loadedPlain));
+    CHECK_FALSE(loaded.Registry().all_of<EditorFlagsComponent>(loadedPlain));
+}

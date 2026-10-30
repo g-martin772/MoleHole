@@ -155,7 +155,13 @@ export namespace MoleHole
         std::uint64_t Parent = 0;
         std::string Name;
         std::string Type;
+        bool Hidden = false;
+        bool Locked = false;
+        bool HasFlags = false;
+        std::vector<std::string> Components;
     };
+
+    enum class EditorFlag { Hidden, Locked };
 
     struct OutlinerRow
     {
@@ -169,7 +175,7 @@ export namespace MoleHole
     // every shown ancestor is expanded. Entities whose parent is missing (or in a cycle) are treated as roots.
     [[nodiscard]] inline std::vector<OutlinerRow> BuildOutlinerRows(
         const std::vector<OutlinerEntry>& entries, const std::unordered_set<std::uint64_t>& expanded,
-        std::string_view filter)
+        std::string_view filter, std::string_view component = {})
     {
         std::unordered_map<std::uint64_t, std::size_t> index;
         for (std::size_t i = 0; i < entries.size(); ++i) index.emplace(entries[i].Guid, i);
@@ -185,12 +191,17 @@ export namespace MoleHole
 
         std::vector<char> visited(entries.size(), 0);
         std::vector<char> shown(entries.size(), 1);
-        const bool filtering = !filter.empty();
+        const bool filtering = !filter.empty() || !component.empty();
+        const auto matches = [&](const OutlinerEntry& entry)
+        {
+            if (!component.empty() && !std::ranges::contains(entry.Components, component)) return false;
+            return filter.empty() || ContainsInsensitive(entry.Name, filter) || ContainsInsensitive(entry.Type, filter);
+        };
         std::function<bool(std::size_t)> mark = [&](std::size_t i)
         {
             if (visited[i]) return false;
             visited[i] = 1;
-            bool any = ContainsInsensitive(entries[i].Name, filter) || ContainsInsensitive(entries[i].Type, filter);
+            bool any = matches(entries[i]);
             for (const auto child : children[i]) any = mark(child) || any;
             shown[i] = any;
             return any;
@@ -287,6 +298,66 @@ export namespace MoleHole
             if (!removed.contains(entry.Guid) && removed.contains(entry.Parent)) result.push_back(entry.Guid);
         }
         return result;
+    }
+
+    [[nodiscard]] inline std::unordered_set<std::uint64_t> DescendantsOf(const std::vector<OutlinerEntry>& entries,
+                                                                        const std::unordered_set<std::uint64_t>& roots)
+    {
+        std::unordered_map<std::uint64_t, std::vector<std::uint64_t>> children;
+        for (const auto& entry : entries)
+        {
+            if (entry.Parent != 0 && entry.Parent != entry.Guid) children[entry.Parent].push_back(entry.Guid);
+        }
+        std::unordered_set<std::uint64_t> result;
+        std::vector<std::uint64_t> stack(roots.begin(), roots.end());
+        while (!stack.empty())
+        {
+            const auto guid = stack.back();
+            stack.pop_back();
+            const auto it = children.find(guid);
+            if (it == children.end()) continue;
+            for (const auto child : it->second)
+            {
+                if (!roots.contains(child) && result.insert(child).second) stack.push_back(child);
+            }
+        }
+        return result;
+    }
+
+    [[nodiscard]] inline bool NextEditorFlagValue(const std::vector<OutlinerEntry>& entries,
+                                                  const std::vector<std::uint64_t>& guids, const EditorFlag flag)
+    {
+        for (const auto guid : guids)
+        {
+            const auto entry = std::ranges::find(entries, guid, &OutlinerEntry::Guid);
+            if (entry != entries.end() && !(flag == EditorFlag::Hidden ? entry->Hidden : entry->Locked)) return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] inline std::vector<GPP::Command> EditorFlagCommands(const std::vector<OutlinerEntry>& entries,
+                                                                     const std::vector<std::uint64_t>& guids,
+                                                                     const EditorFlag flag, const bool value)
+    {
+        constexpr const char* kComponent = "EditorFlags";
+        std::vector<GPP::Command> commands;
+        for (const auto guid : guids)
+        {
+            const auto entry = std::ranges::find(entries, guid, &OutlinerEntry::Guid);
+            if (entry == entries.end()) continue;
+            const bool present = entry->HasFlags;
+            const bool hidden = flag == EditorFlag::Hidden ? value : entry->Hidden;
+            const bool locked = flag == EditorFlag::Locked ? value : entry->Locked;
+            const char* field = flag == EditorFlag::Hidden ? "Hidden" : "Locked";
+            if (!present)
+            {
+                if (!value) continue;
+                commands.push_back(GPP::AddComponentCommand{guid, kComponent, std::format("{}: true", field)});
+            }
+            else if (!hidden && !locked) commands.push_back(GPP::RemoveComponentCommand{guid, kComponent});
+            else commands.push_back(GPP::SetFieldCommand{guid, kComponent, field, GPP::FieldValue{value}});
+        }
+        return commands;
     }
 
     // Drag in asinh space

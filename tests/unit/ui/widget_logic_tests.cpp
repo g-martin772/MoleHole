@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+import GPP;
 import MoleHole;
 import glm;
 import std;
@@ -139,4 +140,83 @@ TEST_CASE("OrphanedChildren lists surviving children of removed entities", "[ui]
 {
     const auto orphans = OrphanedChildren(SampleScene(), {1, 2});
     CHECK(orphans == std::vector<std::uint64_t>{3});
+}
+
+TEST_CASE("Outliner component filter keeps matching entities with their ancestors", "[ui][outliner]")
+{
+    auto entries = SampleScene();
+    entries[2].Components = {"BlackHole"};
+    entries[3].Components = {"Sphere"};
+    auto rows = BuildOutlinerRows(entries, {}, "", "BlackHole");
+    REQUIRE(rows.size() == 3);
+    CHECK(rows[0].Guid == 1);
+    CHECK(rows[2].Guid == 3);
+    rows = BuildOutlinerRows(entries, {}, "oth", "Sphere");
+    REQUIRE(rows.size() == 1);
+    CHECK(rows[0].Guid == 4);
+    CHECK(BuildOutlinerRows(entries, {}, "root", "BlackHole").empty());
+    CHECK(BuildOutlinerRows(entries, {}, "", "Light").empty());
+}
+
+TEST_CASE("DescendantsOf collects the whole subtree without the roots", "[ui][outliner]")
+{
+    const auto entries = SampleScene();
+    CHECK(DescendantsOf(entries, {1}) == std::unordered_set<std::uint64_t>{2, 3});
+    CHECK(DescendantsOf(entries, {2}) == std::unordered_set<std::uint64_t>{3});
+    CHECK(DescendantsOf(entries, {1, 2}) == std::unordered_set<std::uint64_t>{3});
+    CHECK(DescendantsOf(entries, {3, 4}).empty());
+    CHECK(DescendantsOf(entries, {}).empty());
+}
+
+TEST_CASE("DescendantsOf survives cycles", "[ui][outliner]")
+{
+    const std::vector<OutlinerEntry> entries{{1, 2, "A", "Mesh"}, {2, 1, "B", "Mesh"}, {3, 3, "C", "Mesh"}};
+    CHECK(DescendantsOf(entries, {1}) == std::unordered_set<std::uint64_t>{2});
+    CHECK(DescendantsOf(entries, {3}).empty());
+}
+
+TEST_CASE("Editor flag commands add, update and remove the component", "[ui][outliner]")
+{
+    auto entries = SampleScene();
+    entries[1].HasFlags = true;
+    entries[1].Hidden = true;
+    entries[2].HasFlags = true;
+    entries[2].Hidden = true;
+    entries[2].Locked = true;
+
+    auto commands = EditorFlagCommands(entries, {1}, EditorFlag::Hidden, true);
+    REQUIRE(commands.size() == 1);
+    const auto* add = std::get_if<GPP::AddComponentCommand>(&commands[0]);
+    REQUIRE(add);
+    CHECK(add->Component == "EditorFlags");
+    CHECK(add->Yaml == "Hidden: true");
+
+    CHECK(EditorFlagCommands(entries, {1}, EditorFlag::Hidden, false).empty());
+
+    commands = EditorFlagCommands(entries, {2}, EditorFlag::Hidden, false);
+    REQUIRE(commands.size() == 1);
+    CHECK(std::holds_alternative<GPP::RemoveComponentCommand>(commands[0]));
+
+    commands = EditorFlagCommands(entries, {2}, EditorFlag::Locked, true);
+    REQUIRE(commands.size() == 1);
+    const auto* set = std::get_if<GPP::SetFieldCommand>(&commands[0]);
+    REQUIRE(set);
+    CHECK(set->Field == "Locked");
+    CHECK(std::get<bool>(set->Value));
+
+    commands = EditorFlagCommands(entries, {3}, EditorFlag::Hidden, false);
+    CHECK(std::holds_alternative<GPP::SetFieldCommand>(commands.at(0)));
+    CHECK(EditorFlagCommands(entries, {99}, EditorFlag::Hidden, true).empty());
+}
+
+TEST_CASE("Editor flag toggle value follows the selection", "[ui][outliner]")
+{
+    auto entries = SampleScene();
+    entries[0].Hidden = true;
+    CHECK_FALSE(NextEditorFlagValue(entries, {1}, EditorFlag::Hidden));
+    CHECK(NextEditorFlagValue(entries, {1, 2}, EditorFlag::Hidden));
+    CHECK(NextEditorFlagValue(entries, {1}, EditorFlag::Locked));
+    CHECK_FALSE(NextEditorFlagValue(entries, {}, EditorFlag::Hidden));
+    CHECK(EditorFlagLabel(true, true, {"Rock"}) == "Hide Rock");
+    CHECK(EditorFlagLabel(false, false, {"a", "b"}) == "Unlock 2 Entities");
 }

@@ -323,7 +323,9 @@ namespace
         {
             const auto requests = m_UiState->Edits.Take({EditAction::SelectAll, EditAction::Duplicate, EditAction::Delete,
                                                          EditAction::Rename, EditAction::Deselect, EditAction::Copy,
-                                                         EditAction::Paste});
+                                                         EditAction::Paste, EditAction::SelectChildren,
+                                                         EditAction::ToggleHidden, EditAction::ToggleLocked,
+                                                         EditAction::ShowAll});
             if (requests.empty() || m_UiState->CurrentSceneName.empty()) return;
             const auto runner = m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
             if (!runner) return;
@@ -362,6 +364,25 @@ namespace
                 case EditAction::Paste:
                     PasteClipboard(*runner, *sceneLock);
                     break;
+                case EditAction::SelectChildren:
+                    m_Selection.insert_range(DescendantsOf(entries, m_Selection));
+                    break;
+                case EditAction::ToggleHidden:
+                    ToggleFlag(*runner, entries, {m_Selection.begin(), m_Selection.end()}, EditorFlag::Hidden);
+                    break;
+                case EditAction::ToggleLocked:
+                    ToggleFlag(*runner, entries, {m_Selection.begin(), m_Selection.end()}, EditorFlag::Locked);
+                    break;
+                case EditAction::ShowAll:
+                {
+                    std::vector<std::uint64_t> hidden;
+                    for (const auto& entry : entries)
+                    {
+                        if (entry.Hidden) hidden.push_back(entry.Guid);
+                    }
+                    SetFlag(*runner, entries, std::move(hidden), EditorFlag::Hidden, false);
+                    break;
+                }
                 case EditAction::FrameSelected: break;
                 }
             }
@@ -496,7 +517,23 @@ namespace
             m_UiState->SelectedEntityGuid = 0;
         }
 
-        static std::vector<OutlinerEntry> CollectEntries(const Scene& scene)
+        static void SetFlag(SimulationRunner& runner, const std::vector<OutlinerEntry>& entries,
+                            std::vector<std::uint64_t> guids, const EditorFlag flag, const bool value)
+        {
+            auto commands = EditorFlagCommands(entries, guids, flag, value);
+            if (commands.empty()) return;
+            const auto label = EditorFlagLabel(flag == EditorFlag::Hidden, value, NamesOf(entries, guids));
+            runner.EnqueueCommands(std::move(commands), UndoStep(runner, label));
+        }
+
+        static void ToggleFlag(SimulationRunner& runner, const std::vector<OutlinerEntry>& entries,
+                               std::vector<std::uint64_t> guids, const EditorFlag flag)
+        {
+            const bool value = NextEditorFlagValue(entries, guids, flag);
+            SetFlag(runner, entries, std::move(guids), flag, value);
+        }
+
+        static std::vector<OutlinerEntry> CollectEntries(const Scene& scene, const bool withComponents = false)
         {
             std::vector<OutlinerEntry> entries;
             for (auto [entity, metadata] : scene.Registry().view<const MetadataComponent>().each())
@@ -510,6 +547,19 @@ namespace
                 if (const auto* hierarchy = scene.Registry().try_get<HierarchyComponent>(entity))
                 {
                     entry.Parent = hierarchy->ParentGuid;
+                }
+                if (const auto* flags = scene.Registry().try_get<EditorFlagsComponent>(entity))
+                {
+                    entry.HasFlags = true;
+                    entry.Hidden = flags->Hidden;
+                    entry.Locked = flags->Locked;
+                }
+                if (withComponents)
+                {
+                    ComponentRegistry::Instance().ForEach([&](const ComponentTypeInfo& info)
+                    {
+                        if (info.Inspectable && info.Has(scene.Registry(), entity)) entry.Components.push_back(info.Name);
+                    });
                 }
                 entries.push_back(std::move(entry));
             }
@@ -557,16 +607,27 @@ namespace
         void RenderOutliner(SimulationRunner& runner, const Scene& scene)
         {
             ImFont* icons = m_UiState->IconFont;
-            const auto entries = CollectEntries(scene);
+            const auto entries = CollectEntries(scene, !m_ComponentFilter.empty());
             SyncSelection(entries);
             ApplyPendingSelect(entries);
 
-            SearchBox(icons, "OutlinerSearch", m_Filter, "Search entities...");
+            const float filterButton = ImGui::GetFrameHeight();
+            SearchBox(icons, "OutlinerSearch", m_Filter, "Search entities...",
+                      ImGui::GetContentRegionAvail().x - filterButton - ImGui::GetStyle().ItemSpacing.x);
+            ImGui::SameLine();
+            if (IconButton(icons, Icon::Filter, "F", "Filter by component", filterButton)) ImGui::OpenPopup("OutlinerComponentFilter");
+            RenderComponentFilterPopup(scene);
+            if (!m_ComponentFilter.empty())
+            {
+                const auto* info = ComponentRegistry::Instance().FindByName(m_ComponentFilter);
+                const std::string label = info && !info->DisplayName.empty() ? info->DisplayName : m_ComponentFilter;
+                if (Chip(label.c_str(), Palette::Accent, true) == 2) m_ComponentFilter.clear();
+            }
             ImGui::Spacing();
 
             std::unordered_map<std::uint64_t, const OutlinerEntry*> byGuid;
             for (const auto& entry : entries) byGuid.emplace(entry.Guid, &entry);
-            const auto rows = BuildOutlinerRows(entries, m_Expanded, m_Filter);
+            const auto rows = BuildOutlinerRows(entries, m_Expanded, m_Filter, m_ComponentFilter);
 
             ImGui::BeginChild("OutlinerRows", ImVec2(0.0f, 260.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_ResizeY);
             const bool focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
@@ -598,6 +659,13 @@ namespace
                     }
                 }
                 if (hovered && ImGui::IsMouseDoubleClicked(0) && !onArrow) StartRename(entry);
+                if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Middle))
+                {
+                    m_Selection = {row.Guid};
+                    m_Anchor = row.Guid;
+                    m_UiState->SelectedEntityGuid = row.Guid;
+                    m_UiState->Edits.Push(EditAction::FrameSelected);
+                }
 
                 if (ImGui::BeginPopupContextItem("##ctx"))
                 {
@@ -621,6 +689,17 @@ namespace
                     {
                         Reparent(runner, entries, {m_Selection.begin(), m_Selection.end()}, 0);
                     }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Select Children"))
+                    {
+                        m_Selection.insert_range(DescendantsOf(entries, m_Selection));
+                    }
+                    const std::vector<std::uint64_t> targets(m_Selection.begin(), m_Selection.end());
+                    const bool hide = NextEditorFlagValue(entries, targets, EditorFlag::Hidden);
+                    const bool lock = NextEditorFlagValue(entries, targets, EditorFlag::Locked);
+                    if (ImGui::MenuItem(hide ? "Hide" : "Show", "H")) SetFlag(runner, entries, targets, EditorFlag::Hidden, hide);
+                    if (ImGui::MenuItem(lock ? "Lock" : "Unlock", "L")) SetFlag(runner, entries, targets, EditorFlag::Locked, lock);
+                    ImGui::Separator();
                     ImGui::Separator();
                     if (ImGui::MenuItem("Delete", "Del")) DeleteEntities(runner, entries, m_Selection);
                     ImGui::EndPopup();
@@ -659,6 +738,37 @@ namespace
                 DrawIcon(list, icons, glyph.c_str(), "*", ImVec2(iconX, midY), 12.0f,
                          ToU32(selected ? HexColor(0xffc080) : HexColor(0xa8a8a8)));
 
+                const float flagWidth = 20.0f;
+                const ImVec2 afterRow = ImGui::GetCursorScreenPos();
+                const std::array<std::pair<EditorFlag, bool>, 2> flags{{{EditorFlag::Hidden, entry.Hidden},
+                                                                        {EditorFlag::Locked, entry.Locked}}};
+                for (std::size_t i = 0; i < flags.size(); ++i)
+                {
+                    const auto [flag, on] = flags[i];
+                    const float x = pos.x + width - flagWidth * static_cast<float>(flags.size() - i);
+                    ImGui::SetCursorScreenPos(ImVec2(x, pos.y));
+                    ImGui::PushID(static_cast<int>(i));
+                    const bool toggled = ImGui::InvisibleButton("##flag", ImVec2(flagWidth, kRowHeight));
+                    const bool over = ImGui::IsItemHovered();
+                    ImGui::PopID();
+                    if (toggled)
+                    {
+                        const std::vector<std::uint64_t> targets = selected
+                            ? std::vector<std::uint64_t>(m_Selection.begin(), m_Selection.end())
+                            : std::vector<std::uint64_t>{row.Guid};
+                        SetFlag(runner, entries, targets, flag, !on);
+                    }
+                    if (over) Tooltip(flag == EditorFlag::Hidden ? (on ? "Show in viewport" : "Hide from viewport")
+                                                                 : (on ? "Unlock" : "Lock (not pickable in viewport)"));
+                    const char* glyph = flag == EditorFlag::Hidden ? (on ? Icon::EyeSlash : Icon::Eye)
+                                                                   : (on ? Icon::Lock : Icon::Unlock);
+                    const unsigned alpha = on ? 255u : (over || hovered ? 150u : 60u);
+                    DrawIcon(list, icons, glyph, flag == EditorFlag::Hidden ? "H" : "L",
+                             ImVec2(x + flagWidth * 0.5f, midY), 12.0f,
+                             on ? ToU32(HexColor(0xffc080)) : (ToU32(HexColor(0xc8c8c8)) & 0x00ffffffu) | (alpha << 24));
+                }
+                ImGui::SetCursorScreenPos(afterRow);
+
                 const ImVec2 textPos(iconX + 14.0f, pos.y + (kRowHeight - ImGui::GetTextLineHeight()) * 0.5f);
                 if (m_RenameGuid == row.Guid)
                 {
@@ -685,7 +795,10 @@ namespace
                 }
                 else
                 {
-                    list->AddText(textPos, ToU32(HexColor(selected ? 0xffffff : 0xdcdcdc)), entry.Name.c_str());
+                    const ImU32 nameColor = entry.Hidden ? ToU32(HexColor(0x7a7a7a))
+                                            : ToU32(HexColor(selected ? 0xffffff : 0xdcdcdc));
+                    const ImVec4 clip(textPos.x, pos.y, pos.x + width - flagWidth * 2.0f - 4.0f, pos.y + kRowHeight);
+                    list->AddText(nullptr, 0.0f, textPos, nameColor, entry.Name.c_str(), nullptr, 0.0f, &clip);
                 }
                 ImGui::PopID();
             }
@@ -734,6 +847,30 @@ namespace
                 else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_A)) edits.Push(EditAction::SelectAll);
             }
             ImGui::EndChild();
+        }
+
+        void RenderComponentFilterPopup(const Scene& scene)
+        {
+            if (!ImGui::BeginPopup("OutlinerComponentFilter")) return;
+            std::map<std::string, std::pair<std::string, int>> counts;
+            ComponentRegistry::Instance().ForEach([&](const ComponentTypeInfo& info)
+            {
+                if (!info.Inspectable) return;
+                int count = 0;
+                for (const auto [entity, metadata] : scene.Registry().view<const MetadataComponent>().each())
+                {
+                    if (info.Has(scene.Registry(), entity)) ++count;
+                }
+                if (count > 0) counts.emplace(info.Name, std::pair{info.DisplayName.empty() ? SpacedName(info.Name) : info.DisplayName, count});
+            });
+            if (ImGui::Selectable("Any component", m_ComponentFilter.empty())) m_ComponentFilter.clear();
+            ImGui::Separator();
+            for (const auto& [name, entry] : counts)
+            {
+                const auto label = std::format("{} ({})", entry.first, entry.second);
+                if (ImGui::Selectable(label.c_str(), m_ComponentFilter == name)) m_ComponentFilter = name;
+            }
+            ImGui::EndPopup();
         }
 
         void StartRename(const OutlinerEntry& entry)
@@ -1260,6 +1397,7 @@ namespace
 
         std::string m_Filter;
         std::string m_AddFilter;
+        std::string m_ComponentFilter;
         std::unordered_set<std::uint64_t> m_Expanded;
         std::unordered_set<std::uint64_t> m_Selection;
         std::uint64_t m_Anchor = 0;

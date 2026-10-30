@@ -76,7 +76,7 @@ export namespace MoleHole
             for (auto [entity, meshComponent, transform] :
                  scene.Registry().view<const GPP::MeshComponent, const GPP::TransformComponent>().each())
             {
-                if (meshComponent.AssetPath.empty()) continue;
+                if (meshComponent.AssetPath.empty() || IsHidden(scene.Registry(), entity)) continue;
                 const auto gltfScene = m_Meshes->GetOrLoad(meshComponent.AssetPath);
                 if (!gltfScene) continue;
                 const glm::mat4 model = transform.GetRenderMatrix(frame.OriginM, frame.LengthUnitM, meshComponent.MetresPerUnit);

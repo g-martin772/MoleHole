@@ -289,3 +289,38 @@ TEST_CASE("Atmospheres and clouds keep a Surface lit and arrive in render units"
         }
     }
 }
+
+TEST_CASE("Hidden spheres, stars and holes are left out of the uploaded scene", "[rendering][bodies]")
+{
+    RegisterComponents();
+    Scene scene("HiddenUploadTest");
+    const auto sphere = scene.CreateEntity("Sphere");
+    scene.Registry().emplace<TransformComponent>(sphere);
+    scene.Registry().emplace<SphereComponent>(sphere);
+    const auto star = scene.CreateEntity("Star");
+    scene.Registry().emplace<TransformComponent>(star);
+    scene.Registry().emplace<StarComponent>(star);
+    const auto hole = scene.CreateEntity("Hole");
+    scene.Registry().emplace<TransformComponent>(hole);
+    scene.Registry().emplace<BlackHoleComponent>(hole);
+
+    RaytraceParamsGpu params{};
+    FillSceneData(params, scene, RenderFrame{});
+    CHECK(params.NumSpheres == 2);
+    CHECK(params.NumBlackHoles == 1);
+
+    scene.Registry().emplace<EditorFlagsComponent>(sphere, EditorFlagsComponent{.Hidden = true});
+    scene.Registry().emplace<EditorFlagsComponent>(hole, EditorFlagsComponent{.Hidden = true});
+    params = {};
+    FillSceneData(params, scene, RenderFrame{});
+    CHECK(params.NumSpheres == 1);
+    CHECK(params.NumBlackHoles == 0);
+    CHECK(UploadedSpheres(scene) == std::vector<entt::entity>{star});
+
+    scene.Registry().get<EditorFlagsComponent>(sphere).Hidden = false;
+    scene.Registry().get<EditorFlagsComponent>(hole) = {.Hidden = false, .Locked = true};
+    params = {};
+    FillSceneData(params, scene, RenderFrame{});
+    CHECK(params.NumSpheres == 2);
+    CHECK(params.NumBlackHoles == 1);
+}

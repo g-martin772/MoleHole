@@ -58,6 +58,7 @@ namespace MoleHole
 
         for (auto [entity, transform] : scene.Registry().view<GPP::TransformComponent>().each())
         {
+            if (IsHidden(scene.Registry(), entity) || IsLocked(scene.Registry(), entity)) continue;
             const double radius = BoundingRadiusOf(scene, entity, radiusOverride);
             const glm::dvec3 toCenter = rayOriginM - transform.Position;
             const double b = glm::dot(toCenter, direction);
@@ -150,6 +151,7 @@ namespace MoleHole
         std::vector<std::uint64_t> guids;
         for (auto [entity, transform, metadata] : scene.Registry().view<GPP::TransformComponent, GPP::MetadataComponent>().each())
         {
+            if (IsHidden(scene.Registry(), entity) || IsLocked(scene.Registry(), entity)) continue;
             const auto screen = RenderPointToScreen(frame.ToRender(transform.Position), viewportMin, viewportSize, view, projection);
             if (screen && screen->x >= low.x && screen->x <= high.x && screen->y >= low.y && screen->y <= high.y)
             {

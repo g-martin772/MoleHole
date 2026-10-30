@@ -189,6 +189,12 @@ export namespace MoleHole
             b.Edit("edit.rename", "Rename", "F2", EditAction::Rename);
             b.Edit("edit.frame", "Frame Selected", "F", EditAction::FrameSelected);
             b.Edit("edit.deselect", "Deselect", "Esc", EditAction::Deselect);
+            b.Edit("edit.select_children", "Select Children", "", EditAction::SelectChildren);
+            b.Edit("edit.hide", "Hide / Show Selected", "H", EditAction::ToggleHidden).Scope.clear();
+            b.Edit("edit.lock", "Lock / Unlock Selected", "L", EditAction::ToggleLocked).Scope.clear();
+            auto& showAll = b.Edit("edit.show_all", "Show All", "Alt+H", EditAction::ShowAll);
+            showAll.Scope.clear();
+            showAll.Needs = ActionNeed::Scene;
             b.Key("edit.create", "Add Entity Popup", "Edit", "Shift+A", "Scene / Viewport",
                   [ui] { if (ui) ui->CreatePopup.RequestAtMouse(); }).Needs = ActionNeed::Scene;
             auto& historyWindow = b.Add("edit.history", "Undo History", "Edit", [ui] { if (ui) ui->ShowUndoHistoryWindow = !ui->ShowUndoHistoryWindow; });

@@ -312,6 +312,7 @@ export namespace MoleHole
         for (auto [entity, light, transform] : scene.Registry().view<const LightComponent, const GPP::TransformComponent>().each())
         {
             if (count >= kMaxLights) break;
+            if (IsHidden(scene.Registry(), entity)) continue;
             auto& gpu = block.Lights[count++];
             gpu.Color = glm::vec4(light.Color * light.Intensity, 0.0f);
             if (light.Kind == BodyLightKind::Directional)

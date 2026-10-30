@@ -665,6 +665,10 @@ namespace
             entry("Rename", "edit.rename", EditAction::Rename);
             entry("Frame Selected", "edit.frame", EditAction::FrameSelected);
             entry("Deselect", "edit.deselect", EditAction::Deselect);
+            entry("Select Children", "edit.select_children", EditAction::SelectChildren);
+            entry("Hide / Show Selected", "edit.hide", EditAction::ToggleHidden);
+            entry("Lock / Unlock Selected", "edit.lock", EditAction::ToggleLocked);
+            entry("Show All", "edit.show_all", EditAction::ShowAll);
             ImGui::Separator();
             if (ImGui::MenuItem("Preferences...")) m_UiState->ShowSettingsWindow = true;
             ImGui::EndMenu();

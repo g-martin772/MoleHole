@@ -5,7 +5,8 @@ import GPP;
 
 export namespace MoleHole
 {
-    enum class EditAction { SelectAll, Duplicate, Delete, Rename, FrameSelected, Deselect, Copy, Paste };
+    enum class EditAction { SelectAll, Duplicate, Delete, Rename, FrameSelected, Deselect, Copy, Paste,
+                          SelectChildren, ToggleHidden, ToggleLocked, ShowAll };
 
     class EditRequests
     {
@@ -127,6 +128,14 @@ export namespace MoleHole
         if (names.empty()) return std::format("{} Entity", verb);
         if (names.size() == 1) return std::format("{} {}", verb, ShortenLabel(names.front(), 28));
         return std::format("{} {} Entities", verb, names.size());
+    }
+
+    [[nodiscard]] inline std::string EditorFlagLabel(const bool hidden, const bool value,
+                                                    const std::vector<std::string>& names)
+    {
+        const char* verb = hidden ? (value ? "Hide" : "Show") : (value ? "Lock" : "Unlock");
+        return names.size() == 1 ? std::format("{} {}", verb, ShortenLabel(names.front(), 28))
+                                 : std::format("{} {} Entities", verb, names.size());
     }
 
     [[nodiscard]] inline std::string SetFieldLabel(const std::string_view field, const std::string_view entity)

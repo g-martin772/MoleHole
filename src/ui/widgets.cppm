@@ -75,6 +75,10 @@ export namespace MoleHole
         constexpr const char* Plus = "\xef\x81\xa7"; // f067
         constexpr const char* Search = "\xef\x80\x82"; // f002
         constexpr const char* Eye = "\xef\x81\xae"; // f06e
+        constexpr const char* EyeSlash = "\xef\x81\xb0"; // f070
+        constexpr const char* Lock = "\xef\x80\xa3"; // f023
+        constexpr const char* Unlock = "\xef\x82\x9c"; // f09c
+        constexpr const char* Filter = "\xef\x82\xb0"; // f0b0
         constexpr const char* Copy = "\xef\x83\x85"; // f0c5
         constexpr const char* Pen = "\xef\x8c\x84"; // f304
     }

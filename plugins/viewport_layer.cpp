@@ -510,6 +510,7 @@ namespace
         {
             glm::mat4 model(1.0f);
             bool hasTransform = false;
+            bool editable = true;
             RenderFrame frame;
             std::string entityName;
             {
@@ -525,6 +526,7 @@ namespace
                     const auto& transform = scene.Registry().get<TransformComponent>(entity);
                     model = transform.GetRenderMatrix(frame.OriginM, frame.LengthUnitM, frame.LengthUnitM);
                     hasTransform = true;
+                    editable = !IsHidden(scene.Registry(), entity) && !IsLocked(scene.Registry(), entity);
                 }
             }
             if (!hasTransform)
@@ -532,6 +534,7 @@ namespace
                 m_UiState->SelectedEntityGuid = 0;
                 return false;
             }
+            if (!editable) return false;
 
             const glm::mat4 view = m_Camera.GetViewMatrix(frame);
             glm::mat4 projection = m_Camera.GetProjectionMatrix();

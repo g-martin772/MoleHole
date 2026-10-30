@@ -233,6 +233,24 @@ export namespace MoleHole
         std::string GraphYaml;
     };
 
+    struct EditorFlagsComponent
+    {
+        bool Hidden{false};
+        bool Locked{false};
+    };
+
+    [[nodiscard]] inline bool IsHidden(const entt::registry& registry, const entt::entity entity)
+    {
+        const auto* flags = registry.try_get<EditorFlagsComponent>(entity);
+        return flags && flags->Hidden;
+    }
+
+    [[nodiscard]] inline bool IsLocked(const entt::registry& registry, const entt::entity entity)
+    {
+        const auto* flags = registry.try_get<EditorFlagsComponent>(entity);
+        return flags && flags->Locked;
+    }
+
     constexpr const char* kAnimationGraphDataTypeTag = "__AnimationGraphData";
 
     constexpr const char* kSceneGraphsKey = "Graphs";
@@ -524,6 +542,15 @@ namespace MoleHole
                     GPP::Computed<GeodesicBodyComponent, double>(
                         "Radius", [](const GeodesicBodyComponent& c) { return c.State.R; }, nullptr,
                         {.Label = "r / M", .Format = "%.4f"}),
+                }});
+
+            GPP::RegisterComponent<EditorFlagsComponent>("EditorFlags", GPP::ComponentDescription<EditorFlagsComponent>{
+                .DisplayName = "Editor Flags",
+                .Inspectable = false,
+                .GraphExposed = false,
+                .Fields = {
+                    GPP::Field("Hidden", &EditorFlagsComponent::Hidden),
+                    GPP::Field("Locked", &EditorFlagsComponent::Locked),
                 }});
 
             GPP::RegisterComponent<AnimationGraphComponent>("AnimationGraph",

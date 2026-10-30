@@ -184,7 +184,7 @@ export namespace MoleHole
         for (const auto [entity, star, transform] : registry.view<const StarComponent, const GPP::TransformComponent>().each())
         {
             const double luminosity = StarLuminosity(star);
-            if (!(luminosity > 0.0)) continue;
+            if (!(luminosity > 0.0) || IsHidden(registry, entity)) continue;
             GPP::LightGpu light;
             light.Kind = static_cast<std::uint32_t>(GPP::LightKind::Point);
             light.Position = glm::vec3(transform.Position - frame.OriginM);
@@ -203,6 +203,7 @@ export namespace MoleHole
             for (const auto [entity, hole, transform] :
                  registry.view<const BlackHoleComponent, const GPP::TransformComponent>().each())
             {
+                if (IsHidden(registry, entity)) continue;
                 if (!primary || hole.Mass > primary->Mass)
                 {
                     primary = &hole;
