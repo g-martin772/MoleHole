@@ -54,6 +54,7 @@ export import :Rendering.Accumulation;
 export import :Rendering.Sidecar;
 export import :Rendering.Meshes;
 export import :Rendering.MeshTrace;
+export import :Rendering.Culling;
 export import :Rendering.Bodies;
 export import :Rendering.Lighting;
 export import :Rendering.MeshScene;

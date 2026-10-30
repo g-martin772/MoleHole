@@ -7,6 +7,7 @@ import :Rendering.Pipeline;
 import :Rendering.Data;
 import :Rendering.DebugLegend;
 import :Rendering.MeshTrace;
+import :Rendering.Culling;
 import :Rendering.Lut;
 import :Simulation.Components;
 import :Rendering.OrbitOverlays;
@@ -1314,6 +1315,7 @@ namespace MoleHole
 
             void Record(RenderFrameContext& ctx) override
             {
+                GPP_ZONE("Overlay.Geometry");
                 static const glm::vec3 kMeshColor{0.2f, 0.8f, 0.2f};
                 static const glm::vec3 kSphereColor{0.8f, 0.2f, 0.8f};
 
@@ -1553,6 +1555,7 @@ namespace MoleHole
                 params.ToneMapping = static_cast<std::int32_t>(ctx.Settings.ToneMapping);
                 m_Res.Signature.Value(params);
                 m_CameraBuffer->Upload(&params, sizeof(params));
+                const Frustum frustum = MakeFrustum(params.Projection * params.View);
 
                 const auto device = m_Res.Device;
                 const auto meshPipeline = m_Pipeline;
@@ -1562,7 +1565,7 @@ namespace MoleHole
                     "Meshes", {}, {},
                     {RenderGraphAttachment{.Handle = ctx.ColorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}},
                     RenderGraphAttachment{.Handle = ctx.DepthTarget, .LoadOp = vk::AttachmentLoadOp::eLoad},
-                    [device, meshPipeline, cameraBuffer, exposure, frame = std::move(frame)](
+                    [device, meshPipeline, cameraBuffer, exposure, frustum, frame = std::move(frame)](
                         const vk::CommandBuffer cmd, RenderGraph& g)
                     {
                         const auto pipeline = meshPipeline->GetPipeline();
@@ -1590,6 +1593,7 @@ namespace MoleHole
 
                         for (const auto& draw : frame.Draws)
                         {
+                            if (!SphereInFrustum(frustum, draw.Bounds)) continue;
                             MeshPushConstantsGpu push{};
                             push.Model = draw.Model;
                             push.ExtraAddress = draw.Primitive->ExtraBuffer.GetDeviceAddress();

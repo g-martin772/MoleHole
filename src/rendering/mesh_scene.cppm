@@ -12,6 +12,7 @@ import :Rendering.Frame;
 import :Rendering.Settings;
 import :Rendering.Meshes;
 import :Rendering.MeshTrace;
+import :Rendering.Culling;
 import :Rendering.Lighting;
 
 export namespace MoleHole
@@ -22,6 +23,7 @@ export namespace MoleHole
         std::shared_ptr<GPP::GltfSceneData> Owner;
         glm::mat4 Model{1.0f};
         std::uint32_t MaterialIndex = 0;
+        glm::vec4 Bounds{0.0f, 0.0f, 0.0f, -1.0f};
     };
 
     // Everything the two mesh passes read for one frame. Handles stay valid for the lifetime of the MeshScene.
@@ -82,6 +84,7 @@ export namespace MoleHole
                 const glm::mat4 model = transform.GetRenderMatrix(frame.OriginM, frame.LengthUnitM, meshComponent.MetresPerUnit);
                 const auto base = m_Materials.BaseMaterial(*gltfScene);
                 const auto first = out.Draws.size();
+                const glm::vec4 meshBounds = TransformBounds(model, m_Meshes->BoundingRadius(meshComponent.AssetPath));
                 for (const auto& mesh : gltfScene->Meshes)
                 {
                     for (const auto& primitive : mesh.Primitives)
@@ -90,11 +93,12 @@ export namespace MoleHole
                         const bool known = primitive.MaterialIndex >= 0
                                            && static_cast<std::size_t>(primitive.MaterialIndex) < gltfScene->Materials.size();
                         out.Draws.push_back({&primitive, gltfScene, model,
-                                             MeshMaterialTable::MaterialIndex(base, known ? primitive.MaterialIndex : -1)});
+                                             MeshMaterialTable::MaterialIndex(base, known ? primitive.MaterialIndex : -1),
+                                             meshBounds});
                     }
                 }
                 if (out.Draws.size() > first)
-                    bounds = MergeBounds(bounds, TransformBounds(model, m_Meshes->BoundingRadius(meshComponent.AssetPath)));
+                    bounds = MergeBounds(bounds, meshBounds);
             }
             if (out.Draws.empty()) return out;
 
