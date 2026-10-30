@@ -24,6 +24,12 @@ export namespace MoleHole
         const GPP::Scene& scene, const glm::dvec3& rayOriginM, const glm::dvec3& rayDirection,
         const BoundingRadiusOverride& radiusOverride = {});
 
+    [[nodiscard]] std::vector<PickHit> PickAllEntities(
+        const GPP::Scene& scene, const glm::dvec3& rayOriginM, const glm::dvec3& rayDirection,
+        const BoundingRadiusOverride& radiusOverride = {});
+
+    [[nodiscard]] std::optional<PickHit> CyclePick(const std::vector<PickHit>& hits, entt::entity current);
+
     struct Ray
     {
         glm::dvec3 OriginM{0.0};

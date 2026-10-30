@@ -97,3 +97,29 @@ TEST_CASE("ScreenPointToRay finds an entity directly ahead of the camera", "[sim
     REQUIRE(hit.has_value());
     CHECK(hit->Entity == entity);
 }
+
+TEST_CASE("PickAllEntities returns overlapping bodies nearest first and CyclePick walks them", "[simulation][picking]")
+{
+    RegisterComponents();
+    Scene scene("CycleTest");
+    const auto far = scene.CreateEntity("Far");
+    const auto near = scene.CreateEntity("Near");
+    const auto off = scene.CreateEntity("Off");
+    scene.Registry().emplace<TransformComponent>(far, TransformComponent{.Position = {0.0f, 0.0f, 20.0f}});
+    scene.Registry().emplace<SphereComponent>(far, SphereComponent{.Radius = 1.0f});
+    scene.Registry().emplace<TransformComponent>(near, TransformComponent{.Position = {0.0f, 0.0f, 5.0f}});
+    scene.Registry().emplace<SphereComponent>(near, SphereComponent{.Radius = 1.0f});
+    scene.Registry().emplace<TransformComponent>(off, TransformComponent{.Position = {50.0f, 0.0f, 10.0f}});
+    scene.Registry().emplace<SphereComponent>(off, SphereComponent{.Radius = 1.0f});
+
+    const auto hits = PickAllEntities(scene, glm::dvec3(0.0), glm::dvec3(0.0, 0.0, 1.0));
+    REQUIRE(hits.size() == 2);
+    CHECK(hits[0].Entity == near);
+    CHECK(hits[1].Entity == far);
+
+    CHECK(CyclePick(hits, entt::null)->Entity == near);
+    CHECK(CyclePick(hits, near)->Entity == far);
+    CHECK(CyclePick(hits, far)->Entity == near);
+    CHECK(CyclePick(hits, off)->Entity == near);
+    CHECK_FALSE(CyclePick({}, near).has_value());
+}

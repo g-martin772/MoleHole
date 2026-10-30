@@ -49,12 +49,12 @@ namespace MoleHole
         return kDefaultPickRadiusM;
     }
 
-    std::optional<PickHit> PickClosestEntity(
+    std::vector<PickHit> PickAllEntities(
         const GPP::Scene& scene, const glm::dvec3& rayOriginM, const glm::dvec3& rayDirection,
         const BoundingRadiusOverride& radiusOverride)
     {
         const auto direction = glm::normalize(rayDirection);
-        std::optional<PickHit> closest;
+        std::vector<PickHit> hits;
 
         for (auto [entity, transform] : scene.Registry().view<GPP::TransformComponent>().each())
         {
@@ -77,13 +77,38 @@ namespace MoleHole
             {
                 continue;
             }
-            if (!closest || t < closest->Distance)
-            {
-                closest = PickHit{entity, t};
-            }
+            hits.push_back(PickHit{entity, t});
         }
 
-        return closest;
+        std::ranges::sort(hits, {}, &PickHit::Distance);
+        return hits;
+    }
+
+    std::optional<PickHit> PickClosestEntity(
+        const GPP::Scene& scene, const glm::dvec3& rayOriginM, const glm::dvec3& rayDirection,
+        const BoundingRadiusOverride& radiusOverride)
+    {
+        const auto hits = PickAllEntities(scene, rayOriginM, rayDirection, radiusOverride);
+        if (hits.empty())
+        {
+            return std::nullopt;
+        }
+        return hits.front();
+    }
+
+    std::optional<PickHit> CyclePick(const std::vector<PickHit>& hits, const entt::entity current)
+    {
+        if (hits.empty())
+        {
+            return std::nullopt;
+        }
+        const auto found = std::ranges::find(hits, current, &PickHit::Entity);
+        if (found == hits.end())
+        {
+            return hits.front();
+        }
+        const auto next = std::next(found);
+        return next == hits.end() ? hits.front() : *next;
     }
 
     Ray ScreenPointToRay(const glm::vec2& mousePos, const glm::vec2& viewportMin, const glm::vec2& viewportSize,

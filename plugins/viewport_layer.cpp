@@ -511,8 +511,12 @@ namespace
             const auto ray = ScreenPointToRay({mousePos.x, mousePos.y}, viewportMin, viewportSize,
                                               m_Camera.GetViewMatrix(frame), m_Camera.GetProjectionMatrix(),
                                               m_Camera.GetPosition(), frame);
-            const auto radiusOverride = MeshRadiusOverride();
-            if (const auto hit = PickClosestEntity(scene, ray.OriginM, ray.Direction, radiusOverride))
+            const auto hits = PickAllEntities(scene, ray.OriginM, ray.Direction, MeshRadiusOverride());
+            const bool repeat = m_LastPickValid && glm::distance(m_LastPickMouse, glm::vec2(mousePos.x, mousePos.y)) <= kPickRepeatPx;
+            m_LastPickMouse = {mousePos.x, mousePos.y};
+            m_LastPickValid = true;
+            const auto current = repeat ? scene.FindByGuid(m_UiState->SelectedEntityGuid) : entt::entity{entt::null};
+            if (const auto hit = CyclePick(hits, current))
             {
                 m_UiState->SelectedEntityGuid = scene.Registry().get<MetadataComponent>(hit->Entity).Guid;
             }
@@ -1330,6 +1334,9 @@ namespace
         std::atomic<bool> m_CameraMouseHover{false};
         std::atomic<std::chrono::steady_clock::rep> m_SpeedReadoutAt{0};
         bool m_PanActive{false};
+        static constexpr float kPickRepeatPx = 4.0f;
+        glm::vec2 m_LastPickMouse{0.0f};
+        bool m_LastPickValid{false};
         CameraBookmarks m_Bookmarks;
         bool m_BookmarksDirty{false};
         std::uint64_t m_BookmarkRevision{0};
