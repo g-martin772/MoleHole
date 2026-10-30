@@ -126,4 +126,17 @@ namespace MoleHole
         const glm::dvec3 farPointM = frame.ToWorld(glm::vec3(farPoint));
         return Ray{cameraPositionM, glm::normalize(farPointM - cameraPositionM)};
     }
+
+    std::optional<glm::vec2> RenderPointToScreen(const glm::vec3& renderPoint, const glm::vec2& viewportMin,
+                                                 const glm::vec2& viewportSize, const glm::mat4& view,
+                                                 const glm::mat4& projection)
+    {
+        const glm::vec4 clip = projection * view * glm::vec4(renderPoint, 1.0f);
+        if (!(clip.w > 0.0f))
+        {
+            return std::nullopt;
+        }
+        const glm::vec2 ndc = glm::vec2(clip) / clip.w;
+        return viewportMin + (ndc * 0.5f + 0.5f) * viewportSize;
+    }
 }

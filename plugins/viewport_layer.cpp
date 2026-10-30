@@ -413,6 +413,54 @@ namespace
             {
                 PickEntityUnderMouse(min, max, *sim);
             }
+
+            if (imageHovered && !toolbarHovered && !gizmoActive && !ImGuizmo::IsOver() && sim->Runner &&
+                !ImGui::IsMouseDown(ImGuiMouseButton_Left) && !ImGui::IsMouseDown(ImGuiMouseButton_Right) &&
+                !ImGui::IsMouseDown(ImGuiMouseButton_Middle))
+            {
+                DrawHoverHighlight(min, max, *sim);
+            }
+        }
+
+        void DrawHoverHighlight(ImVec2 min, ImVec2 max, const SimBinding& sim)
+        {
+            const glm::vec2 viewportMin{min.x, min.y};
+            const glm::vec2 viewportSize{max.x - min.x, max.y - min.y};
+            if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f) return;
+
+            const auto sceneLock = sim.Runner->AcquireSnapshot();
+            const Scene& scene = *sceneLock;
+            const RenderFrame frame = RenderFrame::ForScene(scene, m_RenderSettings->Effective().LengthUnit,
+                                                            m_Camera.GetPosition());
+            const auto mousePos = ImGui::GetMousePos();
+            const auto view = m_Camera.GetViewMatrix(frame);
+            const auto projection = m_Camera.GetProjectionMatrix();
+            const auto ray = ScreenPointToRay({mousePos.x, mousePos.y}, viewportMin, viewportSize, view, projection,
+                                              m_Camera.GetPosition(), frame);
+            const auto hit = PickClosestEntity(scene, ray.OriginM, ray.Direction, MeshRadiusOverride());
+            if (!hit) return;
+            const auto& metadata = scene.Registry().get<MetadataComponent>(hit->Entity);
+            if (metadata.Guid == m_UiState->SelectedEntityGuid) return;
+
+            const auto& transform = scene.Registry().get<TransformComponent>(hit->Entity);
+            const auto center = frame.ToRender(transform.Position);
+            const auto screen = RenderPointToScreen(center, viewportMin, viewportSize, view, projection);
+            if (!screen) return;
+            const float renderRadius = frame.ToRenderLength(BoundingRadiusOf(scene, hit->Entity, MeshRadiusOverride()));
+            const auto edge = RenderPointToScreen(center + m_Camera.GetRight() * renderRadius, viewportMin, viewportSize, view,
+                                                  projection);
+            const float radius = std::clamp(edge ? glm::distance(*screen, *edge) : 12.0f, 8.0f, 4000.0f);
+
+            const ImU32 color = ImGui::GetColorU32(ImGuiCol_CheckMark);
+            auto* drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRect(min, max, true);
+            drawList->AddCircle({screen->x, screen->y}, radius, color, 64, 2.0f);
+            const ImVec2 label{mousePos.x + 14.0f, mousePos.y + 16.0f};
+            const auto size = ImGui::CalcTextSize(metadata.Name.c_str());
+            drawList->AddRectFilled({label.x - 4.0f, label.y - 2.0f}, {label.x + size.x + 4.0f, label.y + size.y + 2.0f},
+                                    ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.67f)), 3.0f);
+            drawList->AddText(label, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.92f)), metadata.Name.c_str());
+            drawList->PopClipRect();
         }
 
         bool ManipulateSelectedEntity(const SimBinding& sim)

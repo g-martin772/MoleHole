@@ -123,3 +123,24 @@ TEST_CASE("PickAllEntities returns overlapping bodies nearest first and CyclePic
     CHECK(CyclePick(hits, off)->Entity == near);
     CHECK_FALSE(CyclePick({}, near).has_value());
 }
+
+TEST_CASE("RenderPointToScreen inverts ScreenPointToRay and rejects points behind the camera", "[simulation][picking]")
+{
+    const glm::dvec3 cameraPos{0.0, 0.0, 10.0};
+    const RenderFrame frame{.OriginM = glm::dvec3(0.0), .LengthUnitM = 1.0};
+    const glm::mat4 view = glm::lookAt(glm::vec3(cameraPos), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 projection = glm::perspective(glm::radians(60.0f), 4.0f / 3.0f, 0.1f, 1000.0f);
+    projection[1][1] *= -1.0f;
+    const glm::vec2 viewportMin{100.0f, 50.0f};
+    const glm::vec2 viewportSize{800.0f, 600.0f};
+
+    const glm::vec2 mouse{250.0f, 420.0f};
+    const auto ray = ScreenPointToRay(mouse, viewportMin, viewportSize, view, projection, cameraPos, frame);
+    const glm::vec3 onRay = glm::vec3(cameraPos + ray.Direction * 7.0);
+    const auto screen = RenderPointToScreen(onRay, viewportMin, viewportSize, view, projection);
+    REQUIRE(screen.has_value());
+    CHECK(screen->x == Catch::Approx(mouse.x).margin(0.01));
+    CHECK(screen->y == Catch::Approx(mouse.y).margin(0.01));
+
+    CHECK_FALSE(RenderPointToScreen({0.0f, 0.0f, 20.0f}, viewportMin, viewportSize, view, projection).has_value());
+}
