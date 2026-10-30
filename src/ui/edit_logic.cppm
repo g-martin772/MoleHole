@@ -5,7 +5,7 @@ import GPP;
 
 export namespace MoleHole
 {
-    enum class EditAction { SelectAll, Duplicate, Delete, Rename, FrameSelected, Deselect };
+    enum class EditAction { SelectAll, Duplicate, Delete, Rename, FrameSelected, Deselect, Copy, Paste };
 
     class EditRequests
     {
@@ -133,5 +133,10 @@ export namespace MoleHole
     {
         return entity.empty() ? std::format("Set {}", field)
                               : std::format("Set {} ({})", field, ShortenLabel(entity, 28));
+    }
+
+    [[nodiscard]] inline std::string MultiFieldLabel(const std::string_view field, const std::size_t count)
+    {
+        return std::format("Set {} ({} Entities)", field, count);
     }
 }

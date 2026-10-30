@@ -225,7 +225,8 @@ export namespace MoleHole
 
     // Returns whether the section content should be drawn; always pair with EndSection when true.
     // removeClicked, when provided, shows a trash button on the header.
-    inline bool BeginSection(ImFont* icons, const char* label, bool defaultOpen = true, bool* removeClicked = nullptr)
+    inline bool BeginSection(ImFont* icons, const char* label, bool defaultOpen = true, bool* removeClicked = nullptr,
+                             const std::function<void()>& contextMenu = {})
     {
         ImGui::PushID(label);
         auto* storage = ImGui::GetStateStorage();
@@ -243,6 +244,11 @@ export namespace MoleHole
         const float hover = HoverLerp(ImGui::GetItemID(), ImGui::IsItemHovered());
         const bool nowOpen = toggled ? !open : open;
         if (toggled) storage->SetInt(openKey, nowOpen ? 1 : 0);
+        if (contextMenu && ImGui::BeginPopupContextItem("##sectionMenu"))
+        {
+            contextMenu();
+            ImGui::EndPopup();
+        }
 
         anim.Update(nowOpen, ImGui::GetIO().DeltaTime);
         storage->SetFloat(progressKey, anim.Linear);

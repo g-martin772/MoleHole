@@ -120,6 +120,7 @@ TEST_CASE("Edit labels name the entities involved", "[ui][edit]")
     CHECK(CountLabel("Duplicate", {"A", "B", "C"}) == "Duplicate 3 Entities");
     CHECK(SetFieldLabel("Mass", "Earth") == "Set Mass (Earth)");
     CHECK(SetFieldLabel("Mass", "") == "Set Mass");
+    CHECK(MultiFieldLabel("Mass", 3) == "Set Mass (3 Entities)");
 }
 
 TEST_CASE("Edit requests are taken only by the layer that handles them", "[ui][edit]")

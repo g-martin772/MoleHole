@@ -659,6 +659,8 @@ namespace
             };
             entry("Select All", "edit.select_all", EditAction::SelectAll);
             entry("Duplicate", "edit.duplicate", EditAction::Duplicate);
+            entry("Copy", "edit.copy", EditAction::Copy);
+            entry("Paste", "edit.paste", EditAction::Paste);
             entry("Delete", "edit.delete", EditAction::Delete);
             entry("Rename", "edit.rename", EditAction::Rename);
             entry("Frame Selected", "edit.frame", EditAction::FrameSelected);

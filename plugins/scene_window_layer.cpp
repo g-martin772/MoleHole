@@ -51,22 +51,42 @@ namespace
     // Picks a file for an AssetPath field and returns the project-relative path to store, or nullopt.
     using AssetBrowser = std::function<std::optional<std::string>(const FieldInfo&)>;
 
+    void DrawMixedOverlay(const ImVec2 min, const ImVec2 max)
+    {
+        const ImGuiID key = ImGui::GetID("##mixed");
+        auto* storage = ImGui::GetStateStorage();
+        ImGuiID owned = static_cast<ImGuiID>(storage->GetInt(key, 0));
+        const ImGuiID active = ImGui::GetActiveID();
+        if (active == 0 || (owned != 0 && owned != active)) owned = 0;
+        if (owned == 0 && active != 0 && ImGui::IsMouseHoveringRect(min, max)) owned = active;
+        storage->SetInt(key, static_cast<int>(owned));
+        if (owned != 0) return;
+        auto* list = ImGui::GetWindowDrawList();
+        const ImGuiStyle& style = ImGui::GetStyle();
+        list->AddRectFilled(min, max, ImGui::GetColorU32(ImGuiCol_FrameBg), style.FrameRounding);
+        list->AddText(ImVec2(min.x + style.FramePadding.x + 2.0f, min.y + style.FramePadding.y),
+                      ImGui::GetColorU32(ImGuiCol_TextDisabled), "-");
+    }
+
     // The single place a descriptor field becomes a widget; returns the edited value when the user changed it.
     std::optional<FieldValue> DrawField(ImFont* icons, const FieldInfo& field, const FieldValue& current,
                                         const FieldValue* fallback, const std::vector<EntityChoice>& entities,
                                         const AssetBrowser& browse = {}, AssetPicker* picker = nullptr,
-                                        const AssetPickerHost* pickerHost = nullptr)
+                                        const AssetPickerHost* pickerHost = nullptr, bool mixed = false,
+                                        bool* wasReset = nullptr)
     {
         const auto& meta = field.Meta;
         const std::string label = meta.Label.empty() ? SpacedName(field.Name) : meta.Label;
         const float speed = meta.Speed > 0.0 ? static_cast<float>(meta.Speed) : 0.1f;
         const double upperBound = meta.Max > meta.Min ? meta.Max : (meta.Min > 0.0 ? 1.0e300 : 0.0);
         const char* format = meta.Format.empty() ? "%.3f" : meta.Format.c_str();
-        const bool modified = fallback && !field.ReadOnly() && !(*fallback == current);
+        const bool modified = fallback && !field.ReadOnly() && (mixed || !(*fallback == current));
 
         std::optional<FieldValue> edited;
         const bool reset = PropertyRow(icons, label.c_str(), modified, [&]
         {
+            const ImVec2 start = ImGui::GetCursorScreenPos();
+            ImGui::BeginGroup();
             ImGui::BeginDisabled(field.ReadOnly());
             switch (field.Type)
             {
@@ -183,8 +203,14 @@ namespace
             }
             }
             ImGui::EndDisabled();
+            ImGui::EndGroup();
+            if (mixed) DrawMixedOverlay(start, ImGui::GetItemRectMax());
         });
-        if (reset && fallback) edited = *fallback;
+        if (reset && fallback)
+        {
+            edited = *fallback;
+            if (wasReset) *wasReset = true;
+        }
         return edited;
     }
 
@@ -252,6 +278,13 @@ namespace
                 return;
             }
 
+            if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput &&
+                !ImGui::IsAnyItemActive() && m_RenameGuid == 0)
+            {
+                if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_C)) m_UiState->Edits.Push(EditAction::Copy);
+                else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V)) m_UiState->Edits.Push(EditAction::Paste);
+            }
+
             ImFont* icons = m_UiState->IconFont;
             ImGui::TextDisabled("%s%s", m_UiState->SceneState.IsDirty() ? "* " : "",
                                 m_UiState->CurrentScenePath.empty() ? "(unsaved)" : m_UiState->CurrentScenePath.c_str());
@@ -289,7 +322,8 @@ namespace
         void ProcessEditRequests()
         {
             const auto requests = m_UiState->Edits.Take({EditAction::SelectAll, EditAction::Duplicate, EditAction::Delete,
-                                                         EditAction::Rename, EditAction::Deselect});
+                                                         EditAction::Rename, EditAction::Deselect, EditAction::Copy,
+                                                         EditAction::Paste});
             if (requests.empty() || m_UiState->CurrentSceneName.empty()) return;
             const auto runner = m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
             if (!runner) return;
@@ -322,9 +356,66 @@ namespace
                     m_Selection.clear();
                     m_UiState->SelectedEntityGuid = 0;
                     break;
+                case EditAction::Copy:
+                    CopySelection(*sceneLock, entries);
+                    break;
+                case EditAction::Paste:
+                    PasteClipboard(*runner, *sceneLock);
+                    break;
                 case EditAction::FrameSelected: break;
                 }
             }
+        }
+
+        void CopySelection(const Scene& scene, const std::vector<OutlinerEntry>& entries)
+        {
+            std::vector<std::uint64_t> guids;
+            for (const auto& entry : entries)
+            {
+                if (m_Selection.contains(entry.Guid)) guids.push_back(entry.Guid);
+            }
+            const auto text = CopyEntitiesYaml(scene, guids);
+            if (!text.empty()) ImGui::SetClipboardText(text.c_str());
+        }
+
+        void PasteClipboard(SimulationRunner& runner, const Scene& scene)
+        {
+            const char* raw = ImGui::GetClipboardText();
+            const auto content = ParseClipboard(raw ? raw : "");
+            if (!content) return;
+            if (content->Kind == ClipboardKind::Component)
+            {
+                const std::vector<std::uint64_t> targets(m_Selection.begin(), m_Selection.end());
+                runner.EnqueueCommands(MakePasteComponentCommands(scene, *content, targets),
+                                       UndoStep(runner, "Paste " + content->Component));
+                return;
+            }
+            std::vector<std::string> names;
+            for (const auto& entity : content->Entities)
+            {
+                names.push_back(entity.Components["Metadata"]["Name"].as<std::string>("Entity"));
+            }
+            std::vector<std::uint64_t> created;
+            runner.EnqueueCommands(MakePasteEntityCommands(scene, *content, [] { return GPP::GenerateGuid(); }, &created),
+                                   UndoStep(runner, CountLabel("Paste", names)));
+            m_PendingSelect = std::move(created);
+            m_PendingSelectFrames = 120;
+        }
+
+        void ApplyPendingSelect(const std::vector<OutlinerEntry>& entries)
+        {
+            if (m_PendingSelect.empty()) return;
+            const bool ready = std::ranges::all_of(m_PendingSelect, [&](const std::uint64_t guid)
+            {
+                return std::ranges::contains(entries, guid, &OutlinerEntry::Guid);
+            });
+            if (ready)
+            {
+                m_Selection = {m_PendingSelect.begin(), m_PendingSelect.end()};
+                m_UiState->SelectedEntityGuid = m_PendingSelect.front();
+                m_Anchor = m_PendingSelect.front();
+            }
+            if (ready || --m_PendingSelectFrames <= 0) m_PendingSelect.clear();
         }
 
         void RenderToolbar(SimulationRunner& runner, const Scene&)
@@ -468,6 +559,7 @@ namespace
             ImFont* icons = m_UiState->IconFont;
             const auto entries = CollectEntries(scene);
             SyncSelection(entries);
+            ApplyPendingSelect(entries);
 
             SearchBox(icons, "OutlinerSearch", m_Filter, "Search entities...");
             ImGui::Spacing();
@@ -774,8 +866,7 @@ namespace
             return result;
         }
 
-        void RenderAddComponent(SimulationRunner& runner, const Scene& scene, entt::entity entity,
-                                std::uint64_t guid)
+        void RenderAddComponent(SimulationRunner& runner, const Scene& scene, const std::vector<std::uint64_t>& targets)
         {
             ImFont* icons = m_UiState->IconFont;
             if (ImGui::Button("Add Component", ImVec2(-1, 0)))
@@ -791,42 +882,79 @@ namespace
             bool any = false;
             ComponentRegistry::Instance().ForEach([&](const ComponentTypeInfo& info)
             {
-                if (!info.Inspectable || !info.Add || info.Has(scene.Registry(), entity)) return;
+                if (!info.Inspectable || !info.Add || AllHaveComponent(scene, targets, info)) return;
                 if (!ContainsInsensitive(info.DisplayName, m_AddFilter)) return;
                 any = true;
                 if (!ImGui::MenuItem(info.DisplayName.c_str())) return;
-                runner.EnqueueCommand(AddComponentCommand{guid, info.Name, {}},
-                                      UndoStep(runner, "Add " + info.DisplayName));
+                runner.EnqueueCommands(MakeAddComponentCommands(scene, targets, info),
+                                       UndoStep(runner, "Add " + info.DisplayName));
             });
             if (!any) ImGui::TextDisabled("No matching components");
             ImGui::EndPopup();
         }
 
+        [[nodiscard]] std::vector<std::uint64_t> InspectorTargets(const Scene& scene) const
+        {
+            std::vector<std::uint64_t> targets;
+            if (m_Selection.size() > 1)
+            {
+                for (const auto guid : m_Selection)
+                {
+                    if (scene.IsValid(scene.FindByGuid(guid))) targets.push_back(guid);
+                }
+                std::ranges::sort(targets);
+            }
+            else if (m_UiState->SelectedEntityGuid != 0 && scene.IsValid(scene.FindByGuid(m_UiState->SelectedEntityGuid)))
+            {
+                targets.push_back(m_UiState->SelectedEntityGuid);
+            }
+            return targets;
+        }
+
+        void ComponentContextMenu(SimulationRunner& runner, const Scene& scene, const std::vector<std::uint64_t>& targets,
+                                  const ComponentTypeInfo& info)
+        {
+            if (ImGui::MenuItem("Copy Component"))
+            {
+                ImGui::SetClipboardText(CopyComponentYaml(scene, targets.front(), info.Name).c_str());
+            }
+            const auto clip = ParseClipboard(ImGui::GetClipboardText() ? ImGui::GetClipboardText() : "");
+            const bool canPaste = clip && clip->Kind == ClipboardKind::Component && clip->Component == info.Name;
+            if (ImGui::MenuItem("Paste Component Values", nullptr, false, canPaste))
+            {
+                runner.EnqueueCommands(MakePasteComponentCommands(scene, *clip, targets),
+                                       UndoStep(runner, "Paste " + info.DisplayName));
+            }
+            if (info.Remove && ImGui::MenuItem("Remove Component"))
+            {
+                runner.EnqueueCommands(MakeRemoveComponentCommands(scene, targets, info),
+                                       UndoStep(runner, "Remove " + info.DisplayName));
+            }
+        }
+
         void RenderInspector(SimulationRunner& runner, const Scene& scene)
         {
             ImFont* icons = m_UiState->IconFont;
-            if (m_Selection.size() > 1)
+            const auto targets = InspectorTargets(scene);
+            if (targets.empty())
             {
-                SectionHeader("INSPECTOR");
-                ImGui::Text("%zu entities selected", m_Selection.size());
-                if (ImGui::Button("Delete Selected", ImVec2(-1, 0)))
-                {
-                    DeleteEntities(runner, CollectEntries(scene), m_Selection);
-                }
+                if (m_UiState->SelectedEntityGuid != 0 && m_Selection.size() <= 1) m_UiState->SelectedEntityGuid = 0;
                 return;
             }
-            if (m_UiState->SelectedEntityGuid == 0) return;
-            const auto entity = scene.FindByGuid(m_UiState->SelectedEntityGuid);
-            if (!scene.IsValid(entity))
-            {
-                m_UiState->SelectedEntityGuid = 0;
-                return;
-            }
-            const auto guid = m_UiState->SelectedEntityGuid;
+            const bool multi = targets.size() > 1;
+            const auto guid = std::ranges::contains(targets, m_UiState->SelectedEntityGuid)
+                                  ? m_UiState->SelectedEntityGuid
+                                  : targets.front();
+            const auto entity = scene.FindByGuid(guid);
             const auto* metadata = scene.Registry().try_get<MetadataComponent>(entity);
 
             SectionHeader("INSPECTOR");
-            if (metadata)
+            if (multi)
+            {
+                ImGui::Text("%zu entities selected", targets.size());
+                ImGui::TextDisabled("Edits apply to all; mixed values show -");
+            }
+            else if (metadata)
             {
                 std::string name = metadata->Name;
                 ImGui::SetNextItemWidth(-1.0f);
@@ -844,31 +972,32 @@ namespace
             std::vector<EntityChoice> choices;
             for (const auto& entry : CollectEntries(scene))
             {
-                if (entry.Guid != guid) choices.push_back({entry.Guid, entry.Name});
+                if (!std::ranges::contains(targets, entry.Guid)) choices.push_back({entry.Guid, entry.Name});
             }
 
             ComponentRegistry::Instance().ForEach([&](const ComponentTypeInfo& info)
             {
-                if (!info.Inspectable || !info.Has(scene.Registry(), entity)) return;
+                if (!info.Inspectable || !AllHaveComponent(scene, targets, info)) return;
                 bool remove = false;
-                if (BeginSection(icons, info.DisplayName.c_str(), true, &remove))
+                if (BeginSection(icons, info.DisplayName.c_str(), true, &remove,
+                                 [&] { ComponentContextMenu(runner, scene, targets, info); }))
                 {
-                    DrawComponentFields(runner, scene, entity, guid, info, choices);
+                    DrawComponentFields(runner, scene, targets, guid, info, choices);
                     EndSection();
                 }
                 if (remove && info.Remove)
                 {
-                    runner.EnqueueCommand(RemoveComponentCommand{guid, info.Name},
-                                          UndoStep(runner, "Remove " + info.DisplayName));
+                    runner.EnqueueCommands(MakeRemoveComponentCommands(scene, targets, info),
+                                           UndoStep(runner, "Remove " + info.DisplayName));
                 }
             });
 
-            RenderScripts(runner, scene, entity, guid, choices);
-            RenderAddComponent(runner, scene, entity, guid);
+            if (!multi) RenderScripts(runner, scene, entity, guid, choices);
+            RenderAddComponent(runner, scene, targets);
             ImGui::Spacing();
-            if (ImGui::Button("Delete Entity", ImVec2(-1, 0)))
+            if (ImGui::Button(multi ? "Delete Selected" : "Delete Entity", ImVec2(-1, 0)))
             {
-                DeleteEntities(runner, CollectEntries(scene), {guid});
+                DeleteEntities(runner, CollectEntries(scene), {targets.begin(), targets.end()});
             }
         }
 
@@ -911,7 +1040,10 @@ namespace
             if (scripts)
             {
                 bool removeAll = false;
-                if (BeginSection(icons, "Scripts", true, &removeAll))
+                const std::vector<std::uint64_t> self{guid};
+                const auto* scriptsInfo = ComponentRegistry::Instance().FindByName(std::string(kScriptsComponentName));
+                if (BeginSection(icons, "Scripts", true, &removeAll,
+                                 [&] { if (scriptsInfo) ComponentContextMenu(runner, scene, self, *scriptsInfo); }))
                 {
                     std::optional<std::size_t> removeEntry;
                     for (std::size_t i = 0; i < scripts->Entries.size(); ++i)
@@ -997,11 +1129,12 @@ namespace
             ImGui::EndPopup();
         }
 
-        void DrawComponentFields(SimulationRunner& runner, const Scene& scene, entt::entity entity,
+        void DrawComponentFields(SimulationRunner& runner, const Scene& scene, const std::vector<std::uint64_t>& targets,
                                  std::uint64_t guid, const ComponentTypeInfo& info,
                                  const std::vector<EntityChoice>& choices)
         {
             ImFont* icons = m_UiState->IconFont;
+            const auto entity = scene.FindByGuid(guid);
             if (!info.Note.empty()) ImGui::TextDisabled("%s", info.Note.c_str());
             const auto& defaults = DefaultsFor(m_Defaults, info);
             const AssetPickerHost pickerHost{.Catalog = &m_AssetCatalog,
@@ -1021,8 +1154,9 @@ namespace
                 {
                     if (field.Meta.Category != category) continue;
                     if (!FieldVisible(field, info, scene.Registry(), entity)) continue;
-                    const auto current = field.Get(scene.Registry(), entity);
-                    if (std::holds_alternative<std::monostate>(current)) continue;
+                    const auto sample = SampleField(scene, targets, info, field);
+                    if (!sample || std::holds_alternative<std::monostate>(sample->Value)) continue;
+                    const auto& current = sample->Value;
                     if (!headerShown)
                     {
                         ImGui::Spacing();
@@ -1032,15 +1166,26 @@ namespace
                     }
                     const auto def = defaults.find(field.Name);
                     ImGui::PushID(field.Name.c_str());
+                    bool wasReset = false;
                     if (auto edited = DrawField(icons, field, current,
                                                 def != defaults.end() ? &def->second : nullptr, choices,
                                                 [this](const FieldInfo& picked) { return BrowseAsset(picked); },
-                                                &m_AssetPicker, &pickerHost))
+                                                &m_AssetPicker, &pickerHost, sample->Mixed, &wasReset))
                     {
-                        const auto* metadata = scene.Registry().try_get<MetadataComponent>(entity);
-                        EditField(runner, guid, info.Name, field.Name, std::move(*edited),
-                                  SetFieldLabel(field.Meta.Label.empty() ? field.Name : field.Meta.Label,
-                                                metadata ? metadata->Name : std::string_view{}));
+                        const auto& fieldLabel = field.Meta.Label.empty() ? field.Name : field.Meta.Label;
+                        if (targets.size() > 1)
+                        {
+                            CommandOptions options = UndoStep(runner, MultiFieldLabel(fieldLabel, targets.size()),
+                                                              std::format("{}:{}:{}:{}", targets.front(), targets.size(), info.Name, field.Name));
+                            runner.EnqueueCommands(MakeSetFieldCommands(scene, targets, info, field, *edited, wasReset ? nullptr : &current),
+                                                   std::move(options));
+                        }
+                        else
+                        {
+                            const auto* metadata = scene.Registry().try_get<MetadataComponent>(entity);
+                            EditField(runner, guid, info.Name, field.Name, std::move(*edited),
+                                      SetFieldLabel(fieldLabel, metadata ? metadata->Name : std::string_view{}));
+                        }
                     }
                     if (m_ImportNote.first == field.Name && !m_ImportNote.second.empty())
                     {
@@ -1118,6 +1263,8 @@ namespace
         std::unordered_set<std::uint64_t> m_Expanded;
         std::unordered_set<std::uint64_t> m_Selection;
         std::uint64_t m_Anchor = 0;
+        std::vector<std::uint64_t> m_PendingSelect;
+        int m_PendingSelectFrames = 0;
         std::uint64_t m_RenameGuid = 0;
         bool m_RenameFocus = false;
         std::array<char, 256> m_RenameBuffer{};

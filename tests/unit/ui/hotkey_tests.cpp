@@ -113,7 +113,8 @@ TEST_CASE("TrySetShortcut collides with scoped window shortcuts but not with the
     CHECK_FALSE(TrySetShortcut(overrides, Defaults(), "file.close", "Ctrl+D").Applied);
     CHECK_FALSE(TrySetShortcut(overrides, Defaults(), "file.close", "F2").Applied);
     CHECK_FALSE(TrySetShortcut(overrides, Defaults(), "file.close", "T").Applied);
-    CHECK(TrySetShortcut(overrides, Defaults(), "file.close", "Ctrl+C").Applied);
+    CHECK_FALSE(TrySetShortcut(overrides, Defaults(), "file.close", "Ctrl+C").Applied);
+    CHECK(TrySetShortcut(overrides, Defaults(), "file.close", "Ctrl+X").Applied);
     CHECK_FALSE(TrySetShortcut(overrides, Defaults(), "file.close", "Ctrl+").Problem.empty());
     CHECK(TrySetShortcut(overrides, Defaults(), "file.close", "W").Problem.find("Reserved") != std::string::npos);
     CHECK_FALSE(TrySetShortcut(overrides, Defaults(), "edit.delete", "Ctrl+K").Applied);

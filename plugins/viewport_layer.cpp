@@ -185,6 +185,8 @@ namespace
                 {
                     if (ImGui::IsKeyPressed(ImGuiKey_F, false)) m_UiState->Edits.Push(EditAction::FrameSelected);
                     if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) m_UiState->Edits.Push(EditAction::Delete);
+                    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_C)) m_UiState->Edits.Push(EditAction::Copy);
+                    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V)) m_UiState->Edits.Push(EditAction::Paste);
                     if (ImGui::IsKeyChordPressed(ImGuiKey_Home)) m_UiState->View.Push({ViewRequest::Kind::FrameAll});
                     for (int slot = 0; slot < static_cast<int>(kBookmarkSlots); ++slot)
                     {

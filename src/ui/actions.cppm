@@ -183,6 +183,8 @@ export namespace MoleHole
             redo.OwnGuard = true;
             b.Edit("edit.select_all", "Select All", "Ctrl+A", EditAction::SelectAll).Needs = ActionNeed::Scene;
             b.Edit("edit.duplicate", "Duplicate", "Ctrl+D", EditAction::Duplicate);
+            b.Edit("edit.copy", "Copy", "Ctrl+C", EditAction::Copy);
+            b.Edit("edit.paste", "Paste", "Ctrl+V", EditAction::Paste).Needs = ActionNeed::Scene;
             b.Edit("edit.delete", "Delete", "Del", EditAction::Delete);
             b.Edit("edit.rename", "Rename", "F2", EditAction::Rename);
             b.Edit("edit.frame", "Frame Selected", "F", EditAction::FrameSelected);

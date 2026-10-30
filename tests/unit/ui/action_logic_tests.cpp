@@ -234,6 +234,15 @@ TEST_CASE("BuildActions adds dynamic templates, profiles and create entries and 
     FindAction(actions, "edit.delete")->Invoke();
     CHECK(ui.Edits.Take({EditAction::Delete}).size() == 1);
 
+    FindAction(actions, "edit.copy")->Invoke();
+    FindAction(actions, "edit.paste")->Invoke();
+    CHECK(ui.Edits.Take({EditAction::Copy, EditAction::Paste}).size() == 2);
+
+    ActionContext context;
+    context.HasScene = true;
+    CHECK(ActionDisabledReason("edit.copy", context) == "No entity selected");
+    CHECK(ActionDisabledReason("edit.paste", context).empty());
+
     FindAction(actions, "help.shortcuts")->Invoke();
     CHECK(ui.ShowShortcutSheet);
 }
