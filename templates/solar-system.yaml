@@ -3093,7 +3093,7 @@ Entities:
         Fov: 45
         NearPlane: 10
         FarPlane: 149597870700000
-        Primary: false
+        Primary: true
       Scripts:
         - Name: spring_arm_camera
           Props:
@@ -3481,6 +3481,7 @@ Render:
       Description: Straight rays (no black hole), the Sun as the point light, automatic exposure so every planet shows from Mercury to Neptune, orbit lines and markers on.
       Base: Flat
       Set:
+        transport.mode: Integrated
         post.tonemap: Aces
         post.exposure: 1.7
         post.exposure_key: 0.09

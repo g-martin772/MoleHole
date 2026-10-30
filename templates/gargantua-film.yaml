@@ -1,0 +1,64 @@
+# Gargantua as the film shows it, not as the physics would: James, von Tunzelmann, Franklin & Thorne (2015) rendered
+# a/M = 0.6 and switched Doppler beaming and gravitational redshift off, which leaves the disk symmetric and warm.
+# The display temperature sets the colour only. Bloom stays off: it clips into patches on the disk and turns stars into
+# blobs at this focal length. Azimuth 235 degrees keeps the nebulae of the sky map out of frame. Export with --scene-camera.
+Scene: Gargantua (film look)
+SchemaVersion: 2
+TimeScale: 1.0
+Entities:
+  - Guid: 7800000000000000001
+    Components:
+      Metadata:
+        Guid: 7800000000000000001
+        Name: Gargantua
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      BlackHole:
+        Mass: 1.98847e+38
+        Spin: 0.6
+        Charge: 0
+        SpinAxis: [0, 1, 0]
+  - Guid: 7800000000000000002
+    Components:
+      Metadata:
+        Guid: 7800000000000000002
+        Name: Camera
+        TypeTag: Camera
+      Transform:
+        Position: [-7.247413e+12, 4.636756e+11, -5.074694e+12]
+        Rotation: [0.012087, 0.886707, 0.023219, -0.461590]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 25
+        NearPlane: 1000000
+        FarPlane: 1.0e+15
+        Primary: true
+Render:
+  Version: 1
+  Contexts:
+    Edit: Film
+    Play: Film
+    Reference: Film
+    Export: Film
+  Profiles:
+    - Name: Film
+      Description: Gargantua as rendered for the film. Kerr a = 0.6, no Doppler or redshift, warm thin disk.
+      Base: Reference
+      Set:
+        spacetime.solution: Kerr
+        transport.step_size: 0.02
+        transport.max_steps: 4000
+        radiometry.redshift: false
+        radiometry.doppler: false
+        disk.volumetric: false
+        disk.noise_scale: 5
+        disk.display_temperature: 4400
+        disk.hot_spots: 0
+        disk.opacity: 2
+        post.tonemap: Aces
+        post.exposure: 1.5
+        post.bloom: false
+        post.lens_flare: false
