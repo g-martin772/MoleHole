@@ -246,6 +246,8 @@ runner.EnqueueCommand(cmd, CommandOptions{.Undoable = runner.IsPaused(), .Label 
 - Drop `scripts/foo.luau` → returns `{properties, OnStart, OnTick}`
 - Dir list: `config.json` `GPP.Assets.Scripts`
 - Annotate: `OnTick = function(self: ScriptSelf, dt: number)`
+- Shared code: `scripts/lib/<name>.luau`, `require("lib/<name>")`. Resolver is `MakeScriptModuleLoader` (luau_bindings.cpp); the VM installs `require` only for loads given a `LuauModuleTrace` (ScriptHost, ScriptCatalog) and `LuauVm::ModulesStale(trace)` drives hot reload of dependents
+- Profiling: `ScriptHost::Statuses()[i].Profile` (`ScriptProfile`: tick time, allocs/bytes from `LuauVm::AllocStats()` deltas); shown by the Inspector Scripts section
 - Bindings (add Luau API): `gpp/src/scripting/luau_bindings.cpp` (`vm.Register("scene", "name", fn)`)
 
 ## Add an asset directory kind

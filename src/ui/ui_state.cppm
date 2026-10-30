@@ -106,6 +106,16 @@ export namespace MoleHole
             return {};
         }
 
+        [[nodiscard]] GPP::ScriptProfile Profile(const std::uint64_t entity, const std::size_t index) const
+        {
+            std::scoped_lock lock(m_Mutex);
+            for (const auto& status : m_Statuses)
+            {
+                if (status.Entity == entity && status.Index == index) return status.Profile;
+            }
+            return {};
+        }
+
     private:
         mutable std::mutex m_Mutex;
         std::vector<GPP::ScriptStatus> m_Statuses;

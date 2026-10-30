@@ -308,6 +308,8 @@ return {
 - `vector.create(x,y,z)`, `vec2()`, `vec4()`
 - `math.random` is seeded by the sim (deterministic)
 - Sandboxed: no io / os
+- `require("lib/name")` loads `scripts/lib/name.luau` (subfolders ok: `lib/a/b`). Only that form is accepted: no `..`, absolute paths, extensions or symlinks leaving `scripts/lib`. A module runs once per script and returns a value (shared state across the entities using that script); cycles are an error. Modules run in the same sandbox. Editing a lib while playing reloads every script that uses it. Files under `lib/` are not offered by Add Script
+- Inspector, Scripts: while playing each script shows the last tick time (avg, max), allocations and bytes of the last tick, and the memory of the whole script VM
 
 ### Example
 - `scripts/spring_arm_camera.luau` – orbit camera around target

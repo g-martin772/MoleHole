@@ -1,7 +1,4 @@
-local function armDirection(yawDegrees: number, pitchDegrees: number): (number, number, number)
-    local yaw, pitch = math.rad(yawDegrees), math.rad(pitchDegrees)
-    return math.cos(pitch) * math.sin(yaw), math.sin(pitch), math.cos(pitch) * math.cos(yaw)
-end
+local orbit = require("lib/orbit")
 
 return {
     properties = {
@@ -29,7 +26,7 @@ return {
         self.yaw += props.OrbitSpeed * dt
         local tx, ty, tz = scene.get_xyz(target, "Transform", "Position")
         ty += props.HeightOffset
-        local dx, dy, dz = armDirection(self.yaw, props.Pitch)
+        local dx, dy, dz = orbit.direction(self.yaw, props.Pitch)
         local gx, gy, gz = tx + dx * props.ArmLength, ty + dy * props.ArmLength, tz + dz * props.ArmLength
 
         local cx, cy, cz = scene.get_xyz(self.entity, "Transform", "Position")

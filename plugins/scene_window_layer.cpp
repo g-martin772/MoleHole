@@ -31,6 +31,13 @@ namespace
         return options;
     }
 
+    std::string FormatBytes(const double bytes)
+    {
+        if (bytes >= 1024.0 * 1024.0) return std::format("{:.1f} MB", bytes / (1024.0 * 1024.0));
+        if (bytes >= 1024.0) return std::format("{:.1f} KB", bytes / 1024.0);
+        return std::format("{:.0f} B", bytes);
+    }
+
     constexpr float kRowHeight = 24.0f;
     constexpr float kIndentWidth = 14.0f;
 
@@ -1208,6 +1215,13 @@ namespace
                             ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.3f, 1.0f), "%s", descriptor->Error.c_str());
                         }
                         if (!error.empty()) ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.3f, 1.0f), "%s", error.c_str());
+                        if (const auto profile = m_UiState->ScriptStatuses.Profile(guid, i); profile.Ticks > 0)
+                        {
+                            ImGui::TextDisabled("tick %.3f ms (avg %.3f, max %.3f)", profile.LastMs, profile.AvgMs, profile.MaxMs);
+                            ImGui::TextDisabled("alloc %llu (%s) | VM %s", static_cast<unsigned long long>(profile.LastAllocs),
+                                                FormatBytes(profile.LastBytes).c_str(), FormatBytes(profile.VmBytes).c_str());
+                            Tooltip("Cost of the last tick. Avg is a moving average. VM is the memory of the whole script VM");
+                        }
 
                         if (descriptor)
                         {
