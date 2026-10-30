@@ -45,6 +45,7 @@ export import :Simulation.ScriptRuntime;
 export import :Rendering.Metric;
 export import :Rendering.DiskPhase;
 export import :Rendering.OrbitOverlays;
+export import :Rendering.BodyOrbits;
 export import :Physics.Geodesic;
 export import :Physics.Observer;
 export import :Rendering.Frame;

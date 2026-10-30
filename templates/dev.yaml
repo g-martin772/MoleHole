@@ -165,8 +165,8 @@ Graphs:
 Render:
   Version: 1
   Contexts:
-    Edit: Traced (edited)
-    Play: Lensed (edited)
+    Edit: Lensed
+    Play: Lensed
     Reference: Reference
     Export: Legacy
   Profiles:

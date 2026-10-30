@@ -96,6 +96,7 @@ export namespace MoleHole
         bool ShowObjectPaths = false;
         bool ShowCharacteristicRadii = false;
         bool ShowPredictedOrbits = false;
+        bool ShowBodyOrbits = false;
         float PredictionSpan = 300.0f; // coordinate time ahead, in M of each body's hole
 
         DebugView Debug = DebugView::None;

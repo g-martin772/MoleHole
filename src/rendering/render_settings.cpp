@@ -338,6 +338,12 @@ namespace MoleHole
                 .Tooltip = "Where every Geodesic Body will go, integrated ahead from its current state: bright now,\n"
                            "fading towards the end of the span. Drawn without lensing.",
                 .Doc = kDoc}));
+            registry.Add(Setting("overlay.body_orbits", &R::ShowBodyOrbits, {
+                .Label = "Body orbits", .Group = "Overlays",
+                .Tooltip = "The osculating orbit of every N-body body about its parent (the nearest heavier body whose Hill\n"
+                           "sphere holds it): planets blue, moons orange, unbound bodies magenta. A ring marks bodies too\n"
+                           "small to see. Orbits under 10 px across are left out. Spheres hide the lines behind them.",
+                .Doc = kDoc}));
             registry.Add(Setting("overlay.prediction_span", &R::PredictionSpan, {
                 .Label = "Prediction span", .Group = "Orbit overlays",
                 .Tooltip = "Coordinate time to predict ahead, in M (GM/c³ of each body's black hole).",

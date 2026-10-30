@@ -21,11 +21,11 @@ namespace
         return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
     }
 
-    Scene LoadSolarSystem()
+    Scene LoadSolarSystem(const char* file = "solar-system.yaml")
     {
         RegisterComponents();
         Scene scene("SolarSystem");
-        scene.DeserializeFromYaml(ReadFile(std::filesystem::path(MOLEHOLE_SOURCE_DIR) / "templates" / "solar-system.yaml"));
+        scene.DeserializeFromYaml(ReadFile(std::filesystem::path(MOLEHOLE_SOURCE_DIR) / "templates" / file));
         return scene;
     }
 
@@ -74,16 +74,17 @@ TEST_CASE("The solar-system template holds the bodies at the ephemeris epoch", "
     const auto names = ByName(scene);
     const auto& registry = scene.Registry();
 
-    std::size_t bodies = 0;
+    std::size_t bodies = 0, spheres = 0;
     for (auto [entity, body] : registry.view<const NBodyComponent>().each())
     {
         ++bodies;
         INFO(registry.get<MetadataComponent>(entity).Name);
-        CHECK(registry.all_of<SphereComponent>(entity));
         CHECK(registry.all_of<TransformComponent>(entity));
+        if (registry.all_of<SphereComponent>(entity)) ++spheres;
         CHECK(body.GM >= 0.0);
     }
-    CHECK(bodies == 52);
+    CHECK(bodies >= 74);
+    CHECK(spheres <= 62); // the renderer draws at most 64 spheres: the biggest bodies get one
 
     for (const char* name : {"Sun", "Mercury", "Venus", "Earth", "Moon", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune",
                              "Pluto", "Charon", "Io", "Europa", "Ganymede", "Callisto", "Titan", "Triton", "Ceres", "Eris"})
@@ -211,4 +212,34 @@ TEST_CASE("Thirty days of the solar system against JPL Horizons", "[.][simulatio
     CHECK(relative("Titan", "Saturn", "titan", "saturn") < 2e3);
     CHECK(relative("Phobos", "Mars", "phobos", "mars") < 1e6);   // Mars' C22 and higher terms are not modelled
     CHECK(relative("Charon", "Pluto", "charon", "pluto") < 1e5);
+}
+
+TEST_CASE("The black-hole template is the same system with the Sun replaced by a 1 solar-mass hole", "[simulation][scene][nbody][solar-system]")
+{
+    auto real = LoadSolarSystem();
+    auto scene = LoadSolarSystem("solar-system-black-hole.yaml");
+    const auto names = ByName(scene);
+    const auto realNames = ByName(real);
+    const auto& registry = scene.Registry();
+
+    REQUIRE(names.contains("Black hole"));
+    CHECK_FALSE(names.contains("Sun"));
+    const auto hole = names.at("Black hole");
+    REQUIRE(registry.all_of<BlackHoleComponent>(hole));
+    CHECK_FALSE(registry.all_of<StarComponent>(hole));
+    CHECK(registry.get<NBodyComponent>(hole).GM == Approx(1.32712440041279419e20).epsilon(1e-12));
+    CHECK(registry.get<BlackHoleComponent>(hole).Mass * 6.6743e-11 == Approx(1.32712440041279419e20).epsilon(1e-6));
+    CHECK(registry.get<BlackHoleComponent>(hole).Spin == 0.0);
+
+    // Same gravity, same orbits: every other body keeps its state
+    CHECK(PositionOf(scene, hole) == PositionOf(real, realNames.at("Sun")));
+    for (const char* name : {"Mercury", "Earth", "Moon", "Jupiter", "Io", "Neptune"})
+    {
+        CHECK(PositionOf(scene, names.at(name)) == PositionOf(real, realNames.at(name)));
+        CHECK(registry.get<NBodyComponent>(names.at(name)).Velocity == real.Registry().get<NBodyComponent>(realNames.at(name)).Velocity);
+    }
+    // The hole is the light: a point light of the Sun's irradiance at 1 AU
+    const auto& light = registry.get<LightComponent>(hole);
+    CHECK(light.Kind == BodyLightKind::Point);
+    CHECK(light.ReferenceDistance == Approx(kAuM));
 }

@@ -2,7 +2,8 @@
 """Write templates/solar-system.yaml from tools/data/ephemeris_<epoch>.json and tools/solar_system_bodies.py.
 
   tools/fetch_ephemeris.py       # once, needs the network (JPL Horizons)
-  tools/gen_solar_system.py      # offline, deterministic
+  tools/gen_solar_system.py      # offline, deterministic; writes templates/solar-system.yaml
+  tools/gen_solar_system.py --black-hole   # templates/solar-system-black-hole.yaml: the Sun replaced by a 1 solar-mass hole
 
 Frame. Horizons gives ecliptic J2000 axes (x to the vernal equinox, z to the ecliptic north pole). The scene is Y up, so
 scene (x, y, z) = ecliptic (x, z, -y), a proper rotation: the ecliptic is the X-Z plane and +Y is ecliptic north. The
@@ -28,6 +29,17 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OBLIQUITY = math.radians(23.4392911)
 JD_J2000 = 2451545.0
 GUID_BASE = 7500000000000000000
+GUID_BASE_BLACK_HOLE = 7600000000000000000
+TIME_SCALE = 14400
+# The renderer draws at most 64 spheres (kMaxSpheres in src/rendering/render_data.cppm); the biggest bodies get one,
+# the rest are simulated and drawn as orbit-line markers only
+SPHERE_BUDGET = 62
+G = 6.67430e-11                 # CODATA 2022
+M_P = 1.67262192595e-27         # kg, CODATA 2022
+SIGMA_T = 6.6524587051e-29      # m^2, CODATA 2022
+C = 299792458.0
+L_SUN = 3.828e26                # W, IAU 2015 B3
+BLACK_HOLE_ARM_M = 6.0e4        # about 40 r_g of the 1 solar-mass hole
 
 
 def ecliptic_to_scene(v):
@@ -125,30 +137,36 @@ def atmosphere(kind, radius_m):
     return table.get(kind)
 
 
-# (body id, label, arm length m, pitch deg, primary): about four body radii, so the body fills a third of the view
+# (body id, label, arm length m, pitch deg, phase angle deg): the arm is about four body radii, so the body fills a third
+# of the view. The phase angle is the Sun-body-camera angle (0 = fully lit, 90 = half, 180 = new); None = default 40 deg.
 CAMERAS = [
-    ("earth", "Earth", 2.6e7, 20, True),
-    ("moon", "Moon", 7.0e6, 15, False),
-    ("sun", "Sun", 2.8e9, 10, False),
-    ("mercury", "Mercury", 1.0e7, 15, False),
-    ("venus", "Venus", 2.6e7, 15, False),
-    ("mars", "Mars", 1.4e7, 15, False),
-    ("phobos", "Phobos", 6.0e4, 20, False),
-    ("jupiter", "Jupiter", 3.2e8, 12, False),
-    ("io", "Io", 7.0e6, 15, False),
-    ("europa", "Europa", 6.5e6, 15, False),
-    ("ganymede", "Ganymede", 1.1e7, 15, False),
-    ("callisto", "Callisto", 1.0e7, 15, False),
-    ("saturn", "Saturn", 4.0e8, 15, False),
-    ("titan", "Titan", 1.0e7, 15, False),
-    ("enceladus", "Enceladus", 1.0e6, 15, False),
-    ("uranus", "Uranus", 1.0e8, 15, False),
-    ("neptune", "Neptune", 1.0e8, 15, False),
-    ("triton", "Triton", 5.5e6, 15, False),
-    ("pluto", "Pluto", 5.0e6, 15, False),
-    ("charon", "Charon", 2.4e6, 15, False),
-    ("ceres", "Ceres", 2.0e6, 15, False),
-    ("halley", "Halley", 2.0e4, 15, False),
+    ("earth", "Earth", 2.6e7, 20, 80),
+    ("earth", "Earth and Moon", 9.0e8, 35, 70),
+    ("sun", "Inner solar system", 8.0e11, 55, None),
+    ("sun", "Outer solar system", 1.3e13, 45, None),
+    ("moon", "Moon", 7.0e6, 15, None),
+    ("sun", "Sun", 2.8e9, 10, None),
+    ("mercury", "Mercury", 1.0e7, 15, None),
+    ("venus", "Venus", 2.6e7, 15, None),
+    ("mars", "Mars", 1.4e7, 15, None),
+    ("phobos", "Phobos", 6.0e4, 20, None),
+    ("jupiter", "Jupiter", 3.2e8, 12, None),
+    ("jupiter", "Jupiter system", 3.2e9, 25, 60),
+    ("io", "Io", 7.0e6, 15, None),
+    ("europa", "Europa", 6.5e6, 15, None),
+    ("ganymede", "Ganymede", 1.1e7, 15, None),
+    ("callisto", "Callisto", 1.0e7, 15, None),
+    ("saturn", "Saturn", 4.0e8, 15, None),
+    ("saturn", "Saturn system", 3.0e9, 25, None),
+    ("titan", "Titan", 1.0e7, 15, None),
+    ("enceladus", "Enceladus", 1.0e6, 15, None),
+    ("uranus", "Uranus", 1.0e8, 15, None),
+    ("neptune", "Neptune", 1.0e8, 15, None),
+    ("triton", "Triton", 5.5e6, 15, None),
+    ("pluto", "Pluto", 5.0e6, 15, None),
+    ("charon", "Charon", 2.4e6, 15, None),
+    ("ceres", "Ceres", 2.0e6, 15, None),
+    ("halley", "Halley", 2.0e4, 15, None),
 ]
 
 
@@ -180,14 +198,15 @@ def pole_of(key):
     return pole_vector(*body["pole"]) if body["pole"] else None
 
 
-def view_angles(key, target, sun, pole, pitch):
+def view_angles(key, target, sun, pole, pitch, phase=None):
     """Yaw and pitch (deg, the spring-arm convention: direction = (cos p sin y, sin p, cos p cos y)) of a camera that sees
-    the body about three quarters lit: 40 deg round from the Sun's direction. A ringed body is seen 25 deg above its ring
+    the body at the phase angle `phase` (default: 40 deg round from the Sun's direction, about three quarters lit). A ringed body is seen 25 deg above its ring
     plane instead, so the rings open."""
     if key == "sun":
         return 25.0, pitch
     to_sun = unit(tuple(sun[i] - target[i] for i in range(3)))
-    yaw = math.degrees(math.atan2(to_sun[0], to_sun[2])) + 40.0
+    offset = 40.0 if phase is None else math.degrees(math.acos(min(1.0, math.cos(math.radians(phase)) / math.cos(math.radians(pitch)))))
+    yaw = math.degrees(math.atan2(to_sun[0], to_sun[2])) + offset
     if key == "saturn" and pole is not None:
         horizontal = tuple(to_sun[i] - dot(to_sun, pole) * pole[i] for i in range(3))
         horizontal = unit(horizontal)
@@ -200,7 +219,7 @@ def view_angles(key, target, sun, pole, pitch):
     return yaw, pitch
 
 
-def build(epoch, primary=None):
+def build(epoch, primary=None, black_hole=False):
     path = os.path.join(ROOT, "tools", "data", f"ephemeris_{epoch}.json")
     with open(path) as f:
         data = json.load(f)
@@ -208,19 +227,28 @@ def build(epoch, primary=None):
     jd = next(iter(states.values()))["jd"]
     lines = []
     out = lines.append
-    out("# Solar system on JPL DE441 / SBDB state vectors at " + epoch + " 00:00 TDB (JD " + repr(jd) + ").")
+    title = "Solar system with a black hole" if black_hole else "Solar system"
+    out("# " + title + " on JPL DE441 / SBDB state vectors at " + epoch + " 00:00 TDB (JD " + repr(jd) + ").")
     out("# Generated by tools/gen_solar_system.py from tools/data/ephemeris_" + epoch + ".json; do not edit by hand,")
     out("# change tools/solar_system_bodies.py and run the generator again. Background: docs/notes/solar_system.md")
-    out("# Needs the maps from tools/fetch_textures.py. Run with 'Play': the N-Body module integrates every body with")
-    out("# 1PN relativity and the J2 of the oblate planets; TimeScale is simulated seconds per second (1 hour per second).")
-    out("Scene: Solar system")
+    out("# Needs the maps from tools/fetch_textures.py (groups core and moons). Run with 'Play': the N-Body module integrates")
+    out("# every body with 1PN relativity and the J2 of the oblate planets; TimeScale is simulated seconds per second (4 hours per second).")
+    if black_hole:
+        out("# The Sun is replaced by a non-rotating black hole of the same GM, so every orbit is unchanged. Light: a point light of")
+        out("# the Sun's irradiance at 1 AU, as if the hole were fed at L = 1 L_sun (Mdot = L / (eta c^2), L/L_Edd = 3e-5); a hole")
+        out("# that shines at the Eddington limit (1.26e31 W) would give the planets 33,000 times the sunlight.")
+    out("Scene: " + title)
     out("SchemaVersion: 2")
-    out("TimeScale: 3600")
+    out(f"TimeScale: {TIME_SCALE}")
     out("Entities:")
 
     guid = {}
     for index, body in enumerate(BODIES):
-        guid[body["id"]] = GUID_BASE + 1 + index
+        guid[body["id"]] = (GUID_BASE_BLACK_HOLE if black_hole else GUID_BASE) + 1 + index
+
+    drawable = [b for b in BODIES if b["kind"] != "probe"]
+    drawable.sort(key=lambda b: (b["kind"] != "star", -b["radius"]))
+    spheres = {b["id"] for b in drawable[:SPHERE_BUDGET]}
 
     def entity_header(g, name, tag):
         out(f"  - Guid: {g}")
@@ -244,8 +272,12 @@ def build(epoch, primary=None):
         positions[body["id"]] = p
         radius_m = body["radius"] * 1000.0
         g = guid[body["id"]]
-        tag = "Star" if body["kind"] == "star" else "Sphere"
-        entity_header(g, body["name"], tag)
+        is_sun = body["kind"] == "star"
+        has_sphere = body["id"] in spheres
+        if is_sun and black_hole:
+            entity_header(g, "Black hole", "BlackHole")
+        else:
+            entity_header(g, body["name"], "Star" if is_sun else "Sphere" if has_sphere else "Body")
         transform(p)
         pole = (0.0, 1.0, 0.0)
         prime = 0.0
@@ -256,21 +288,32 @@ def build(epoch, primary=None):
         elif body["pole"] is not None:
             pole = pole_vector(*body["pole"])
         color = body["color"] or (1.0, 1.0, 1.0)
-        out("      Sphere:")
-        out(f"        Radius: {fmt(radius_m)}")
-        out("        Spin: 0")
-        out(f"        Color: {vec(color)}")
-        out(f"        SpinAxis: {vec(pole)}")
-        out('        TexturePath: ""')
+        if has_sphere and not (is_sun and black_hole):
+            out("      Sphere:")
+            out(f"        Radius: {fmt(radius_m)}")
+            out("        Spin: 0")
+            out(f"        Color: {vec(color)}")
+            out(f"        SpinAxis: {vec(pole)}")
+            out('        TexturePath: ""')
         out("      NBody:")
         out(f"        GM: {fmt(body['gm'] * 1e9)}")
         out(f"        Velocity: {vec(v)}")
-        if body["j2"] and body["kind"] != "star":
+        if body["j2"] and has_sphere and not (is_sun and black_hole):
             out(f"        J2: {fmt(body['j2'])}")
-            out(f"        J2Radius: {fmt(body['j2r'] * 1000.0)}")
-        elif body["j2"]:
-            out(f"        J2: {fmt(body['j2'])}")
-            out(f"        J2Radius: {fmt(radius_m)}")
+            out(f"        J2Radius: {fmt(body['j2r'] * 1000.0 if body['kind'] != 'star' else radius_m)}")
+        if is_sun and black_hole:
+            out("      BlackHole:")
+            out(f"        Mass: {fmt(body['gm'] * 1e9 / G)}")
+            out("        Spin: 0")
+            out("        Charge: 0")
+            out("        SpinAxis: [0, 1, 0]")
+            out("      Light:")
+            out("        Kind: Point")
+            out("        Color: [0.85, 0.92, 1.0]")
+            out("        Intensity: 3.14159")
+            out("        Direction: [1, 0, 0]")
+            out(f"        ReferenceDistance: {fmt(AU_KM * 1000.0)}")
+            continue
         if body["kind"] == "star":
             out("      Star:")
             out("        Teff: 5772")
@@ -284,7 +327,7 @@ def build(epoch, primary=None):
             out("        Direction: [1, 0, 0]")
             out(f"        ReferenceDistance: {fmt(AU_KM * 1000.0)}")
             continue
-        if body["kind"] == "probe":
+        if not has_sphere:
             continue
         tex = body["tex"]
         out("      Surface:")
@@ -348,20 +391,21 @@ def build(epoch, primary=None):
             out("        Opacity: 1")
 
     # ---- cameras: each rides the spring-arm script around a body (scripts/spring_arm_camera.luau) -----------------
-    for index, (key, label, arm_m, pitch, is_primary) in enumerate(CAMERAS):
+    cameras = [("sun", "Black hole", BLACK_HOLE_ARM_M, 20, None)] + [c for c in CAMERAS if c[1] != "Sun"] if black_hole else CAMERAS
+    for index, (key, label, arm_m, pitch, phase) in enumerate(cameras):
         target = positions[key]
-        yaw, pitch = view_angles(key, target, positions["sun"], pole_of(key), pitch)
+        yaw, pitch = view_angles(key, target, positions["sun"], pole_of(key), pitch, phase)
         d = (math.cos(math.radians(pitch)) * math.sin(math.radians(yaw)), math.sin(math.radians(pitch)),
              math.cos(math.radians(pitch)) * math.cos(math.radians(yaw)))
         position = tuple(target[i] + d[i] * arm_m for i in range(3))
-        g = GUID_BASE + 1000 + index
+        g = (GUID_BASE_BLACK_HOLE if black_hole else GUID_BASE) + 1000 + index
         entity_header(g, "Camera: " + label, "Camera")
         transform(position, look_at_rotation(position, target))
         out("      Camera:")
         out("        Fov: 45")
         out("        NearPlane: 10")
         out("        FarPlane: {value: 1000, unit: AU}")
-        out(f"        Primary: {'true' if (key == primary if primary else is_primary) else 'false'}")
+        out(f"        Primary: {'true' if (label == primary if primary else index == 0) else 'false'}")
         out("      Scripts:")
         out("        - Name: spring_arm_camera")
         out("          Props:")
@@ -374,27 +418,58 @@ def build(epoch, primary=None):
         out(f"            Target: {guid[key]}")
         out(f"            Yaw: {fmt(round(yaw, 3))}")
 
+    clean = "Black hole system (clean)" if black_hole else "Solar system (clean)"
+    main = "Black hole system" if black_hole else "Solar system"
+    base = "Flat"
     out("Render:")
     out("  Version: 1")
     out("  Contexts:")
-    out("    Edit: Solar system")
-    out("    Play: Solar system")
+    out(f"    Edit: {main}")
+    out(f"    Play: {main}")
     out("    Reference: Reference")
-    out("    Export: Solar system")
+    out(f"    Export: {clean}")
     out("  Profiles:")
-    out("    - Name: Solar system")
-    out("      Description: " + json.dumps("Straight rays (no black hole), the Sun as the point light, automatic exposure so every planet shows from Mercury to Neptune."))
-    out("      Base: Flat")
-    out("      Set:")
-    out("        post.tonemap: Aces")
-    out("        post.exposure_mode: Auto")
-    out("        post.exposure_key: 0.09")
-    out("        post.bloom: true")
-    out("        post.bloom_intensity: 1.5")
-    out("        overlay.object_paths: true")
-    out("    - Name: Solar system (sunny 16)")
+    lensing = "straight rays, the hole drawn as its analytic shadow, photon ring and disk" if black_hole else "straight rays (no black hole)"
+    light = "the hole's point light" if black_hole else "the Sun as the point light"
+    for name, orbits in ((main, True), (clean, False)):
+        out(f"    - Name: {name}")
+        out("      Description: " + json.dumps(f"{lensing.capitalize()}, {light}, automatic exposure so every planet shows from Mercury to Neptune"
+                                               + (", orbit lines and markers on." if orbits else ", no overlays.")))
+        out(f"      Base: {base}")
+        out("      Set:")
+        out("        post.tonemap: Aces")
+        out("        post.exposure_mode: Auto")
+        out("        post.exposure_key: 0.09")
+        out("        post.bloom: true")
+        out("        post.bloom_intensity: 1.5")
+        out("        post.lens_flare: false")
+        if orbits:
+            out("        overlay.body_orbits: true")
+    if black_hole:
+        out("    - Name: Black hole close-up")
+        out("      Description: " + json.dumps("Geodesic integration around the hole with the planets hidden: with them in the scene the lensing kernels take seconds per frame (every ray is tested against all 62 spheres). Use it with the Black hole camera."))
+        out("      Base: Traced")
+        out("      Set:")
+        out("        objects.spheres: false")
+        out("        post.tonemap: Aces")
+        out("        post.exposure_mode: Auto")
+        out("        post.exposure_key: 0.09")
+        out("        post.bloom: true")
+        out("        post.lens_flare: false")
+    if not black_hole:
+        out(f"    - Name: {main} (outer planets)")
+        out("      Description: " + json.dumps("Fixed exposure +3 EV for Jupiter and beyond: they get 4 % (Jupiter) to 0.1 % (Neptune) of the light Earth does, and automatic exposure would lift the starry sky with them."))
+        out("      Base: Flat")
+        out("      Set:")
+        out("        post.tonemap: Aces")
+        out("        post.exposure_mode: Manual")
+        out("        post.exposure: 3")
+        out("        post.bloom: true")
+        out("        post.bloom_intensity: 1.5")
+        out("        post.lens_flare: false")
+    out(f"    - Name: {main} (sunny 16)")
     out("      Description: " + json.dumps("A physical camera at f/16, 1/100 s, ISO 100: sunlit scenes at 1 AU and the Sun's disc are exposed right, the outer planets fall dark as they do to a real camera."))
-    out("      Base: Flat")
+    out(f"      Base: {base}")
     out("      Set:")
     out("        post.tonemap: Aces")
     out("        post.exposure_mode: Physical")
@@ -403,16 +478,20 @@ def build(epoch, primary=None):
     out("        post.camera_iso: 100")
     out("        post.bloom: true")
     out("        post.bloom_intensity: 1.5")
+    out("        post.lens_flare: false")
     return "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--epoch", default="2026-10-22")
-    parser.add_argument("--primary", help="body id whose camera is the primary one (default: earth)")
-    parser.add_argument("--output", default=os.path.join(ROOT, "templates", "solar-system.yaml"))
+    parser.add_argument("--primary", help="label of the camera that is the primary one (default: the first)")
+    parser.add_argument("--black-hole", action="store_true", help="replace the Sun by a 1 solar-mass black hole")
+    parser.add_argument("--output")
     args = parser.parse_args()
-    text = build(args.epoch, args.primary)
+    if not args.output:
+        args.output = os.path.join(ROOT, "templates", "solar-system-black-hole.yaml" if args.black_hole else "solar-system.yaml")
+    text = build(args.epoch, args.primary, args.black_hole)
     with open(args.output, "w") as f:
         f.write(text)
     print("wrote", args.output, f"({text.count(chr(10))} lines)")

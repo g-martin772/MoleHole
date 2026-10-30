@@ -1,17 +1,20 @@
 # The solar system scene: ephemeris, N-body dynamics and bodies
 
-`templates/solar-system.yaml` holds 52 bodies at their real positions and velocities on 2026-10-22 00:00 TDB: the Sun,
-the eight planets, 18 of their moons, Pluto and Charon, Ceres, Eris, Haumea, Makemake, three large asteroids, three
-comets, two interstellar visitors and six spacecraft. While the simulation plays, every body moves under the pull of
-all the others, with the first post-Newtonian correction of general relativity and the oblateness of the planets.
-The scene is generated, not authored: edit `tools/solar_system_bodies.py` and run the generator again.
+`templates/solar-system.yaml` holds 98 bodies at their real positions and velocities on 2026-10-22 00:00 TDB: the Sun,
+the eight planets, 70 moons (Earth 1, Mars 2, Jupiter 16, Saturn 23, Uranus 15, Neptune 8, Pluto 5), Ceres, Eris, Haumea,
+Makemake, three large asteroids, three comets, two interstellar visitors and six spacecraft. While the simulation plays,
+every body moves under the pull of all the others, with the first post-Newtonian correction of general relativity and
+the oblateness of the planets. `templates/solar-system-black-hole.yaml` is the same system with the Sun replaced by a
+1 solar-mass black hole (section 6). Both are generated, not authored: edit `tools/solar_system_bodies.py` or
+`tools/gen_solar_system.py` and run the generator again (`--black-hole` for the second template).
 
 Code:
 - `NBodyComponent` in `src/simulation/components.cppm` (`GM`, `Velocity`, `J2`, `J2Radius`)
 - `NBodySystem`, `NBodyAcceleration`, `NBodyStep`, `NBodyAdvance`, `NBodyEnergy` and `NBodySimulationModule` in `src/simulation/nbody_module.cppm`
 - `BodyRotationModule` (`src/simulation/body_rotation_module.cppm`) turns the Surfaces, negative periods turn them backwards
 - `tools/fetch_ephemeris.py` (JPL Horizons, cached in `tools/data/ephemeris_2026-10-22.json`),
-  `tools/solar_system_bodies.py` (physical data), `tools/gen_solar_system.py` (writes the scene)
+  `tools/solar_system_bodies.py` (physical data), `tools/gen_solar_system.py` (writes both scenes)
+- `BodyOrbitsOverlay` in `src/rendering/body_orbits.cppm` (the orbit lines, setting `overlay.body_orbits`, section 7)
 
 Tests: `tests/unit/simulation/nbody_tests.cpp` (integrator order, conservation laws, Mercury's perihelion, J2 nodal
 precession, the module on a scene) and `tests/unit/simulation/solar_system_scene_tests.cpp` (the scene itself).
@@ -29,8 +32,10 @@ To regenerate: `tools/fetch_ephemeris.py --epoch YYYY-MM-DD` (needs the network)
   barycentre, so the Sun sits about 1.1 million km from it.
 - Everything is SI. Gravity is stored as `GM` in m³/s², not as a mass: the products are known to 10 digits from the
   ephemerides, while G alone is known to five, so converting through kg would throw away the accuracy.
-- The scene's `TimeScale` is 3600: one second of wall time is one simulated hour. The tick is 1/60 s, so a tick is a minute
-  of simulated time. Raise it for the outer planets (the simulation window's time-scale control).
+- The scene's `TimeScale` is 14400: one second of wall time is four simulated hours. The tick is 1/60 s, so a tick is
+  4 minutes of simulated time (two 128 s integrator steps). Raise it in the simulation window; a Debug build spends about
+  7 ms per step on the 98 bodies, so it keeps up with real time only up to a few hours per second (a Release build
+  is faster, not measured). Past 4096 steps per tick the integrator takes longer steps.
 
 ## 2. Dynamics
 
@@ -71,7 +76,7 @@ Numbers from `tests/unit/simulation/nbody_tests.cpp` (see the file for the exact
 | The scene for 1 day (the default suite) | Newtonian energy change below 1e-8, momentum change below 1e-9 |
 | The scene for 30 days against Horizons (`[slow]`) | see below |
 
-**Against JPL Horizons after 30 days** (2026-11-21 00:00 TDB, state vectors of the scene advanced by the module at its default
+**Against JPL Horizons after 30 days** (table measured with the first 52 bodies; the `[slow]` test passes with the 98 and the IAU 2015 poles, 6 min in a Debug build, the errors were not tabulated again) (2026-11-21 00:00 TDB, state vectors of the scene advanced by the module at its default
 time scale; positions in the barycentric frame, metres):
 
 | Body | Error | Body (relative to its planet) | Error |
@@ -113,10 +118,28 @@ the same face looks at the planet: Io's phase comes out right at the epoch to th
 rotate chaotically and are not turned.
 
 **Maps.** Real maps for Mercury, Venus (the cloud deck: the surface is not visible from space), Earth, the Moon, Mars,
-Jupiter, Saturn with its rings, Uranus and Neptune, from Solar System Scope (CC BY 4.0, `texture_sources.md`). Earth also
-has relief, night lights, clouds and the atmosphere. Every other body shows a flat albedo colour from the literature
-(`tint` in the table). The "fictional" maps of the dwarf planets in `assets/textures/` are not used: no spacecraft has
-imaged Eris, Haumea or Makemake.
+Jupiter, Saturn with its rings, Uranus and Neptune from Solar System Scope (CC BY 4.0), and spacecraft mosaics for Io,
+Europa, Ganymede, Callisto, Titan, Enceladus, Mimas, Tethys, Dione, Rhea, Iapetus, Triton, Pluto, Charon, Ceres, Vesta and
+Phobos from USGS Astrogeology (Mimas: NASA Photojournal), group `moons` of the texture manifest (`texture_sources.md`
+section 8; `MOON_MAPS` in `tools/solar_system_bodies.py`). Pluto's, Charon's and Triton's maps have black regions that
+were never imaged. Earth also has relief, night lights, clouds and the atmosphere. Every other body shows a flat albedo
+colour (`tint`, from the literature). The "fictional" maps of the dwarf planets in `assets/textures/` are not used: no
+spacecraft has imaged Eris, Haumea or Makemake. No usable global map exists for Deimos, Amalthea, Hyperion or Phoebe.
+
+**More moons.** The 22 moons beyond the first 18 (Jupiter: Himalia, Thebe, Adrastea, Metis; Saturn: Phoebe, Janus,
+Epimetheus, Helene, Atlas, Prometheus, Pandora, Pan; Neptune: Naiad, Thalassa, Despina, Galatea, Larissa, Proteus; Pluto:
+Nix, Hydra, Kerberos, Styx) take GM and mean radius from the JPL satellite physical parameters table
+(<https://ssd.jpl.nasa.gov/sats/phys_par/>, read on 2026-10-30; Kerberos and Styx have only upper limits and get GM 0).
+A further 24 satellites that JPL gives no physical parameters for use the mean radius of NAIF's `pck00011.tpc` and GM 0,
+so they feel the other bodies and do not pull (Jupiter's Elara, Pasiphae, Sinope, Lysithea, Carme, Ananke, Leda; Saturn's
+Telesto, Calypso, Polydeuces, Methone, Pallene, Anthe, Aegaeon; Uranus' Cordelia, Ophelia, Bianca, Cressida, Desdemona,
+Juliet, Portia, Rosalind, Belinda, Puck). Poles and prime meridians come from the same kernel (IAU 2015, Archinal et al.
+2018); checking the older entries against it changed Mars (the file had the IAU 2009 pole, 1.5° off), Neptune, Titan's W₀,
+Phobos, Deimos and Vesta. Tints of the small moons are rough where the source in the docstring of
+`tools/solar_system_bodies.py` is not cited. Not in the scene: the satellites without a radius in either table (Saturn's
+other irregulars, Uranus' Perdita, Cupid, Mab and irregulars, Hippocamp, Neptune's irregulars, Daphnis for lack of a
+Horizons ephemeris after 2018). A two-body period check of every new moon against the known period gives 0 to 3.4 %
+(Pasiphae, Sun-perturbed); Pluto's small moons orbit the Pluto–Charon barycentre, not Pluto.
 
 **Atmospheres** (`atmosphere()` in the generator): Earth has Hillaire's values. Venus, Mars, Titan and Pluto are
 scattering shells with a haze, Jupiter, Saturn, Uranus and Neptune have a Rayleigh limb (hydrogen scatters weaker per
@@ -124,10 +147,63 @@ molecule than nitrogen) with methane absorbing red in the ice giants. The coeffi
 composition and pressure and are not fits to observations.
 
 **Lighting.** The Sun is both a `Star` (the disc) and a point `Light` of irradiance π at 1 AU falling with the inverse
-square, so Mars gets 43 % and Neptune 0.11 % of Earth's light. The render profile `Solar system` is based on `Flat`
-(straight rays: there is no black hole, so no sky probes and the `Light` is the only source) and uses automatic exposure.
+square, so Mars gets 43 % and Neptune 0.11 % of Earth's light. The render profiles are based on `Flat` (straight rays:
+there is no black hole, so no sky probes and the `Light` is the only source). The Earth's day and night side come out of
+this light alone: the terminator, the sun glint on the ocean and the city lights on the dark side are in
+`docs/solar-system-demo/real-earth.png`. The Flat kernel draws neither Earth's clouds nor atmospheres; the lensed kernels
+do (see the limitations).
 
-## 5. Limitations
+**Spheres.** The renderer draws at most 64 spheres (`kMaxSpheres`, taken in entity order). The generator gives a `Sphere`
+(and `Surface`) to the Sun and the 61 biggest other bodies by radius (`SPHERE_BUDGET`); the rest (spacecraft, comets,
+visitors, the small moons) are `Body` entities with only a Transform and an `NBody`: they move and have orbit lines and
+markers but are not drawn as discs. A moon that is too small for a sphere still has its orbit in the overlay.
+
+**Cameras.** Each camera rides the spring-arm script around a body. The primary one is `Camera: Earth` (phase angle 80°:
+the terminator crosses the disc). Others: Earth and Moon (the whole lunar orbit), Inner solar system (4 AU above the
+ecliptic at 55°), Outer solar system (87 AU), Jupiter system, Saturn system, and one per major body or moon.
+
+**Render profiles.** `Solar system` (Edit and Play): Flat, ACES, automatic exposure, orbit lines. `Solar system (clean)`
+(Export): the same without overlays. `Solar system (outer planets)`: fixed +3 EV, because automatic exposure lifts the
+starry sky as much as the planets (Jupiter gets 3.7 % of Earth's light, Pluto 0.08 %). `Solar system (sunny 16)`: a
+physical camera.
+
+## 5. The black-hole variant
+
+`templates/solar-system-black-hole.yaml` swaps the Sun (a `Star` with a `Light`) for a `BlackHole` of mass GM☉/G =
+1.98841·10³⁰ kg, spin 0, with the same `NBody` GM and velocity, so every orbit is the Sun's: the planets cannot tell the
+difference by gravity. The hole's quadrupole is dropped (J2 = 0). Differences by design:
+
+- **No light.** A real dark hole would leave the planets in the dark. The scene gives the hole a point `Light` of the Sun's
+  irradiance at 1 AU (bluish white, [0.85, 0.92, 1.0]), i.e. it is fed so that L = 1 L☉. That needs Ṁ = L/(ηc²), about
+  7.5·10¹⁰ kg/s with η = 0.057 (Schwarzschild), L/L_Edd = 3·10⁻⁵; at the Eddington limit (1.26·10³¹ W) the planets would get 33,000 times the sunlight. The accretion disk itself is the renderer's own
+  model (`disk.*`).
+- **Nothing to see from far away.** The shadow of a 1 M☉ hole is 8 km across: at 1 AU it is 10 arcseconds, far below a
+  pixel, and the Einstein ring (41″) is as small. The `Inner solar system` view shows the orbits and a dark centre.
+- **Profiles.** `Black hole system` and `(clean)` are Flat with the analytic shadow, photon ring and disk. `Black hole
+  close-up` (Traced, planets hidden, the `Black hole` camera at 40 r_g) is the lensed picture. With the 62 spheres in the
+  scene the lensing kernels (Lensed, Traced) take about 12 s per 640×360 frame as soon as the camera is near the hole
+  (25 ms with `objects.spheres` off): that is why the close-up profile hides the planets.
+
+## 6. Orbit lines (`overlay.body_orbits`)
+
+`BodyOrbitsOverlay` draws, for every N-body body in view, the osculating Keplerian conic of its state about its parent:
+a = −μ/2ε, e from the eccentricity vector, μ = GM_parent + GM_body, sampled evenly in eccentric anomaly (128 segments),
+or for an open orbit the branch out to twice the current distance. The parent is found by Hill spheres: bodies are taken
+by decreasing GM, a body's parent is the nearest heavier body whose sphere r_H = d (m/3M)^(1/3) (about its own parent)
+holds it, else the heaviest body. A moon's ellipse is drawn about its planet's current position, so it travels with it.
+
+- Colours: planets and other bodies orbiting the heaviest one blue, moons orange, open orbits magenta; comets and probes
+  (GM 0) at 45 %. A ring of 5 px marks bodies whose disc is under 6 px.
+- Level of detail: a body outside the view cone is skipped (an off-screen orbit is a line across the picture), orbits
+  under 10 px across are skipped (moons are then on top of their planet), a moon's orbit wider than 1.5 screen heights is
+  skipped. Lines behind a sphere larger than 2 px are cut where the sphere hides them (no depth buffer: the test is done
+  on the CPU against every such sphere).
+- The conic is an instantaneous fit: for the Moon (perturbed by the Sun) it follows the true orbit within a few percent
+  and drifts as the elements change. Lines are not lensed or aberrated (like the other overlays).
+- Tests: `tests/unit/rendering/body_orbits_tests.cpp` (circle, vis-viva ellipse, hyperbola, Hill-sphere parents, orbit
+  planes, level of detail, occlusion, view cone).
+
+## 7. Limitations
 
 - **Spheres.** A planet is a sphere of its equatorial radius; Saturn's flattening (10 %) and Jupiter's (6 %) are in the
   dynamics (J2) but not in the picture. Small moons and asteroids are spheres of their mean radius. Haumea is a
@@ -143,8 +219,8 @@ square, so Mars gets 43 % and Neptune 0.11 % of Earth's light. The render profil
 - **Saturn's rings are almost edge-on to the Sun on this date** (the ring-plane crossing was in 2025), so they are dim and
   cast a thin shadow: that is how the scene looks, not a rendering fault.
 - **Exposure.** The Sun's irradiance falls with the square of the distance: Jupiter gets 3.7 % of the light Earth does, Neptune
-  0.11 %. The profile `Solar system` uses automatic exposure with key 0.09 so every planet shows; the Sun's disc then
-  comes out grey. `Solar system (sunny 16)` is a physical camera (f/16, 1/100 s, ISO 100): a white disc for the Sun, correct
+  0.11 %. The profile `Solar system` uses automatic exposure with key 0.09 so every planet shows (and brightens the starry
+  sky of the outer-planet views: use `(outer planets)`); the Sun's disc then comes out grey. `Solar system (sunny 16)` is a physical camera (f/16, 1/100 s, ISO 100): a white disc for the Sun, correct
   inner-system views, dark outer planets.
 - **Tides, radiation pressure, Yarkovsky, non-gravitational comet forces:** none. The 1PN terms are the only relativity:
   frame dragging, the J2 of the Sun's own relativistic corrections and the 2PN terms are not.
@@ -152,11 +228,17 @@ square, so Mars gets 43 % and Neptune 0.11 % of Earth's light. The render profil
   ~200 perturbing asteroids and tidal terms; this one has neither. Expect planet positions to stay within a few thousand
   km of Horizons for a few years for the inner planets, more for the moons (Moon: Earth's tides and the Sun's quadrupole
   are not modelled).
-- **Time scale and cost.** Seven force evaluations per step, each over 52 bodies and the 39 that pull; one tick at the default
+- **Time scale and cost.** Seven force evaluations per step, each over 98 bodies and the 50 that pull; one tick at the default
   time scale is one step. The cost grows linearly with the time scale (the step is fixed by Phobos' orbit), and has not been
   measured on a release build.
 - **Camera follow lags one tick.** The spring-arm script reads the previous tick's position, so at a high time scale the
   camera trails its target by one tick of the target's motion. The default time scale keeps this below 1 % of the arm.
+
+- **Clouds and atmospheres need a lensed kernel.** The Flat kernel the Solar system profiles use does not draw Earth's cloud
+  layer or any atmosphere. With `--set transport.mode=AnalyticLens` they appear, but that kernel renders the ocean with a
+  speckle noise and a darker terminator in the exports checked, so the templates stay on Flat.
+- **Eris, Haumea, Makemake, Deimos, Amalthea, Hyperion, Phoebe** have no real map in the scene; Venus shows its cloud deck,
+  not the Magellan radar map that is in the manifest.
 
 ## Sources
 
@@ -168,3 +250,8 @@ square, so Mars gets 43 % and Neptune 0.11 % of Earth's light. The render profil
 - Jacobson, R. A. et al. (2006, 2014) and the JPL planetary satellite physical parameters page (<https://ssd.jpl.nasa.gov/sats/phys_par/>). Moon GMs and radii, planetary J2.
 - Hillaire, S. (2020). *A Scalable and Production Ready Sky and Atmosphere Rendering Technique.* Computer Graphics Forum 39(4). Earth's atmosphere coefficients (`atmospheres.md`).
 - Solar System Scope (<https://www.solarsystemscope.com/textures/>), CC BY 4.0. Planet and Moon maps (`texture_sources.md`).
+- JPL Solar System Dynamics, *Planetary Satellite Physical Parameters* (<https://ssd.jpl.nasa.gov/sats/phys_par/>, read 2026-10-30). GM and mean radius of the added moons.
+- NAIF, `pck00011.tpc` (<https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc>), IAU 2015 poles, prime meridians and radii (Archinal et al. 2018).
+- USGS Astrogeology Science Center, planetary map mosaics (<https://astrogeology.usgs.gov/>), and NASA Photojournal PIA17214 (Mimas). Moon and dwarf-planet maps (`texture_sources.md`).
+- Eddington luminosity L_Edd = 4πGMm_pc/σ_T with CODATA 2022 m_p and σ_T; L☉ = 3.828·10²⁶ W (IAU 2015 Resolution B3). The black-hole variant's light.
+- Hill, G. W. (1878), the Hill sphere used for the parent search; Murray, C. D. & Dermott, S. F. (1999), *Solar System Dynamics*, ch. 2 (Keplerian elements from a state vector).

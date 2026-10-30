@@ -11,6 +11,7 @@ import :Rendering.Culling;
 import :Rendering.Lut;
 import :Simulation.Components;
 import :Rendering.OrbitOverlays;
+import :Rendering.BodyOrbits;
 import std;
 import vulkan;
 import glm;
@@ -1310,7 +1311,7 @@ namespace MoleHole
             [[nodiscard]] std::string_view Name() const override { return "OverlayGeometry"; }
             [[nodiscard]] bool Enabled(const RenderSettings& settings) const override
             {
-                return settings.ShowObjectPaths || settings.ShowCharacteristicRadii || settings.ShowPredictedOrbits;
+                return settings.ShowObjectPaths || settings.ShowCharacteristicRadii || settings.ShowPredictedOrbits || settings.ShowBodyOrbits;
             }
 
             void Record(RenderFrameContext& ctx) override
@@ -1329,6 +1330,20 @@ namespace MoleHole
                     m_Radii = CharacteristicRadiiOverlay(ctx.Scene, 96, primary ? primary->first : 0);
                 }
                 if (ctx.Settings.ShowPredictedOrbits) UpdatePredictions(ctx.Scene, ctx.Settings.PredictionSpan, ctx.Inputs.ObserverGuid);
+                m_BodyOrbits.clear();
+                if (ctx.Settings.ShowBodyOrbits)
+                {
+                    const auto& camera = ctx.ViewCamera;
+                    m_BodyOrbits = BodyOrbitsOverlay(
+                        ctx.Scene,
+                        {.Position = camera.GetPosition(), .Front = camera.GetFront(), .Right = camera.GetRight(), .Up = camera.GetUp(),
+                         .PixelAngle = 2.0 * std::tan(0.5 * glm::radians(static_cast<double>(camera.GetFov()))) /
+                                       static_cast<double>(std::max(ctx.TraceExtent.height, 1u)),
+                         .ViewHalfAngle = std::atan(std::tan(0.5 * glm::radians(static_cast<double>(camera.GetFov()))) *
+                                                    std::hypot(1.0, static_cast<double>(ctx.TraceExtent.width) /
+                                                                        static_cast<double>(std::max(ctx.TraceExtent.height, 1u)))),
+                         .ViewHeightPixels = static_cast<double>(ctx.TraceExtent.height)});
+                }
 
                 std::uint64_t pathRevision = 0;
                 if (ctx.Settings.ShowObjectPaths)
@@ -1342,15 +1357,19 @@ namespace MoleHole
                 key.Value(ctx.Settings.ShowCharacteristicRadii);
                 key.Value(ctx.Settings.ShowPredictedOrbits);
                 key.Value(ctx.Settings.ShowObjectPaths);
+                key.Value(ctx.Settings.ShowBodyOrbits);
                 key.Value(ctx.Frame.OriginM);
                 key.Value(ctx.Frame.LengthUnitM);
                 key.Value(ctx.Settings.ShowPredictedOrbits ? m_PredictionRevision : std::uint64_t{0});
                 key.Value(pathRevision);
-                for (const auto& segment : m_Radii)
+                for (const auto* lines : {&m_Radii, &m_BodyOrbits})
                 {
-                    key.Value(segment.A);
-                    key.Value(segment.B);
-                    key.Value(segment.Color);
+                    for (const auto& segment : *lines)
+                    {
+                        key.Value(segment.A);
+                        key.Value(segment.B);
+                        key.Value(segment.Color);
+                    }
                 }
                 if (hole)
                 {
@@ -1373,6 +1392,7 @@ namespace MoleHole
                     {
                         for (const auto& segment : m_Predictions) m_Render.push_back({ctx.Frame.ToRender(segment.A), ctx.Frame.ToRender(segment.B), segment.Color});
                     }
+                    for (const auto& segment : m_BodyOrbits) m_Render.push_back({ctx.Frame.ToRender(segment.A), ctx.Frame.ToRender(segment.B), segment.Color});
                     if (ctx.Settings.ShowObjectPaths)
                     {
                         std::scoped_lock lock(m_Mutex);
@@ -1472,6 +1492,7 @@ namespace MoleHole
             std::vector<OverlaySegment> m_Predictions;
             std::uint64_t m_PredictionRevision{0};
             std::vector<OverlaySegment> m_Radii;
+            std::vector<OverlaySegment> m_BodyOrbits;
             std::vector<RenderSegment> m_Render;
             std::vector<RenderSegment> m_Simplified;
             std::vector<RenderSegment> m_Raster;
@@ -1493,7 +1514,7 @@ namespace MoleHole
             [[nodiscard]] std::string_view Name() const override { return "OverlayLines"; }
             [[nodiscard]] bool Enabled(const RenderSettings& settings) const override
             {
-                return settings.ShowObjectPaths || settings.ShowCharacteristicRadii || settings.ShowPredictedOrbits;
+                return settings.ShowObjectPaths || settings.ShowCharacteristicRadii || settings.ShowPredictedOrbits || settings.ShowBodyOrbits;
             }
 
             void Record(RenderFrameContext& ctx) override

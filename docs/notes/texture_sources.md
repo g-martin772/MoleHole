@@ -371,3 +371,46 @@ textures:
     attribution: "NASA Earth Observatory / Visible Earth, cloud_combined (contents not verified)"
     target: earth/nasa/clouds_2k.jpg
 ```
+
+---
+
+## 8. Moons and dwarf planets (manifest group `moons`)
+
+Added 2026-10-30. Real spacecraft mosaics, all equirectangular 2:1 (checked from the TIFF headers and by looking at
+every result). Source host: USGS Astrogeology (`planetarymaps.usgs.gov/mosaic/*.tif`, product pages under
+`astrogeology.usgs.gov/search/map/<slug>`), except Mimas (NASA Photojournal PIA17214). Licence per USGS record:
+public domain or no access constraints, "please cite authors"; the underlying data are NASA PDS products.
+The TIFFs are 8 to 360 MB and stb_image cannot read them, so `tools/fetch_textures.py` downloads the TIFF, checks
+`source_sha256`, and writes a JPEG q90 of at most `max_width` pixels (`sha256` is the hash of that final file and
+only a warning if another Pillow/libjpeg build encodes differently).
+
+| Body | Target (`assets/textures/`) | Source product | Final size | Caveats |
+|---|---|---|---|---|
+| Io | `io/albedo_8k.jpg` | Galileo SSI + Voyager colour-merged global mosaic 1 km (`io_galileo_ssi_voyager_color_merged_global_mosaic_1km`) | 8192x4096 RGB | colour merge, real; smooth at the poles |
+| Europa | `europa/albedo_8k.jpg` | Voyager + Galileo SSI global mosaic 500 m (`europa_voyager_galileo_ssi_global_mosaic_500m`) | 8192x4096 grey | grey-scale; visible resolution seams |
+| Ganymede | `ganymede/albedo_8k.jpg` | Voyager + Galileo SSI global mosaic 1 km (`ganymede_voyager_galileo_ssi_global_mosaic_1km`) | 8192x4096 grey | grey-scale; seams, dark blank corners at the poles |
+| Callisto | `callisto/albedo_8k.jpg` | Galileo SSI + Voyager global mosaic 1 km (`callisto_galileo_voyager_global_mosaic_1km`) | 8192x4096 grey | grey-scale; tile seams, black polar gap |
+| Titan | `titan/albedo_4k.jpg` | Cassini ISS global mosaic 4 km (`titan_cassini_iss_global_mosaic_4005m`) | 4040x2020 grey | near-IR through the haze (not visible colour); patchwork of tiles; 450 m near-global mosaic exists but is 1.5 GB |
+| Enceladus | `enceladus/albedo_8k.jpg` | Cassini ISS global mosaic 110 m (`enceladus_cassini_global_mosaic_110m`) | 8192x4096 grey | grey-scale; polar smearing |
+| Mimas | `mimas/albedo_6k.jpg` | NASA Photojournal PIA17214, Cassini global map June 2017 (216 m/px) | 5760x2880 grey | file used unchanged; polar smearing; NASA media licence (not USGS) |
+| Tethys | `tethys/albedo_8k.jpg` | Cassini ISS global mosaic 293 m (`tethys_cassini_global_mosaic_293m`) | 8192x4096 grey | grey-scale |
+| Dione | `dione/albedo_8k.jpg` | Cassini + Voyager global mosaic 154 m (`dione_cassini_voyager_global_mosaic_154m`) | 8192x4096 grey | source 23040x11520 (265 MB); grey-scale |
+| Rhea | `rhea/albedo_8k.jpg` | Cassini + Voyager global mosaic 417 m (file `Rhea_Cassini_Voyager_mosaic_global_417m.tif`; the USGS page `rhea_cassini_voyager_global_mosaic_417m` links the older 833 m Voyager file) | 8192x4096 grey | grey-scale |
+| Iapetus | `iapetus/albedo_6k.jpg` | Cassini + Voyager global mosaic (`iapetus_cassini_voyager_global_mosaic_803m`, file name says 783 m) | 5760x2880 grey | grey-scale; re-encoded only |
+| Triton | `triton/albedo_8k.jpg` | Voyager 2 global colour mosaic 600 m, global fill (`triton_voyager_2_global_color_mosaic_600m`) | 8192x4096 RGB | the north (roughly 30 to 40 % of the map) was never imaged: black; the rest is very blurry in places |
+| Pluto | `pluto/albedo_8k.jpg` | New Horizons LORRI+MVIC global mosaic 300 m, Jul 2017 (`pluto_new_horizons_lorri_mvic_global_mosaic_300m`) | 8192x4096 grey | source 24888x12444 (310 MB); southern polar night is black (about a third of the map); Sputnik Planitia is visible |
+| Charon | `charon/albedo_8k.jpg` | New Horizons LORRI+MVIC global mosaic 300 m, Jul 2017 (`charon_new_horizons_lorri_mvic_global_mosaic_300m`) | 8192x4096 grey | southern third of the map is black (never lit/imaged); the far side is low resolution |
+| Ceres | `ceres/albedo_7k.jpg` | Dawn FC global mosaic 400 m (`ceres_dawn_fc_global_mosaic_400m`) | 7383x3691 grey | not 8192 wide in the source; thin black strip at the south pole |
+| Vesta | `vesta/albedo_8k.jpg` | Dawn FC HAMO global mosaic (`vesta_dawn_fc_hamo_global_mosaic_60m`) | 8192x4096 grey | source 26704x13352 (357 MB); north polar night is black |
+| Phobos | `phobos/albedo_6k.jpg` | Mars Express SRC + Viking global mosaic 16 ppd (`phobos_mars_express_src_global_mosaic_12m`) | 5760x2880 grey | ESA/DLR/FU Berlin data, labelled public domain by USGS only; black patches where there is no coverage; re-encoded only |
+| Venus (surface) | `venus/albedo_6k.jpg` | Magellan C3-MDIR synthetic colour mosaic 4641 m (`venus_magellan_global_c3_mdir_synthetic_color_mosaic_4641m`) | 6144x3072 RGB | radar backscatter with Venera-derived synthetic colour, not optical; resized from 8192 to stay near 10 MB |
+
+Not available as a real map:
+
+- Eris, Haumea, Makemake: never imaged beyond a few pixels. The `4k_*_fictional.jpg` files are artists' inventions.
+- Deimos: only the old USGS/Stooke cylindrical maps on solarviews.com, whose site-wide copyright notice contradicts the
+  per-file "public domain" label, so not used. No Deimos mosaic on astrogeology.usgs.gov.
+- Amalthea, Hyperion: no global mosaic exists (only nomenclature reference maps). Phoebe: the Cassini map (233 m,
+  IMG/PDF/PNG only) covers only part of the surface, not fetched.
+- Mimas has no USGS GeoTIFF, hence the NASA Photojournal file. The old `photojournal.jpl.nasa.gov/jpeg/PIA*.jpg`
+  URLs now redirect to an HTML page; the working link is under `assets.science.nasa.gov/content/dam/science/psd/photojournal/pia/`.

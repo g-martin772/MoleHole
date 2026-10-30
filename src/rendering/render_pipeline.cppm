@@ -13,6 +13,7 @@ import :Rendering.MeshTrace;
 import :Rendering.MeshScene;
 import :Simulation.ObjectPaths;
 import :Rendering.OrbitOverlays;
+import :Rendering.BodyOrbits;
 
 export namespace MoleHole
 {

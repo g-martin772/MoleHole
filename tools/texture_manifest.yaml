@@ -1,6 +1,7 @@
 # Planet textures fetched by tools/fetch_textures.py into assets/textures/ (not in git).
 # Sources, licences and checks: docs/notes/texture_sources.md. Groups: core (8k, the templates use these),
-# core-2k (small set for slow connections), nasa (optional higher-resolution and true height data).
+# core-2k (small set for slow connections), nasa (optional higher-resolution and true height data),
+# moons (USGS/NASA spacecraft mosaics of moons and dwarf planets; entries with max_width are re-encoded to JPEG).
 # TIFF targets are converted to PNG after download (stb_image cannot read TIFF).
 requires_referer:
   https://www.solarsystemscope.com/textures/download/: https://www.solarsystemscope.com/textures/
@@ -180,3 +181,181 @@ textures:
   attribution: Solar System Scope (solarsystemscope.com/textures), CC BY 4.0
   target: neptune/albedo_2k.jpg
   group: core
+- id: io_albedo_8k
+  url: https://planetarymaps.usgs.gov/mosaic/Io_GalileoSSI-Voyager_Global_Mosaic_ClrMerge_1km.tif
+  licence: Public domain (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL/USGS, Galileo SSI and Voyager colour-merged global mosaic 1 km (USGS Astrogeology)
+  target: io/albedo_8k.jpg
+  note: colour merge; 11445x5723 source; width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: 135f88cb645bfdb4e045b380971ab2ba14e230590c96c9c86cfe7310fda881ac
+  sha256: 3b4774443b510831d48e7186afa528d1b4c452044a7cecf29c397c66a774f09a
+  group: moons
+- id: europa_albedo_8k
+  url: https://planetarymaps.usgs.gov/mosaic/Europa_Voyager_GalileoSSI_global_mosaic_500m.tif
+  licence: No access constraints (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL/USGS, Voyager and Galileo SSI global mosaic 500 m (USGS Astrogeology; Becker, Archinal et al.)
+  target: europa/albedo_8k.jpg
+  note: grey-scale; 19631x9816 source; width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: a323f0c9ccb47d5af9902ea8297fe81f9a9708795645b80801f103c3f7c9a624
+  sha256: 3d24c7c174a210b0816072c526b4859ac41a649245b0c0bde6ea8e5b9f697973
+  group: moons
+- id: ganymede_albedo_8k
+  url: https://planetarymaps.usgs.gov/mosaic/Ganymede_Voyager_GalileoSSI_global_mosaic_1km.tif
+  licence: Public domain (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL/USGS, Voyager and Galileo SSI global mosaic 1 km (USGS Astrogeology)
+  target: ganymede/albedo_8k.jpg
+  note: grey-scale; 16539x8270 source; width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: c2c8d9506b8cf8f7a0a90d823d9052e91c8d9885cf7267fdce8de8216f4df888
+  sha256: 14e0c33cb3c5f080b22ddbc7d8e0fecf0dadf3b56fb7d3c3450cfffcae3ddf60
+  group: moons
+- id: callisto_albedo_8k
+  url: https://planetarymaps.usgs.gov/mosaic/Callisto_Voyager_GalileoSSI_global_mosaic_1km.tif
+  licence: Public domain (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL/USGS, Galileo SSI and Voyager global mosaic 1 km (USGS Astrogeology)
+  target: callisto/albedo_8k.jpg
+  note: grey-scale; 15138x7569 source; polar gaps; width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: e1f0bd2e0e05de605d067d6b5f5ededddaf31ca6c064562a1ca770f15a7dbaa3
+  sha256: be1af127c8977b0ada8dd7eb8952098ad2e52dedcffe96d3da0a8bab536b299a
+  group: moons
+- id: titan_albedo_4k
+  url: https://planetarymaps.usgs.gov/mosaic/Titan_ISS_P19658_Mosaic_Global_4km.tif
+  licence: No access constraints, cite authors (USGS Astrogeology record, NASA/JPL-Caltech/SSI Cassini ISS data)
+  attribution: NASA/JPL-Caltech/SSI, Cassini ISS global mosaic 4 km (Cassini ISS Team; USGS Astrogeology)
+  target: titan/albedo_4k.jpg
+  note: grey-scale, near-IR surface view through the haze; 4040x2020 source; width capped at 4096 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 4096
+  source_sha256: ca0fe5f6f9bdba1b6d03245969a42336a010ddc17d636e5e06fffa939d10ca83
+  sha256: cf625e21cf081b256871dc27d300f743dce7001cee95002d01bf7b354ad7645f
+  group: moons
+- id: enceladus_albedo_8k
+  url: https://planetarymaps.usgs.gov/mosaic/Enceladus_Cassini_mosaic_global_110m.tif
+  licence: Public domain (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL/SSI, Cassini ISS global mosaic 110 m (USGS Astrogeology)
+  target: enceladus/albedo_8k.jpg
+  note: grey-scale; 14401x7201 source; width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: c9d29292141dd986e52b2a24b692df34701d1dabaee69bcb9fb64ebc6baba335
+  sha256: 87cbb9ac623386d1ee761fa7be55a054a26070b7e497877ce3ae0398723e6d1e
+  group: moons
+- id: tethys_albedo_8k
+  url: https://planetarymaps.usgs.gov/mosaic/Tethys_Cassini_mosaic_global_293m.tif
+  licence: Public domain (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL/SSI, Cassini ISS global mosaic 293 m (Roatsch, Kersten, Hoffmeister, Wahlisch; DLR; USGS Astrogeology)
+  target: tethys/albedo_8k.jpg
+  note: grey-scale; 11520x5760 source; width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: 40723c3ebfaaa52a657827b37309bc84234811db1cf26a21d086e26aba2b3640
+  sha256: 3b6e1516e9887730e780358637a73a2f33ba5e47f00e7b042b028b6dadb3c49d
+  group: moons
+- id: dione_albedo_8k
+  url: https://planetarymaps.usgs.gov/mosaic/Dione_Cassini_Voyager_mosaic_global_154m.tif
+  licence: Public domain (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL/SSI, Cassini ISS and Voyager global mosaic 154 m (DLR; USGS Astrogeology)
+  target: dione/albedo_8k.jpg
+  note: grey-scale; 23040x11520 source; width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: 5c5d796c02e3c99fde5dd034e01dd1f25905699a4885843aed445ded955e08b5
+  sha256: 2a74be76101519d267961284cd633ef58ee12f2311cf94676e6088e2c74916f2
+  group: moons
+- id: rhea_albedo_8k
+  url: https://planetarymaps.usgs.gov/mosaic/Rhea_Cassini_Voyager_mosaic_global_417m.tif
+  licence: Public domain (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL/SSI, Cassini ISS and Voyager global mosaic 417 m (DLR; USGS Astrogeology)
+  target: rhea/albedo_8k.jpg
+  note: grey-scale; 11520x5760 source; width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: ce537c3c93670a0d4ea5a64b99bffb76ff308727eb3eabeee0a38cf9f6f1abc7
+  sha256: 73963e71883cee8b5e18c43f4bff6b96ba9fea125a79317d4c3d54c75f8548ab
+  group: moons
+- id: iapetus_albedo_6k
+  url: https://planetarymaps.usgs.gov/mosaic/Iapetus_Cassini_Voyager_mosaic_global_783m.tif
+  licence: Public domain (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL/SSI, Cassini ISS and Voyager global mosaic 783 m (DLR; USGS Astrogeology)
+  target: iapetus/albedo_6k.jpg
+  note: grey-scale; 5760x2880, not resized; width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: eb8acdbed3af495102b6ec6d3efce1f03dc6bc39bb43323c23231ce590494d6e
+  sha256: 5084d778a4bdd522334bdfd27234d100a26cc64f17d4b8ec12e51710a29c19bb
+  group: moons
+- id: triton_albedo_8k
+  url: https://planetarymaps.usgs.gov/mosaic/Triton_Voyager2_ClrMosaic_GlobalFill_600m.tif
+  licence: Public domain (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL/USGS, Voyager 2 global colour mosaic 600 m (LPI, P. Schenk; USGS Astrogeology)
+  target: triton/albedo_8k.jpg
+  note: colour; 14138x7069 source; northern third unimaged (black); width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: f20ed332e85df469725629b81d3a73ad026897fe561ec59d6245d249a09507db
+  sha256: 5d79901b42f1c17eb410635809347e7350bfae3a5fbd73aae81f5d92e9fe1921
+  group: moons
+- id: pluto_albedo_8k
+  url: https://planetarymaps.usgs.gov/mosaic/Pluto_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif
+  licence: No access constraints (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JHUAPL/SwRI/LPI, New Horizons LORRI+MVIC global mosaic 300 m, Jul 2017 (USGS Astrogeology)
+  target: pluto/albedo_8k.jpg
+  note: grey-scale; 24888x12444 source; southern polar night unimaged (black); width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: 592b7fb0f88cafa0bedf9f33bb71e983952a250ee8577edf2abfe814b473356b
+  sha256: 29f24cad524bebcba244b5182fdd74ccbf3b42ea9a6440d13026176a561756d6
+  group: moons
+- id: charon_albedo_8k
+  url: https://planetarymaps.usgs.gov/mosaic/Charon_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif
+  licence: No access constraints (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JHUAPL/SwRI/LPI, New Horizons LORRI+MVIC global mosaic 300 m, Jul 2017 (USGS Astrogeology)
+  target: charon/albedo_8k.jpg
+  note: grey-scale; 12693x6347 source; southern polar night unimaged (black); width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: 4a874809e0a33a851cd026b8e4647f5875ed15807e677d413812367509564b00
+  sha256: 872e28b1a6e321043173f805049d6e60f8a76ae97afdb94b5a9a9c5f8fa1fc56
+  group: moons
+- id: ceres_albedo_7k
+  url: https://planetarymaps.usgs.gov/mosaic/Ceres_Dawn_FC_DLR_global_20ppd_Oct2015.tif
+  licence: No access constraints (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL-Caltech/UCLA/MPS/DLR/IDA, Dawn FC global mosaic 400 m (USGS Astrogeology)
+  target: ceres/albedo_7k.jpg
+  note: grey-scale; 7383x3691, not resized; width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: 920f65e7d0718c9f8d5e86783f35e0b466096251a8c1f2d01a7748a6d534c154
+  sha256: 7201db5342de4b27f369707f8cc7a30dba24e571babd433d07652e5afa367597
+  group: moons
+- id: vesta_albedo_8k
+  url: https://planetarymaps.usgs.gov/mosaic/Vesta_Dawn_FC_HAMO_Mosaic_Global_74ppd.tif
+  licence: No access constraints (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL-Caltech/UCLA/MPS/DLR/IDA, Dawn FC HAMO global mosaic (USGS Astrogeology)
+  target: vesta/albedo_8k.jpg
+  note: grey-scale; 26704x13352 source; north polar night unimaged (black); width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: e7a5dab2924ed590947230e70b11fd42e61e6582f94c01180ddb64b3a9f86ff4
+  sha256: 97137d1002ec479ba321eeedada0719120a4c558f2a0c7ee5d515030e28593b5
+  group: moons
+- id: phobos_albedo_6k
+  url: https://planetarymaps.usgs.gov/mosaic/Phobos_ME_SRC_Mosaic_Global_16ppd.tif
+  licence: Public domain (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: ESA/DLR/FU Berlin, Mars Express HRSC SRC with Viking global mosaic 16 ppd (Willner et al.; USGS Astrogeology)
+  target: phobos/albedo_6k.jpg
+  note: grey-scale; 5760x2880, not resized; unimaged patches (black); width capped at 8192 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 8192
+  source_sha256: 4106b826ce0035c3d8e58c773deec5434cb2a642ddc6569131d9476a03074ff5
+  sha256: 513e94579c65742391ece5bc5822e9a7a5eb96e68088c99c12389456c678ef9c
+  group: moons
+- id: venus_albedo_6k
+  url: https://planetarymaps.usgs.gov/mosaic/Venus_Magellan_C3-MDIR_Colorized_Global_Mosaic_4641m.tif
+  licence: Public domain (USGS Astrogeology record, NASA PDS data; cite authors)
+  attribution: NASA/JPL, Magellan C3-MDIR radar mosaic, synthetic colour (USGS Astrogeology)
+  target: venus/albedo_6k.jpg
+  note: radar backscatter with synthetic Venera-based colour, not an optical albedo; 8192x4096 source; width capped at 6144 px wide, JPEG q90 (tools/fetch_textures.py)
+  max_width: 6144
+  source_sha256: 6bfcd1ccaa79bad8b6d6943a86b6c77b65c7cf48a6ecbf900e429e334f584f43
+  sha256: e380ecbfa8091f973ad7115fef845ff05be55384cd16a5a28bdc541207d72373
+  group: moons
+- id: mimas_albedo_6k
+  url: https://assets.science.nasa.gov/content/dam/science/psd/photojournal/pia/pia17/pia17214/PIA17214.jpg
+  licence: NASA media usage guidelines (generally not subject to copyright in the US; acknowledge NASA)
+  attribution: NASA/JPL-Caltech/Space Science Institute, Cassini ISS global map of Mimas, June 2017 (PIA17214)
+  target: mimas/albedo_6k.jpg
+  note: grey-scale, 5760x2880 original JPEG, used unchanged; poles smeared
+  sha256: f2d62eaa50c7864e303a13434738a7bc6db0e133f1f4b163c2506979800c1116
+  group: moons

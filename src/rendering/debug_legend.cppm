@@ -130,11 +130,18 @@ export namespace MoleHole
         {"kPredictionFarColor", "End of span", "where it is after the prediction span", {0.35f, 0.25f, 0.05f}},
     }};
 
-    inline constexpr std::array<OverlayLegend, 5> kOverlayLegends{{
+    inline constexpr std::array<LegendEntry, 3> kBodyOrbitLegend{{
+        {"kPlanetOrbitColor", "Planets", "osculating orbit about the star (and other bodies whose parent is the heaviest)", {0.30f, 0.55f, 0.95f}},
+        {"kMoonOrbitColor", "Moons", "osculating orbit about the parent planet; travels with it", {0.95f, 0.65f, 0.25f}},
+        {"kUnboundOrbitColor", "Unbound", "open orbit of a probe or visitor, out to twice its distance", {0.85f, 0.35f, 0.85f}},
+    }};
+
+    inline constexpr std::array<OverlayLegend, 6> kOverlayLegends{{
         {"overlay.gravity_grid", kGravityGridLegend},
         {"overlay.physics_colliders", kColliderLegend},
         {"overlay.object_paths", kObjectPathLegend},
         {"overlay.characteristic_radii", kCharacteristicRadiiLegend},
         {"overlay.predicted_orbits", kPredictedOrbitLegend},
+        {"overlay.body_orbits", kBodyOrbitLegend},
     }};
 }
