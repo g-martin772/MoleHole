@@ -617,6 +617,20 @@ namespace
                 }
                 ImGui::EndMenu();
             }
+            const auto mask = m_UiState->CameraBookmarkMask.load(std::memory_order_relaxed);
+            for (const bool store : {true, false})
+            {
+                if (!ImGui::BeginMenu(store ? "Store Camera Bookmark" : "Recall Camera Bookmark", reason.empty())) continue;
+                for (std::size_t slot = 0; slot < kBookmarkSlots; ++slot)
+                {
+                    const auto id = std::format("view.bookmark_{}:{}", store ? "store" : "recall", slot + 1);
+                    const bool used = (mask >> slot) & 1u;
+                    const auto label = std::format("Bookmark {}{}", slot + 1, used ? " (set)" : "");
+                    if (ImGui::MenuItem(label.c_str(), ActionShortcut(id).c_str(), false, store || used))
+                        m_UiState->View.Push({store ? ViewRequest::Kind::StoreBookmark : ViewRequest::Kind::RecallBookmark, static_cast<int>(slot)});
+                }
+                ImGui::EndMenu();
+            }
         }
 
         void RenderEditMenu()

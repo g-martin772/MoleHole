@@ -8,6 +8,7 @@ import GPP;
 import :Simulation.Components;
 import :Rendering.Meshes;
 import :Rendering.Settings;
+import :Application.CameraBookmarks;
 
 export namespace MoleHole
 {
@@ -33,6 +34,7 @@ export namespace MoleHole
             std::string Error;
             std::string RenderExtension;
             std::optional<EditorView> Editor;
+            CameraBookmarks Bookmarks;
             std::size_t MeshCount = 0;
             std::vector<std::string> FailedMeshes;
             std::size_t WarningCount = 0;
@@ -168,6 +170,7 @@ export namespace MoleHole
                 result.SceneName = scene.Metadata().Name;
                 result.RenderExtension = RenderExtensionText(scene);
                 result.Editor = ReadEditorView(scene);
+                result.Bookmarks = CameraBookmarks::FromScene(scene);
             }
             catch (const std::exception& error)
             {

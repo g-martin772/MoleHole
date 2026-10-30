@@ -118,6 +118,7 @@ namespace
                 sceneKey = key.Digest();
                 RecordPaths(render.ShowObjectPaths, !sim->Runner->IsPaused(), sceneKey, *published);
                 m_UiState->SceneState.Observe(published.ContentRevision());
+                SyncBookmarkExtension(*sim->Runner, *published);
                 if (m_UiState->PendingSelectGuid != 0 && published->IsValid(published->FindByGuid(m_UiState->PendingSelectGuid)))
                 {
                     m_UiState->SelectedEntityGuid = std::exchange(m_UiState->PendingSelectGuid, 0);
@@ -185,6 +186,12 @@ namespace
                     if (ImGui::IsKeyPressed(ImGuiKey_F, false)) m_UiState->Edits.Push(EditAction::FrameSelected);
                     if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) m_UiState->Edits.Push(EditAction::Delete);
                     if (ImGui::IsKeyChordPressed(ImGuiKey_Home)) m_UiState->View.Push({ViewRequest::Kind::FrameAll});
+                    for (int slot = 0; slot < static_cast<int>(kBookmarkSlots); ++slot)
+                    {
+                        const auto key = static_cast<ImGuiKey>(ImGuiKey_1 + slot);
+                        if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | key)) m_UiState->View.Push({ViewRequest::Kind::StoreBookmark, slot});
+                        if (ImGui::IsKeyChordPressed(ImGuiMod_Alt | key)) m_UiState->View.Push({ViewRequest::Kind::RecallBookmark, slot});
+                    }
                 }
             }
             m_Renderer->SetBufferTargetVisible(m_LayerTarget.Id, viewportOpen || m_UiState->ExportActive);
@@ -656,6 +663,7 @@ namespace
                     if (view->SpeedMs) m_UiState->CameraSpeedMs = *view->SpeedMs;
                 }
                 m_TrackedPose = CurrentCameraPose();
+                ResetBookmarks(result->Bookmarks);
                 for (const auto& warning : m_RenderSettings->Warnings())
                 {
                     m_Logger->Warn("ViewportLayer: {}", warning);
@@ -673,6 +681,7 @@ namespace
                                                 std::format("{}: {}\nStarted with a default scene", result->Path, result->Error),
                                                 0.0f, "scene-load");
                 CreateDefaultScene("ViewportDefault", "BlackHole");
+                ResetBookmarks({});
                 m_UiState->CurrentScenePath.clear();
                 m_RenderSettings->LoadScene({});
                 StartSimulationFor("ViewportDefault");
@@ -740,6 +749,7 @@ namespace
                 const auto name = "Untitled-" + std::to_string(++m_SceneCounter);
                 CommitCamera();
                 CreateDefaultScene(name, "Black Hole");
+                ResetBookmarks({});
                 m_UiState->CurrentScenePath.clear();
                 m_RenderSettings->LoadScene({});
                 StartSimulationFor(name);
@@ -1062,8 +1072,56 @@ namespace
                 {
                 case ViewRequest::Kind::FrameAll: FrameAll(); break;
                 case ViewRequest::Kind::Snap: SnapToAxis(static_cast<ViewAxis>(request.Index)); break;
+                case ViewRequest::Kind::StoreBookmark: StoreBookmark(static_cast<std::size_t>(request.Index)); break;
+                case ViewRequest::Kind::RecallBookmark: RecallBookmark(static_cast<std::size_t>(request.Index)); break;
                 }
             }
+        }
+
+        void StoreBookmark(const std::size_t slot)
+        {
+            const CameraBookmark bookmark{m_Camera.GetPosition(), m_Camera.GetYaw(), m_Camera.GetPitch(), m_Camera.GetFov(),
+                                          m_UiState->CameraSpeedMs};
+            if (!m_Bookmarks.Set(slot, bookmark)) return;
+            m_BookmarksDirty = true;
+            m_UiState->CameraBookmarkMask.store(m_Bookmarks.Mask(), std::memory_order_relaxed);
+            m_Logger->Notifications()->Post(NotificationKind::Info, std::format("Camera bookmark {} stored", slot + 1), {}, 0.0f,
+                                            "view-bookmark");
+        }
+
+        void RecallBookmark(const std::size_t slot)
+        {
+            const auto bookmark = m_Bookmarks.Get(slot);
+            if (!bookmark)
+            {
+                m_Logger->Notifications()->Post(NotificationKind::Info, std::format("Camera bookmark {} is empty", slot + 1),
+                                                "Ctrl+number stores the current view", 0.0f, "view-bookmark");
+                return;
+            }
+            m_FocusGuid = 0;
+            m_Camera.SetPosition(bookmark->PositionM);
+            m_Camera.SetYawPitch(bookmark->Yaw, bookmark->Pitch);
+            m_Camera.SetFov(bookmark->Fov);
+            m_UiState->CameraFov = bookmark->Fov;
+            if (bookmark->SpeedMs > 0.0) m_UiState->CameraSpeedMs = ClampFlySpeed(bookmark->SpeedMs);
+        }
+
+        void SyncBookmarkExtension(SimulationRunner& runner, const Scene& scene)
+        {
+            if (scene.ExtensionRevision() == m_BookmarkRevision && !m_BookmarksDirty) return;
+            m_BookmarkRevision = scene.ExtensionRevision();
+            const bool edited = std::exchange(m_BookmarksDirty, false);
+            if (CameraBookmarks::FromScene(scene) == m_Bookmarks) return;
+            auto write = [bookmarks = m_Bookmarks](Scene& target) { bookmarks.WriteTo(target); };
+            if (edited) runner.EnqueueEdit(std::move(write));
+            else runner.EnqueueSystemEdit(std::move(write), false);
+        }
+
+        void ResetBookmarks(CameraBookmarks bookmarks)
+        {
+            m_Bookmarks = std::move(bookmarks);
+            m_BookmarksDirty = true;
+            m_UiState->CameraBookmarkMask.store(m_Bookmarks.Mask(), std::memory_order_relaxed);
         }
 
         void SnapToAxis(const ViewAxis axis)
@@ -1272,6 +1330,9 @@ namespace
         std::atomic<bool> m_CameraMouseHover{false};
         std::atomic<std::chrono::steady_clock::rep> m_SpeedReadoutAt{0};
         bool m_PanActive{false};
+        CameraBookmarks m_Bookmarks;
+        bool m_BookmarksDirty{false};
+        std::uint64_t m_BookmarkRevision{0};
         double m_PanDistanceM{1.0};
         float m_LastMouseX{0.0f};
         float m_LastMouseY{0.0f};

@@ -65,7 +65,7 @@ export namespace MoleHole
 
     struct ViewRequest
     {
-        enum class Kind { FrameAll, Snap } What = Kind::FrameAll;
+        enum class Kind { FrameAll, Snap, StoreBookmark, RecallBookmark } What = Kind::FrameAll;
         int Index = 0;
     };
 

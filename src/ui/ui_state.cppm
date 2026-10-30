@@ -145,6 +145,7 @@ export namespace MoleHole
         bool OpenAddMeshDialog = false;
         EditRequests Edits;
         ViewRequests View;
+        std::atomic<std::uint32_t> CameraBookmarkMask{0};
         ActionRequests Actions;
         RecentActions RecentActionIds;
         bool ShowShortcutSheet = false;

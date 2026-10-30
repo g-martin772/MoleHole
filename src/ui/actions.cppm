@@ -13,6 +13,7 @@ import :UI.TransportLogic;
 import :UI.TutorialState;
 import :UI.ViewportNav;
 import :UI.ViewAxisGizmo;
+import :Application.CameraBookmarks;
 
 export namespace MoleHole
 {
@@ -222,6 +223,19 @@ export namespace MoleHole
                 });
                 action.Needs = ActionNeed::Scene;
                 action.Keywords = "axis orthographic front back top bottom left right camera";
+            }
+            for (std::size_t slot = 0; slot < kBookmarkSlots; ++slot)
+            {
+                const auto number = std::to_string(slot + 1);
+                const auto index = static_cast<int>(slot);
+                auto& store = b.Key("view.bookmark_store:" + number, "Store Camera Bookmark " + number, "View", "Ctrl+" + number, "Viewport",
+                                    [ui, index] { if (ui) ui->View.Push({ViewRequest::Kind::StoreBookmark, index}); });
+                store.Needs = ActionNeed::Scene;
+                store.Keywords = "view save camera position";
+                auto& recall = b.Key("view.bookmark_recall:" + number, "Recall Camera Bookmark " + number, "View", "Alt+" + number, "Viewport",
+                                     [ui, index] { if (ui) ui->View.Push({ViewRequest::Kind::RecallBookmark, index}); });
+                recall.Needs = ActionNeed::Scene;
+                recall.Keywords = "view load camera position goto";
             }
             b.Defer("layout.reset", "Reset Layout", "View").Keywords = "layout dock windows default arrange";
             b.Add("layout.save", "Save Layout As...", "View", [ui] { if (ui) ui->LayoutSaveRequested = true; }).Keywords =
