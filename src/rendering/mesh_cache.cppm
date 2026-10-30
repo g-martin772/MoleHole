@@ -10,11 +10,36 @@ export namespace MoleHole
     class MeshCache
     {
     public:
+        using Loader = std::function<std::shared_ptr<GPP::GltfSceneData>(const std::string&)>;
+
         MeshCache(std::shared_ptr<GPP::Renderer> renderer, std::shared_ptr<GPP::IFileSystem> fileSystem,
                   std::shared_ptr<GPP::Logger> logger)
-            : m_Renderer(std::move(renderer)), m_FileSystem(std::move(fileSystem)), m_Logger(std::move(logger))
+            : MeshCache(fileSystem, logger,
+                        [renderer, fileSystem, logger](const std::string& assetPath)
+                        {
+                            return std::make_shared<GPP::GltfSceneData>(
+                                GPP::LoadGltfScene(renderer->GetDevice(), fileSystem, assetPath, logger));
+                        },
+                        [renderer] { return renderer->GetDevice(); })
         {
         }
+
+        MeshCache(std::shared_ptr<GPP::IFileSystem> fileSystem, std::shared_ptr<GPP::Logger> logger, Loader loader,
+                  std::function<std::shared_ptr<GPP::VulkanDevice>()> device = {})
+            : m_FileSystem(std::move(fileSystem)), m_Logger(std::move(logger)), m_Loader(std::move(loader)),
+              m_DeviceProvider(std::move(device)), m_Watch(m_FileSystem, m_Logger)
+        {
+            m_Worker = std::jthread([this](const std::stop_token& stop) { WorkerLoop(stop); });
+        }
+
+        ~MeshCache()
+        {
+            m_Worker.request_stop();
+            m_Wake.notify_all();
+        }
+
+        MeshCache(const MeshCache&) = delete;
+        MeshCache& operator=(const MeshCache&) = delete;
 
         std::shared_ptr<GPP::GltfSceneData> GetOrLoad(const std::string& assetPath)
         {
@@ -30,28 +55,18 @@ export namespace MoleHole
             if (const auto cached = TryGet(assetPath)) return cached.value_or(nullptr);
 
             std::shared_ptr<GPP::GltfSceneData> result;
-            float radius = 0.5f;
             try
             {
-                result = std::make_shared<GPP::GltfSceneData>(
-                    GPP::LoadGltfScene(m_Renderer->GetDevice(), m_FileSystem, assetPath, m_Logger));
-                if (!result->Geometry.Vertices.empty())
-                {
-                    float maxDistSq = 0.0f;
-                    for (const auto& vertex : result->Geometry.Vertices)
-                    {
-                        maxDistSq = std::max(maxDistSq, glm::dot(vertex, vertex));
-                    }
-                    radius = std::sqrt(maxDistSq);
-                }
+                result = m_Loader(assetPath);
             }
             catch (const std::exception& error)
             {
                 m_Logger->Warn("MeshCache: failed to load mesh '{}': {}", assetPath, error.what());
             }
+            Track(assetPath, result.get());
             std::scoped_lock lock(m_Mutex);
             m_Meshes.emplace(assetPath, result);
-            m_Radii.emplace(assetPath, radius);
+            m_Radii.emplace(assetPath, Radius(result.get()));
             return result;
         }
 
@@ -70,14 +85,171 @@ export namespace MoleHole
             return it != m_Radii.end() ? it->second : 0.5f;
         }
 
+        void Update()
+        {
+            if (m_RetiredObjects && m_RetiredObjects->Pending() > 0) m_RetiredObjects->Collect();
+            for (const auto& path : m_Watch.TakeChanged())
+            {
+                std::scoped_lock lock(m_Mutex);
+                for (const auto& key : m_Paths.Find(path)) m_Stale.insert(key);
+            }
+            QueueStale();
+            std::deque<Reloaded> done;
+            {
+                std::scoped_lock lock(m_JobMutex);
+                done.swap(m_Done);
+            }
+            for (auto& result : done) Apply(std::move(result));
+        }
+
+        [[nodiscard]] std::uint64_t Generation() const noexcept { return m_Generation.load(); }
+
+        [[nodiscard]] bool IsCurrent(const GPP::GltfSceneData* scene) const
+        {
+            std::scoped_lock lock(m_Mutex);
+            return std::ranges::any_of(m_Meshes, [scene](const auto& entry) { return entry.second.get() == scene; });
+        }
+
+        void Retire(std::shared_ptr<void> object)
+        {
+            if (!m_RetiredObjects && m_DeviceProvider)
+            {
+                if (auto device = m_DeviceProvider()) m_RetiredObjects = std::make_unique<GPP::RetiredObjects>(std::move(device));
+            }
+            if (m_RetiredObjects) m_RetiredObjects->Retire(std::move(object));
+        }
+
+        [[nodiscard]] std::size_t PendingReloads() const
+        {
+            std::scoped_lock lock(m_JobMutex);
+            return m_Jobs.size() + m_Done.size() + m_InFlight;
+        }
+
     private:
-        std::shared_ptr<GPP::Renderer> m_Renderer;
+        struct Reloaded
+        {
+            std::string AssetPath;
+            std::shared_ptr<GPP::GltfSceneData> Scene;
+            std::string Error;
+        };
+
+        static float Radius(const GPP::GltfSceneData* scene)
+        {
+            if (!scene || scene->Geometry.Vertices.empty()) return 0.5f;
+            float maxDistSq = 0.0f;
+            for (const auto& vertex : scene->Geometry.Vertices) maxDistSq = std::max(maxDistSq, glm::dot(vertex, vertex));
+            return std::sqrt(maxDistSq);
+        }
+
+        void Track(const std::string& assetPath, const GPP::GltfSceneData* scene)
+        {
+            std::vector<std::filesystem::path> files{m_FileSystem->ResolvePath(assetPath)};
+            if (scene) files.insert(files.end(), scene->Sources.begin(), scene->Sources.end());
+            std::vector<std::filesystem::path> resolved;
+            for (const auto& file : files) resolved.push_back(m_Watch.Watch(file));
+            std::scoped_lock lock(m_Mutex);
+            m_Paths.Remove(assetPath);
+            for (const auto& file : resolved) m_Paths.Add(file, assetPath);
+        }
+
+        void QueueStale()
+        {
+            std::vector<std::string> ready;
+            {
+                std::scoped_lock lock(m_Mutex, m_JobMutex);
+                for (auto it = m_Stale.begin(); it != m_Stale.end();)
+                {
+                    if (m_Active.contains(*it))
+                    {
+                        ++it;
+                        continue;
+                    }
+                    m_Active.insert(*it);
+                    m_Jobs.push_back(*it);
+                    it = m_Stale.erase(it);
+                }
+            }
+            m_Wake.notify_one();
+        }
+
+        void WorkerLoop(const std::stop_token& stop)
+        {
+            while (true)
+            {
+                std::string assetPath;
+                {
+                    std::unique_lock lock(m_JobMutex);
+                    if (!m_Wake.wait(lock, stop, [this] { return !m_Jobs.empty(); })) return;
+                    assetPath = std::move(m_Jobs.front());
+                    m_Jobs.pop_front();
+                    ++m_InFlight;
+                }
+                Reloaded result{.AssetPath = assetPath};
+                try
+                {
+                    result.Scene = m_Loader(assetPath);
+                    if (!result.Scene) result.Error = "empty result";
+                }
+                catch (const std::exception& error)
+                {
+                    result.Error = error.what();
+                }
+                std::scoped_lock lock(m_JobMutex);
+                --m_InFlight;
+                m_Done.push_back(std::move(result));
+            }
+        }
+
+        void Apply(Reloaded result)
+        {
+            {
+                std::scoped_lock lock(m_JobMutex);
+                m_Active.erase(result.AssetPath);
+            }
+            const auto key = "mesh:" + result.AssetPath;
+            if (!result.Scene)
+            {
+                m_Logger->Warn("MeshCache: reload of '{}' failed, keeping the previous mesh: {}", result.AssetPath,
+                               result.Error);
+                m_Logger->Notifications()->Post(GPP::NotificationKind::Error, "Mesh reload failed",
+                                                result.AssetPath + "\n" + result.Error, 0.0f, key);
+                return;
+            }
+            Track(result.AssetPath, result.Scene.get());
+            std::shared_ptr<GPP::GltfSceneData> previous;
+            {
+                std::scoped_lock lock(m_Mutex);
+                auto& slot = m_Meshes[result.AssetPath];
+                previous = std::exchange(slot, result.Scene);
+                m_Radii.insert_or_assign(result.AssetPath, Radius(result.Scene.get()));
+            }
+            m_Generation.fetch_add(1);
+            Retire(std::move(previous));
+            m_Logger->Info("MeshCache: reloaded '{}'", result.AssetPath);
+            m_Logger->Notifications()->Post(GPP::NotificationKind::Info, "Mesh reloaded", result.AssetPath, 2.0f, key);
+        }
+
         std::shared_ptr<GPP::IFileSystem> m_FileSystem;
         std::shared_ptr<GPP::Logger> m_Logger;
+        Loader m_Loader;
+        std::function<std::shared_ptr<GPP::VulkanDevice>()> m_DeviceProvider;
+        std::unique_ptr<GPP::RetiredObjects> m_RetiredObjects;
+        GPP::AssetFileWatch m_Watch;
         mutable std::mutex m_Mutex;
         std::unordered_map<std::string, std::shared_ptr<std::mutex>> m_PathLocks;
         std::unordered_map<std::string, std::shared_ptr<GPP::GltfSceneData>> m_Meshes;
         std::unordered_map<std::string, float> m_Radii;
+        GPP::AssetPathIndex<std::string> m_Paths;
+        std::set<std::string> m_Stale;
+        std::atomic<std::uint64_t> m_Generation{0};
+
+        mutable std::mutex m_JobMutex;
+        std::condition_variable_any m_Wake;
+        std::deque<std::string> m_Jobs;
+        std::deque<Reloaded> m_Done;
+        std::set<std::string> m_Active;
+        std::size_t m_InFlight = 0;
+        std::jthread m_Worker;
     };
 
     // One material table and one texture table for every loaded glTF scene: a draw's material is
@@ -90,11 +262,15 @@ export namespace MoleHole
             : m_Device(std::move(device)), m_Logger(std::move(logger)),
               m_Library(GPP::GltfTextureCapacity(m_Device->GetCapabilities()))
         {
-            GPP::GltfMaterial fallback;
-            fallback.BaseColorFactor = {0.8f, 0.8f, 0.8f, 1.0f};
-            fallback.MetallicFactor = 0.5f;
-            fallback.RoughnessFactor = 0.5f;
-            m_Library.AddMaterial(fallback);
+            AddFallback();
+        }
+
+        void Reset()
+        {
+            m_Library.Clear();
+            AddFallback();
+            m_WarnedOverflow = false;
+            m_Dirty = true;
         }
 
         [[nodiscard]] std::uint32_t BaseMaterial(const GPP::GltfSceneData& scene)
@@ -137,6 +313,15 @@ export namespace MoleHole
         [[nodiscard]] const GPP::GltfMaterialLibrary& Library() const noexcept { return m_Library; }
 
     private:
+        void AddFallback()
+        {
+            GPP::GltfMaterial fallback;
+            fallback.BaseColorFactor = {0.8f, 0.8f, 0.8f, 1.0f};
+            fallback.MetallicFactor = 0.5f;
+            fallback.RoughnessFactor = 0.5f;
+            m_Library.AddMaterial(fallback);
+        }
+
         std::shared_ptr<GPP::VulkanDevice> m_Device;
         std::shared_ptr<GPP::Logger> m_Logger;
         GPP::GltfMaterialLibrary m_Library;

@@ -68,6 +68,11 @@ export namespace MoleHole
                                const RenderSettings& settings, const bool buildTlas, const GPP::VulkanImage& fallbackTexture)
         {
             GPP_ZONE("Mesh.Prepare");
+            if (const auto generation = m_Meshes->Generation(); generation != m_SeenGeneration)
+            {
+                m_SeenGeneration = generation;
+                EvictReplaced();
+            }
             MeshSceneFrame out;
             auto& records = m_Records;
             auto& instances = m_TlasInstances;
@@ -242,6 +247,24 @@ export namespace MoleHole
             return stored.Structure ? &stored : nullptr;
         }
 
+        void EvictReplaced()
+        {
+            auto stale = std::make_shared<std::vector<CachedPrimitive>>();
+            for (auto it = m_Primitives.begin(); it != m_Primitives.end();)
+            {
+                if (m_Meshes->IsCurrent(it->second.Owner.get()))
+                {
+                    ++it;
+                    continue;
+                }
+                std::erase(m_UnbuiltBlas, it->first);
+                stale->push_back(std::move(it->second));
+                it = m_Primitives.erase(it);
+            }
+            m_Materials.Reset();
+            m_Meshes->Retire(std::move(stale));
+        }
+
         void FlushBlas()
         {
             if (m_UnbuiltBlas.empty()) return;
@@ -273,6 +296,7 @@ export namespace MoleHole
         std::unique_ptr<GPP::VulkanBuffer> m_Dfg;
         std::array<Slot, kSlots> m_Slots;
         std::size_t m_NextSlot = 0;
+        std::uint64_t m_SeenGeneration = 0;
         std::vector<std::shared_ptr<GPP::VulkanBuffer>> m_RetiredBuffers;
     };
 }

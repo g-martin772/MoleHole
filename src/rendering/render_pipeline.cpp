@@ -1741,6 +1741,7 @@ namespace MoleHole
         res.TrailsActive = false;
         res.Textures->SetMaxSize(static_cast<std::uint32_t>(std::max(inputs.Settings.BodyTextureMaxSize, 0)));
         { GPP_ZONE("Textures.Update"); res.Textures->Update(*res.UploadPool, res.Device->GetBackgroundQueue()); }
+        res.Meshes->Update();
         res.OverlayVertices.clear();
 
         // A debug view shows the tracer's raw output: no glow, flare, smoothing or tone mapping on top of it
