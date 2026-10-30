@@ -328,6 +328,17 @@ CLI, headless. Output PNG / MP4 (needs ffmpeg).
 - `tools/bench.py`: time every profile, keep or compare golden images
 - Full table: `docs/export-instructions.md`
 
+## Headless simulation
+Runs the scene's physics with no window or GPU and writes the final state as a scene YAML.
+```sh
+./build/MoleHole --simulate templates/dev.yaml --ticks 600 --out state.yaml
+./build/MoleHole --simulate scene.yaml --ticks 1000 --dt 0.005 --seed 42
+```
+- `--ticks N` (required), `--dt S` fixed step in seconds (default 1/60, allowed 0.0005..1), `--seed N` (nonzero; default the scene's `Seed`, else 1), `--out FILE` (optional)
+- Prints ticks, sim time and the state hash on stdout; the same scene, ticks, dt and seed give a byte-identical `--out` and hash
+- Exit 0 ok, 1 scene missing/invalid or sim init failed, 2 bad arguments. `--validate-scene f.yaml` checks a scene without running it (same exit codes)
+- Runs the same simulation modules as the app (physics, gravity, geodesics, N-body, body rotation). Animation graphs and Luau scripts run in the UI process and are not executed. Convex-mesh colliders need the mesh loaded on the GPU and are skipped (a warning per entity)
+
 ## Installing
 ```sh
 cmake --preset release-vcpkg

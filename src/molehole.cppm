@@ -10,6 +10,7 @@ export import :Application.Autosave;
 export import :Application.Export;
 export import :Application.Cli;
 export import :Application.ReplayCli;
+export import :Application.SimulateCli;
 export import :Application.Bootstrap;
 export import :Application.TextureImport;
 export import :Simulation.Components;

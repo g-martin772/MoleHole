@@ -12,7 +12,7 @@ namespace MoleHole
         constexpr std::array kValueFlags{
             "--export-image", "--export-video", "--export-sequence", "--sequence-name", "--width", "--height", "--duration", "--fps", "--sim-start",
             "--time-scale", "--export-timeout", "--profile", "--set", "--ray-step-size", "--max-ray-steps",
-            "--gpu-precision", "--metric", "--prefix", "--scene", "--template", "--recover", "--validate-scene"};
+            "--gpu-precision", "--metric", "--prefix", "--scene", "--template", "--recover", "--validate-scene", "--simulate", "--ticks", "--dt", "--seed", "--out"};
     }
 
     StartupArgs ParseStartupArgs(const std::span<const std::string> args)
