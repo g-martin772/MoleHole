@@ -139,4 +139,23 @@ namespace MoleHole
         const glm::vec2 ndc = glm::vec2(clip) / clip.w;
         return viewportMin + (ndc * 0.5f + 0.5f) * viewportSize;
     }
+
+    std::vector<std::uint64_t> EntitiesInScreenRect(const GPP::Scene& scene, const RenderFrame& frame,
+                                                    const glm::vec2& viewportMin, const glm::vec2& viewportSize,
+                                                    const glm::mat4& view, const glm::mat4& projection,
+                                                    const glm::vec2& rectMin, const glm::vec2& rectMax)
+    {
+        const glm::vec2 low = glm::min(rectMin, rectMax);
+        const glm::vec2 high = glm::max(rectMin, rectMax);
+        std::vector<std::uint64_t> guids;
+        for (auto [entity, transform, metadata] : scene.Registry().view<GPP::TransformComponent, GPP::MetadataComponent>().each())
+        {
+            const auto screen = RenderPointToScreen(frame.ToRender(transform.Position), viewportMin, viewportSize, view, projection);
+            if (screen && screen->x >= low.x && screen->x <= high.x && screen->y >= low.y && screen->y <= high.y)
+            {
+                guids.push_back(metadata.Guid);
+            }
+        }
+        return guids;
+    }
 }

@@ -144,3 +144,29 @@ TEST_CASE("RenderPointToScreen inverts ScreenPointToRay and rejects points behin
 
     CHECK_FALSE(RenderPointToScreen({0.0f, 0.0f, 20.0f}, viewportMin, viewportSize, view, projection).has_value());
 }
+
+TEST_CASE("EntitiesInScreenRect selects entities whose centres project inside the rectangle", "[simulation][picking]")
+{
+    RegisterComponents();
+    Scene scene("BoxTest");
+    const auto left = scene.CreateEntity("Left");
+    const auto right = scene.CreateEntity("Right");
+    const auto behind = scene.CreateEntity("Behind");
+    scene.Registry().emplace<TransformComponent>(left, TransformComponent{.Position = {-2.0f, 0.0f, 0.0f}});
+    scene.Registry().emplace<TransformComponent>(right, TransformComponent{.Position = {2.0f, 0.0f, 0.0f}});
+    scene.Registry().emplace<TransformComponent>(behind, TransformComponent{.Position = {-2.0f, 0.0f, 30.0f}});
+
+    const RenderFrame frame{.OriginM = glm::dvec3(0.0), .LengthUnitM = 1.0};
+    const glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 projection = glm::perspective(glm::radians(60.0f), 1.0f, 0.1f, 1000.0f);
+    projection[1][1] *= -1.0f;
+    const glm::vec2 viewportMin{0.0f, 0.0f};
+    const glm::vec2 viewportSize{800.0f, 800.0f};
+
+    const auto leftHalf = EntitiesInScreenRect(scene, frame, viewportMin, viewportSize, view, projection, {0.0f, 0.0f}, {400.0f, 800.0f});
+    REQUIRE(leftHalf.size() == 1);
+    CHECK(leftHalf.front() == scene.Registry().get<MetadataComponent>(left).Guid);
+
+    const auto all = EntitiesInScreenRect(scene, frame, viewportMin, viewportSize, view, projection, {800.0f, 800.0f}, {0.0f, 0.0f});
+    CHECK(all.size() == 2);
+}

@@ -229,6 +229,7 @@ namespace
         void OnUiRender() override
         {
             ProcessEditRequests();
+            ProcessBoxSelect();
             if (!m_UiState->ShowSceneWindow) return;
             if (!ImGui::Begin("Scene", &m_UiState->ShowSceneWindow))
             {
@@ -273,6 +274,18 @@ namespace
         }
 
     private:
+        void ProcessBoxSelect()
+        {
+            if (!m_UiState->PendingBoxSelect) return;
+            const auto request = std::exchange(m_UiState->PendingBoxSelect, std::nullopt);
+            if (!request->Additive) m_Selection.clear();
+            else if (m_UiState->SelectedEntityGuid != 0) m_Selection.insert(m_UiState->SelectedEntityGuid);
+            m_Selection.insert(request->Guids.begin(), request->Guids.end());
+            if (!request->Guids.empty()) m_UiState->SelectedEntityGuid = request->Guids.front();
+            else if (!request->Additive) m_UiState->SelectedEntityGuid = 0;
+            m_Anchor = m_UiState->SelectedEntityGuid;
+        }
+
         void ProcessEditRequests()
         {
             const auto requests = m_UiState->Edits.Take({EditAction::SelectAll, EditAction::Duplicate, EditAction::Delete,

@@ -31,6 +31,12 @@ export namespace MoleHole
     enum class GizmoOperation { Translate, Rotate, Scale };
     enum class GizmoMode { Local, World };
 
+    struct BoxSelectRequest
+    {
+        std::vector<std::uint64_t> Guids;
+        bool Additive = false;
+    };
+
     struct ExportRequest
     {
         enum class Kind { Image, Video, Sequence } RequestKind = Kind::Image;
@@ -141,6 +147,7 @@ export namespace MoleHole
 
         std::uint64_t SelectedEntityGuid = 0;
         std::uint64_t PendingSelectGuid = 0;
+        std::optional<BoxSelectRequest> PendingBoxSelect;
         CreatePopupRequest CreatePopup;
         bool OpenAddMeshDialog = false;
         EditRequests Edits;

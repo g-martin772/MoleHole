@@ -412,7 +412,11 @@ namespace
                 ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 PickEntityUnderMouse(min, max, *sim);
+                m_BoxCandidate = true;
+                m_BoxActive = false;
+                m_BoxStart = ImGui::GetMousePos();
             }
+            if (m_BoxCandidate && sim->Runner) UpdateBoxSelect(min, max, *sim);
 
             if (imageHovered && !toolbarHovered && !gizmoActive && !ImGuizmo::IsOver() && sim->Runner &&
                 !ImGui::IsMouseDown(ImGuiMouseButton_Left) && !ImGui::IsMouseDown(ImGuiMouseButton_Right) &&
@@ -420,6 +424,43 @@ namespace
             {
                 DrawHoverHighlight(min, max, *sim);
             }
+        }
+
+        void UpdateBoxSelect(ImVec2 min, ImVec2 max, const SimBinding& sim)
+        {
+            const auto mouse = ImGui::GetMousePos();
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape) || !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            {
+                const bool commit = m_BoxActive && !ImGui::IsKeyPressed(ImGuiKey_Escape);
+                m_BoxCandidate = false;
+                m_BoxActive = false;
+                if (commit) CommitBoxSelect(min, max, sim, mouse);
+                return;
+            }
+            if (!m_BoxActive && glm::distance(glm::vec2(m_BoxStart.x, m_BoxStart.y), glm::vec2(mouse.x, mouse.y)) < kBoxDragPx) return;
+            m_BoxActive = true;
+            const ImVec2 low{std::max(min.x, std::min(m_BoxStart.x, mouse.x)), std::max(min.y, std::min(m_BoxStart.y, mouse.y))};
+            const ImVec2 high{std::min(max.x, std::max(m_BoxStart.x, mouse.x)), std::min(max.y, std::max(m_BoxStart.y, mouse.y))};
+            auto* drawList = ImGui::GetWindowDrawList();
+            const auto accent = ImGui::GetStyle().Colors[ImGuiCol_CheckMark];
+            drawList->AddRectFilled(low, high, ImGui::GetColorU32(ImVec4(accent.x, accent.y, accent.z, 0.12f)));
+            drawList->AddRect(low, high, ImGui::GetColorU32(ImVec4(accent.x, accent.y, accent.z, 0.9f)), 0.0f, 0, 1.5f);
+        }
+
+        void CommitBoxSelect(ImVec2 min, ImVec2 max, const SimBinding& sim, ImVec2 mouse)
+        {
+            const glm::vec2 viewportMin{min.x, min.y};
+            const glm::vec2 viewportSize{max.x - min.x, max.y - min.y};
+            if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f) return;
+            const auto sceneLock = sim.Runner->AcquireSnapshot();
+            const Scene& scene = *sceneLock;
+            const RenderFrame frame = RenderFrame::ForScene(scene, m_RenderSettings->Effective().LengthUnit,
+                                                            m_Camera.GetPosition());
+            BoxSelectRequest request;
+            request.Additive = ImGui::GetIO().KeyShift;
+            request.Guids = EntitiesInScreenRect(scene, frame, viewportMin, viewportSize, m_Camera.GetViewMatrix(frame),
+                                                 m_Camera.GetProjectionMatrix(), {m_BoxStart.x, m_BoxStart.y}, {mouse.x, mouse.y});
+            m_UiState->PendingBoxSelect = std::move(request);
         }
 
         void DrawHoverHighlight(ImVec2 min, ImVec2 max, const SimBinding& sim)
@@ -1383,6 +1424,10 @@ namespace
         std::atomic<std::chrono::steady_clock::rep> m_SpeedReadoutAt{0};
         bool m_PanActive{false};
         static constexpr float kPickRepeatPx = 4.0f;
+        static constexpr float kBoxDragPx = 6.0f;
+        bool m_BoxCandidate{false};
+        bool m_BoxActive{false};
+        ImVec2 m_BoxStart{0.0f, 0.0f};
         glm::vec2 m_LastPickMouse{0.0f};
         bool m_LastPickValid{false};
         CameraBookmarks m_Bookmarks;

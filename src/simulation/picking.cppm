@@ -46,4 +46,9 @@ export namespace MoleHole
     [[nodiscard]] std::optional<glm::vec2> RenderPointToScreen(const glm::vec3& renderPoint, const glm::vec2& viewportMin,
                                                                const glm::vec2& viewportSize, const glm::mat4& view,
                                                                const glm::mat4& projection);
+
+    [[nodiscard]] std::vector<std::uint64_t> EntitiesInScreenRect(const GPP::Scene& scene, const RenderFrame& frame,
+                                                                  const glm::vec2& viewportMin, const glm::vec2& viewportSize,
+                                                                  const glm::mat4& view, const glm::mat4& projection,
+                                                                  const glm::vec2& rectMin, const glm::vec2& rectMax);
 }
