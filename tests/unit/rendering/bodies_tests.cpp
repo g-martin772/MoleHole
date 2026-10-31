@@ -111,6 +111,37 @@ TEST_CASE("Body entries line up with the uploaded spheres when a Star is among t
     }
 }
 
+TEST_CASE("More than 64 spheres are uploaded with their body entries", "[rendering][bodies]")
+{
+    static_assert(sizeof(RaytraceParamsGpu) <= 65536);
+    RegisterComponents();
+    Scene scene;
+    constexpr int kCount = 200;
+    for (int i = 0; i < kCount; ++i)
+    {
+        const auto entity = AddSphere(scene, glm::vec3(static_cast<float>(i) / 255.0f, 0.0f, 0.0f), {0.0f, 1.0f, 0.0f});
+        scene.Registry().get<SphereComponent>(entity).Radius = 1.0 + i;
+    }
+    RaytraceParamsGpu params{};
+    FillSceneData(params, scene, RenderFrame{});
+    const auto bodies = FillBodyData(scene, kNoTextures);
+    CHECK(params.NumSpheres == kCount);
+    CHECK(UploadedSpheres(scene).size() == static_cast<std::size_t>(kCount));
+    float smallest = params.Spheres[0].Radius;
+    float largest = smallest;
+    for (int i = 0; i < kCount; ++i)
+    {
+        smallest = std::min(smallest, params.Spheres[static_cast<std::size_t>(i)].Radius);
+        largest = std::max(largest, params.Spheres[static_cast<std::size_t>(i)].Radius);
+    }
+    CHECK(largest / smallest == Approx(static_cast<float>(kCount)));
+    CHECK(bodies.size() == static_cast<std::size_t>(kMaxSpheres));
+
+    for (int i = 0; i < kMaxSpheres + 10; ++i) AddSphere(scene, glm::vec3(1.0f), {0.0f, 1.0f, 0.0f});
+    FillSceneData(params, scene, RenderFrame{});
+    CHECK(params.NumSpheres == kMaxSpheres);
+}
+
 TEST_CASE("Surface maps get slots by role and a bare sphere uses its texture as albedo", "[rendering][bodies]")
 {
     RegisterComponents();

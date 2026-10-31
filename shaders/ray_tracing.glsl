@@ -1,3 +1,109 @@
+// A segment inside g_sphereBall only meets the spheres in g_sphereMask (those whose bounds overlap the ball); a short one
+// outside opens a new ball around itself, up to g_sphereWindowMax; any other tests every sphere. A pinned mask holds
+// the spheres along one straight ray and serves every segment on it.
+const int SPHERE_MASK_WORDS = MAX_SPHERES / 32;
+uint g_sphereMask[SPHERE_MASK_WORDS];
+vec4 g_sphereBall = vec4(0.0, 0.0, 0.0, -1.0);
+bool g_sphereMaskOn = false;
+bool g_sphereMaskPinned = false;
+bool g_sphereBallAll = false;
+float g_sphereWindowMax = 0.0;
+
+// Radius around the centre that holds the body, its atmosphere, cloud shell and rings
+float sphereExtent(int i) {
+    return max(max(u_spheres[i].radius, u_bodies[i].atmosphereShape.x), max(u_bodies[i].cloud.x, u_bodies[i].ring.y));
+}
+
+int fillSphereMask(vec3 center, float radius) {
+    for (int w = 0; w < SPHERE_MASK_WORDS; w++) g_sphereMask[w] = 0u;
+    g_sphereMaskPinned = false;
+    if (u_renderSpheres != 1) return 0;
+    int count = 0;
+    for (int i = 0; i < u_numSpheres; i++) {
+        float d = distance(u_spheres[i].position, center);
+        if (d * (1.0 - 1e-5) <= radius * 1.001 + sphereExtent(i) * 1.001) {
+            g_sphereMask[i >> 5] |= 1u << uint(i & 31);
+            count++;
+        }
+    }
+    return count;
+}
+
+// With more than a few spheres inside, the ball is dropped for windows (selectSpheres)
+void gatherSpheres(vec3 center, float radius, float windowMax) {
+    int count = fillSphereMask(center, radius);
+    g_sphereBall = vec4(center, count > 4 ? -1.0 : radius);
+    g_sphereBallAll = false;
+    g_sphereWindowMax = windowMax;
+}
+
+void gatherSpheresAlong(vec3 origin, vec3 dir) {
+    for (int w = 0; w < SPHERE_MASK_WORDS; w++) g_sphereMask[w] = 0u;
+    g_sphereMaskPinned = true;
+    if (u_renderSpheres != 1) return;
+    for (int i = 0; i < u_numSpheres; i++) {
+        vec3 oc = u_spheres[i].position - origin;
+        float extent = sphereExtent(i) * 1.001 + 2e-6 * length(oc);
+        if (dot(oc, dir) >= -extent && length(cross(oc, dir)) <= extent) g_sphereMask[i >> 5] |= 1u << uint(i & 31);
+    }
+}
+
+bool sphereMaskEmpty() {
+    uint any = 0u;
+    for (int w = 0; w < SPHERE_MASK_WORDS; w++) any |= g_sphereMask[w];
+    return any == 0u;
+}
+
+bool insideSphereBall(vec3 p) {
+    vec3 d = p - g_sphereBall.xyz;
+    return dot(d, d) <= g_sphereBall.w * g_sphereBall.w;
+}
+
+void selectSpheres(vec3 origin, vec3 dir, float length) {
+    if (g_sphereMaskPinned) {
+        g_sphereMaskOn = true;
+        return;
+    }
+    vec3 end = origin + dir * length;
+    if (g_sphereBall.w >= 0.0 && insideSphereBall(origin) && insideSphereBall(end)) {
+        g_sphereMaskOn = !g_sphereBallAll;
+        return;
+    }
+    float window = 32.0 * length;
+    if (window > g_sphereWindowMax) {
+        g_sphereMaskOn = false;
+        return;
+    }
+    int count = fillSphereMask(end, window);
+    g_sphereBall = vec4(end, window);
+    g_sphereBallAll = 2 * count > u_numSpheres;
+    g_sphereMaskOn = !g_sphereBallAll;
+}
+
+int nextSphere(int from) {
+    if (!g_sphereMaskOn) return from < u_numSpheres ? from : -1;
+    int w = from >> 5;
+    if (w >= SPHERE_MASK_WORDS) return -1;
+    uint bits = g_sphereMask[w] & (~0u << uint(from & 31));
+    while (bits == 0u) {
+        if (++w >= SPHERE_MASK_WORDS) return -1;
+        bits = g_sphereMask[w];
+    }
+    return (w << 5) + findLSB(bits);
+}
+
+bool sphereLayersReach(int i, vec3 origin, vec3 dir, float tEnd) {
+    float extent = max(u_bodies[i].atmosphereShape.x, max(u_bodies[i].cloud.x, u_bodies[i].ring.y));
+    if (extent <= 0.0) return false;
+    extent *= 1.001;
+    vec3 oc = origin - u_spheres[i].position;
+    float b = dot(oc, dir);
+    float disc = b * b - (dot(oc, oc) - extent * extent);
+    if (disc < 0.0) return false;
+    float root = sqrt(disc);
+    return -b - root <= tEnd + 0.001 * extent && -b + root >= -0.001 * extent;
+}
+
 struct HitRecord {
     bool hit;
     float t;
@@ -37,19 +143,21 @@ HitRecord rayTraceNormalSpace(vec3 rayOrigin, vec3 rayDir, float maxDistance) {
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
 
     if (u_renderSpheres == 1) {
-        for (int i = 0; i < u_numSpheres; i++) {
+        selectSpheres(rayOrigin, rayDir, maxDistance);
+        int closest = -1;
+        for (int i = nextSphere(0); i >= 0; i = nextSphere(i + 1)) {
             if (i == g_skipSphere) continue;
             float t;
-            if (intersectSphere(rayOrigin, rayDir, u_spheres[i].position, u_spheres[i].radius, t)) {
-                if (t < record.t) {
-                    record.hit = true;
-                    record.t = t;
-                    record.type = 1;
-                    record.objectIndex = i;
-                    vec3 hitPoint = rayOrigin + rayDir * t;
-                    record.color = renderSphere(hitPoint, rayDir, i, lightDir);
-                }
+            if (intersectSphere(rayOrigin, rayDir, u_spheres[i].position, u_spheres[i].radius, t) && t < record.t) {
+                record.t = t;
+                closest = i;
             }
+        }
+        if (closest >= 0) {
+            record.hit = true;
+            record.type = 1;
+            record.objectIndex = closest;
+            record.color = renderSphere(rayOrigin + rayDir * record.t, rayDir, closest, lightDir);
         }
     }
 
@@ -94,8 +202,9 @@ void segmentLayers(vec3 origin, vec3 dir, float tEnd, out vec3 add, out vec3 tra
     transmit = vec3(1.0);
     if (u_renderSpheres != 1) return;
     float eye = distance(u_cameraPos, origin);
-    for (int i = 0; i < u_numSpheres; i++) {
-        if (i == g_skipSphere) continue;
+    selectSpheres(origin, dir, tEnd);
+    for (int i = nextSphere(0); i >= 0; i = nextSphere(i + 1)) {
+        if (i == g_skipSphere || !sphereLayersReach(i, origin, dir, tEnd)) continue;
         bodyAllLayers(i, origin - u_spheres[i].position, dir, tEnd, eye, add, transmit);
     }
 }
@@ -116,6 +225,11 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
 
     newOrigin = rayOrigin;
     newDirection = rayDirection;
+
+    if (u_renderSpheres == 1 && u_numSpheres > 0) {
+        float zone = calculateInfluenceRadius(calculateEventHorizonRadius(u_blackHoles[closestHole].mass));
+        gatherSpheres(u_blackHoles[closestHole].position, 1.25 * zone, 0.5 * zone);
+    }
 
     float stepSize = u_rayStepSize * 10.0f;
     float maxSteps = u_maxRaySteps / 50;
@@ -259,6 +373,7 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     hitPoint = vec3(0.0);
 
     int maxOuterIterations = max(50, u_maxRaySteps / 200);
+    bool straightMask = false;
 
     g_maxStepCount = maxOuterIterations + u_maxRaySteps / 50;
     for (int iter = 0; iter < maxOuterIterations; iter++) {
@@ -269,6 +384,8 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         bool inZone = isInInfluenceZone(currentOrigin, closestBH, distToBH, influenceR);
 
         if (inZone) {
+            straightMask = false;
+            g_sphereMaskPinned = false;
             bool hitHorizon, exited;
             vec3 newOrigin, newDir;
             vec3 zoneHitPoint; bool zoneHitSolid;
@@ -292,6 +409,10 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
 
             return color;
         } else {
+            if (!straightMask) {
+                gatherSpheresAlong(currentOrigin, currentDir);
+                straightMask = true;
+            }
             float minDistToInfluence = 1e10;
 
             if (u_renderBlackHoles == 1) {
@@ -487,6 +608,15 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     float trailTravel = 0.0f;
     float trailSpacing = trails ? trailTestSpacing() : 0.0f;
 
+    // |x|^2 = r^2 + a^2 sin^2 theta, so the path stays inside this ball until the last chord
+    bool sphereObjects = u_renderSpheres == 1 && u_numSpheres > 0;
+    bool otherObjects = u_numMeshInstances > 0 || traceThirdPerson();
+    bool chordSpheres = sphereObjects;
+    if (sphereObjects) {
+        gatherSpheres(bh.position, influenceRadius + abs(float(st.a)), 0.5 * influenceRadius);
+        chordSpheres = !sphereMaskEmpty();
+    }
+
     g_maxStepCount = u_maxRaySteps;
     g_termination = TERM_STEPS;
     for (int i = 0; i < u_maxRaySteps; i++) {
@@ -533,7 +663,6 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             if (abs(float(r * rcos(y.y))) < 5.0f * H) h = min(h, real(0.25f * H));
         }
 
-        vec3 chordStart = objects ? blToCartesian(y.x, y.y, phi, st.a) : vec3(0.0f);
         real r0 = y.x;
         real phi0 = phi;
         real pth0 = y.w;
@@ -546,7 +675,8 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             break;
         }
 
-        if (objects) {
+        if (objects && (chordSpheres || otherObjects || r > rEscape)) {
+            vec3 chordStart = blToCartesian(r0, theta0, phi0, st.a);
             vec3 chord = frame * (blToCartesian(y.x, y.y, phi, st.a) - chordStart);
             float chordLength = length(chord);
             if (chordLength > 0.0f) {

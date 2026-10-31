@@ -35,8 +35,8 @@ export namespace MoleHole
 
     constexpr int kMaxBlackHoles = 8;
     // The sphere table of the trace uniform block grows every offset behind it by 48 bytes per sphere over the original 16;
-    // the shaders' u_spheres arrays (trace_common.glsl, gravity_grid_data.glsl) must match.
-    constexpr int kMaxSpheres = 64;
+    // the shaders' u_spheres arrays (trace_common.glsl, gravity_grid_data.glsl) must match. 256 keeps the block under 64 KiB.
+    constexpr int kMaxSpheres = 256;
     constexpr std::size_t kSphereTableGrowth = (kMaxSpheres - 16) * 48;
     constexpr int kDiskProfileVec4s = kDiskProfileSamples / 4;
     // Outer edge of the disk in M; a free (artistic) parameter, nothing in the metric sets it.
@@ -127,6 +127,7 @@ export namespace MoleHole
     };
     constexpr std::size_t kObserverVelocityOffset = 3616 + kSphereTableGrowth + 16 * kMaxBlackHoles * kDiskPhaseBins;
     static_assert(sizeof(RaytraceParamsGpu) == kObserverVelocityOffset + 80 + 16 * kMaxBlackHoles);
+    static_assert(sizeof(RaytraceParamsGpu) <= 65536);
     static_assert(offsetof(RaytraceParamsGpu, HolePrecision) == kObserverVelocityOffset + 80);
     static_assert(offsetof(RaytraceParamsGpu, DiskPhase) == 3616 + kSphereTableGrowth);
     static_assert(offsetof(RaytraceParamsGpu, ObserverVelocity) == kObserverVelocityOffset);

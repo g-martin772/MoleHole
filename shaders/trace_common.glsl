@@ -1,5 +1,7 @@
 layout(set = 0, binding = 0, rgba32f) uniform image2D l_outputImage;
 
+const int MAX_SPHERES = 256; // kMaxSpheres in src/rendering/render_data.cppm
+
 layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
 {
     vec3 u_cameraPos; float u_fov;
@@ -43,7 +45,7 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
     float _pad0;
 
     BlackHoleData u_blackHoles[8];
-    SphereData u_spheres[64];
+    SphereData u_spheres[MAX_SPHERES];
 
     mat4 u_viewProjection;
 
