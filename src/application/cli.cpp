@@ -42,6 +42,38 @@ namespace MoleHole
         for (const auto& profile : BuiltInRenderProfiles()) std::println("  {:<12} {}", profile.Name, profile.Description);
     }
 
+    std::string DumpSchemaMarkdown()
+    {
+        constexpr std::array<std::string_view, 11> typeNames{"bool", "int", "float", "vec2", "vec3", "vec4", "string", "entity", "enum", "double", "dvec3"};
+        std::string out = "# Component schema\n";
+        GPP::ComponentRegistry::Instance().ForEach([&](const GPP::ComponentTypeInfo& info)
+        {
+            out += std::format("\n## {}\n\n", info.Name);
+            if (!info.Note.empty()) out += info.Note + "\n\n";
+            if (info.Fields.empty()) { out += "No fields.\n"; return; }
+            out += "| Field | Type | Label | Range | Notes |\n|---|---|---|---|---|\n";
+            for (const auto& field : info.Fields)
+            {
+                const auto& meta = field.Meta;
+                std::vector<std::string> notes;
+                if (meta.Dim != GPP::Units::Dimension::None) notes.emplace_back(GPP::Units::DimensionName(meta.Dim));
+                if (field.ReadOnly() || meta.ReadOnly) notes.emplace_back("read-only");
+                if (!field.Serialized) notes.emplace_back("not saved");
+                if (!meta.Options.empty())
+                {
+                    std::string options;
+                    for (const auto& option : meta.Options) options += (options.empty() ? "" : ", ") + option;
+                    notes.push_back("options: " + options);
+                }
+                std::string notesText;
+                for (const auto& note : notes) notesText += (notesText.empty() ? "" : "; ") + note;
+                const std::string range = meta.Min != meta.Max ? std::format("{} .. {}", meta.Min, meta.Max) : std::string();
+                out += std::format("| `{}` | {} | {} | {} | {} |\n", field.Name, typeNames[static_cast<std::size_t>(field.Type)], meta.Label, range, notesText);
+            }
+        });
+        return out;
+    }
+
     std::optional<CliExportArgs> ParseExportArgs(int argc, char* argv[])
     {
         CliExportArgs args;

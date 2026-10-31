@@ -17,6 +17,7 @@ export namespace MoleHole
 
     [[nodiscard]] std::optional<CliExportArgs> ParseExportArgs(int argc, char* argv[]);
     void PrintSettings();
+    [[nodiscard]] std::string DumpSchemaMarkdown();
     [[nodiscard]] std::optional<std::string> ParseValidateSceneArg(int argc, char* argv[]);
     [[nodiscard]] int RunValidateScene(const std::string& path);
 }

@@ -110,3 +110,12 @@ TEST_CASE("Sequence export flags are parsed", "[export][cli]")
     CHECK(args->Request.SequenceName == "a_b");
     CHECK(args->Request.Framerate == 24);
 }
+
+TEST_CASE("Schema dump lists registered components and their fields", "[export][cli]")
+{
+    RegisterComponents();
+    const auto text = DumpSchemaMarkdown();
+    CHECK(text.starts_with("# Component schema"));
+    CHECK(text.contains("\n## Transform\n"));
+    CHECK(text.contains("| Field | Type | Label | Range | Notes |"));
+}

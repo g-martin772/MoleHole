@@ -48,6 +48,9 @@ The disk noise still follows the wall clock, so two exports of the same scene ar
 | `--set <key=value>` | both | — | Override one render setting; repeatable; bad keys or values abort with exit code 2 |
 | `--export-timeout <seconds>` | both | 120 | Give up when the export makes no progress (scene load, shader compile, a frame, encoding) for this long; `0` disables |
 | `--list-settings` | — | — | Print every setting key with default and options, then exit |
+| `--dump-schema` | — | — | Print every registered component and its fields as markdown, then exit (no window, no GPU) |
+| `--validate-scene <file>` | — | — | Check a scene file and exit (0 ok, 1 errors); see User Guide |
+| `--simulate <file>` | — | — | Headless physics run (`--ticks`, `--dt`, `--seed`, `--out`); see User Guide → Headless simulation |
 | `--ray-step-size <f>` | both | profile | Same as `--set transport.step_size=<f>` |
 | `--max-ray-steps <n>` | both | profile | Same as `--set transport.max_steps=<n>` |
 | `--gpu-precision <f32\|f64>` | both | f32 | Same as `--set transport.gpu_precision=<p>` |
@@ -65,4 +68,4 @@ The disk noise still follows the wall clock, so two exports of the same scene ar
 | 5 | Writing the image or encoding the video failed |
 
 Step size is in units of the render frame's gravitational radius (`camera.length_unit`).
-Not available yet: `--spp`, `--seed`, `--format`, `--denoise`, `--time-scale`, `--sim-start` (no accumulation or sampler yet).
+Not available yet: `--spp`, `--seed`, `--format`, `--denoise` (no accumulation or sampler yet). `--seed` exists only for `--simulate`.

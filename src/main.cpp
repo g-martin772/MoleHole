@@ -20,6 +20,12 @@ int main(int argc, char* argv[])
     const std::vector<std::string> cliArgs(argv + 1, argv + argc);
     const auto startupArgs = ParseStartupArgs(cliArgs);
 
+    if (std::ranges::find(cliArgs, "--dump-schema") != cliArgs.end())
+    {
+        std::print("{}", DumpSchemaMarkdown());
+        return 0;
+    }
+
     if (const auto validatePath = ParseValidateSceneArg(argc, argv)) return RunValidateScene(*validatePath);
 
     if (const auto simulateArgs = ParseSimulateArgs(argc, argv)) return RunSimulate(*simulateArgs);
