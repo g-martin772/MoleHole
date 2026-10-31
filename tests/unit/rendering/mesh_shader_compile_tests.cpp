@@ -85,6 +85,15 @@ TEST_CASE("The traced black hole kernel with meshes compiles in both precisions"
     }
 }
 
+TEST_CASE("The mesh trace dither does not depend on the work slice", "[rendering][shaders]")
+{
+    std::ifstream file(kRoot / "shaders" / "mesh_trace.glsl");
+    const std::string source((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    REQUIRE_FALSE(source.empty());
+    CHECK(source.find("gl_GlobalInvocationID") == std::string::npos);
+    CHECK(source.find("gl_WorkGroupID") == std::string::npos);
+}
+
 TEST_CASE("The exposure shader compiles", "[rendering][shaders]")
 {
     const auto shader = Compile("exposure.comp", ShaderStage::Compute, Caps(true), 32);

@@ -114,6 +114,13 @@ bool meshBoundsHit(vec3 origin, vec3 dir, float tMax) {
     return b < 0.0 && disc >= 0.0 && -b - sqrt(disc) <= tMax;
 }
 
+// Per-pixel threshold from the image position: slice-relative ids change with frame timing
+vec2 meshDitherPixel() {
+    ivec2 texel;
+    traceTexel(texel);
+    return vec2(texel);
+}
+
 // Alpha test of a candidate hit on a non-opaque instance: single-sided back faces, MASK cutoff and a dithered BLEND
 // (the same screen-space threshold as the raster pass).
 bool meshAcceptCandidate(rayQueryEXT query, vec3 dir) {
@@ -127,7 +134,7 @@ bool meshAcceptCandidate(rayQueryEXT query, vec3 dir) {
                                           rayQueryGetIntersectionTEXT(query, false), dir);
     float alpha = material.baseColorFactor.a * meshSampleSlot(material.baseColor, surface, vec4(1.0)).a;
     if (mode == PBR_ALPHA_MASK) return alpha >= material.alphaCutoff;
-    return alpha > meshDitherThreshold(vec2(gl_GlobalInvocationID.xy));
+    return alpha > meshDitherThreshold(meshDitherPixel());
 }
 
 bool traceMeshes(vec3 origin, vec3 dir, float tMax, out float tHit, out vec3 color) {
