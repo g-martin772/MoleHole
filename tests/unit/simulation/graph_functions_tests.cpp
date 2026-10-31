@@ -44,14 +44,17 @@ TEST_CASE("New function graph has entry and return nodes joined by flow", "[grap
 {
     SceneGraphs graphs;
     const auto index = AddFunctionGraph(graphs);
-    const auto& fn = graphs.Items[index];
-    CHECK(fn.IsFunction);
-    REQUIRE(fn.Graph.Nodes.size() == 2);
-    CHECK(fn.Graph.Nodes[0].SubType == NodeSubType::FunctionEntry);
-    CHECK(fn.Graph.Nodes[1].SubType == NodeSubType::FunctionReturn);
-    CHECK(fn.Graph.Links.size() == 1);
+    {
+        const auto& fn = graphs.Items[index];
+        CHECK(fn.IsFunction);
+        REQUIRE(fn.Graph.Nodes.size() == 2);
+        CHECK(fn.Graph.Nodes[0].SubType == NodeSubType::FunctionEntry);
+        CHECK(fn.Graph.Nodes[1].SubType == NodeSubType::FunctionReturn);
+        CHECK(fn.Graph.Links.size() == 1);
+    }
+    const auto firstName = graphs.Items[index].Name;
     CHECK(AddFunctionGraph(graphs) != index);
-    CHECK(graphs.Items[1].Name != fn.Name);
+    CHECK(graphs.Items[1].Name != firstName);
 }
 
 TEST_CASE("Signature edits keep pin ids stable and update calls", "[graph][function]")
