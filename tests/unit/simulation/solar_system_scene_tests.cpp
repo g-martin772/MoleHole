@@ -25,7 +25,7 @@ namespace
     {
         RegisterComponents();
         Scene scene("SolarSystem");
-        scene.DeserializeFromYaml(ReadFile(std::filesystem::path(MOLEHOLE_SOURCE_DIR) / "templates" / file));
+        scene.DeserializeFromYaml(ReadFile(std::filesystem::path(MOLEHOLE_SOURCE_DIR) / "tests" / "fixtures" / file));
         return scene;
     }
 
