@@ -25,6 +25,7 @@ export namespace MoleHole
         std::shared_ptr<GPP::PhysicsSimulationModule> Physics;
         std::uint64_t ObserverGuid = 0; // entity whose world line the camera rides (possessed scene camera), 0 = none
         std::uint64_t SceneKey = 0;
+        std::uint64_t SceneId = 0; // constant while the same scene runs
         bool Interactive = true; // false: every frame is drawn, never skipped or accumulated (exports)
     };
 

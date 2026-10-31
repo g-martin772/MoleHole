@@ -8,6 +8,7 @@ import :Rendering.Data;
 import :Rendering.DebugLegend;
 import :Rendering.MeshTrace;
 import :Rendering.Culling;
+import :Rendering.Exposure;
 import :Rendering.Lut;
 import :Simulation.Components;
 import :Rendering.OrbitOverlays;
@@ -365,8 +366,7 @@ namespace MoleHole
         class TraceStage final : public IRenderStage
         {
         public:
-            TraceStage(RenderResources& res, const std::chrono::steady_clock::time_point& start)
-                : m_Res(res), m_StartTime(start)
+            explicit TraceStage(RenderResources& res) : m_Res(res)
             {
             }
 
@@ -775,7 +775,6 @@ namespace MoleHole
             }
 
             RenderResources& m_Res;
-            std::chrono::steady_clock::time_point m_StartTime;
             mutable std::mutex m_VariantMutex;
             TraceVariants m_Demand;
             bool m_HaveDemand = false;
@@ -859,7 +858,7 @@ namespace MoleHole
         class ExposureStage final : public IRenderStage
         {
         public:
-            explicit ExposureStage(RenderResources& res) : m_Res(res)
+            ExposureStage(RenderResources& res, const std::chrono::steady_clock::time_point& start) : m_Res(res), m_StartTime(start)
             {
                 m_Pipeline = MakeComputePipeline(res, "exposure.comp");
             }
@@ -880,10 +879,27 @@ namespace MoleHole
                           ctx.Settings.CameraAperture, ctx.Settings.CameraShutter, ctx.Settings.CameraIso})
                                          * Radiometry::kHdrReferenceWhite)
                     : 0.0f;
-                struct { std::int32_t Enabled; std::int32_t Auto; float Ev; float Key; float PhysicalScale; } push{
+                const bool metering = ctx.Settings.ToneMapping != ToneMap::None && ctx.Settings.Exposure == ExposureMode::Auto;
+                ExposureStep step;
+                if (metering)
+                {
+                    const bool interactive = ctx.Inputs.Interactive;
+                    const double time = interactive
+                        ? std::chrono::duration<double>(std::chrono::steady_clock::now() - m_StartTime).count()
+                        : ctx.Scene.Clock().Elapsed;
+                    if (m_Res.ExposureImage.get() != m_Image)
+                    {
+                        m_Image = m_Res.ExposureImage.get();
+                        m_Adaptation.Reset();
+                    }
+                    const auto context = ctx.Inputs.SceneId * 2 + (interactive ? 1u : 0u);
+                    step = m_Adaptation.Next(time, ctx.Settings.AutoExposureAdaptation, context);
+                }
+                else m_Adaptation.Reset();
+                struct { std::int32_t Enabled; std::int32_t Auto; float Ev; float Key; float PhysicalScale; float Alpha; std::int32_t Commit; } push{
                     ctx.Settings.ToneMapping != ToneMap::None ? 1 : 0,
                     ctx.Settings.Exposure == ExposureMode::Auto ? 1 : 0,
-                    ctx.Settings.ExposureEv, ctx.Settings.AutoExposureKey, physicalScale};
+                    ctx.Settings.ExposureEv, ctx.Settings.AutoExposureKey, physicalScale, step.Alpha, step.Commit ? 1 : 0};
                 ctx.Graph.AddComputePass(
                     "Exposure", {}, {},
                     [device, res, exposure, push](const vk::CommandBuffer cmd, RenderGraph& g)
@@ -904,7 +920,10 @@ namespace MoleHole
 
         private:
             RenderResources& m_Res;
+            std::chrono::steady_clock::time_point m_StartTime;
             std::shared_ptr<ShaderPipeline> m_Pipeline;
+            ExposureAdaptation m_Adaptation;
+            const void* m_Image = nullptr;
         };
 
         class BloomStage final : public IRenderStage
@@ -1685,12 +1704,12 @@ namespace MoleHole
 
         // Before the trace: it hands the lensed part of the trails to the tracer
         impl.Stages.push_back(std::make_unique<OverlayGeometryStage>(res, impl.Paths, impl.PathMutex));
-        auto trace = std::make_unique<TraceStage>(res, impl.StartTime);
+        auto trace = std::make_unique<TraceStage>(res);
         trace->Initialize();
         impl.Trace = trace.get();
         impl.Stages.push_back(std::move(trace));
         impl.Stages.push_back(std::make_unique<AccumulateStage>(res));
-        impl.Stages.push_back(std::make_unique<ExposureStage>(res));
+        impl.Stages.push_back(std::make_unique<ExposureStage>(res, impl.StartTime));
         impl.Stages.push_back(std::make_unique<BloomStage>(res));
         impl.Stages.push_back(std::make_unique<LensFlareStage>(res));
         impl.Stages.push_back(std::make_unique<CompositeStage>(res));

@@ -259,6 +259,12 @@ namespace MoleHole
                 .Tooltip = "Grey level the metered average is mapped to.",
                 .Doc = kDoc, .Min = 0.01, .Max = 1.0, .Scale = SettingScale::Log, .Format = "%.2f",
                 .VisibleWhen = "post.tonemap>=1 & post.exposure_mode=1"}));
+            registry.Add(Setting("post.exposure_adaptation", &R::AutoExposureAdaptation, {
+                .Label = "Auto adaptation", .Group = "Post",
+                .Tooltip = "Time the metered exposure takes to follow a change, in seconds (film time in exports).\n"
+                           "0 = follows every frame. The first frame of a shot is always metered exactly.",
+                .Doc = kDoc, .Min = 0.0, .Max = 10.0, .Format = "%.2f s",
+                .VisibleWhen = "post.tonemap>=1 & post.exposure_mode=1"}));
             registry.Add(Setting("post.camera_aperture", &R::CameraAperture, {
                 .Label = "Aperture (f/N)", .Group = "Post",
                 .Tooltip = "f-number N of the physical camera: exposure scales with 1/N^2.",

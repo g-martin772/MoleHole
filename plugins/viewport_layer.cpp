@@ -28,6 +28,7 @@ namespace
         RenderSettings Render;
         std::uint64_t ObserverGuid = 0; // possessed scene camera entity, for a camera riding a Geodesic Body
         std::uint64_t SceneKey = 0;
+        std::uint64_t SceneId = 0;
         bool Interactive = true;
     };
 
@@ -99,6 +100,7 @@ namespace
             UpdateRenderSettings();
             auto render = m_RenderSettings->Effective();
             std::uint64_t sceneKey = 0;
+            std::uint64_t sceneId = 0;
             if (const auto sim = m_Sim.Load(); sim->Runner)
             {
                 ReportInitErrors(*sim->Runner);
@@ -114,6 +116,9 @@ namespace
                 const auto published = sim->Runner->AcquireSnapshot();
                 SignatureHasher key;
                 key.Pointer(sim->Runner.get());
+                SignatureHasher id;
+                id.Pointer(sim->Runner.get());
+                sceneId = id.Digest();
                 key.Value(published.Generation());
                 sceneKey = key.Digest();
                 RecordPaths(render.ShowObjectPaths, !sim->Runner->IsPaused(), sceneKey, *published);
@@ -132,7 +137,7 @@ namespace
             PublishObserverReadout(render, sceneKey);
             const bool interactive = m_ActiveContext != RenderContext::Export;
             RequestFrameOnChange(sceneKey, interactive, step);
-            m_FrameParams.Publish(ViewportFrameParams{m_Camera, std::move(render), m_ObserverGuid, sceneKey, interactive});
+            m_FrameParams.Publish(ViewportFrameParams{m_Camera, std::move(render), m_ObserverGuid, sceneKey, sceneId, interactive});
         }
 
         void OnRender() override
@@ -163,6 +168,7 @@ namespace
             inputs.Physics = sim->Runner->GetModule<PhysicsSimulationModule>();
             inputs.ObserverGuid = frameParams->ObserverGuid;
             inputs.SceneKey = frameParams->SceneKey;
+            inputs.SceneId = frameParams->SceneId;
             inputs.Interactive = frameParams->Interactive;
             const auto sceneLock = sim->Runner->AcquireSnapshot();
             inputs.Scene = &*sceneLock;

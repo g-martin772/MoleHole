@@ -82,6 +82,7 @@ export namespace MoleHole
         ExposureMode Exposure = ExposureMode::Manual;
         float ExposureEv = 0.0f;
         float AutoExposureKey = 0.18f;
+        float AutoExposureAdaptation = 0.5f; // s
         float CameraAperture = 2.8f;        // f-number N
         float CameraShutter = 0.008f;       // s
         float CameraIso = 100.0f;

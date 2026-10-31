@@ -2,13 +2,15 @@
 
 // Exposure for the tone mapper, written to a 1x1 image read by bloom_extract.comp and blackhole_display.frag.
 // Manual: 2^EV. Auto: key / log-average luminance (Reinhard et al. 2002) of the pixels within 1/100 of the
-// brightest sample, times 2^EV, so a frame that is mostly dark sky is metered on its subject.
+// brightest sample, times 2^EV, so a frame that is mostly dark sky is metered on its subject. The metered value is
+// blended with the previous one in stops: u_alpha is the weight of the new meter, u_commit moves the last render
+// into the committed state the blend starts from. Image channels: r exposure, g metered stops, b committed stops.
 // Physical camera: scale from aperture, shutter and ISO (EV100 model, image value 1 = 203 cd/m^2) times 2^EV.
 // Disabled (no tone mapping): 1, so the raw tracer output is shown unchanged.
 layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(set = 0, binding = 0, rgba32f) uniform readonly image2D u_inputImage;
-layout(set = 0, binding = 1, rgba32f) uniform writeonly image2D u_exposureImage;
+layout(set = 0, binding = 1, rgba32f) uniform image2D u_exposureImage;
 
 layout(push_constant) uniform PushConstants
 {
@@ -17,6 +19,8 @@ layout(push_constant) uniform PushConstants
     float u_ev;
     float u_key;
     float u_physicalScale; // > 0: physical camera, replaces manual and auto
+    float u_alpha;
+    int u_commit;
 };
 
 shared float s_max[256];
@@ -77,14 +81,25 @@ void main() {
 
     if (id == 0u) {
         float exposure = 1.0;
+        vec4 state = vec4(0.0);
         if (u_enabled == 1) {
             exposure = exp2(u_ev);
             if (u_physicalScale > 0.0) {
                 exposure *= u_physicalScale;
-            } else if (u_auto == 1 && s_count[0] > 0.0) {
-                exposure *= u_key / exp(s_logSum[0] / s_count[0]);
+            } else if (u_auto == 1) {
+                float target = s_count[0] > 0.0 ? log2(u_key) - s_logSum[0] / s_count[0] * 1.4426950408889634 : 0.0;
+                float metered = target;
+                float committed = target;
+                if (u_alpha < 1.0) {
+                    vec4 old = imageLoad(u_exposureImage, ivec2(0));
+                    committed = u_commit == 1 ? old.g : old.b;
+                    metered = mix(committed, target, u_alpha);
+                }
+                exposure *= exp2(metered);
+                state = vec4(0.0, metered, committed, 0.0);
             }
         }
-        imageStore(u_exposureImage, ivec2(0), vec4(exposure));
+        state.r = exposure;
+        imageStore(u_exposureImage, ivec2(0), state);
     }
 }
