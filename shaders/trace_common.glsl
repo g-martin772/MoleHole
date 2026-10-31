@@ -75,6 +75,8 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
     // z = 1 when there are traced trails, w = line half-width in radians
     vec4 u_trailGrid;
     vec4 u_trailGrid2; // x = hash table size (power of two)
+
+    vec4 u_holePrecision[8]; // per hole x = a* - spin, y = r+ - horizonRadius: what the floats of u_blackHoles drop
 };
 
 layout(set = 0, binding = 2) uniform sampler2D u_skyboxTexture;

@@ -162,7 +162,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
 
         if (u_accretionDiskEnabled == 1) {
             BlackHoleData bh = u_blackHoles[closestBH];
-            Spacetime st = spacetimeOf(bh);
+            Spacetime st = spacetimeOf(bh, u_holePrecision[closestBH]);
             mat3 toLocal = transpose(spinFrame(bh.spinAxis));
             vec3 axis = normalize(bh.spinAxis);
             vec4 diskInfo = u_diskInfo[closestBH];
@@ -403,7 +403,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     }
 
     BlackHoleData bh = u_blackHoles[0];
-    Spacetime st = spacetimeOf(bh);
+    Spacetime st = spacetimeOf(bh, u_holePrecision[0]);
     float mass = bh.mass;
     mat3 frame = spinFrame(bh.spinAxis);
     mat3 toLocal = transpose(frame);

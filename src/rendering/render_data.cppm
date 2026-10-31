@@ -121,9 +121,13 @@ export namespace MoleHole
         // Lensed trails (shaders/trails.glsl): grid half-size (render units), cells per axis, 1 = active, half-width (rad)
         glm::vec4 TrailGrid{0.0f};
         glm::vec4 TrailGrid2{0.0f}; // x = hash table size of the occupied trail cells
+
+        // Per black hole the part the floats of BlackHoles drop: x = a* - Spin, y = r+ - HorizonRadius (render units)
+        std::array<glm::vec4, kMaxBlackHoles> HolePrecision{};
     };
     constexpr std::size_t kObserverVelocityOffset = 3616 + kSphereTableGrowth + 16 * kMaxBlackHoles * kDiskPhaseBins;
-    static_assert(sizeof(RaytraceParamsGpu) == kObserverVelocityOffset + 80);
+    static_assert(sizeof(RaytraceParamsGpu) == kObserverVelocityOffset + 80 + 16 * kMaxBlackHoles);
+    static_assert(offsetof(RaytraceParamsGpu, HolePrecision) == kObserverVelocityOffset + 80);
     static_assert(offsetof(RaytraceParamsGpu, DiskPhase) == 3616 + kSphereTableGrowth);
     static_assert(offsetof(RaytraceParamsGpu, ObserverVelocity) == kObserverVelocityOffset);
     static_assert(offsetof(RaytraceParamsGpu, OrbitRadii) == kObserverVelocityOffset + 16);
@@ -163,10 +167,16 @@ export namespace MoleHole
         return result;
     }
 
+    [[nodiscard]] inline double ExactSpin(const RaytraceParamsGpu& params, const std::size_t index)
+    {
+        return static_cast<double>(params.BlackHoles[index].Spin) + static_cast<double>(params.HolePrecision[index].x);
+    }
+
     // Holes are uploaded heaviest first: the lensing engines treat index 0 as the primary hole.
     inline void FillSceneData(RaytraceParamsGpu& params, const GPP::Scene& scene, const RenderFrame& frame)
     {
-        std::vector<BlackHoleGpuData> holes;
+        struct UploadedHole { BlackHoleGpuData Gpu; float SpinLow; };
+        std::vector<UploadedHole> holes;
         for (auto [entity, blackHole, transform] :
              scene.Registry().view<const BlackHoleComponent, const GPP::TransformComponent>().each())
         {
@@ -179,13 +189,19 @@ export namespace MoleHole
             const auto metric = BlackHoleMetric(blackHole);
             gpu.SpinAxis = EffectiveSpinAxis(blackHole.SpinAxis, BlackHoleSignedSpin(blackHole));
             gpu.Spin = static_cast<float>(metric.SpinParameter);
+            const auto spinLow = static_cast<float>(metric.SpinParameter - static_cast<double>(gpu.Spin));
             gpu.Charge = static_cast<float>(metric.Charge);
             gpu.MassSolar = static_cast<float>(blackHole.Mass / GPP::Units::kSolarMass);
-            holes.push_back(gpu);
+            holes.push_back({gpu, spinLow});
         }
-        std::ranges::stable_sort(holes, std::greater<>{}, &BlackHoleGpuData::MassSolar);
+        std::ranges::stable_sort(holes, [](const UploadedHole& a, const UploadedHole& b) { return a.Gpu.MassSolar > b.Gpu.MassSolar; });
         params.NumBlackHoles = static_cast<std::int32_t>(std::min<std::size_t>(holes.size(), kMaxBlackHoles));
-        for (std::int32_t i = 0; i < params.NumBlackHoles; ++i) params.BlackHoles[static_cast<std::size_t>(i)] = holes[static_cast<std::size_t>(i)];
+        for (std::int32_t i = 0; i < params.NumBlackHoles; ++i)
+        {
+            const auto index = static_cast<std::size_t>(i);
+            params.BlackHoles[index] = holes[index].Gpu;
+            params.HolePrecision[index] = glm::vec4(holes[index].SpinLow, 0.0f, 0.0f, 0.0f);
+        }
 
         params.NumSpheres = 0;
         for (auto [entity, star, transform] :
@@ -224,6 +240,7 @@ export namespace MoleHole
     struct HoleMetricResult
     {
         float Spin{0.0f}, Charge{0.0f}, HorizonRadius{0.0f}, IscoRadius{0.0f};
+        float SpinLow{0.0f}, HorizonLow{0.0f};
         glm::vec4 DiskInfo{0.0f};
         std::array<glm::vec4, kDiskProfileVec4s> DiskProfile{};
     };
@@ -232,7 +249,7 @@ export namespace MoleHole
     {
         struct Entry
         {
-            std::array<float, 5> Key{};
+            std::array<float, 6> Key{};
             std::int32_t Metric{-1};
             bool Valid{false};
             HoleMetricResult Result;
@@ -241,14 +258,19 @@ export namespace MoleHole
         int Misses{0}; // recomputations so far
     };
 
-    [[nodiscard]] inline HoleMetricResult ComputeHoleMetric(const RaytraceParamsGpu& params, const BlackHoleGpuData& hole)
+    [[nodiscard]] inline HoleMetricResult ComputeHoleMetric(const RaytraceParamsGpu& params, const BlackHoleGpuData& hole,
+                                                            const double spin)
     {
         HoleMetricResult out;
-        const auto metric = MakeKerrNewmanParams(params.MetricType, hole.Mass, hole.Spin, hole.Charge);
+        const auto metric = MakeKerrNewmanParams(params.MetricType, hole.Mass, spin, hole.Charge);
         const double mass = metric.Mass > 0.0 ? metric.Mass : 1.0;
-        out.Spin = static_cast<float>(metric.SpinParameter / mass);
+        const double scaledSpin = metric.SpinParameter / mass;
+        const double horizon = CaptureRadius(metric);
+        out.Spin = static_cast<float>(scaledSpin);
+        out.SpinLow = static_cast<float>(scaledSpin - static_cast<double>(out.Spin));
         out.Charge = static_cast<float>(metric.Charge / mass);
-        out.HorizonRadius = static_cast<float>(CaptureRadius(metric));
+        out.HorizonRadius = static_cast<float>(horizon);
+        out.HorizonLow = static_cast<float>(horizon - static_cast<double>(out.HorizonRadius));
         out.IscoRadius = static_cast<float>(ProgradeIscoRadius(metric));
 
         const auto disk = BuildDiskProfile(metric, hole.MassSolar, params.DiskAccretionRate, kDiskOuterRadiusM * metric.Mass);
@@ -271,10 +293,11 @@ export namespace MoleHole
             const auto index = static_cast<std::size_t>(i);
             auto& gpu = params.BlackHoles[index];
             auto& entry = cache.Entries[index];
-            const std::array<float, 5> key{gpu.Mass, gpu.Spin, gpu.Charge, gpu.MassSolar, params.DiskAccretionRate};
+            const std::array<float, 6> key{gpu.Mass, gpu.Spin, params.HolePrecision[index].x, gpu.Charge, gpu.MassSolar,
+                                           params.DiskAccretionRate};
             if (!entry.Valid || entry.Metric != params.MetricType || entry.Key != key)
             {
-                entry.Result = ComputeHoleMetric(params, gpu);
+                entry.Result = ComputeHoleMetric(params, gpu, ExactSpin(params, index));
                 entry.Key = key;
                 entry.Metric = params.MetricType;
                 entry.Valid = true;
@@ -283,6 +306,7 @@ export namespace MoleHole
 
             const auto& result = entry.Result;
             gpu.Spin = result.Spin;
+            params.HolePrecision[index] = glm::vec4(result.SpinLow, result.HorizonLow, 0.0f, 0.0f);
             gpu.Charge = result.Charge;
             gpu.HorizonRadius = result.HorizonRadius;
             gpu.IscoRadius = result.IscoRadius;
@@ -313,7 +337,7 @@ export namespace MoleHole
             const auto& info = params.DiskInfo[index];
             if (!(gpu.Mass > 0.0f) || !(info.x > 0.0f)) continue;
 
-            const KerrNewmanParams unit{.Mass = 1.0, .SpinParameter = gpu.Spin, .Charge = gpu.Charge};
+            const KerrNewmanParams unit{.Mass = 1.0, .SpinParameter = ExactSpin(params, index), .Charge = gpu.Charge};
             const double massKg = static_cast<double>(gpu.MassSolar) * GPP::Units::kSolarMass;
             const double gravitationalTime = GPP::Units::GravitationalRadius(massKg) / GPP::Units::kSpeedOfLight;
             const auto table = BuildDiskPhaseTable(unit, gravitationalTime, static_cast<double>(info.y) / gpu.Mass,
@@ -364,7 +388,7 @@ export namespace MoleHole
         params.ObserverVelocity = glm::vec4(0.0f);
         if (kind == ObserverKind::Zamo || params.NumBlackHoles == 0) return;
         const auto& hole = params.BlackHoles[0];
-        const auto metric = MakeKerrNewmanParams(params.MetricType, hole.Mass, hole.Spin, hole.Charge);
+        const auto metric = MakeKerrNewmanParams(params.MetricType, hole.Mass, ExactSpin(params, 0), hole.Charge);
         const auto bl = BoyerLindquistRadiusTheta(glm::dvec3(params.CameraPos - hole.Position), glm::dvec3(hole.SpinAxis),
                                                   metric.SpinParameter);
         const auto velocity = ObserverVelocity(metric, kind, bl.x, bl.y, direction);
@@ -398,7 +422,7 @@ export namespace MoleHole
         params.OrbitRadii2 = glm::vec4(0.0f);
         if (!enabled || params.NumBlackHoles == 0) return;
         const auto& hole = params.BlackHoles[0];
-        const auto m = MakeKerrNewmanParams(params.MetricType, hole.Mass, hole.Spin, hole.Charge);
+        const auto m = MakeKerrNewmanParams(params.MetricType, hole.Mass, ExactSpin(params, 0), hole.Charge);
         const auto f = [](const double r) { return static_cast<float>(r); };
         params.OrbitRadii = glm::vec4(f(PhotonOrbitRadius(m, OrbitDirection::Prograde)), f(PhotonOrbitRadius(m, OrbitDirection::Retrograde)),
                                       f(MarginallyBoundRadius(m, OrbitDirection::Prograde)),

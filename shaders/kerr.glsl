@@ -13,12 +13,12 @@ struct Spacetime {
     real rIsco;
 };
 
-Spacetime spacetimeOf(BlackHoleData bh) {
+Spacetime spacetimeOf(BlackHoleData bh, vec4 dropped) {
     Spacetime st;
     st.M = real(bh.mass);
-    st.a = real(bh.spin) * st.M;
+    st.a = (real(bh.spin) + real(dropped.x)) * st.M;
     st.Q = real(bh.charge) * st.M;
-    st.rPlus = real(bh.horizonRadius);
+    st.rPlus = real(bh.horizonRadius) + real(dropped.y);
     st.rMinus = real(2.0) * st.M - st.rPlus;
     st.rIsco = real(bh.iscoRadius);
     return st;

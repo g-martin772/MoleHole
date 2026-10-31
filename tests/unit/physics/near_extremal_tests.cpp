@@ -144,3 +144,57 @@ TEST_CASE("A near-extremal hole reaches the renderer without NaNs", "[physics][n
     CHECK(std::isfinite(params.DiskInfo[0].x));
     CHECK(params.ObserverVelocity.w == 1.0f);
 }
+
+TEST_CASE("A near-extremal gap survives the float upload", "[physics][near-extremal][rendering]")
+{
+    for (const double gap : {1.3e-14, 1e-9, 1e-4})
+    {
+        GPP::Scene scene("Gargantua");
+        const auto entity = scene.CreateEntity("Gargantua");
+        scene.Registry().emplace<GPP::TransformComponent>(entity);
+        scene.Registry().emplace<BlackHoleComponent>(
+            entity, BlackHoleComponent{.Mass = 1e8 * GPP::Units::kSolarMass, .SpinRange = BlackHoleSpinRange::NearExtremal,
+                                       .SpinGap = gap});
+        RaytraceParamsGpu params{};
+        params.MetricType = static_cast<std::int32_t>(MetricKind::Kerr);
+        RegisterComponents();
+        const auto frame = RenderFrame::ForScene(scene, FrameMode::PrimaryBlackHole, {});
+        FillSceneData(params, scene, frame);
+        FillMetricData(params);
+
+        const auto& hole = params.BlackHoles[0];
+        const double mass = hole.Mass;
+        const double spin = ExactSpin(params, 0);
+        INFO("gap " << gap);
+        CHECK(1.0 - spin == Approx(gap).epsilon(1e-2));
+        CHECK(params.BlackHoles[0].Spin == static_cast<float>(spin));
+
+        const double horizon = static_cast<double>(hole.HorizonRadius) + static_cast<double>(params.HolePrecision[0].y);
+        const double expected = 1.0 + std::sqrt((1.0 - spin) * (1.0 + spin));
+        CHECK((horizon / mass - 1.0) == Approx(expected - 1.0).epsilon(1e-6));
+        CHECK((horizon / mass - 1.0) == Approx(std::sqrt(2.0 * gap)).epsilon(1e-2));
+    }
+}
+
+TEST_CASE("Holes keep their dropped precision when sorted by mass", "[physics][near-extremal][rendering]")
+{
+    GPP::Scene scene("Two holes");
+    RegisterComponents();
+    const auto add = [&](const double solarMasses, const BlackHoleSpinRange range, const double gap, const double spin)
+    {
+        const auto entity = scene.CreateEntity("Hole");
+        scene.Registry().emplace<GPP::TransformComponent>(entity);
+        scene.Registry().emplace<BlackHoleComponent>(
+            entity, BlackHoleComponent{.Mass = solarMasses * GPP::Units::kSolarMass, .Spin = spin, .SpinRange = range, .SpinGap = gap});
+    };
+    add(10.0, BlackHoleSpinRange::ThorneLimit, 0.0, 0.3);
+    add(1e8, BlackHoleSpinRange::NearExtremal, 1.3e-14, 0.0);
+    RaytraceParamsGpu params{};
+    params.MetricType = static_cast<std::int32_t>(MetricKind::Kerr);
+    const auto frame = RenderFrame::ForScene(scene, FrameMode::PrimaryBlackHole, {});
+    FillSceneData(params, scene, frame);
+    REQUIRE(params.NumBlackHoles == 2);
+    CHECK(1.0 - ExactSpin(params, 0) == Approx(1.3e-14).epsilon(1e-2));
+    CHECK(ExactSpin(params, 1) == Approx(0.3));
+    CHECK(params.HolePrecision[1].x == Approx(0.3 - static_cast<double>(static_cast<float>(0.3))).margin(1e-9));
+}
