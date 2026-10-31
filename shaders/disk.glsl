@@ -111,11 +111,18 @@ void diskGas(Spacetime st, int hole, float r, float phi, float zOverH, out float
 // near the brightness of the pre-HDR renderer, so relative brightness and beaming stay physical.
 const float DISK_REFERENCE_LUMINANCE = 0.25;
 
+// Visible-band Planck intensity at 550 nm, 1 / (exp(hc / lambda k T) - 1). Far above the LUT range the optical band sits on
+// the Rayleigh-Jeans tail, where it grows as T rather than T^4. Mirrored by VisibleBandIntensity (metric.cppm).
+float visibleBandIntensity(float temperature) {
+    float x = min(26159.6 / max(temperature, 1.0), 80.0);
+    return 1.0 / (x < 0.05 ? x * (1.0 + x * (0.5 + x * (1.0 / 6.0))) : exp(x) - 1.0);
+}
+
 // Observed radiance of thermal gas at emitted temperature T seen with frequency ratio g. Colour from the blackbody
 // LUT at the observed temperature g T; brightness from I ∝ T_obs^4 (I_nu / nu^3 is invariant along a ray).
 // The display temperature rescales every temperature by one factor for the colour lookup only, so ratios and
 // shifts stay physical.
-// Brightness is (g T / reference)⁴: the exposure reference (u_diskInfo.w) is the hottest gas as a distant observer
+// Brightness is (g T / reference)⁴ (visible-band ratio for a physical disk above the LUT range): the exposure reference (u_diskInfo.w) is the hottest gas as a distant observer
 // sees it, scaled so a Schwarzschild disk is unchanged; using the rest-frame peak instead made spinning disks far too
 // dim, because their hottest gas sits in the deep, redshifted throat (DiskExposureReference, metric.cppm).
 vec3 diskSourceRadiance(int hole, float temperature, float g) {
@@ -126,6 +133,10 @@ vec3 diskSourceRadiance(int hole, float temperature, float g) {
     float luminance = dot(lut, vec3(0.2126, 0.7152, 0.0722));
     vec3 chroma = luminance > 1e-6 ? lut / luminance : vec3(0.0);
     float ratio = g * temperature / reference;
+    if (u_diskDisplayTemperature <= 0.0 && reference > u_lutTempMax) {
+        float bandRatio = visibleBandIntensity(g * temperature) / visibleBandIntensity(reference);
+        return DISK_REFERENCE_LUMINANCE * chroma * bandRatio;
+    }
     return DISK_REFERENCE_LUMINANCE * chroma * (ratio * ratio) * (ratio * ratio);
 }
 

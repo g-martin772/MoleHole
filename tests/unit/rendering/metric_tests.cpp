@@ -353,3 +353,19 @@ TEST_CASE("FillMetricData writes the disk exposure reference", "[rendering][metr
     CHECK(params.DiskInfo[0].w == Approx(static_cast<float>(DiskExposureReference(profile))));
     CHECK(params.DiskInfo[0].w > params.DiskInfo[0].x * 0.5f);
 }
+
+TEST_CASE("Visible-band intensity is linear in T on the Rayleigh-Jeans tail of a stellar-mass disk", "[rendering][metric][disk]")
+{
+    constexpr double peak = 1.0e7;
+    CHECK(VisibleBandIntensity(peak) / VisibleBandIntensity(peak) == Approx(1.0));
+    CHECK(VisibleBandIntensity(0.5 * peak) / VisibleBandIntensity(peak) == Approx(0.5).epsilon(5e-3));
+    CHECK(VisibleBandIntensity(2.0 * peak) / VisibleBandIntensity(peak) == Approx(2.0).epsilon(5e-3));
+}
+
+TEST_CASE("Visible-band intensity follows Planck's closed form and turns exponential in the Wien tail", "[rendering][metric][disk]")
+{
+    CHECK(VisibleBandIntensity(26159.6) == Approx(1.0 / (std::numbers::e - 1.0)));
+    CHECK(VisibleBandIntensity(2000.0) < 1e-5);
+    CHECK(VisibleBandIntensity(1.0e7) > VisibleBandIntensity(4.0e4));
+    CHECK(VisibleBandIntensity(0.0) < 1e-30);
+}

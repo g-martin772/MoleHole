@@ -469,6 +469,13 @@ export namespace MoleHole
         return ratio;
     }
 
+    [[nodiscard]] inline double VisibleBandIntensity(const double temperature)
+    {
+        constexpr double kHcOverKLambda = 26159.6; // K, 550 nm
+        const double x = std::min(kHcOverKLambda / std::max(temperature, 1.0), 80.0);
+        return 1.0 / std::expm1(x);
+    }
+
     [[nodiscard]] inline double DiskExposureReference(const DiskProfile& profile)
     {
         if (!(profile.ObservedPeakTemperature > 0.0)) return profile.PeakTemperature;
