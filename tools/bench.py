@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Render a scene with each render profile and report GPU/wall time, optionally against golden images.
 
-Exports with a static disk (`disk.speed=0`), so a profile's image is byte-identical from run to run on one machine.
+Exports are byte-identical from run to run on one machine. The camera comes from the scene (`EditorCamera` key, else its
+primary camera), never from .gpp/molehole_state.yaml or .gpp/scene_cameras.yaml, so the golden does not depend on user state.
 
   tools/bench.py                                   # all built-in profiles, 960x540, templates/dev.yaml
   tools/bench.py --profiles Flat Lensed --runs 3 --json out.json
@@ -16,6 +17,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import statistics
 import subprocess
 import sys
@@ -28,7 +30,7 @@ BUILTIN = ["Flat", "Lensed", "Traced", "Reference"]
 
 def export(profile, scene, width, height, extra, out_png, timeout):
     cmd = [BINARY, "--export-image", out_png, "--width", str(width), "--height", str(height), "--scene", scene,
-           "--profile", profile, "--set", "disk.speed=0"]
+           "--profile", profile]
     for pair in extra:
         cmd += ["--set", pair]
     subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout, check=True)
@@ -100,7 +102,7 @@ def main():
             golden = os.path.join(args.save_golden or args.compare or "", f"{profile}_{args.width}x{args.height}.png")
             if args.save_golden:
                 os.makedirs(args.save_golden, exist_ok=True)
-                os.replace(image, golden)
+                shutil.move(image, golden)
             elif args.compare:
                 row["psnr"] = psnr(golden, image) if os.path.exists(golden) else None
                 failed |= row["psnr"] is None or row["psnr"] < args.min_psnr

@@ -162,6 +162,12 @@ Graphs:
               V: 0
         Nodes: []
         Links: []
+EditorCamera:
+  PositionM: [11905.815412022755, 26008.40548019903, 95582.82010791471]
+  Yaw: 209.76936
+  Pitch: 20.853886
+  Fov: 60
+  SpeedMs: 1234.22713292637
 Render:
   Version: 1
   Contexts:

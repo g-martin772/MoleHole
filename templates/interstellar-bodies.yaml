@@ -215,6 +215,12 @@ Entities:
         NearPlane: 10
         FarPlane: {value: 1000, unit: AU}
         Primary: false
+EditorCamera:
+  PositionM: [0, 7.4e11, 4.43e12]
+  Yaw: -90
+  Pitch: -9.5
+  Fov: 50
+  SpeedMs: 1.5e11
 Render:
   Version: 1
   Contexts:

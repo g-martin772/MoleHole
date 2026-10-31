@@ -79,7 +79,7 @@ namespace MoleHole
             m_Recents.FromYaml(node["RecentScenes"]);
             m_Recents.Prune();
             if (const auto v = node["ShowLauncher"]; v && v.IsScalar()) m_ShowLauncher = v.as<bool>(true);
-            if (const auto camera = node["Camera"])
+            if (const auto camera = node["Camera"]; camera && m_Persist)
             {
                 if (const auto v = camera["Position"])
                 {
@@ -337,7 +337,7 @@ namespace MoleHole
 
     std::optional<SceneCameraPose> AppStateService::LookupSceneCamera(const std::string& scenePath) const
     {
-        if (scenePath.empty()) return std::nullopt;
+        if (!m_Persist || scenePath.empty()) return std::nullopt;
         const auto key = SceneCameraCache::KeyFor(m_FileSystem->ResolvePath(scenePath, PathAnchor::WorkingDir));
         std::scoped_lock lock(m_Mutex);
         return m_SceneCameras.Lookup(key);

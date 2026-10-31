@@ -745,6 +745,7 @@ namespace
                         0.0f, "scene-warnings");
                 }
                 m_RenderSettings->LoadScene(result->RenderExtension, m_UiState->CurrentScenePath);
+                m_EditorViewPinned = false;
                 if (const auto cached = m_AppState->LookupSceneCamera(m_UiState->CurrentScenePath))
                 {
                     m_UiState->CameraPositionM = cached->PositionM;
@@ -754,6 +755,7 @@ namespace
                 }
                 else if (const auto& view = result->Editor)
                 {
+                    m_EditorViewPinned = true;
                     m_UiState->CameraPositionM = view->PositionM;
                     m_UiState->CameraYaw = view->Yaw;
                     m_UiState->CameraPitch = view->Pitch;
@@ -1306,7 +1308,8 @@ namespace
             if (!sim->Runner) return false;
             const bool playing = !sim->Runner->IsPaused();
             const bool possess = m_UiState->PossessSceneCamera || m_UiState->ExportActive;
-            if (!m_UiState->PreviewSceneCamera && !(playing && possess)) return false;
+            const bool exportDefault = m_UiState->ExitWhenExportDone && !m_EditorViewPinned;
+            if (!m_UiState->PreviewSceneCamera && !(playing && possess) && !exportDefault) return false;
 
             const auto snapshot = sim->Runner->AcquireSnapshot();
             if (!snapshot) return false;
@@ -1382,6 +1385,7 @@ namespace
         std::shared_ptr<UiState> m_UiState;
         std::shared_ptr<AppStateService> m_AppState;
         std::optional<SceneCameraPose> m_TrackedPose;
+        bool m_EditorViewPinned = false;
         bool m_CameraPending = false;
         std::chrono::steady_clock::time_point m_CameraChangedAt;
         std::shared_ptr<RenderSettingsService> m_RenderSettings;
