@@ -91,7 +91,7 @@ export namespace MoleHole
 
         glm::vec4 MeshBounds{0.0f};
         std::int32_t NumMeshInstances{0};
-        float _MeshPad0{0.0f};
+        std::int32_t NumMeshClusters{0};
         float JitterX{0.0f};
         float JitterY{0.0f};
 
@@ -124,11 +124,14 @@ export namespace MoleHole
 
         // Per black hole the part the floats of BlackHoles drop: x = a* - Spin, y = r+ - HorizonRadius (render units)
         std::array<glm::vec4, kMaxBlackHoles> HolePrecision{};
+
+        std::array<glm::vec4, 8> MeshClusters{};
     };
     constexpr std::size_t kObserverVelocityOffset = 3616 + kSphereTableGrowth + 16 * kMaxBlackHoles * kDiskPhaseBins;
-    static_assert(sizeof(RaytraceParamsGpu) == kObserverVelocityOffset + 80 + 16 * kMaxBlackHoles);
+    static_assert(sizeof(RaytraceParamsGpu) == kObserverVelocityOffset + 80 + 16 * kMaxBlackHoles + 16 * 8);
     static_assert(sizeof(RaytraceParamsGpu) <= 65536);
     static_assert(offsetof(RaytraceParamsGpu, HolePrecision) == kObserverVelocityOffset + 80);
+    static_assert(offsetof(RaytraceParamsGpu, MeshClusters) == kObserverVelocityOffset + 80 + 16 * kMaxBlackHoles);
     static_assert(offsetof(RaytraceParamsGpu, DiskPhase) == 3616 + kSphereTableGrowth);
     static_assert(offsetof(RaytraceParamsGpu, ObserverVelocity) == kObserverVelocityOffset);
     static_assert(offsetof(RaytraceParamsGpu, OrbitRadii) == kObserverVelocityOffset + 16);

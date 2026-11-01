@@ -39,6 +39,7 @@ export namespace MoleHole
         vk::Buffer Dfg{};
         std::shared_ptr<const std::vector<vk::DescriptorImageInfo>> Textures;
         glm::vec4 Bounds{0.0f};
+        std::vector<glm::vec4> Clusters;
         std::int32_t InstanceCount = 0;
         std::uint32_t TextureCapacity = 0;
         MeshLighting Lighting;
@@ -57,6 +58,14 @@ export namespace MoleHole
         }
 
         [[nodiscard]] const MeshMaterialTable& Materials() const noexcept { return m_Materials; }
+
+        void Update()
+        {
+            PollBlasJobs();
+            m_PendingBlas.store(static_cast<std::uint32_t>(m_Pending), std::memory_order_release);
+        }
+
+        [[nodiscard]] bool BlasSettled() const noexcept { return m_PendingBlas.load(std::memory_order_acquire) == 0; }
 
         [[nodiscard]] bool ShadowsAvailable() const
         {
@@ -79,6 +88,8 @@ export namespace MoleHole
             records.clear();
             instances.clear();
             glm::vec4 bounds{0.0f};
+            auto& boundsList = m_InstanceBounds;
+            boundsList.clear();
 
             for (auto [entity, meshComponent, transform] :
                  scene.Registry().view<const GPP::MeshComponent, const GPP::TransformComponent>().each())
@@ -103,7 +114,10 @@ export namespace MoleHole
                     }
                 }
                 if (out.Draws.size() > first)
+                {
                     bounds = MergeBounds(bounds, meshBounds);
+                    boundsList.push_back(meshBounds);
+                }
             }
             if (out.Draws.empty()) return out;
 
@@ -120,8 +134,10 @@ export namespace MoleHole
             UploadLighting(slot, out);
 
             if (!tlas) return out;
+            PollBlasJobs();
             for (const auto& draw : out.Draws) Cached(draw);
             FlushBlas();
+            m_PendingBlas.store(static_cast<std::uint32_t>(m_Pending), std::memory_order_release);
             for (const auto& draw : out.Draws)
             {
                 const auto* cached = Cached(draw);
@@ -162,7 +178,10 @@ export namespace MoleHole
             out.HasTlas = true;
             out.Tlas = slot.Tlas->GetHandle();
             out.Instances = slot.Records->GetBuffer();
-            out.Bounds = glm::vec4(glm::vec3(bounds), bounds.w * 1.01f + 1e-4f);
+            const auto inflate = [](const glm::vec4& sphere) { return glm::vec4(glm::vec3(sphere), sphere.w * 1.01f + 1e-4f); };
+            out.Bounds = inflate(bounds);
+            out.Clusters = ClusterBounds(boundsList, kMaxMeshClusters);
+            for (auto& cluster : out.Clusters) cluster = inflate(cluster);
             out.InstanceCount = static_cast<std::int32_t>(records.size());
             return out;
         }
@@ -171,7 +190,8 @@ export namespace MoleHole
         struct CachedPrimitive
         {
             std::shared_ptr<GPP::GltfSceneData> Owner;
-            std::unique_ptr<GPP::Blas> Structure;
+            std::shared_ptr<GPP::Blas> Structure;
+            bool Ready = false;
             vk::DeviceAddress Vertices = 0;
             vk::DeviceAddress Indices = 0;
         };
@@ -225,26 +245,27 @@ export namespace MoleHole
         {
             const auto& primitive = *draw.Primitive;
             if (const auto it = m_Primitives.find(&primitive); it != m_Primitives.end())
-                return it->second.Structure ? &it->second : nullptr;
+                return it->second.Structure && it->second.Ready ? &it->second : nullptr;
             CachedPrimitive entry{.Owner = draw.Owner};
             try
             {
                 entry.Vertices = primitive.VertexBuffer.GetDeviceAddress();
                 entry.Indices = primitive.IndexBuffer.GetDeviceAddress();
-                entry.Structure = std::make_unique<GPP::Blas>(
+                entry.Structure = std::make_shared<GPP::Blas>(
                     m_Device,
                     GPP::BlasTriangles{.VertexAddress = entry.Vertices, .VertexStride = sizeof(GPP::GltfVertex),
                                        .VertexCount = primitive.VertexCount, .IndexAddress = entry.Indices,
                                        .IndexCount = primitive.IndexCount});
                 m_UnbuiltBlas.push_back(&primitive);
+                ++m_Pending;
             }
             catch (const std::exception& error)
             {
                 m_Logger->Warn("Mesh tracing: BLAS build failed: {}", error.what());
                 entry.Structure.reset();
             }
-            const auto& stored = m_Primitives.emplace(&primitive, std::move(entry)).first->second;
-            return stored.Structure ? &stored : nullptr;
+            m_Primitives.emplace(&primitive, std::move(entry));
+            return nullptr;
         }
 
         void EvictReplaced()
@@ -257,6 +278,7 @@ export namespace MoleHole
                     ++it;
                     continue;
                 }
+                if (it->second.Structure && !it->second.Ready) --m_Pending;
                 std::erase(m_UnbuiltBlas, it->first);
                 stale->push_back(std::move(it->second));
                 it = m_Primitives.erase(it);
@@ -268,19 +290,54 @@ export namespace MoleHole
         void FlushBlas()
         {
             if (m_UnbuiltBlas.empty()) return;
+            BlasJob job;
             std::vector<GPP::Blas*> blases;
-            blases.reserve(m_UnbuiltBlas.size());
-            for (const auto* primitive : m_UnbuiltBlas) blases.push_back(m_Primitives.at(primitive).Structure.get());
+            std::vector<std::shared_ptr<void>> keepAlive;
+            for (const auto* primitive : m_UnbuiltBlas)
+            {
+                const auto& entry = m_Primitives.at(primitive);
+                blases.push_back(entry.Structure.get());
+                keepAlive.push_back(entry.Structure);
+                keepAlive.push_back(entry.Owner);
+                job.Members.emplace_back(primitive, entry.Structure.get());
+            }
+            m_UnbuiltBlas.clear();
             try
             {
-                GPP::BuildBlasBatch(m_Device, *m_UploadPool, m_Device->GetBackgroundQueue(), blases);
+                job.Build = std::make_unique<GPP::BlasBuildJob>(m_Device, *m_UploadPool, m_Device->GetBackgroundQueue(),
+                                                                std::move(blases), std::move(keepAlive));
+                m_BlasJobs.push_back(std::move(job));
             }
             catch (const std::exception& error)
             {
                 m_Logger->Warn("Mesh tracing: BLAS build failed: {}", error.what());
-                for (const auto* primitive : m_UnbuiltBlas) m_Primitives.at(primitive).Structure.reset();
+                for (const auto& [primitive, blas] : job.Members) FinishBlas(primitive, blas, false);
             }
-            m_UnbuiltBlas.clear();
+        }
+
+        void PollBlasJobs()
+        {
+            for (auto it = m_BlasJobs.begin(); it != m_BlasJobs.end();)
+            {
+                if (!it->Build->Poll())
+                {
+                    ++it;
+                    continue;
+                }
+                const bool ok = !it->Build->Failed();
+                if (!ok) m_Logger->Warn("Mesh tracing: BLAS build failed");
+                for (const auto& [primitive, blas] : it->Members) FinishBlas(primitive, blas, ok);
+                it = m_BlasJobs.erase(it);
+            }
+        }
+
+        void FinishBlas(const GPP::GltfPrimitive* primitive, const GPP::Blas* blas, const bool ok)
+        {
+            const auto it = m_Primitives.find(primitive);
+            if (it == m_Primitives.end() || it->second.Structure.get() != blas) return;
+            --m_Pending;
+            if (ok) it->second.Ready = true;
+            else it->second.Structure.reset();
         }
 
         std::shared_ptr<GPP::VulkanDevice> m_Device;
@@ -290,7 +347,17 @@ export namespace MoleHole
         MeshMaterialTable m_Materials;
         DiskLightCache m_DiskCache;
         std::unordered_map<const GPP::GltfPrimitive*, CachedPrimitive> m_Primitives;
+        struct BlasJob
+        {
+            std::unique_ptr<GPP::BlasBuildJob> Build;
+            std::vector<std::pair<const GPP::GltfPrimitive*, const GPP::Blas*>> Members;
+        };
+
         std::vector<const GPP::GltfPrimitive*> m_UnbuiltBlas;
+        std::vector<BlasJob> m_BlasJobs;
+        std::vector<glm::vec4> m_InstanceBounds;
+        int m_Pending = 0;
+        std::atomic<std::uint32_t> m_PendingBlas{0};
         std::vector<MeshInstanceGpu> m_Records;
         std::vector<GPP::TlasInstance> m_TlasInstances;
         std::unique_ptr<GPP::VulkanBuffer> m_Dfg;

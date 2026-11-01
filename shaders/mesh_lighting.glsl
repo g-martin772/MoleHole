@@ -91,15 +91,33 @@ const uint LIGHT_FLAG_DISK_LOBE = 256u;
 const uint MESH_FACE_MASK_OPAQUE = 1u;
 
 #ifdef MESH_SHADOWS
-// True when something opaque lies between the origin and origin + dir * tMax (render units).
+#ifdef MESH_SHADOW_ALPHA
+bool meshShadowCandidate(rayQueryEXT query, vec3 dir);
+#endif
+
+// True when something lies between the origin and origin + dir * tMax (render units)
 bool meshShadowed(vec3 origin, vec3 dir, float tMax) {
     rayQueryEXT query;
+#ifdef MESH_SHADOW_ALPHA
+    rayQueryInitializeEXT(query, u_meshScene, gl_RayFlagsTerminateOnFirstHitEXT, 0xFF, origin, 0.0, dir, tMax);
+    while (rayQueryProceedEXT(query)) {
+        if (rayQueryGetIntersectionTypeEXT(query, false) == gl_RayQueryCandidateIntersectionTriangleEXT
+            && meshShadowCandidate(query, dir)) {
+            rayQueryConfirmIntersectionEXT(query);
+        }
+    }
+#else
     rayQueryInitializeEXT(query, u_meshScene, gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT,
                           MESH_FACE_MASK_OPAQUE, origin, 0.0, dir, tMax);
     while (rayQueryProceedEXT(query)) {
     }
+#endif
     return rayQueryGetIntersectionTypeEXT(query, true) != gl_RayQueryCommittedIntersectionNoneEXT;
 }
+#endif
+
+#ifdef MESH_SPHERE_SHADOWS
+bool meshSphereShadowed(vec3 origin, vec3 dir, float tMax);
 #endif
 
 // Irradiance of one light on a surface at P (render units): the direction to the light L, the irradiance E along it
@@ -204,6 +222,9 @@ vec3 meshShade(vec3 P, vec3 V, vec3 N, vec3 Ng, PbrMaterialSample s) {
         if (u_shadowsEnabled != 0) {
             vec3 origin = P + Ng * bias;
             if (meshShadowed(origin, L, max(shadowDistance - bias, 0.0))) continue;
+#ifdef MESH_SPHERE_SHADOWS
+            if (meshSphereShadowed(origin, L, max(shadowDistance - bias, 0.0))) continue;
+#endif
         }
 #endif
         radiance += evalBsdf(lobes, N, V, L) * E * nol;

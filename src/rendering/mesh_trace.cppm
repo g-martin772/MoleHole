@@ -26,6 +26,7 @@ export namespace MoleHole
     // TLAS instance masks: shadow rays only see the opaque casters, camera rays see everything.
     constexpr std::uint8_t kMeshMaskOpaque = 0x01;
     constexpr std::uint8_t kMeshMaskTransparent = 0x02;
+    constexpr std::size_t kMaxMeshClusters = 8;
 
     [[nodiscard]] inline MeshInstanceGpu MakeMeshInstance(const glm::mat4& model, const std::uint32_t materialIndex,
                                                           const std::uint64_t vertexAddress,
@@ -71,5 +72,63 @@ export namespace MoleHole
         const float scale = std::max({glm::length(glm::vec3(model[0])), glm::length(glm::vec3(model[1])),
                                       glm::length(glm::vec3(model[2]))});
         return {glm::vec3(model[3]), radius * scale};
+    }
+
+    // Median splits keep a few far-apart meshes in tight spheres
+    [[nodiscard]] inline std::vector<glm::vec4> ClusterBounds(const std::span<const glm::vec4> bounds,
+                                                              const std::size_t maxClusters)
+    {
+        std::vector<glm::vec4> items;
+        items.reserve(bounds.size());
+        for (const auto& sphere : bounds)
+        {
+            if (sphere.w > 0.0f) items.push_back(sphere);
+        }
+        if (items.size() <= maxClusters || maxClusters == 0) return maxClusters == 0 ? std::vector<glm::vec4>{} : items;
+
+        struct Group
+        {
+            std::size_t First = 0;
+            std::size_t Last = 0;
+            glm::vec4 Sphere{0.0f};
+        };
+        const auto enclose = [&items](const std::size_t first, const std::size_t last)
+        {
+            glm::vec4 sphere{0.0f};
+            for (std::size_t i = first; i < last; ++i) sphere = MergeBounds(sphere, items[i]);
+            return sphere;
+        };
+        std::vector<Group> groups{{0, items.size(), enclose(0, items.size())}};
+        while (groups.size() < maxClusters)
+        {
+            std::size_t pick = groups.size();
+            for (std::size_t g = 0; g < groups.size(); ++g)
+            {
+                if (groups[g].Last - groups[g].First < 2) continue;
+                if (pick == groups.size() || groups[g].Sphere.w > groups[pick].Sphere.w) pick = g;
+            }
+            if (pick == groups.size()) break;
+            const Group group = groups[pick];
+            glm::vec3 low(std::numeric_limits<float>::max());
+            glm::vec3 high(std::numeric_limits<float>::lowest());
+            for (std::size_t i = group.First; i < group.Last; ++i)
+            {
+                low = glm::min(low, glm::vec3(items[i]));
+                high = glm::max(high, glm::vec3(items[i]));
+            }
+            const glm::vec3 extent = high - low;
+            const int axis = extent.x >= extent.y && extent.x >= extent.z ? 0 : (extent.y >= extent.z ? 1 : 2);
+            const std::size_t middle = group.First + (group.Last - group.First) / 2;
+            std::nth_element(items.begin() + static_cast<std::ptrdiff_t>(group.First),
+                             items.begin() + static_cast<std::ptrdiff_t>(middle),
+                             items.begin() + static_cast<std::ptrdiff_t>(group.Last),
+                             [axis](const glm::vec4& a, const glm::vec4& b) { return a[axis] < b[axis]; });
+            groups[pick] = {group.First, middle, enclose(group.First, middle)};
+            groups.push_back({middle, group.Last, enclose(middle, group.Last)});
+        }
+        std::vector<glm::vec4> out;
+        out.reserve(groups.size());
+        for (const auto& group : groups) out.push_back(group.Sphere);
+        return out;
     }
 }

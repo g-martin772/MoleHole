@@ -102,3 +102,43 @@ TEST_CASE("The mesh shader blocks mirror the C++ records", "[rendering][mesh-tra
     CHECK(sizeof(MeshPushConstantsGpu) == 80);
     CHECK(sizeof(MeshLightingParamsGpu) == 32);
 }
+
+namespace
+{
+    bool Contains(const glm::vec4& outer, const glm::vec4& inner)
+    {
+        return glm::length(glm::vec3(outer) - glm::vec3(inner)) + inner.w <= outer.w + 1e-3f;
+    }
+}
+
+TEST_CASE("Cluster bounds keep few meshes exact and split many into tight groups", "[rendering][mesh-trace]")
+{
+    const std::vector<glm::vec4> few{{0, 0, 0, 1}, {100, 0, 0, 1}, {0, 0, 0, -1}, {0, 50, 0, 2}};
+    const auto exact = ClusterBounds(few, kMaxMeshClusters);
+    REQUIRE(exact.size() == 3);
+    CHECK(exact[1] == glm::vec4(100, 0, 0, 1));
+    CHECK(ClusterBounds(few, 0).empty());
+
+    std::vector<glm::vec4> field;
+    for (int i = 0; i < 50; ++i) field.emplace_back(static_cast<float>(i % 10) * 3.0f, 0.0f, (i < 25 ? 0.0f : 5000.0f), 1.0f);
+    const auto clusters = ClusterBounds(field, kMaxMeshClusters);
+    CHECK(clusters.size() == kMaxMeshClusters);
+    for (const auto& sphere : field)
+    {
+        CHECK(std::ranges::any_of(clusters, [&](const glm::vec4& c) { return Contains(c, sphere); }));
+    }
+    const auto merged = std::ranges::fold_left(field, glm::vec4(0.0f), [](const glm::vec4& a, const glm::vec4& b) { return MergeBounds(a, b); });
+    float largest = 0.0f;
+    for (const auto& c : clusters) largest = std::max(largest, c.w);
+    CHECK(largest < 0.05f * merged.w);
+    CHECK(ClusterBounds(field, kMaxMeshClusters) == clusters);
+
+    const auto single = ClusterBounds(field, 1);
+    REQUIRE(single.size() == 1);
+    for (const auto& sphere : field) CHECK(Contains(single[0], sphere));
+}
+
+TEST_CASE("The traced mesh params carry one bounds sphere per cluster", "[rendering][mesh-trace]")
+{
+    CHECK(RaytraceParamsGpu{}.MeshClusters.size() == kMaxMeshClusters);
+}

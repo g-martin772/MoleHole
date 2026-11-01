@@ -28,6 +28,8 @@ layout(set = 0, binding = 6) uniform accelerationStructureEXT u_meshScene;
 layout(set = 0, binding = 7, std430) readonly buffer MeshInstanceBlock { MeshInstanceData u_meshInstances[]; };
 
 #define MESH_SHADOWS 1
+#define MESH_SHADOW_ALPHA 1
+#define MESH_SPHERE_SHADOWS 1
 #define MESH_BIND_TEXTURES 8
 #define MESH_BIND_MATERIALS 9
 #define MESH_BIND_LIGHTS 10
@@ -105,13 +107,36 @@ PbrMaterialTexels meshSampleTexels(GltfMaterial m, MeshSurface surface) {
     return t;
 }
 
-bool meshBoundsHit(vec3 origin, vec3 dir, float tMax) {
-    vec3 oc = origin - u_meshBounds.xyz;
+bool meshSphereHit(vec4 sphere, vec3 origin, vec3 dir, float tMax) {
+    vec3 oc = origin - sphere.xyz;
     float b = dot(oc, dir);
-    float c = dot(oc, oc) - u_meshBounds.w * u_meshBounds.w;
+    float c = dot(oc, oc) - sphere.w * sphere.w;
     if (c <= 0.0) return true;
     float disc = b * b - c;
     return b < 0.0 && disc >= 0.0 && -b - sqrt(disc) <= tMax;
+}
+
+bool meshBoundsHit(vec3 origin, vec3 dir, float tMax) {
+    if (!meshSphereHit(u_meshBounds, origin, dir, tMax)) return false;
+    if (u_numMeshClusters <= 1) return true;
+    for (int i = 0; i < u_numMeshClusters; i++) {
+        if (meshSphereHit(u_meshClusters[i], origin, dir, tMax)) return true;
+    }
+    return false;
+}
+
+// Opaque spheres between the surface and the light; emissive spheres are the lights themselves
+bool meshSphereShadowed(vec3 origin, vec3 dir, float tMax) {
+    if (u_renderSpheres != 1) return false;
+    for (int i = 0; i < u_numSpheres; i++) {
+        if (u_spheres[i].emissive > 0.5) continue;
+        vec3 oc = origin - u_spheres[i].position;
+        float b = dot(oc, dir);
+        float c = dot(oc, oc) - u_spheres[i].radius * u_spheres[i].radius;
+        float disc = b * b - c;
+        if (c > 0.0 && b < 0.0 && disc >= 0.0 && -b - sqrt(disc) < tMax) return true;
+    }
+    return false;
 }
 
 // Per-pixel threshold from the image position: slice-relative ids change with frame timing
@@ -121,12 +146,7 @@ vec2 meshDitherPixel() {
     return vec2(texel);
 }
 
-// Alpha test of a candidate hit on a non-opaque instance: single-sided back faces, MASK cutoff and a dithered BLEND
-// (the same screen-space threshold as the raster pass).
-bool meshAcceptCandidate(rayQueryEXT query, vec3 dir) {
-    MeshInstanceData instance = u_meshInstances[rayQueryGetIntersectionInstanceCustomIndexEXT(query, false)];
-    GltfMaterial material = u_meshMaterials[instance.materialIndex];
-    if (!rayQueryGetIntersectionFrontFaceEXT(query, false) && !pbrDoubleSided(material)) return false;
+bool meshAlphaPasses(rayQueryEXT query, MeshInstanceData instance, GltfMaterial material, vec3 dir) {
     uint mode = pbrAlphaMode(material);
     if (mode == PBR_ALPHA_OPAQUE) return true;
     MeshSurface surface = meshLoadSurface(instance, rayQueryGetIntersectionPrimitiveIndexEXT(query, false),
@@ -135,6 +155,18 @@ bool meshAcceptCandidate(rayQueryEXT query, vec3 dir) {
     float alpha = material.baseColorFactor.a * meshSampleSlot(material.baseColor, surface, vec4(1.0)).a;
     if (mode == PBR_ALPHA_MASK) return alpha >= material.alphaCutoff;
     return alpha > meshDitherThreshold(meshDitherPixel());
+}
+
+bool meshAcceptCandidate(rayQueryEXT query, vec3 dir) {
+    MeshInstanceData instance = u_meshInstances[rayQueryGetIntersectionInstanceCustomIndexEXT(query, false)];
+    GltfMaterial material = u_meshMaterials[instance.materialIndex];
+    if (!rayQueryGetIntersectionFrontFaceEXT(query, false) && !pbrDoubleSided(material)) return false;
+    return meshAlphaPasses(query, instance, material, dir);
+}
+
+bool meshShadowCandidate(rayQueryEXT query, vec3 dir) {
+    MeshInstanceData instance = u_meshInstances[rayQueryGetIntersectionInstanceCustomIndexEXT(query, false)];
+    return meshAlphaPasses(query, instance, u_meshMaterials[instance.materialIndex], dir);
 }
 
 bool traceMeshes(vec3 origin, vec3 dir, float tMax, out float tHit, out vec3 color) {

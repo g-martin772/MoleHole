@@ -51,7 +51,7 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
 
     vec4 u_meshBounds;
     int u_numMeshInstances;
-    float _meshPad0;
+    int u_numMeshClusters;
     float u_jitterX;
     float u_jitterY;
 
@@ -79,6 +79,8 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
     vec4 u_trailGrid2; // x = hash table size (power of two)
 
     vec4 u_holePrecision[8]; // per hole x = a* - spin, y = r+ - horizonRadius: what the floats of u_blackHoles drop
+
+    vec4 u_meshClusters[8];
 };
 
 layout(set = 0, binding = 2) uniform sampler2D u_skyboxTexture;

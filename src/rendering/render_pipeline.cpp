@@ -410,7 +410,8 @@ namespace MoleHole
                     std::scoped_lock lock(m_VariantMutex);
                     if (!m_HaveDemand || !VariantsCompiled(m_Demand)) return false;
                 }
-                return (!m_Res.Textures || m_Res.Textures->PendingCount() == 0) && m_ProbeFramesSettled;
+                return (!m_Res.Textures || m_Res.Textures->PendingCount() == 0) && m_ProbeFramesSettled
+                       && (!m_Res.Mesh || m_Res.Mesh->BlasSettled());
             }
 
             [[nodiscard]] std::optional<std::string> Failure() const override
@@ -544,6 +545,9 @@ namespace MoleHole
                 {
                     params.MeshBounds = m_Res.MeshTrace.Scene.Bounds;
                     params.NumMeshInstances = m_Res.MeshTrace.Scene.InstanceCount;
+                    const auto& clusters = m_Res.MeshTrace.Scene.Clusters;
+                    params.NumMeshClusters = static_cast<std::int32_t>(clusters.size());
+                    std::ranges::copy(clusters, params.MeshClusters.begin());
                 }
 
                 // Lensed trails prepared by OverlayGeometryStage
@@ -1782,6 +1786,7 @@ namespace MoleHole
         res.Textures->SetMaxSize(static_cast<std::uint32_t>(std::max(inputs.Settings.BodyTextureMaxSize, 0)));
         { GPP_ZONE("Textures.Update"); res.Textures->Update(*res.UploadPool, res.Device->GetBackgroundQueue()); }
         res.Meshes->Update();
+        if (res.Mesh) res.Mesh->Update();
         res.OverlayVertices.clear();
 
         // A debug view shows the tracer's raw output: no glow, flare, smoothing or tone mapping on top of it
