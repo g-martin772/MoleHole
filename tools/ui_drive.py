@@ -3,6 +3,8 @@
 
 Commands: launch [args], resize W H, tile, click X Y [button] [count], drag X1 Y1 X2 Y2, scroll X Y N, key chord..., shot PATH,
 alive, info, kill.
+click, drag and scroll take `--mods ctrl,shift,alt` (held for the whole gesture) and drag takes `--esc` (press Escape just
+before releasing the button, to cancel a box select).
 `launch` records PID and window address in .gpp/ui_drive.json; every command targets that instance (matched by PID), so
 concurrent --export-image runs are never touched. `resize` makes the window floating and verifies the size; `tile` undoes that.
 Pointer is positioned with hyprctl, buttons/keys/wheel are injected through /dev/uinput (needs the `input` group).
@@ -173,33 +175,60 @@ def cmd_tile():
     print(json.dumps(window()["size"]))
 
 
-def cmd_click(x, y, button="left", count=1):
+def hold(dev, mods, down):
+    codes = [KEYS[name] for name in mods]
+    for code in (codes if down else reversed(codes)):
+        dev.emit(EV_KEY, code, 1 if down else 0)
+    if codes:
+        time.sleep(0.08)
+
+
+def jitter(dev):
+    dev.emit(EV_REL, REL_X, 1)
+    dev.emit(EV_REL, REL_X, -1)
+
+
+def cmd_click(x, y, button="left", count=1, mods=()):
     dev = Uinput()
     cmd_click_focus(x, y, dev)
+    hold(dev, mods, True)
     for _ in range(count):
         dev.emit(EV_KEY, BTN[button], 1)
         time.sleep(0.05)
         dev.emit(EV_KEY, BTN[button], 0)
         time.sleep(0.08)
+    hold(dev, mods, False)
     dev.close()
 
 
-def cmd_drag(x1, y1, x2, y2, steps=20):
+def cmd_drag(x1, y1, x2, y2, steps=20, mods=(), escape=False):
     dev = Uinput()
     cmd_click_focus(x1, y1, dev)
+    hold(dev, mods, True)
     dev.emit(EV_KEY, BTN["left"], 1)
+    time.sleep(0.1)
     for i in range(1, steps + 1):
         move(x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps)
+        jitter(dev)
+        time.sleep(0.05)
+    if escape:
+        dev.emit(EV_KEY, KEYS["esc"], 1)
+        time.sleep(0.1)
+        dev.emit(EV_KEY, KEYS["esc"], 0)
+        time.sleep(0.1)
     dev.emit(EV_KEY, BTN["left"], 0)
+    hold(dev, mods, False)
     dev.close()
 
 
-def cmd_scroll(x, y, notches):
+def cmd_scroll(x, y, notches, mods=()):
     dev = Uinput()
     cmd_click_focus(x, y, dev)
+    hold(dev, mods, True)
     for _ in range(abs(notches)):
         dev.emit(EV_REL, REL_WHEEL, 1 if notches > 0 else -1)
         time.sleep(0.05)
+    hold(dev, mods, False)
     dev.close()
 
 
@@ -213,6 +242,10 @@ def cmd_click_focus(x, y, dev):
 
 
 def cmd_key(*names):
+    for chord in names:
+        for part in chord.split("+"):
+            if part not in KEYS and part not in CHORDS:
+                sys.exit(f"unknown key '{part}' in '{chord}' (known: {', '.join(sorted(KEYS))})")
     dev = Uinput()
     dispatch(f"hl.dsp.focus({{window='address:{window()['address']}'}})")
     for chord in names:
@@ -273,25 +306,48 @@ def cmd_kill():
         pass
 
 
+def split_flags(args):
+    mods, escape, rest = (), False, []
+    it = iter(args)
+    for arg in it:
+        if arg == "--mods":
+            mods = tuple(m for m in next(it, "").split(",") if m)
+            unknown = [m for m in mods if m not in ("ctrl", "shift", "alt")]
+            if unknown:
+                sys.exit(f"unknown modifier(s) {unknown}; use ctrl, shift, alt")
+        elif arg == "--esc":
+            escape = True
+        else:
+            rest.append(arg)
+    return rest, mods, escape
+
+
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
-    name, args = sys.argv[1], sys.argv[2:]
+    name = sys.argv[1]
+    args, mods, escape = split_flags(sys.argv[2:])
     table = {
-        "launch": lambda: cmd_launch(args),
+        "launch": lambda: cmd_launch(sys.argv[2:]),
         "info": lambda: print(json.dumps({k: window()[k] for k in ("address", "at", "size", "floating")})),
         "resize": lambda: cmd_resize(int(args[0]), int(args[1])),
         "tile": cmd_tile,
         "move": lambda: move(float(args[0]), float(args[1])),
-        "click": lambda: cmd_click(float(args[0]), float(args[1]), *(args[2:3] or ["left"]), *(map(int, args[3:4]))),
-        "drag": lambda: cmd_drag(*map(float, args[:4])),
-        "scroll": lambda: cmd_scroll(float(args[0]), float(args[1]), int(args[2])),
+        "click": lambda: cmd_click(float(args[0]), float(args[1]), *(args[2:3] or ["left"]), *(map(int, args[3:4])), mods=mods),
+        "drag": lambda: cmd_drag(*map(float, args[:4]), mods=mods, escape=escape),
+        "scroll": lambda: cmd_scroll(float(args[0]), float(args[1]), int(args[2]), mods=mods),
         "key": lambda: cmd_key(*args),
         "shot": lambda: cmd_shot(args[0]),
         "alive": cmd_alive,
         "kill": cmd_kill,
     }
-    table[name]()
+    if name not in table:
+        sys.exit(f"unknown command '{name}'; commands: {', '.join(table)}")
+    try:
+        table[name]()
+    except (IndexError, ValueError):
+        sys.exit(f"bad arguments for '{name}'\n{__doc__}")
 
 
-main()
+if __name__ == "__main__":
+    main()
