@@ -210,3 +210,40 @@ TEST_CASE("Stop returns the time scale changed while playing", "[simulation][pla
     REQUIRE(WaitFor([&] { return runner->Metadata().TimeScale == 1.0; }));
     runner->Stop();
 }
+
+TEST_CASE("Undo history survives a play session but is hidden while it runs", "[simulation][playstop][history]")
+{
+    RegisterComponents();
+    auto logger = std::make_shared<Logger>();
+    SceneManager scenes(logger, std::make_shared<FileSystem>());
+
+    Scene scene("PlayHistory");
+    const auto entity = scene.CreateEntity("Mover");
+    scene.Registry().emplace<TransformComponent>(entity, TransformComponent{.Position = {1.0, 0.0, 0.0}});
+    const auto guid = scene.GuidOf(entity);
+    auto runner = scenes.CreateSimulation(std::move(scene), std::vector<std::shared_ptr<ISimulationModule>>{});
+    runner->Start();
+    runner->SetPaused(true);
+
+    CommandOptions options;
+    options.Undoable = true;
+    runner->EnqueueCommand(SetFieldCommand{guid, "Transform", "Position", glm::vec3(3.0f, 0.0f, 0.0f)}, options);
+    REQUIRE(WaitFor([&] { return PositionX(*runner, guid) == 3.0; }));
+    REQUIRE(runner->CanUndo());
+
+    auto session = std::make_shared<PlaySession>();
+    session->Resume(runner);
+    REQUIRE(WaitFor([&] { return !runner->IsPaused(); }));
+    CHECK_FALSE(runner->CanUndo());
+
+    runner->EnqueueCommand(SetFieldCommand{guid, "Transform", "Position", glm::vec3(9.0f, 0.0f, 0.0f)}, options);
+    REQUIRE(WaitFor([&] { return PositionX(*runner, guid) == 9.0; }));
+    CHECK(runner->CanUndo());
+
+    session->Stop(runner, std::nullopt);
+    REQUIRE(WaitFor([&] { return runner->IsPaused() && PositionX(*runner, guid) == 3.0; }));
+    REQUIRE(WaitFor([&] { return runner->CanUndo(); }));
+    CHECK(runner->UndoSteps(1) == 1);
+    REQUIRE(WaitFor([&] { return PositionX(*runner, guid) == 1.0; }));
+    runner->Stop();
+}

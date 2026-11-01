@@ -29,5 +29,12 @@ export namespace MoleHole
     [[nodiscard]] StartupArgs ParseStartupArgs(std::span<const std::string> args);
     [[nodiscard]] StartupPrefs ReadStartupPrefs(const std::filesystem::path& stateFile);
     [[nodiscard]] StartupMode SelectStartupMode(const StartupArgs& args, const StartupPrefs& prefs);
+    [[nodiscard]] inline std::string ResolveStartupScene(const std::optional<std::string>& explicitPath,
+                                                         const std::string_view lastScenePath)
+    {
+        static constexpr std::string_view kDefaultScenePath = "templates/test-scene.yaml";
+        if (explicitPath) return *explicitPath;
+        return std::string(lastScenePath.empty() ? kDefaultScenePath : lastScenePath);
+    }
     [[nodiscard]] std::string RelativeTimeText(std::int64_t then, std::int64_t now);
 }

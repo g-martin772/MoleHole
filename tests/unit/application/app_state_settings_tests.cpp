@@ -17,7 +17,7 @@ TEST_CASE("Settings persist in the state file and are sanitised on load", "[stat
     const auto configHome = root / "config";
     const auto statePath = configHome / "molehole" / "molehole_state.yaml";
     fs::create_directories(statePath.parent_path());
-    std::ofstream(statePath) << "UI:\n  UndoHistoryCapacity: 99999999\nAutosave:\n  Enabled: true\n  DelaySeconds: 30\n"
+    std::ofstream(statePath) << "UI:\n  UndoHistoryCapacity: 99999999\nSimulation:\n  FixedTimestep: false\nAutosave:\n  Enabled: true\n  DelaySeconds: 30\n"
                                 "Shortcuts:\n  file.save: Ctrl+K\n  file.open: Ctrl+K\n  bogus.action: Ctrl+J\n  edit.delete: Ctrl+L\n  file.new: ''\n";
 
     AppInfo info;
@@ -51,6 +51,7 @@ TEST_CASE("Settings persist in the state file and are sanitised on load", "[stat
         CHECK(uiState->UndoHistoryCapacity == kMaxUndoCapacity);
         CHECK(uiState->AutosaveEnabled);
         CHECK(uiState->AutosaveDelaySeconds == 30);
+        CHECK_FALSE(uiState->SimulationFixedTimestep);
 
         const auto& overrides = ShortcutOverrideStore::Instance().Overrides();
         CHECK(overrides.at("file.open") == "Ctrl+K");
@@ -66,10 +67,12 @@ TEST_CASE("Settings persist in the state file and are sanitised on load", "[stat
 
     ShortcutOverrideStore::Instance().Set({});
     uiState->UndoHistoryCapacity = kDefaultUndoCapacity;
+    uiState->SimulationFixedTimestep = true;
     {
         const auto service = makeService();
         service->StartAsync({}).get();
         CHECK(uiState->UndoHistoryCapacity == 321);
+        CHECK_FALSE(uiState->SimulationFixedTimestep);
         CHECK(ShortcutOverrideStore::Instance().Overrides() == ShortcutOverrides{{"help.shortcuts", "F5"}});
         CHECK(ActionShortcut("help.shortcuts") == "F5");
         service->StopAsync().get();

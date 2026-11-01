@@ -131,6 +131,12 @@ namespace
                 ImGui::SetTooltip("How many times per second the simulation steps (Ctrl+click to type a value).\n"
                                   "Independent of the UI and viewport frame rates.");
             }
+            ImGui::Checkbox("Fixed timestep", &m_UiState->SimulationFixedTimestep);
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("On: every tick advances exactly 1 / tick rate, so runs repeat.\n"
+                                  "Off: ticks follow the wall clock; the simulation is not reproducible.");
+            }
             for (const float preset : {30.0f, 60.0f, 120.0f, 240.0f})
             {
                 char label[16];

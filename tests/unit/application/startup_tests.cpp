@@ -210,3 +210,12 @@ TEST_CASE("State file recents migrate from the legacy list", "[startup][state]")
     CHECK(recents[0].LastOpened > 0);
     CHECK(reloaded->GetShowLauncher());
 }
+
+TEST_CASE("An explicit --scene wins over the last session's scene", "[startup]")
+{
+    const auto args = Parse({"--scene", "templates/dev.yaml", "--skip-intro"});
+    CHECK(ResolveStartupScene(args.Scene, "/old/last.yaml") == "templates/dev.yaml");
+    CHECK(SelectStartupMode(args, Prefs(true, true)) == StartupMode::Editor);
+    CHECK(ResolveStartupScene(Parse({}).Scene, "/old/last.yaml") == "/old/last.yaml");
+    CHECK(ResolveStartupScene(Parse({}).Scene, "") == "templates/test-scene.yaml");
+}

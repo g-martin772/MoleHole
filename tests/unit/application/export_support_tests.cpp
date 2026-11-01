@@ -2,6 +2,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <yaml-cpp/yaml.h>
 
+import GPP;
 import MoleHole;
 import std;
 
@@ -118,4 +119,38 @@ TEST_CASE("Schema dump lists registered components and their fields", "[export][
     CHECK(text.starts_with("# Component schema"));
     CHECK(text.contains("\n## Transform\n"));
     CHECK(text.contains("| Field | Type | Label | Range | Notes |"));
+}
+
+TEST_CASE("Export scene scope sets time scale and clock without touching the content revision and restores them", "[export][scope]")
+{
+    RegisterComponents();
+    auto logger = std::make_shared<GPP::Logger>();
+    GPP::SceneManager scenes(logger, std::make_shared<GPP::FileSystem>());
+    GPP::Scene scene("ExportScope");
+    scene.SetTimeScale(2.0);
+    auto runner = scenes.CreateSimulation(std::move(scene), std::vector<std::shared_ptr<GPP::ISimulationModule>>{});
+    runner->Start();
+    runner->SetPaused(true);
+    const auto waitFor = [](const auto& predicate)
+    {
+        for (int i = 0; i < 300 && !predicate(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        return predicate();
+    };
+    REQUIRE(waitFor([&] { return runner->Metadata().TimeScale == 2.0; }));
+    const auto revision = runner->ContentRevision();
+
+    ExportSceneScope scope;
+    scope.Apply(*runner, 7.0, 123.0);
+    REQUIRE(waitFor([&] { return runner->Metadata().TimeScale == 7.0; }));
+    CHECK(runner->AcquireSnapshot()->Clock().Time == 123.0);
+    CHECK(runner->ContentRevision() == revision);
+
+    scope.Restore(*runner);
+    REQUIRE(waitFor([&] { return runner->Metadata().TimeScale == 2.0; }));
+    CHECK(runner->AcquireSnapshot()->Clock().Time == 0.0);
+    CHECK(runner->ContentRevision() == revision);
+
+    scope.Restore(*runner);
+    CHECK(runner->Metadata().TimeScale == 2.0);
+    runner->Stop();
 }

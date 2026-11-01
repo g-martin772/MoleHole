@@ -8,6 +8,41 @@ import :Rendering.SettingsService;
 
 export namespace MoleHole
 {
+    class ExportSceneScope
+    {
+    public:
+        void Apply(GPP::SimulationRunner& runner, const std::optional<double> timeScale, const std::optional<double> simTime)
+        {
+            if (timeScale)
+            {
+                m_PreviousScale = runner.Metadata().TimeScale;
+                runner.EnqueueSystemEdit([scale = *timeScale](GPP::Scene& scene) { scene.SetTimeScale(scale); }, false);
+            }
+            if (simTime)
+            {
+                if (runner.IsPaused()) m_PreviousTime = runner.AcquireSnapshot()->Clock().Time;
+                runner.SetSimTime(*simTime);
+            }
+        }
+
+        void Restore(GPP::SimulationRunner& runner)
+        {
+            if (const auto scale = std::exchange(m_PreviousScale, std::nullopt))
+                runner.EnqueueSystemEdit([scale = *scale](GPP::Scene& scene) { scene.SetTimeScale(scale); }, false);
+            if (const auto time = std::exchange(m_PreviousTime, std::nullopt)) runner.SetSimTime(*time);
+        }
+
+        void Forget() noexcept
+        {
+            m_PreviousScale.reset();
+            m_PreviousTime.reset();
+        }
+
+    private:
+        std::optional<double> m_PreviousScale;
+        std::optional<double> m_PreviousTime;
+    };
+
     class ExportController
     {
     public:
@@ -82,6 +117,8 @@ export namespace MoleHole
         double m_TickDebt{0.0};
         double m_SimStart{0.0};
         double m_TimeScale{1.0};
+        ExportSceneScope m_SceneScope;
+        bool m_ScopeDeferred{false};
         std::shared_ptr<GPP::ProgressTask> m_Task;
         std::shared_ptr<Job> m_Job = std::make_shared<Job>();
         std::filesystem::path m_TempDir;

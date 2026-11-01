@@ -252,5 +252,6 @@ export namespace MoleHole
         GPP::Units::Precision SimulationPrecision = GPP::Units::Precision::F64;
         float GravityMultiplier = 1.0f;
         float SimulationTickRate = 60.0f;
+        bool SimulationFixedTimestep = true;
     };
 }

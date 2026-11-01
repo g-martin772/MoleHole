@@ -23,8 +23,9 @@ export namespace MoleHole
                     self->m_Revision = runner->ContentRevision();
                     self->m_TimeScale = scene.Metadata().TimeScale;
                     self->m_Bookmarks.Clear();
+                    self->m_History = runner->ExtractHistory();
                 }
-                runner->ClearHistory();
+                else runner->ClearHistory();
                 if (run) runner->SetPaused(false);
             });
             return fresh;
@@ -73,12 +74,14 @@ export namespace MoleHole
             {
                 std::optional<GPP::Scene> snapshot;
                 std::optional<GPP::RunnerState> hidden;
+                std::optional<GPP::HistoryState> history;
                 std::uint64_t revision = 0;
                 double timeScale = 1.0;
                 {
                     std::scoped_lock lock(self->m_Mutex);
                     snapshot = std::exchange(self->m_Snapshot, std::nullopt);
                     hidden = std::exchange(self->m_Hidden, std::nullopt);
+                    history = std::exchange(self->m_History, std::nullopt);
                     revision = self->m_Revision;
                     timeScale = self->m_TimeScale;
                     self->m_Bookmarks.Clear();
@@ -96,6 +99,7 @@ export namespace MoleHole
                 }
                 if (hidden) runner->RestoreState(*hidden);
                 runner->ClearHistory();
+                if (history) runner->RestoreHistory(std::move(*history));
                 runner->SetPaused(true);
             }, false);
         }
@@ -116,6 +120,7 @@ export namespace MoleHole
         double m_TimeScale = 1.0;
         std::optional<GPP::Scene> m_Snapshot;
         std::optional<GPP::RunnerState> m_Hidden;
+        std::optional<GPP::HistoryState> m_History;
         std::uint64_t m_Revision = 0;
         std::atomic<bool> m_Active{false};
     };

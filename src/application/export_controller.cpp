@@ -150,6 +150,12 @@ namespace MoleHole
             m_ManualStepping = false;
         }
         m_UiState->ExportStepDelta = 0.0f;
+        if (m_StartedPlay) m_SceneScope.Forget();
+        else if (!m_UiState->ExitWhenExportDone)
+        {
+            if (const auto runner = m_Runner()) m_SceneScope.Restore(*runner);
+        }
+        m_ScopeDeferred = false;
         if (m_StartedPlay)
         {
             if (!m_UiState->PendingSnapshotForPlay.exchange(false)) m_UiState->PendingStopSimulation = true;
@@ -239,6 +245,8 @@ namespace MoleHole
             const auto runner = m_Runner();
             if (!runner || !runner->IsPaused())
             {
+                if (runner && std::exchange(m_ScopeDeferred, false))
+                    m_SceneScope.Apply(*runner, m_Request.TimeScale, m_Request.SimStart);
                 m_AwaitPlay = false;
                 m_LastProgress = std::chrono::steady_clock::now();
                 m_Stepping = runner != nullptr;
@@ -333,15 +341,13 @@ namespace MoleHole
 
         m_SimStart = 0.0;
         m_TimeScale = 1.0;
+        m_ScopeDeferred = false;
         if (const auto runner = m_Runner())
         {
-            if (request.TimeScale)
-            {
-                runner->EnqueueEdit([scale = *request.TimeScale](Scene& scene) { scene.SetTimeScale(scale); });
-            }
             m_TimeScale = request.TimeScale.value_or(runner->Metadata().TimeScale);
-            if (request.SimStart) runner->SetSimTime(*request.SimStart);
-            m_SimStart = runner->AcquireSnapshot()->Clock().Time;
+            m_SimStart = request.SimStart.value_or(runner->AcquireSnapshot()->Clock().Time);
+            m_ScopeDeferred = !m_UiState->ExitWhenExportDone && Animated(request) && runner->IsPaused();
+            if (!m_ScopeDeferred) m_SceneScope.Apply(*runner, request.TimeScale, request.SimStart);
         }
 
         const auto stats = m_Renderer->GetBufferTargetStats(m_BufferTargetId);

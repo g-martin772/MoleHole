@@ -113,6 +113,7 @@ namespace
                 // freshly started simulation).
                 if (sim->Runner->GetTickRate() != m_UiState->SimulationTickRate)
                     sim->Runner->SetTickRate(m_UiState->SimulationTickRate);
+                sim->Runner->SetFixedTimestep(m_UiState->SimulationFixedTimestep);
                 const auto published = sim->Runner->AcquireSnapshot();
                 SignatureHasher key;
                 key.Pointer(sim->Runner.get());
@@ -678,15 +679,7 @@ namespace
 
         [[nodiscard]] std::string StartupScenePath() const
         {
-            static constexpr auto kDefaultScenePath = "templates/test-scene.yaml";
-            // Explicit --scene (or export request) wins; otherwise resume the last session's
-            // scene if one was persisted; otherwise fall back to the bundled default.
-            return m_UiState->StartupScenePath.value_or(
-                [this]
-                {
-                    const auto lastScene = m_AppState->GetLastScenePath();
-                    return lastScene.empty() ? std::string(kDefaultScenePath) : lastScene;
-                }());
+            return ResolveStartupScene(m_UiState->StartupScenePath, m_AppState->GetLastScenePath());
         }
 
         bool BeginSceneLoad(std::string path, const SceneLoader::Result::Kind kind)
@@ -833,6 +826,7 @@ namespace
             gravity->SetGravityMultiplier(m_UiState->GravityMultiplier);
             SimulationOptions options;
             options.FixedTimestep = std::chrono::duration<float>(1.0f / std::max(m_UiState->SimulationTickRate, 1.0f));
+            options.UseFixedTimestep = m_UiState->SimulationFixedTimestep;
             auto geodesics = std::make_shared<GeodesicSimulationModule>(m_Logger);
             auto rotation = std::make_shared<BodyRotationModule>();
             auto nbody = std::make_shared<NBodySimulationModule>(m_Logger);
