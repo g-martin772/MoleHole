@@ -1,0 +1,173 @@
+Scene: Fly Ship
+SchemaVersion: 2
+TimeScale: 0.01
+Input:
+  Actions:
+    move_y: [key:space, -key:ctrl]
+    roll: [key:e, -key:q]
+    pitch: [key:up, -key:down]
+    yaw: [key:right, -key:left]
+    assist: [key:f]
+    camera: [key:c]
+Entities:
+  - Guid: 5101000000000000001
+    Components:
+      Metadata:
+        Guid: 5101000000000000001
+        Name: BlackHole
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      BlackHole:
+        Mass: 1.9884098706980507e+30
+        Spin: 0
+        Charge: 0
+        SpinAxis: [0, 1, 0]
+  - Guid: 5101000000000000002
+    Components:
+      Metadata:
+        Guid: 5101000000000000002
+        Name: Ship
+        TypeTag: Mesh
+      Transform:
+        Position: [738312.5191252009, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [-1, 1, -1]
+      Velocity:
+        Linear: [0, 0, -10725701.043676010]
+        Angular: [0, 0, 0]
+      RigidBody:
+        Type: Dynamic
+        Mass: 10000
+        LinearDamping: 0
+        AngularDamping: 0
+        EnableGravity: true
+      Collider:
+        Shape: Box
+        HalfExtents: [20, 6, 47]
+        StaticFriction: 0.5
+        DynamicFriction: 0.5
+        Restitution: 0.1
+        IsTrigger: false
+      Mesh:
+        AssetPath: assets/models/star_trek_online__u.s.s._enterprise_kelvin/scene.gltf
+        CenterOfMassOffset: [0, 0, 0]
+        MetresPerUnit: 2.5
+      Scripts:
+        - Name: ship_controller
+          Props:
+            Assist: 1
+            Boost: 2.5
+            GLimit: 4.0e+6
+            MaxRate: 4500
+            ResponseTime: 0.005
+            RetroStop: 1.0e+4
+            ThrustX: 1.0e+11
+            ThrustY: 1.0e+11
+            ThrustZ: 2.0e+11
+            TorquePitch: 2.0e+11
+            TorqueRoll: 2.0e+11
+            TorqueYaw: 2.0e+11
+  - Guid: 5101000000000000003
+    Components:
+      Metadata:
+        Guid: 5101000000000000003
+        Name: Chase Camera
+        TypeTag: Camera
+      Transform:
+        Position: [738312.5191252009, 80, 300]
+        Rotation: [-0.0569, 0, 0, 0.99838]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 60
+        NearPlane: 5
+        FarPlane: 5000000
+        Primary: true
+      Scripts:
+        - Name: chase_camera
+          Props:
+            Distance: 300
+            Height: 80
+            LookAhead: 400
+            Next: 5101000000000000004
+            SmoothTime: 0.25
+            Target: 5101000000000000002
+            TurnTime: 0.15
+  - Guid: 5101000000000000004
+    Components:
+      Metadata:
+        Guid: 5101000000000000004
+        Name: Cockpit Camera
+        TypeTag: Camera
+      Transform:
+        Position: [738312.5191252009, 10, -30]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 75
+        NearPlane: 1
+        FarPlane: 5000000
+        Primary: false
+      Scripts:
+        - Name: cockpit_camera
+          Props:
+            Next: 5101000000000000005
+            Offset: [0, 10, -30]
+            Target: 5101000000000000002
+  - Guid: 5101000000000000005
+    Components:
+      Metadata:
+        Guid: 5101000000000000005
+        Name: Fly Camera
+        TypeTag: Camera
+      Transform:
+        Position: [738312.5191252009, 80, 300]
+        Rotation: [-0.0569, 0, 0, 0.99838]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 60
+        NearPlane: 5
+        FarPlane: 5000000
+        Primary: false
+      Scripts:
+        - Name: fly_camera
+          Props:
+            Boost: 5
+            LookSpeed: 0.15
+            Next: 5101000000000000003
+            Speed: 200
+            Target: 5101000000000000002
+  - Guid: 5101000000000000006
+    Components:
+      Metadata:
+        Guid: 5101000000000000006
+        Name: Key Light
+        TypeTag: DirectionalLight
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [-0.408668, 0.298355, 0.143353, 0.850544]
+        Scale: [1, 1, 1]
+      DirectionalLight:
+        Enabled: true
+        Irradiance: 0.9
+        Color: [1, 0.96, 0.9]
+        ColorMode: Rgb
+        AngularDiameter: 0.533
+  - Guid: 5101000000000000007
+    Components:
+      Metadata:
+        Guid: 5101000000000000007
+        Name: Fill Light
+        TypeTag: DirectionalLight
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [-0.15623, -0.377172, -0.064713, 0.910574]
+        Scale: [1, 1, 1]
+      DirectionalLight:
+        Enabled: true
+        Irradiance: 0.3
+        Color: [0.7, 0.8, 1]
+        ColorMode: Rgb
+        AngularDiameter: 0.533

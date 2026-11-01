@@ -1,0 +1,164 @@
+local function spawn_ship(position, rotation)
+    local ship = sim.spawn("Ship", {
+        Transform = { Position = position or vector.create(0, 0, 0) },
+        RigidBody = { Type = 2, Mass = 100, EnableGravity = false },
+        Collider = { Shape = 1, Radius = 1 },
+    })
+    if rotation then
+        scene.set64(ship, "Transform", "Rotation", rotation)
+    end
+    sim.set_velocity(ship, vector.create(0, 0, 0))
+    return ship
+end
+
+local function bare_camera(primary)
+    return sim.spawn("Camera", { Camera = { Primary = primary } })
+end
+
+local function spawn_camera(script, props, primary)
+    local camera = bare_camera(primary)
+    sim.attach(camera, script, props)
+    return camera
+end
+
+local function position(entity) return scene.get64(entity, "Transform", "Position") end
+local function rotation(entity) return scene.get64(entity, "Transform", "Rotation") end
+local function primary(entity) return scene.get(entity, "Camera", "Primary") end
+
+local function modes()
+    local seen = {}
+    for _, event in sim.events("camera_mode") do
+        table.insert(seen, event.args[1])
+    end
+    return seen
+end
+
+test("the chase camera settles behind and above the ship, looking ahead", function()
+    local ship = spawn_ship()
+    local camera = spawn_camera("chase_camera", { Target = ship, Distance = 30, Height = 8, LookAhead = 40, SmoothTime = 0.1, TurnTime = 0.05 }, true)
+    sim.step(180)
+    assert_near(position(camera), dvec3.new(0, 8, 30), 0.05)
+    local forward = dquat.rotate(rotation(camera), dvec3.new(0, 0, -1))
+    local expected = dvec3.normalize(dvec3.new(0, 0, -40) - dvec3.new(0, 8, 30))
+    assert_near(forward, expected, 1e-3)
+end)
+
+test("the chase camera keeps its offset on a ship moving 100 m per tick", function()
+    local ship = spawn_ship()
+    local camera = spawn_camera("chase_camera", { Target = ship, Distance = 30, Height = 8, SmoothTime = 0.1 }, true)
+    sim.step(1)
+    physics.set_velocity(ship, vector.create(6000, 0, 0))
+    sim.step(120)
+    local offset = position(camera) - position(ship)
+    assert_near(offset, dvec3.new(0, 8, 30), 0.1)
+    assert(position(ship).x > 10000)
+end)
+
+test("the chase camera trails a turning ship instead of snapping", function()
+    local ship = spawn_ship()
+    local camera = spawn_camera("chase_camera", { Target = ship, Distance = 30, Height = 0, SmoothTime = 0.5 }, true)
+    sim.step(120)
+    scene.set64(ship, "Transform", "Rotation", dquat.from_axis_angle(dvec3.new(0, 1, 0), math.pi / 2))
+    sim.step(5)
+    local mid = position(camera) - position(ship)
+    assert(mid.x > 1 and mid.x < 29 and mid.z > 1)
+    sim.step(300)
+    assert_near(position(camera) - position(ship), dvec3.new(30, 0, 0), 0.1)
+end)
+
+test("the cockpit camera rides in the ship's frame", function()
+    local ship = spawn_ship(vector.create(10, 0, 0), dquat.from_axis_angle(dvec3.new(0, 1, 0), math.pi / 2))
+    local camera = spawn_camera("cockpit_camera", { Target = ship, Offset = vector.create(0, 2, -3) }, true)
+    sim.step(2)
+    assert_near(position(camera), dvec3.new(10 - 3, 2, 0), 1e-4)
+    assert(math.abs(dquat.dot(rotation(camera), rotation(ship))) > 0.99999)
+end)
+
+test("C cycles chase, cockpit and fly with one primary camera", function()
+    local ship = spawn_ship()
+    local chase, cockpit, fly = bare_camera(true), bare_camera(false), bare_camera(false)
+    sim.attach(chase, "chase_camera", { Target = ship, Next = cockpit })
+    sim.attach(cockpit, "cockpit_camera", { Target = ship, Next = fly })
+    sim.attach(fly, "fly_camera", { Target = ship, Next = chase })
+    sim.step(2)
+    assert(primary(chase) and not primary(cockpit) and not primary(fly))
+    sim.input_tap("camera")
+    sim.step(3)
+    assert(primary(cockpit) and not primary(chase) and not primary(fly))
+    sim.input_tap("camera")
+    sim.step(3)
+    assert(primary(fly) and not primary(cockpit))
+    sim.input_tap("camera")
+    sim.step(3)
+    assert(primary(chase) and not primary(fly))
+    assert_eq(modes(), { "chase", "cockpit", "fly", "chase" })
+end)
+
+test("a held C does not cycle every tick", function()
+    local ship = spawn_ship()
+    local a, b = bare_camera(true), bare_camera(false)
+    sim.attach(a, "chase_camera", { Target = ship, Next = b })
+    sim.attach(b, "cockpit_camera", { Target = ship, Next = a })
+    sim.step(2)
+    sim.input("camera")
+    sim.step(30)
+    assert(primary(b) and not primary(a))
+end)
+
+test("the fly camera starts where the previous camera was and obeys the keys", function()
+    local ship = spawn_ship()
+    local chase, fly = bare_camera(true), bare_camera(false)
+    sim.attach(chase, "chase_camera", { Target = ship, Distance = 30, Height = 0, SmoothTime = 0, Next = fly })
+    sim.attach(fly, "fly_camera", { Speed = 60, Boost = 2 })
+    sim.step(5)
+    local start = position(chase)
+    sim.input_tap("camera")
+    sim.step(4)
+    assert(primary(fly))
+    assert_near(position(fly), start, 1e-3)
+    local forward = dquat.rotate(rotation(fly), dvec3.new(0, 0, -1))
+    sim.input("move_z")
+    sim.step(60)
+    assert_near(position(fly) - start, forward * 60, 0.5)
+    sim.input("boost")
+    sim.step(60)
+    assert_near(dvec3.distance(position(fly), start), 60 + 120, 1)
+end)
+
+test("mouse look turns the fly camera and clamps the pitch", function()
+    local fly = spawn_camera("fly_camera", { LookSpeed = 1 }, true)
+    sim.step(2)
+    sim.input_mouse(-90, 0)
+    sim.step(1)
+    local forward = dquat.rotate(rotation(fly), dvec3.new(0, 0, -1))
+    assert_near(forward, dvec3.new(-1, 0, 0), 1e-3)
+    sim.input_mouse(0, -500)
+    sim.step(1)
+    forward = dquat.rotate(rotation(fly), dvec3.new(0, 0, -1))
+    assert_near(forward.y, math.sin(math.rad(89)), 1e-3)
+end)
+
+test("the fly camera follows its target's motion and still flies on top", function()
+    local ship = spawn_ship()
+    local fly = spawn_camera("fly_camera", { Target = ship, Speed = 10 }, true)
+    sim.step(2)
+    local start = position(fly) - position(ship)
+    physics.set_velocity(ship, vector.create(3000, 0, 0))
+    sim.input("move_y")
+    sim.step(60)
+    local offset = position(fly) - position(ship)
+    assert_near(offset.x - start.x, 0, 0.01)
+    assert_near(offset.y - start.y, 10, 0.2)
+    assert(position(ship).x > 1000)
+end)
+
+test("a camera without a target or with a destroyed one stays put", function()
+    local chase = spawn_camera("chase_camera", {}, true)
+    local ship = spawn_ship()
+    local cockpit = spawn_camera("cockpit_camera", { Target = ship }, true)
+    sim.step(3)
+    sim.destroy(ship)
+    sim.step(3)
+    assert_near(position(chase), dvec3.new(0, 0, 0), 1e-9)
+    assert_near(position(cockpit), dvec3.new(0, 0, 0), 1e-9)
+end)
