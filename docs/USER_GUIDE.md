@@ -344,6 +344,12 @@ Input:
 - Mouse look has no pointer lock yet: motion stops when the cursor reaches the window edge
 - Headless tests inject input with `sim.input(action, value?)`, `sim.input_tap(action)`, `sim.input_mouse(dx, dy)`, `sim.input_clear()` (see `tests/scripts/input.luau`)
 
+### Flying a ship
+- Open `templates/fly-ship.yaml`, press Play and click the viewport to capture input. A ship starts 500 r_g from a solar-mass black hole on an elliptical orbit (80% of circular speed); a burn along its heading circularises it. Time runs at 0.01 so an orbit takes about 35 seconds
+- Keys: W / S forward and back, A / D strafe, Space / Ctrl up and down, Shift boost, arrow keys or the mouse pitch and yaw (up arrow and mouse up = nose up), E / Q roll, F cycles the flight assist (off, rate damping, velocity and attitude hold, retro brake), C cycles chase, cockpit and free-fly cameras, Esc releases the mouse and keyboard
+- The assist keeps the ship from tumbling: rate damping stops rotation, hold also keeps heading and cruise velocity after you let go, retro turns the nose against your velocity and burns until you stop. Inside the free-fly camera the ship does not react to your keys
+- Add it to your own scene: `ship_controller` on a Dynamic rigid body with a collider, `chase_camera`, `cockpit_camera` or `fly_camera` on camera entities with Target set to the ship and Next set to the next camera. Properties (thrust, torque, max rate, assist, mass override, G limit, boost) are in the Inspector; values are SI per physical second, so scale thrust with the scene's Time Scale
+
 ### Example
 - `scripts/spring_arm_camera.luau` – orbit camera around target
 - Demo scene: `templates/spring-arm-demo.yaml`
