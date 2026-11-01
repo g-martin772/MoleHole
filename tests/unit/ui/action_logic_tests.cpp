@@ -141,6 +141,21 @@ TEST_CASE("RecentActions keeps most recent first, deduplicated and capped", "[ui
     CHECK(recent.Ids().front() == "19");
 }
 
+TEST_CASE("RecentActions restore drops blanks and duplicates and respects the capacity", "[ui][actions]")
+{
+    RecentActions recent;
+    recent.Touch("old");
+    std::vector<std::string> saved{"b", "", "a", "b"};
+    for (int i = 0; i < 20; ++i) saved.push_back(std::to_string(i));
+    recent.Restore(saved);
+    CHECK(recent.Ids().size() == RecentActions::kCapacity);
+    CHECK(recent.Ids()[0] == "b");
+    CHECK(recent.Ids()[1] == "a");
+    CHECK(recent.Ids()[2] == "0");
+    recent.Restore({});
+    CHECK(recent.Ids().empty());
+}
+
 TEST_CASE("ActionRequests hand each consumer only its own prefixes", "[ui][actions]")
 {
     ActionRequests requests;

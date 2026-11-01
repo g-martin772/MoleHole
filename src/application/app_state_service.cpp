@@ -140,6 +140,15 @@ namespace MoleHole
                 }
                 ShortcutOverrideStore::Instance().Set(SanitizeShortcutOverrides(raw, DefaultActions()));
             }
+            if (const auto recent = node["RecentActions"]; recent && recent.IsSequence())
+            {
+                std::vector<std::string> ids;
+                for (const auto& entry : recent)
+                {
+                    if (entry.IsScalar()) ids.push_back(entry.as<std::string>());
+                }
+                m_UiState->RecentActionIds.Restore(ids);
+            }
             if (const auto autosave = node["Autosave"])
             {
                 if (const auto v = autosave["Enabled"]) m_UiState->AutosaveEnabled = v.as<bool>();
@@ -285,6 +294,8 @@ namespace MoleHole
             root["UI"]["UndoHistoryCapacity"] = m_UiState->UndoHistoryCapacity;
 
             for (const auto& [id, chord] : ShortcutOverrideStore::Instance().Overrides()) root["Shortcuts"][id] = chord;
+
+            for (const auto& id : m_UiState->RecentActionIds.Ids()) root["RecentActions"].push_back(id);
 
             root["Autosave"]["Enabled"] = m_UiState->AutosaveEnabled;
             root["Autosave"]["DelaySeconds"] = m_UiState->AutosaveDelaySeconds;

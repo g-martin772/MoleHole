@@ -360,6 +360,16 @@ export namespace MoleHole
             if (m_Ids.size() > kCapacity) m_Ids.resize(kCapacity);
         }
 
+        void Restore(const std::span<const std::string> ids)
+        {
+            m_Ids.clear();
+            for (const auto& id : ids)
+            {
+                if (m_Ids.size() == kCapacity) break;
+                if (!id.empty() && !std::ranges::contains(m_Ids, id)) m_Ids.push_back(id);
+            }
+        }
+
         [[nodiscard]] const std::vector<std::string>& Ids() const noexcept { return m_Ids; }
 
     private:

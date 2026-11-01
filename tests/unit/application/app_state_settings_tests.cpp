@@ -61,17 +61,21 @@ TEST_CASE("Settings persist in the state file and are sanitised on load", "[stat
         CHECK(overrides.at("file.new").empty());
 
         uiState->UndoHistoryCapacity = 321;
+        uiState->RecentActionIds.Touch("file.save");
+        uiState->RecentActionIds.Touch("view.frame");
         ShortcutOverrideStore::Instance().Set({{"help.shortcuts", "F5"}});
         service->StopAsync().get();
     }
 
     ShortcutOverrideStore::Instance().Set({});
     uiState->UndoHistoryCapacity = kDefaultUndoCapacity;
+    uiState->RecentActionIds.Restore({});
     uiState->SimulationFixedTimestep = true;
     {
         const auto service = makeService();
         service->StartAsync({}).get();
         CHECK(uiState->UndoHistoryCapacity == 321);
+        CHECK(uiState->RecentActionIds.Ids() == std::vector<std::string>{"view.frame", "file.save"});
         CHECK_FALSE(uiState->SimulationFixedTimestep);
         CHECK(ShortcutOverrideStore::Instance().Overrides() == ShortcutOverrides{{"help.shortcuts", "F5"}});
         CHECK(ActionShortcut("help.shortcuts") == "F5");
