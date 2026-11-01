@@ -139,3 +139,17 @@ TEST_CASE("ObjectPathTracker doesn't crash and stops growing a destroyed entity'
     // it is neither pruned nor grown any further.
     CHECK(tracker.SphereHistories().at(sphereGuid).size() == 2);
 }
+
+TEST_CASE("ObjectPathTracker record cost", "[.bench][object-paths]")
+{
+    RegisterComponents();
+    Scene scene("ObjectPathsBench");
+    for (int i = 0; i < 500; ++i) MakeSphereEntity(scene, {static_cast<float>(i), 0.0f, 0.0f});
+    ObjectPathTracker tracker;
+    for (int i = 0; i < 2000; ++i) tracker.RecordPositions(scene);
+    constexpr int calls = 1000;
+    const auto start = std::chrono::steady_clock::now();
+    for (int i = 0; i < calls; ++i) tracker.RecordPositions(scene);
+    const double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count() / calls;
+    std::printf("RecordPositions, 500 spheres with full 2000-point histories: %.1f us per call\n", us);
+}

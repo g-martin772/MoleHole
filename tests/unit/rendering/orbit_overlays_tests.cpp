@@ -485,3 +485,85 @@ TEST_CASE("Changed chunks report only the bytes that differ", "[rendering][overl
     CHECK(resized[0] == std::pair<std::size_t, std::size_t>{0, 100});
     CHECK(ChangedChunks(before, std::span<const std::byte>{}, 4096).empty());
 }
+
+TEST_CASE("Trail pipeline cost: LOD and upload ranges", "[.bench][trails]")
+{
+    constexpr int bodies = 40;
+    constexpr int history = 2000;
+    const auto position = [](const int body, const int tick)
+    {
+        const float radius = 200.0f + 40.0f * static_cast<float>(body);
+        const float angle = 0.004f * static_cast<float>(tick) / std::sqrt(radius / 200.0f) + static_cast<float>(body);
+        return glm::vec3(radius * std::cos(angle), 3.0f * std::sin(0.1f * static_cast<float>(body)), radius * std::sin(angle));
+    };
+    const auto build = [&](const int firstTick)
+    {
+        std::vector<RenderSegment> segments;
+        for (int b = 0; b < bodies; ++b)
+        {
+            for (int t = 1; t < history; ++t)
+                segments.push_back({position(b, firstTick + t - 1), position(b, firstTick + t), glm::vec3(0.2f * static_cast<float>(b % 5))});
+        }
+        return segments;
+    };
+    const auto raw = build(0);
+    const auto clock = [](auto&& fn)
+    {
+        const auto start = std::chrono::steady_clock::now();
+        fn();
+        return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    };
+    std::printf("raw segments %zu (%zu KiB of overlay vertices)\n", raw.size(), raw.size() * 12 * sizeof(float) / 1024);
+    std::vector<float> vertices;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        const double fill = clock([&]
+        {
+            vertices.clear();
+            vertices.reserve(raw.size() * 12);
+            for (const auto& segment : raw)
+            {
+                const glm::vec3 c = segment.Color;
+                vertices.insert(vertices.end(), {segment.A.x, segment.A.y, segment.A.z, c.r, c.g, c.b, segment.B.x, segment.B.y, segment.B.z, c.r, c.g, c.b});
+            }
+        });
+        if (pass) std::printf("per-frame vertex fill of the raw set: %.2f ms\n", fill);
+    }
+    for (const float tolerance : {0.0f, 0.27f, 8.8f, 140.0f})
+    {
+        std::vector<RenderSegment> out;
+        const double ms = clock([&] { SimplifyTrails(raw, tolerance, out); });
+        std::printf("tolerance %7.2f: %zu segments (%.1f%%), %.2f ms\n", tolerance, out.size(),
+                    100.0 * static_cast<double>(out.size()) / static_cast<double>(raw.size()), ms);
+    }
+
+    const auto traced = [&](const std::vector<RenderSegment>& segments)
+    {
+        TracedTrails t;
+        std::vector<RenderSegment> outside;
+        BuildTracedTrails(t, segments, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f), 20000.0f, 0.0f, outside);
+        return t;
+    };
+    const auto simplified = [&](const std::vector<RenderSegment>& segments)
+    {
+        return SimplifyTrails(segments, 0.5f);
+    };
+    const auto bytes = [](const auto& v) { return std::as_bytes(std::span(v)); };
+    for (const int growth : {1, 50})
+    {
+        const auto a = traced(simplified(raw));
+        const auto b = traced(simplified(build(growth)));
+        std::size_t changed = 0, total = 0;
+        const auto count = [&](const auto& before, const auto& after)
+        {
+            for (const auto [offset, length] : ChangedChunks(bytes(before), bytes(after), 64)) changed += length;
+            total += std::as_bytes(std::span(after)).size();
+        };
+        count(a.Segments, b.Segments);
+        count(a.Cells, b.Cells);
+        count(a.CellSegments, b.CellSegments);
+        std::printf("full history, shifted by %2d ticks: %zu of %zu bytes changed (%.1f%%), segments %zu -> %zu\n", growth,
+                    changed, total, 100.0 * static_cast<double>(changed) / static_cast<double>(std::max<std::size_t>(total, 1)),
+                    a.Segments.size(), b.Segments.size());
+    }
+}
