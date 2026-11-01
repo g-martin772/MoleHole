@@ -116,8 +116,16 @@ namespace
                                                             m_UiState->ViewPositionM);
             const glm::mat4 viewProj = BuildViewProjection(*m_UiState, width / height, frame);
 
-            ImDrawList* drawList = ImGui::GetForegroundDrawList();
-            drawList->PushClipRect(ImVec2(min.x, min.y), ImVec2(max.x, max.y));
+            if (!m_UiState->ViewportVisible) return;
+            // in Viewport window: popups cover labels
+            const bool windowOpen = ImGui::Begin("Viewport");
+            struct WindowEnd
+            {
+                ~WindowEnd() { ImGui::End(); }
+            } windowEnd;
+            if (!windowOpen) return;
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRect(ImVec2(min.x, min.y), ImVec2(max.x, max.y), true);
 
             constexpr ImU32 colBg = IM_COL32(20, 20, 20, 180);
             constexpr ImU32 colBorder = IM_COL32(180, 100, 40, 200);
