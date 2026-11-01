@@ -160,13 +160,13 @@ export namespace MoleHole
         for (auto [entity, star, transform] : registry.view<const StarComponent, const GPP::TransformComponent>().each())
         {
             if (result.size() >= static_cast<std::size_t>(kMaxSpheres)) return result;
-            if (IsHidden(registry, entity)) continue;
+            if (IsHidden(scene, entity)) continue;
             result.push_back(entity);
         }
         for (auto [entity, sphere, transform] : registry.view<const SphereComponent, const GPP::TransformComponent>().each())
         {
             if (result.size() >= static_cast<std::size_t>(kMaxSpheres)) return result;
-            if (!registry.all_of<StarComponent>(entity) && !IsHidden(registry, entity)) result.push_back(entity);
+            if (!registry.all_of<StarComponent>(entity) && !IsHidden(scene, entity)) result.push_back(entity);
         }
         return result;
     }
@@ -184,7 +184,7 @@ export namespace MoleHole
         for (auto [entity, blackHole, transform] :
              scene.Registry().view<const BlackHoleComponent, const GPP::TransformComponent>().each())
         {
-            if (IsHidden(scene.Registry(), entity)) continue;
+            if (IsHidden(scene, entity)) continue;
             BlackHoleGpuData gpu;
             gpu.Position = frame.ToRender(transform.Position);
             gpu.Mass = frame.GeometricMass(blackHole.Mass);
@@ -212,7 +212,7 @@ export namespace MoleHole
              scene.Registry().view<const StarComponent, const GPP::TransformComponent>().each())
         {
             if (params.NumSpheres >= kMaxSpheres) break;
-            if (IsHidden(scene.Registry(), entity)) continue;
+            if (IsHidden(scene, entity)) continue;
             auto& gpu = params.Spheres[static_cast<std::size_t>(params.NumSpheres)];
             gpu.Position = frame.ToRender(transform.Position);
             gpu.Radius = frame.ToRenderLength(star.Radius);
@@ -226,7 +226,7 @@ export namespace MoleHole
              scene.Registry().view<const SphereComponent, const GPP::TransformComponent>().each())
         {
             if (params.NumSpheres >= kMaxSpheres) break;
-            if (scene.Registry().all_of<StarComponent>(entity) || IsHidden(scene.Registry(), entity)) continue;
+            if (scene.Registry().all_of<StarComponent>(entity) || IsHidden(scene, entity)) continue;
             auto& gpu = params.Spheres[static_cast<std::size_t>(params.NumSpheres)];
             gpu.Position = frame.ToRender(transform.Position);
             gpu.Radius = frame.ToRenderLength(sphere.Radius);
@@ -476,7 +476,7 @@ export namespace MoleHole
              scene.Registry().view<const BlackHoleComponent, const GPP::TransformComponent>().each())
         {
             if (params.NumBlackHoles >= kMaxBlackHoles) break;
-            if (IsHidden(scene.Registry(), entity)) continue;
+            if (IsHidden(scene, entity)) continue;
             params.BlackHoles[static_cast<std::size_t>(params.NumBlackHoles)] =
                 GravityGridPointGpu{.Position = frame.ToRender(transform.Position), .Mass = frame.GeometricMass(blackHole.Mass)};
             ++params.NumBlackHoles;
@@ -487,7 +487,7 @@ export namespace MoleHole
              scene.Registry().view<const SphereComponent, const GPP::TransformComponent>().each())
         {
             if (params.NumSpheres >= kMaxSpheres) break;
-            if (IsHidden(scene.Registry(), entity)) continue;
+            if (IsHidden(scene, entity)) continue;
             float mass = 0.0f;
             if (const auto* rigidBody = scene.Registry().try_get<const GPP::RigidBodyComponent>(entity))
             {
@@ -503,7 +503,7 @@ export namespace MoleHole
              scene.Registry().view<const GPP::MeshComponent, const GPP::TransformComponent>().each())
         {
             if (params.NumMeshes >= kMaxGravityGridMeshes) break;
-            if (IsHidden(scene.Registry(), entity)) continue;
+            if (IsHidden(scene, entity)) continue;
             float mass = 0.0f;
             if (const auto* rigidBody = scene.Registry().try_get<const GPP::RigidBodyComponent>(entity))
             {

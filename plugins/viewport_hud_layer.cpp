@@ -134,7 +134,7 @@ namespace
                      scene.Registry().view<const TransformComponent, const CameraComponent, const MetadataComponent>().each())
                 {
                     if (camera.Primary && m_UiState->SceneCameraActive) continue;
-                    if (IsHidden(scene.Registry(), entity)) continue;
+                    if (IsHidden(scene, entity)) continue;
                     const bool selected = metadata.Guid == m_UiState->SelectedEntityGuid;
                     const ImU32 color = selected ? IM_COL32(255, 190, 90, 255)
                                         : camera.Primary ? IM_COL32(230, 140, 50, 220)
@@ -153,7 +153,7 @@ namespace
             for (auto [entity, transform, metadata] :
                  scene.Registry().view<const TransformComponent, const MetadataComponent>().each())
             {
-                if (IsHidden(scene.Registry(), entity)) continue;
+                if (IsHidden(scene, entity)) continue;
                 ImVec2 screenPos;
                 if (!WorldToScreen(transform.Position, *m_UiState, width / height, min, max, screenPos)) continue;
 

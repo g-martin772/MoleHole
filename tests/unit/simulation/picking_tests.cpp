@@ -213,8 +213,62 @@ TEST_CASE("EditorFlags round-trip through the scene YAML", "[simulation][picking
     loaded.DeserializeFromYaml(scene.SerializeToYaml());
     const auto loadedHidden = loaded.FindByGuid(scene.Registry().get<MetadataComponent>(hidden).Guid);
     const auto loadedPlain = loaded.FindByGuid(scene.Registry().get<MetadataComponent>(plain).Guid);
-    CHECK(IsHidden(loaded.Registry(), loadedHidden));
-    CHECK_FALSE(IsLocked(loaded.Registry(), loadedHidden));
-    CHECK_FALSE(IsHidden(loaded.Registry(), loadedPlain));
+    CHECK(IsHidden(loaded, loadedHidden));
+    CHECK_FALSE(IsLocked(loaded, loadedHidden));
+    CHECK_FALSE(IsHidden(loaded, loadedPlain));
     CHECK_FALSE(loaded.Registry().all_of<EditorFlagsComponent>(loadedPlain));
+}
+
+TEST_CASE("Hidden and locked flags are inherited by descendants", "[simulation][picking]")
+{
+    RegisterComponents();
+
+    Scene scene("FlagsInheritTest");
+    const auto parent = scene.CreateEntity("Parent");
+    const auto child = scene.CreateEntity("Child");
+    const auto grandchild = scene.CreateEntity("Grandchild");
+    for (const auto entity : {parent, child, grandchild})
+    {
+        scene.Registry().emplace<TransformComponent>(entity, TransformComponent{.Position = {0.0f, 0.0f, 5.0f}});
+        scene.Registry().emplace<SphereComponent>(entity, SphereComponent{.Radius = 1.0f});
+    }
+    scene.Registry().emplace<HierarchyComponent>(child, HierarchyComponent{scene.GuidOf(parent)});
+    scene.Registry().emplace<HierarchyComponent>(grandchild, HierarchyComponent{scene.GuidOf(child)});
+
+    CHECK_FALSE(IsHidden(scene, grandchild));
+
+    scene.Registry().emplace<EditorFlagsComponent>(parent, EditorFlagsComponent{.Hidden = true});
+    CHECK(IsHidden(scene, child));
+    CHECK(IsHidden(scene, grandchild));
+    CHECK_FALSE(IsLocked(scene, grandchild));
+    CHECK_FALSE(PickClosestEntity(scene, glm::dvec3(0.0), glm::dvec3(0.0, 0.0, 1.0)).has_value());
+
+    scene.Registry().get<EditorFlagsComponent>(parent) = {.Hidden = false, .Locked = true};
+    CHECK_FALSE(IsHidden(scene, grandchild));
+    CHECK(IsLocked(scene, grandchild));
+
+    scene.Registry().remove<EditorFlagsComponent>(parent);
+    scene.Registry().emplace<EditorFlagsComponent>(grandchild, EditorFlagsComponent{.Hidden = true});
+    CHECK_FALSE(IsHidden(scene, child));
+    CHECK_FALSE(IsHidden(scene, parent));
+    CHECK(IsHidden(scene, grandchild));
+}
+
+TEST_CASE("Flag inheritance survives a missing parent and a hierarchy cycle", "[simulation][picking]")
+{
+    RegisterComponents();
+
+    Scene scene("FlagsCycleTest");
+    const auto a = scene.CreateEntity("A");
+    const auto b = scene.CreateEntity("B");
+    scene.Registry().emplace<HierarchyComponent>(a, HierarchyComponent{scene.GuidOf(b)});
+    scene.Registry().emplace<HierarchyComponent>(b, HierarchyComponent{scene.GuidOf(a)});
+    CHECK_FALSE(IsHidden(scene, a));
+
+    const auto orphan = scene.CreateEntity("Orphan");
+    scene.Registry().emplace<HierarchyComponent>(orphan, HierarchyComponent{0xdeadbeefULL});
+    CHECK_FALSE(IsLocked(scene, orphan));
+
+    scene.Registry().emplace<EditorFlagsComponent>(b, EditorFlagsComponent{.Hidden = true});
+    CHECK(IsHidden(scene, a));
 }

@@ -129,7 +129,7 @@ export namespace MoleHole
         std::vector<double> radius;
         for (auto [entity, body, transform] : registry.view<const NBodyComponent, const GPP::TransformComponent>().each())
         {
-            if (IsHidden(registry, entity)) continue;
+            if (IsHidden(scene, entity)) continue;
             bodies.push_back(entity);
             position.push_back(transform.Position);
             velocity.push_back(body.Velocity);

@@ -533,7 +533,7 @@ namespace
                     const auto& transform = scene.Registry().get<TransformComponent>(entity);
                     model = transform.GetRenderMatrix(frame.OriginM, frame.LengthUnitM, frame.LengthUnitM);
                     hasTransform = true;
-                    editable = !IsHidden(scene.Registry(), entity) && !IsLocked(scene.Registry(), entity);
+                    editable = !IsHidden(scene, entity) && !IsLocked(scene, entity);
                 }
             }
             if (!hasTransform)

@@ -239,16 +239,29 @@ export namespace MoleHole
         bool Locked{false};
     };
 
-    [[nodiscard]] inline bool IsHidden(const entt::registry& registry, const entt::entity entity)
+    [[nodiscard]] inline bool InheritsEditorFlag(const GPP::Scene& scene, entt::entity entity, bool EditorFlagsComponent::*flag)
     {
-        const auto* flags = registry.try_get<EditorFlagsComponent>(entity);
-        return flags && flags->Hidden;
+        const auto& registry = scene.Registry();
+        constexpr int kMaxDepth = 64;
+        for (int depth = 0; depth < kMaxDepth && scene.IsValid(entity); ++depth)
+        {
+            const auto* flags = registry.try_get<EditorFlagsComponent>(entity);
+            if (flags && flags->*flag) return true;
+            const auto* hierarchy = registry.try_get<GPP::HierarchyComponent>(entity);
+            if (!hierarchy || hierarchy->ParentGuid == 0) return false;
+            entity = scene.FindByGuid(hierarchy->ParentGuid);
+        }
+        return false;
     }
 
-    [[nodiscard]] inline bool IsLocked(const entt::registry& registry, const entt::entity entity)
+    [[nodiscard]] inline bool IsHidden(const GPP::Scene& scene, const entt::entity entity)
     {
-        const auto* flags = registry.try_get<EditorFlagsComponent>(entity);
-        return flags && flags->Locked;
+        return InheritsEditorFlag(scene, entity, &EditorFlagsComponent::Hidden);
+    }
+
+    [[nodiscard]] inline bool IsLocked(const GPP::Scene& scene, const entt::entity entity)
+    {
+        return InheritsEditorFlag(scene, entity, &EditorFlagsComponent::Locked);
     }
 
     constexpr const char* kAnimationGraphDataTypeTag = "__AnimationGraphData";
