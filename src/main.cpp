@@ -179,6 +179,20 @@ int main(int argc, char* argv[])
             else if (*written) logger->Info("Recovery copy written on termination");
         });
     }
+    if (!exportArgs)
+    {
+        if (const auto renderer = app->GetServiceProvider().GetService<Renderer>())
+        {
+            renderer->SetUiBusyProbe([uiState, scenes = app->GetServiceProvider().GetService<SceneManager>(), logger]
+            {
+                if (uiState->IntroActive || uiState->ExportActive || uiState->LauncherMode) return true;
+                const auto notifications = logger->Notifications();
+                if (!notifications->Toasts().empty() || !notifications->Tasks().empty()) return true;
+                const auto runner = uiState->CurrentSceneName.empty() ? nullptr : scenes->GetSimulation(uiState->CurrentSceneName);
+                return runner && !runner->IsPaused();
+            });
+        }
+    }
     const int result = app->Run();
     app.reset();
     if (const auto relaunch = uiState->PendingRelaunch.Take())
