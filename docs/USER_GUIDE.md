@@ -12,7 +12,7 @@ Open from sidebar or View menu.
 | Simulation | tick rate, stepping, physics, CPU precision |
 | Profiler | CPU zone timings and GPU pass times |
 | Undo History | undo/redo list |
-| Viewport HUD | stats overlay |
+| Viewport HUD | a label (name, position, mass) at every entity in view, at any scale |
 | General Relativity | theory + metric info |
 | Science | science info |
 | Animation Graph | graph editor |
@@ -200,7 +200,7 @@ Render:
 | Sphere | radius (m), spin, color, spin axis, texture |
 | Mesh | mesh asset, metres per model unit |
 | Geodesic Body | launch mode, retrograde, launch velocity; readouts status, proper time, clock rate, speed vs ZAMO, r/M |
-| Camera | FOV, near, far, primary |
+| Camera | FOV, near, far; "Make Primary" (exactly one camera is primary: making one primary demotes the others in the same undo step, deleting the primary promotes another) |
 | RigidBody / Collider / Velocity | physics |
 | Scripts | list of script components + props |
 - Add via inspector → Add Component
