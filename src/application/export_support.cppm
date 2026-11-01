@@ -19,6 +19,7 @@ export namespace MoleHole
     [[nodiscard]] std::filesystem::path SequenceFramePath(const std::filesystem::path& directory, std::string_view name,
                                                           int frameNumber);
     [[nodiscard]] std::filesystem::path NextSequenceDirectory(const std::filesystem::path& parent);
+    [[nodiscard]] int CountSequenceFrames(const std::filesystem::path& directory, std::string_view name);
 
     struct ExportSettings
     {

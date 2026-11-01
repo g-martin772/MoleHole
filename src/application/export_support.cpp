@@ -79,6 +79,21 @@ namespace MoleHole
         }
     }
 
+    int CountSequenceFrames(const std::filesystem::path& directory, const std::string_view name)
+    {
+        const auto prefix = SanitizeSequenceName(name) + "_";
+        std::error_code error;
+        int count = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(directory, error))
+        {
+            const auto file = entry.path().filename().string();
+            if (!file.starts_with(prefix) || !file.ends_with(".png")) continue;
+            const auto digits = std::string_view(file).substr(prefix.size(), file.size() - prefix.size() - 4);
+            if (!digits.empty() && std::ranges::all_of(digits, [](const char c) { return c >= '0' && c <= '9'; })) ++count;
+        }
+        return count;
+    }
+
     void ExportSettings::Clamp()
     {
         Width = std::clamp(Width, 1, 16384);

@@ -38,6 +38,21 @@ TEST_CASE("Next sequence directory skips existing ones", "[export]")
     std::filesystem::remove_all(dir);
 }
 
+TEST_CASE("Existing sequence frames are counted by name", "[export]")
+{
+    const auto root = std::filesystem::temp_directory_path() /
+        ("molehole_seqcount_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    CHECK(CountSequenceFrames(root, "frame") == 0);
+    std::filesystem::create_directories(root);
+    for (const auto* name : {"frame_00001.png", "frame_00002.png", "other_00001.png", "frame_x.png", "frame_00003.jpg", "frame_.png"})
+        std::ofstream(root / name) << "x";
+    CHECK(CountSequenceFrames(root, "frame") == 2);
+    CHECK(CountSequenceFrames(root, "other") == 1);
+    CHECK(CountSequenceFrames(root, "") == 2);
+    std::error_code error;
+    std::filesystem::remove_all(root, error);
+}
+
 TEST_CASE("Remaining time extrapolates from the frame interval", "[export]")
 {
     CHECK_FALSE(EstimateRemainingSeconds(0.0, 0, 100));

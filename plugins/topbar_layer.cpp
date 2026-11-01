@@ -834,6 +834,17 @@ namespace
                                                                     : m_AppState->NextSequenceFolder();
                 ImGui::TextDisabled("Saves %s to %s", SequenceFramePath("", m_ExportNameBuffer.data(), 1).string().c_str(),
                                     folder.string().c_str());
+                const auto scanKey = folder.string() + '\n' + SanitizeSequenceName(m_ExportNameBuffer.data());
+                if (scanKey != m_SequenceScanKey)
+                {
+                    m_SequenceScanKey = scanKey;
+                    m_SequenceExisting = CountSequenceFrames(folder, m_ExportNameBuffer.data());
+                }
+                if (m_SequenceExisting > 0)
+                {
+                    ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.3f, 1.0f), "%d existing frame%s will be overwritten",
+                                       m_SequenceExisting, m_SequenceExisting == 1 ? "" : "s");
+                }
             }
             else
             {
@@ -887,7 +898,8 @@ namespace
             }
             else
             {
-                if (ImGui::Button("Start Export", ImVec2(120, 0)))
+                const bool overwrite = form.Format == ExportFormat::Sequence && m_SequenceExisting > 0;
+                if (ImGui::Button(overwrite ? "Overwrite and Export" : "Start Export", ImVec2(overwrite ? 180 : 120, 0)))
                 {
                     ExportRequest request;
                     switch (form.Format)
@@ -943,6 +955,7 @@ namespace
             m_ExportForm = m_AppState->GetExportSettings();
             FillBuffer(m_ExportFolderBuffer, m_ExportForm.SequenceFolder);
             FillBuffer(m_ExportNameBuffer, m_ExportForm.SequenceName);
+            m_SequenceScanKey.clear();
             m_ShowExportDialog = true;
         }
 
@@ -974,6 +987,8 @@ namespace
         std::array<char, 512> m_ExportPathBuffer{};
         std::array<char, 512> m_ExportFolderBuffer{};
         std::array<char, 128> m_ExportNameBuffer{};
+        std::string m_SequenceScanKey;
+        int m_SequenceExisting = 0;
         std::array<char, 64> m_LayoutName{};
         bool m_LayoutNameFocus = false;
     };
