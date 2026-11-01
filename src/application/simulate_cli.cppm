@@ -3,6 +3,7 @@ export module MoleHole:Application.SimulateCli;
 import std;
 import GPP;
 import :Application.ReplayCli;
+import :Application.ScriptTestCli;
 
 export namespace MoleHole
 {
@@ -13,6 +14,8 @@ export namespace MoleHole
         std::optional<double> Dt;
         std::optional<std::uint64_t> Seed;
         std::string Out;
+        bool Scripts = false;
+        std::string ScriptsDir = "scripts";
         std::string Error;
     };
 
@@ -45,7 +48,8 @@ export namespace MoleHole
         for (int i = 1; i < argc && args.Error.empty(); ++i)
         {
             const std::string_view arg = argv[i];
-            if (arg != "--ticks" && arg != "--dt" && arg != "--seed" && arg != "--out") continue;
+            if (arg == "--scripts") args.Scripts = true;
+            if (arg != "--ticks" && arg != "--dt" && arg != "--seed" && arg != "--out" && arg != "--scripts-dir") continue;
             if (i + 1 >= argc)
             {
                 args.Error = std::format("{} expects a value", arg);
@@ -72,6 +76,7 @@ export namespace MoleHole
                 }
             }
             else if (arg == "--out") args.Out = value;
+            else if (arg == "--scripts-dir") args.ScriptsDir = value;
         }
         return found;
     }
@@ -121,8 +126,19 @@ export namespace MoleHole
             return 1;
         }
 
-        auto result = GPP::RunHeadless(std::move(scene), MakeHeadlessModules(),
-                                       {.Ticks = *args.Ticks, .Dt = args.Dt, .Seed = args.Seed});
+        auto modules = MakeHeadlessModules();
+        std::optional<GPP::AssetDirectories> assets;
+        std::shared_ptr<GPP::ScriptSimulationModule> scripts;
+        GPP::HeadlessOptions options{.Ticks = *args.Ticks, .Dt = args.Dt, .Seed = args.Seed};
+        if (args.Scripts)
+        {
+            assets.emplace(MakeScriptAssetOptions(args.ScriptsDir));
+            scripts = std::make_shared<GPP::ScriptSimulationModule>(*assets);
+            modules.insert(modules.begin(), scripts);
+            options.OnRunnerCreated = [&scripts](GPP::SimulationRunner& runner) { scripts->SetRandom(runner.Random()); };
+        }
+
+        auto result = GPP::RunHeadless(std::move(scene), std::move(modules), options);
         if (!result)
         {
             std::println(std::cerr, "{}", result.error());
@@ -132,6 +148,13 @@ export namespace MoleHole
         {
             for (const auto& error : result->InitErrors) std::println(std::cerr, "{}: {}", args.Path, error);
             return 1;
+        }
+
+        if (scripts)
+        {
+            const auto errors = scripts->TakeErrors();
+            for (const auto& error : errors) std::println(std::cerr, "{}: script '{}': {}", args.Path, error.Script, error.Message);
+            if (!errors.empty()) return 1;
         }
 
         if (!args.Out.empty())

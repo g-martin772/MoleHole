@@ -250,6 +250,36 @@ runner.EnqueueCommand(cmd, CommandOptions{.Undoable = runner.IsPaused(), .Label 
 - Profiling: `ScriptHost::Statuses()[i].Profile` (`ScriptProfile`: tick time, allocs/bytes from `LuauVm::AllocStats()` deltas); shown by the Inspector Scripts section
 - Bindings (add Luau API): `gpp/src/scripting/luau_bindings.cpp` (`vm.Register("scene", "name", fn)`)
 
+## Test a Luau script
+Headless, no GUI. Tests live in `tests/scripts/*.luau` (recursive), one file per script or `scripts/lib/` module.
+```sh
+build/MoleHole --test-scripts                              # all of tests/scripts
+build/MoleHole --test-scripts tests/scripts/orbit.luau     # one file or dir (several allowed)
+build/MoleHole --test-scripts --verbose --seed 7           # list passes with timings, other seed
+build/molehole_tests "[script-tests]"                      # same files through Catch2 (also part of the full run)
+```
+Exit code 0 = all passed, 1 = a test or file failed, 2 = bad arguments. Failures print `file:line: message`, the test name and a trace. Run from the repo root (`scripts/` is `--scripts-dir`).
+
+A test file registers tests with `test(name, fn)`. Every test gets a fresh world (empty scene, seeded RNG, new VMs), so tests never leak into each other, and `require("lib/x")` resolves like in a script.
+```lua
+local orbit = require("lib/orbit")
+test("camera sits on the arm", function()
+    local target = sim.spawn("Target", { Transform = { Position = vector.create(0, 0, 0) } })
+    local cam = sim.spawn("Cam")
+    sim.attach(cam, "spring_arm_camera", { Target = target, ArmLength = 10, Smoothing = 0, OrbitSpeed = 0 })
+    sim.step(1)
+    assert_near(scene.get(cam, "Transform", "Position"), vector.create(0, 3.42, 9.4), 0.01)
+end)
+```
+- Asserts (failure points at the calling line): `assert(cond, msg)`, `assert_eq(a, b, msg?)` (deep for tables), `assert_ne`, `assert_near(a, b, tol=1e-6, msg?)` and `assert_rel` (numbers or vectors, absolute / relative), `expect_error(fn, substring?)` (returns the message; script errors raised inside `sim.step` can be expected too)
+- World: `sim.spawn(name, {Component = {Field = value}})` (adds missing components, entities start with Transform), `sim.create`, `sim.destroy`, `sim.add_component`, `sim.attach(entity, script, props?)`, `scene.*` (get/set/get_xyz/find/query/...; writes apply immediately)
+- Time: `sim.step(n)` ticks all attached scripts (a script error fails the test with its `script:line`), `sim.ticks()`, `sim.dt()`, `sim.set_dt(s)` (default 1/60), `time.elapsed()`, `time.sim_time()`
+- Determinism: `math.random` draws from the seeded stream (`sim.seed(n)` restarts it, `--seed` sets the default, 1), `sim.state_hash()` hashes the scene. Never read a wall clock
+- Runaway loops hit the VM instruction limit and fail only that test. A file that registers no tests fails
+- Headless modules (`MakeHeadlessModules`: gravity, physics, geodesics, N-body, rotation) tick after scripts, so scripts can be tested against bodies
+- Reusable runner is gpp `GPP.Scripting:ScriptTest` (`RunScriptTests`, `ScriptTestOptions::MakeModules/Extend`); add natives to the test VM with `Extend`. MoleHole wiring is `src/application/script_test_cli.cppm`
+- `--simulate scene.yaml --ticks N --scripts` runs the scene's attached scripts in the headless sim (`ScriptSimulationModule`), exit 1 on script errors
+
 ## Add an asset directory kind
 - `AssetDirectories` service: `gpp/src/core/assets`
 - Config section `GPP.Assets.<Kind>` with `Directories`, `Extensions`

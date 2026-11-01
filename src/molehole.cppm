@@ -11,6 +11,7 @@ export import :Application.Export;
 export import :Application.Cli;
 export import :Application.ReplayCli;
 export import :Application.SimulateCli;
+export import :Application.ScriptTestCli;
 export import :Application.Bootstrap;
 export import :Application.TextureImport;
 export import :Simulation.Components;

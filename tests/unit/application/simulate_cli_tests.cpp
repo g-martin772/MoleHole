@@ -1,3 +1,4 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 import GPP;
@@ -51,6 +52,11 @@ TEST_CASE("Simulate flags parse and reject bad values", "[simulate][cli]")
     CHECK_FALSE(Parse({"--simulate", "a.yaml", "--ticks", "-3"})->Error.empty());
     CHECK_FALSE(Parse({"--simulate", "a.yaml", "--ticks"})->Error.empty());
     CHECK_FALSE(Parse({"--simulate", "a.yaml", "--ticks", "1", "--seed", "0"})->Error.empty());
+
+    CHECK_FALSE(good->Scripts);
+    const auto scripts = Parse({"--simulate", "a.yaml", "--ticks", "1", "--scripts", "--scripts-dir", "s"});
+    CHECK(scripts->Scripts);
+    CHECK(scripts->ScriptsDir == "s");
 }
 
 TEST_CASE("Simulate runs a template deterministically and reports errors", "[simulate][cli]")
@@ -84,5 +90,39 @@ TEST_CASE("Simulate runs a template deterministically and reports errors", "[sim
     std::ofstream(bad) << "Scene: Bad\nEntities:\n  - Guid: 1\n    Components:\n      Transform: {Position: oops}\n";
     CHECK(Simulate(bad.string(), "1", first) == 1);
 
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("Simulate --scripts runs the scene's attached scripts", "[simulate][cli][scripting]")
+{
+    RegisterComponents();
+    const auto dir = std::filesystem::temp_directory_path() / "molehole_simulate_scripts";
+    std::filesystem::create_directories(dir / "scripts");
+    std::ofstream(dir / "scripts" / "drift.luau") << "return { OnTick = function(self, dt)\n"
+        "  local x, y, z = scene.get_xyz(self.entity, 'Transform', 'Position')\n"
+        "  scene.set_xyz(self.entity, 'Transform', 'Position', x + 10 * dt, y, z)\n"
+        "end }";
+    const auto scene = dir / "scene.yaml";
+    std::ofstream(scene) << "Scene: Drift\nSchemaVersion: 2\nEntities:\n  - Guid: 5\n    Components:\n"
+        "      Metadata: {Guid: 5, Name: Drifter, TypeTag: Entity}\n"
+        "      Transform: {Position: [0, 0, 0]}\n"
+        "      Scripts:\n        - Name: drift\n";
+    const auto plain = dir / "plain.yaml";
+    const auto driven = dir / "driven.yaml";
+    const std::vector<std::string> extra{"--scripts-dir", (dir / "scripts").string()};
+
+    REQUIRE(Simulate(scene.string(), "60", plain) == 0);
+    auto flags = extra;
+    flags.push_back("--scripts");
+    REQUIRE(Simulate(scene.string(), "60", driven, flags) == 0);
+    CHECK(ReadFile(plain) != ReadFile(driven));
+
+    Scene result;
+    result.DeserializeFromYaml(ReadFile(driven));
+    const auto position = result.Registry().get<TransformComponent>(result.FindByGuid(5)).Position;
+    CHECK(position.x == Catch::Approx(10.0).margin(1e-2));
+
+    std::ofstream(dir / "scripts" / "drift.luau", std::ios::trunc) << "return { OnTick = function() error('broken') end }";
+    CHECK(Simulate(scene.string(), "2", driven, flags) == 1);
     std::filesystem::remove_all(dir);
 }
