@@ -19,18 +19,21 @@ namespace
         return projection * glm::lookAt(position, position + state.ViewFront, state.ViewUp);
     }
 
-    bool WorldToScreen(const glm::vec3& renderPos, const glm::mat4& viewProj, const glm::vec2& min,
+    bool WorldToScreen(const glm::dvec3& worldM, const UiState& state, const float aspect, const glm::vec2& min,
                        const glm::vec2& max, ImVec2& screenPos)
     {
-        const glm::vec4 clip = viewProj * glm::vec4(renderPos, 1.0f);
-        if (clip.w <= 0.0f) return false;
-        const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-        if (ndc.x < -1.0f || ndc.x > 1.0f || ndc.y < -1.0f || ndc.y > 1.0f || ndc.z < -1.0f || ndc.z > 1.0f)
-            return false;
-        const float w = max.x - min.x;
-        const float h = max.y - min.y;
-        screenPos.x = min.x + (ndc.x * 0.5f + 0.5f) * w;
-        screenPos.y = min.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * h;
+        const glm::dvec3 front = glm::normalize(glm::dvec3(state.ViewFront));
+        const glm::dvec3 right = glm::normalize(glm::cross(front, glm::dvec3(state.ViewUp)));
+        const glm::dvec3 up = glm::cross(right, front);
+        const glm::dvec3 offset = worldM - state.ViewPositionM;
+        const double depth = glm::dot(offset, front);
+        if (!(depth > 0.0)) return false;
+        const double tanHalf = std::tan(0.5 * glm::radians(static_cast<double>(state.ViewFov)));
+        const double x = glm::dot(offset, right) / (depth * tanHalf * aspect);
+        const double y = glm::dot(offset, up) / (depth * tanHalf);
+        if (std::abs(x) > 1.0 || std::abs(y) > 1.0) return false;
+        screenPos.x = min.x + static_cast<float>(x * 0.5 + 0.5) * (max.x - min.x);
+        screenPos.y = min.y + static_cast<float>(0.5 - y * 0.5) * (max.y - min.y);
         return true;
     }
 
@@ -152,7 +155,7 @@ namespace
             {
                 if (IsHidden(scene.Registry(), entity)) continue;
                 ImVec2 screenPos;
-                if (!WorldToScreen(frame.ToRender(transform.Position), viewProj, min, max, screenPos)) continue;
+                if (!WorldToScreen(transform.Position, *m_UiState, width / height, min, max, screenPos)) continue;
 
                 std::vector<std::string> lines;
                 const auto length = [](const double metres) { return Units::FormatQuantity(metres, Units::Dimension::Length, 4); };
