@@ -309,6 +309,10 @@ return {
 - `events.emit(name, ...)`, `events.on(name, fn)`, `events.off(name, fn)`: named events between scripts, delivered in emit order at the end of the tick pass
 - Contacts and triggers: give a body a Collider (Is Trigger makes it a zone, Material Id tags the surface); scripts on either body get `OnContact` when they touch and `OnTrigger` when a body enters or leaves a zone. `normal` points from `other` toward you. They run in the app, in `--test-scripts` and in `--simulate --scripts`. Scripts start when Play starts and get `OnStop` when you press Stop (the scene then goes back to how it was)
 - `input.axis(action)` (-1 to 1), `input.held(action)`, `input.pressed(action)`, `input.released(action)`, `input.mouse_delta()` (a `vec2` of pixels since the last tick, +y down): see Script input below. Unknown actions read 0
+- `physics.raycast(origin, dir, max_dist, [layer_mask])` and `physics.spherecast(origin, radius, dir, max_dist, [layer_mask])` give `{entity, point, normal, distance}` (or nil); `physics.overlap(center, radius, [layer_mask])` lists the entities touching a sphere. Positions are metres; use `{x=, y=, z=}` tables for far-away positions (`hit.point64` is the precise point)
+- `physics.add_force(e, v)`, `add_torque`, `add_impulse(e, v, [point])`, `set_velocity`, `set_angular_velocity`, `set_kinematic_target(e, pos, [rotation])`, `set_gravity_scale(e, s)` push rigid bodies (the entity needs a Rigid Body and a Collider). They take effect in the physics step of the same tick
+- `physics.create_joint(a, b, "fixed" | "hinge" | "distance", {anchor, axis, distance, break_force, ...})` returns a handle, `physics.break_joint(handle)` removes it, `physics.joint_broken(handle)` tells whether it snapped. Pass nil as `b` to pin to the world
+- Colliders have a Layer (0-31) and a Mask (which layers they collide with, -1 = all); the `layer_mask` of a query uses the same bits. Ray-gun example: `scripts/ray_gun.luau`
 - `vector.create(x,y,z)`, `vec2()`, `vec4()`
 - `math.random` is seeded by the sim (deterministic)
 - Sandboxed: no io / os
