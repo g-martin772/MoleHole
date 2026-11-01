@@ -12,6 +12,9 @@ export namespace MoleHole
     [[nodiscard]] std::filesystem::path NextNumberedPath(const std::filesystem::path& directory, std::string_view stem,
                                                          std::string_view extension);
 
+    // Moves an unreadable file to `<name>.corrupt` so the next save cannot overwrite it; empty when the move failed.
+    [[nodiscard]] std::filesystem::path QuarantineCorruptFile(const std::filesystem::path& file);
+
     class AppStateService final : public GPP::IHostedService
     {
     public:
@@ -60,6 +63,7 @@ export namespace MoleHole
         void Load();
         void LoadSceneCameras();
         void Save() const;
+        void ReportCorrupt(const std::filesystem::path& file, std::string_view what) const;
 
         std::shared_ptr<UiState> m_UiState;
         std::shared_ptr<RenderSettingsService> m_RenderSettings;

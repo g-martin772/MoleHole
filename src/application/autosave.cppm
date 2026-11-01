@@ -336,6 +336,27 @@ export namespace MoleHole
         std::filesystem::path m_Last;
     };
 
+    struct TerminationScene
+    {
+        bool Dirty = false;
+        bool Playing = false;
+        bool Discard = false;
+        std::string Path;
+        std::string Name;
+    };
+
+    // Returns true when a recovery copy was written. A running simulation is skipped: its state is not the scene.
+    [[nodiscard]] inline std::expected<bool, std::string> WriteTerminationRecovery(
+        RecoveryStore& recovery, const TerminationScene& scene,
+        const std::function<std::expected<std::string, std::string>()>& serialize)
+    {
+        if (!scene.Dirty || scene.Playing || scene.Discard || !recovery.Enabled()) return false;
+        const auto yaml = serialize();
+        if (!yaml) return std::unexpected(yaml.error());
+        if (auto written = recovery.Write(scene.Path, scene.Name, *yaml); !written) return std::unexpected(written.error());
+        return true;
+    }
+
     struct RecoveredScene
     {
         std::filesystem::path File;

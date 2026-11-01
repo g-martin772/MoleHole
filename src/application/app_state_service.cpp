@@ -21,6 +21,15 @@ namespace MoleHole
         }
     }
 
+    std::filesystem::path QuarantineCorruptFile(const std::filesystem::path& file)
+    {
+        auto target = file;
+        target += ".corrupt";
+        std::error_code ec;
+        std::filesystem::rename(file, target, ec);
+        return ec ? std::filesystem::path{} : target;
+    }
+
     AppStateService::AppStateService(std::shared_ptr<UiState> uiState, std::shared_ptr<RenderSettingsService> renderSettings,
                                       std::shared_ptr<UiPreferences> preferences,
                                       std::shared_ptr<IFileSystem> fileSystem, std::shared_ptr<AppPaths> appPaths,
@@ -206,7 +215,18 @@ namespace MoleHole
         {
             m_Logger->Warn("AppStateService: failed to load '{}' ({}), using defaults",
                            m_StatePath.string(), error.what());
+            ReportCorrupt(m_StatePath, "Settings");
         }
+    }
+
+    void AppStateService::ReportCorrupt(const std::filesystem::path& file, const std::string_view what) const
+    {
+        if (!m_Persist) return;
+        const auto kept = QuarantineCorruptFile(file);
+        if (kept.empty()) return;
+        m_Logger->Notifications()->Post(GPP::NotificationKind::Warning, std::format("{} could not be read", what),
+                                        std::format("Defaults are used. The old file was kept as {}", kept.string()), 0.0f,
+                                        "state-corrupt");
     }
 
     void AppStateService::Save() const
@@ -331,7 +351,10 @@ namespace MoleHole
         std::scoped_lock lock(m_Mutex);
         m_SceneCameras = SceneCameraCache(m_StatePath.parent_path() / "scene_cameras.yaml");
         if (const auto problem = m_SceneCameras.Load(); !problem.empty())
+        {
             m_Logger->Warn("AppStateService: ignoring scene camera cache '{}': {}", m_SceneCameras.File().string(), problem);
+            ReportCorrupt(m_SceneCameras.File(), "Scene camera cache");
+        }
         m_SceneCameras.Prune();
     }
 

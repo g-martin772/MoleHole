@@ -159,6 +159,26 @@ int main(int argc, char* argv[])
     RegisterLayers(builder, launcherMode, exportArgs.has_value());
 
     auto app = builder.Build();
+    if (!exportArgs)
+    {
+        app->SetTerminationHook([uiState, scenes = app->GetServiceProvider().GetService<SceneManager>(), logger]
+        {
+            const auto runner = uiState->CurrentSceneName.empty() ? nullptr : scenes->GetSimulation(uiState->CurrentSceneName);
+            if (!runner) return;
+            const TerminationScene scene{.Dirty = uiState->SceneState.IsDirty(),
+                                         .Playing = !runner->IsPaused(),
+                                         .Discard = uiState->DiscardOnExit,
+                                         .Path = uiState->CurrentScenePath,
+                                         .Name = uiState->CurrentSceneName};
+            const auto written = WriteTerminationRecovery(uiState->Recovery, scene,
+                                                          [&]() -> std::expected<std::string, std::string>
+                                                          {
+                                                              return runner->LockRenderScene()->SerializeToYaml();
+                                                          });
+            if (!written) logger->Error("Recovery copy on termination failed: {}", written.error());
+            else if (*written) logger->Info("Recovery copy written on termination");
+        });
+    }
     const int result = app->Run();
     app.reset();
     if (const auto relaunch = uiState->PendingRelaunch.Take())

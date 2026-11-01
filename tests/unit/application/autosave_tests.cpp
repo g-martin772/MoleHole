@@ -282,3 +282,42 @@ TEST_CASE("Autosave reports failing until the next success", "[autosave]")
     scheduler.Succeeded(Action::SaveFile, kStart + 10s);
     CHECK_FALSE(scheduler.Failing());
 }
+
+TEST_CASE("Termination writes a recovery copy only for a modified, stopped scene", "[autosave][termination]")
+{
+    TempDir dir;
+    RecoveryStore store(dir.Root, 77, [](long) { return false; });
+    int serialized = 0;
+    const auto serialize = [&]() -> std::expected<std::string, std::string>
+    {
+        ++serialized;
+        return "Scene: S\n";
+    };
+
+    TerminationScene scene{.Dirty = true, .Path = "/s/a.yaml", .Name = "A"};
+    const auto written = WriteTerminationRecovery(store, scene, serialize);
+    REQUIRE(written);
+    CHECK(*written);
+    CHECK(Slurp(store.FileFor("/s/a.yaml", "A")).ends_with("Scene: S\n"));
+    store.Clear();
+
+    scene.Dirty = false;
+    CHECK_FALSE(*WriteTerminationRecovery(store, scene, serialize));
+    scene = {.Dirty = true, .Playing = true};
+    CHECK_FALSE(*WriteTerminationRecovery(store, scene, serialize));
+    scene = {.Dirty = true, .Discard = true};
+    CHECK_FALSE(*WriteTerminationRecovery(store, scene, serialize));
+    RecoveryStore none;
+    CHECK_FALSE(*WriteTerminationRecovery(none, {.Dirty = true}, serialize));
+    CHECK(serialized == 1);
+}
+
+TEST_CASE("Termination reports serialisation and write failures", "[autosave][termination]")
+{
+    TempDir dir;
+    RecoveryStore store(dir.Root, 78, [](long) { return false; });
+    const auto failing = [&]() -> std::expected<std::string, std::string> { return std::unexpected("no simulation"); };
+    const auto result = WriteTerminationRecovery(store, {.Dirty = true, .Name = "A"}, failing);
+    REQUIRE_FALSE(result);
+    CHECK(result.error() == "no simulation");
+}

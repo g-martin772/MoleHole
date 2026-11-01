@@ -146,3 +146,73 @@ TEST_CASE("Headless exports ignore the saved camera and the per-scene camera cac
     std::error_code error;
     fs::remove_all(root, error);
 }
+
+TEST_CASE("An unreadable state file is kept aside and the app starts with defaults", "[state][corrupt]")
+{
+    const auto root = fs::temp_directory_path() /
+        ("molehole_corrupt_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(root / "lib" / "molehole");
+    fs::create_directories(root / "share" / "molehole");
+    const auto configHome = root / "config";
+    const auto statePath = configHome / "molehole" / "molehole_state.yaml";
+    fs::create_directories(statePath.parent_path());
+    const std::string garbage = "UI: [unclosed\n  Font: : :\n\t- {";
+    std::ofstream(statePath) << garbage;
+    std::ofstream(statePath.parent_path() / "scene_cameras.yaml") << "Scenes: {not: [a list\n";
+
+    AppInfo info;
+    info.Id = "molehole";
+    info.Name = "MoleHole";
+    auto paths = std::make_shared<AppPaths>(AppPaths::Resolve({
+        .BinaryDir = root / "lib" / "molehole",
+        .WorkingDir = root,
+        .Info = info,
+        .Env = [&](std::string_view key) -> std::optional<std::string>
+        {
+            if (key == "HOME") return root.string();
+            if (key == "XDG_CONFIG_HOME") return configHome.string();
+            return std::nullopt;
+        }}));
+    REQUIRE(paths->IsInstalled());
+
+    const auto uiState = std::make_shared<UiState>();
+    const auto defaultCapacity = uiState->UndoHistoryCapacity;
+    const auto service = std::make_shared<AppStateService>(
+        uiState, std::make_shared<RenderSettingsService>(),
+        std::make_shared<UiPreferences>(std::make_shared<FontOptions>(), std::make_shared<EventDispatcher>()),
+        std::make_shared<FileSystem>(), paths, std::make_shared<Logger>());
+    service->StartAsync({}).get();
+
+    CHECK(uiState->UndoHistoryCapacity == defaultCapacity);
+    CHECK_FALSE(fs::exists(statePath));
+    auto kept = statePath;
+    kept += ".corrupt";
+    REQUIRE(fs::exists(kept));
+    std::ifstream in(kept);
+    const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    CHECK(text == garbage);
+    CHECK(fs::exists(statePath.parent_path() / "scene_cameras.yaml.corrupt"));
+
+    service->StopAsync().get();
+    CHECK(fs::exists(statePath));
+    CHECK(fs::exists(kept));
+
+    std::error_code error;
+    fs::remove_all(root, error);
+}
+
+TEST_CASE("Quarantine moves a file aside and reports failure for a missing one", "[state][corrupt]")
+{
+    const auto dir = fs::temp_directory_path() /
+        ("molehole_quarantine_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(dir);
+    const auto file = dir / "state.yaml";
+    std::ofstream(file) << "x";
+    const auto kept = QuarantineCorruptFile(file);
+    CHECK(kept == dir / "state.yaml.corrupt");
+    CHECK_FALSE(fs::exists(file));
+    CHECK(fs::exists(kept));
+    CHECK(QuarantineCorruptFile(file).empty());
+    std::error_code error;
+    fs::remove_all(dir, error);
+}
