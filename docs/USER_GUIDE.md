@@ -287,7 +287,7 @@ Premade, prewired groups. Add menu → Combos, fill few fields.
 ## Scripting (Luau)
 - Files in `scripts/*.luau`
 - Attach: select entity → Scripts → Add Script
-- Returns table: `properties`, `OnStart(self)`, `OnTick(self, dt)`, optional `OnFixedTick(self, dt)`, `OnLateTick(self, dt)`, `OnStop(self)`, `OnEvent(self, name, ...)`, `OnContact(self, other, point, normal, impulse, relative_velocity, material, other_material)`, `OnTrigger(self, other, entered)`
+- Returns table: `properties`, `OnStart(self)`, `OnTick(self, dt)`, optional `OnFixedTick(self, dt)`, `OnLateTick(self, dt)`, `OnStop(self)`, `OnEvent(self, name, ...)`, `OnContact(self, other, point, normal, impulse, relative_velocity, material, other_material, point64, relative_velocity64)`, `OnTrigger(self, other, entered)`
 - `self.entity`, `self.props.X`; own fields on `self`
 - Property types: `float`, `bool`, `entity`, vectors…
 - Props show in inspector, saved in scene
@@ -304,12 +304,13 @@ return {
 
 ### API
 - `scene.exists(e)`, `scene.get(e, comp, field)`, `scene.set(e, comp, field, v)`
+- `scene.get64(e, comp, field)` / `scene.set64(e, comp, field, v)`: the same in 64-bit (`dvec3`, `dquat`), see 64-bit math below
 - `scene.find(name)`, `scene.name(e)`, `scene.query(...)`, `scene.look_at(...)`
 - `render.set(key, value)`, `render.get(key)`: change or read a render setting (see `./build/MoleHole --list-settings`) for the running simulation only. The profile is not edited; it reverts on Stop or scene load. Unknown keys or bad values are script errors
 - `events.emit(name, ...)`, `events.on(name, fn)`, `events.off(name, fn)`: named events between scripts, delivered in emit order at the end of the tick pass
 - Contacts and triggers: give a body a Collider (Is Trigger makes it a zone, Material Id tags the surface); scripts on either body get `OnContact` when they touch and `OnTrigger` when a body enters or leaves a zone. `normal` points from `other` toward you. They run in the app, in `--test-scripts` and in `--simulate --scripts`. Scripts start when Play starts and get `OnStop` when you press Stop (the scene then goes back to how it was)
 - `input.axis(action)` (-1 to 1), `input.held(action)`, `input.pressed(action)`, `input.released(action)`, `input.mouse_delta()` (a `vec2` of pixels since the last tick, +y down): see Script input below. Unknown actions read 0
-- `physics.raycast(origin, dir, max_dist, [layer_mask])` and `physics.spherecast(origin, radius, dir, max_dist, [layer_mask])` give `{entity, point, normal, distance}` (or nil); `physics.overlap(center, radius, [layer_mask])` lists the entities touching a sphere. Positions are metres; use `{x=, y=, z=}` tables for far-away positions (`hit.point64` is the precise point)
+- `physics.raycast(origin, dir, max_dist, [layer_mask])` and `physics.spherecast(origin, radius, dir, max_dist, [layer_mask])` give `{entity, point, normal, distance}` (or nil); `physics.overlap(center, radius, [layer_mask])` lists the entities touching a sphere. Positions are metres; pass a `dvec3` for far-away positions (`hit.point64` is the precise `dvec3`, `hit.point` the float32 one)
 - `physics.add_force(e, v)`, `add_torque`, `add_impulse(e, v, [point])`, `set_velocity`, `set_angular_velocity`, `set_kinematic_target(e, pos, [rotation])`, `set_gravity_scale(e, s)` push rigid bodies (the entity needs a Rigid Body and a Collider). They take effect in the physics step of the same tick
 - `physics.create_joint(a, b, "fixed" | "hinge" | "distance", {anchor, axis, distance, break_force, ...})` returns a handle, `physics.break_joint(handle)` removes it, `physics.joint_broken(handle)` tells whether it snapped. Pass nil as `b` to pin to the world
 - Colliders have a Layer (0-31) and a Mask (which layers they collide with, -1 = all); the `layer_mask` of a query uses the same bits. Ray-gun example: `scripts/ray_gun.luau`
@@ -318,6 +319,15 @@ return {
 - Sandboxed: no io / os
 - `require("lib/name")` loads `scripts/lib/name.luau` (subfolders ok: `lib/a/b`). Only that form is accepted: no `..`, absolute paths, extensions or symlinks leaving `scripts/lib`. A module runs once per script and returns a value (shared state across the entities using that script); cycles are an error. Modules run in the same sandbox. Editing a lib while playing reloads every script that uses it. Files under `lib/` are not offered by Add Script
 - Inspector, Scripts: while playing each script shows the last tick time (avg, max), allocations and bytes of the last tick, and the memory of the whole script VM
+
+### 64-bit math
+- `vector.create` is float32: about 7 digits, so a position 1e11 m from the origin is only good to kilometres. For anything far away use `dvec3` (position, velocity) and `dquat` (rotation), which are double precision
+- `local p = scene.get64(self.entity, "Transform", "Position")` gives a `dvec3`; `scene.set64(self.entity, "Transform", "Position", p + dvec3.new(1, 0, 0) * dt)` writes it back with nothing lost. `scene.get/set` keep returning and taking float32 vectors
+- `dvec3.new(x, y, z)`, `+ - * /`, unary `-`, `==`, `#v` (length), `v.x v.y v.z`; `dvec3.dot`, `cross`, `length`, `normalize`, `distance`, `lerp`, `to_vec` (float32 vector), `from_vec`. Methods work too: `v:length()`. Values never change in place; `a + 1` or `a + vector.create(...)` is an error, convert with `dvec3.from_vec`
+- `dquat.new(x, y, z, w)`, `from_axis_angle(axis, radians)`, `from_euler(x, y, z)` (degrees), `mul`, `rotate(q, v)` (or `q * v`), `slerp`, `inverse`, `to_euler`, `to_quat`. Physics calls accept a `dvec3` anywhere they take a vector, and `set_kinematic_target` accepts a `dquat`
+- `require("lib/dvec")` and `require("lib/dquat")` add helpers: `dvec.sum`, `project`, `reflect`, `clamp_length`, `move_towards`, `angle`; `dquat.from_to`, `look_rotation`, `rotate_towards`, `forward/up/right`
+- Events keep a `dvec3` argument intact; contact callbacks get `point64` and `relative_velocity64` as extra trailing arguments
+- Example: `tests/scripts/far_origin.luau` moves a body at 1e11 m for 300 ticks with `get64/set64` (millimetre accurate) next to a float32 copy that drifts kilometres
 
 ### Script input
 - Scripts read named actions, not keys. Built-in actions: `move_x` (D / A), `move_y` (E / Q), `move_z` (W / S), `jump` (Space), `boost` (Shift), `fire` (left mouse), `aim` (right mouse). Scripts never see input in the editor
