@@ -87,7 +87,7 @@ namespace
         const float speed = meta.Speed > 0.0 ? static_cast<float>(meta.Speed) : 0.1f;
         const double upperBound = meta.Max > meta.Min ? meta.Max : (meta.Min > 0.0 ? 1.0e300 : 0.0);
         const char* format = meta.Format.empty() ? "%.3f" : meta.Format.c_str();
-        const bool modified = fallback && !field.ReadOnly() && (mixed || !(*fallback == current));
+        const bool modified = fallback && !field.ReadOnly() && !meta.Exclusive && (mixed || !(*fallback == current));
 
         std::optional<FieldValue> edited;
         const bool reset = PropertyRow(icons, label.c_str(), modified, [&]
@@ -100,7 +100,13 @@ namespace
             case FieldType::Bool:
             {
                 bool v = std::get<bool>(current);
-                if (ToggleSwitch("##v", &v)) edited = v;
+                if (meta.Exclusive)
+                {
+                    ImGui::BeginDisabled(v);
+                    if (ImGui::Button(v ? "Active" : std::format("Make {}", label).c_str())) edited = true;
+                    ImGui::EndDisabled();
+                }
+                else if (ToggleSwitch("##v", &v)) edited = v;
                 break;
             }
             case FieldType::Int:
@@ -1305,6 +1311,7 @@ namespace
                 {
                     if (field.Meta.Category != category) continue;
                     if (!FieldVisible(field, info, scene.Registry(), entity)) continue;
+                    if (field.Meta.Exclusive && targets.size() > 1) continue;
                     const auto sample = SampleField(scene, targets, info, field);
                     if (!sample || std::holds_alternative<std::monostate>(sample->Value)) continue;
                     const auto& current = sample->Value;

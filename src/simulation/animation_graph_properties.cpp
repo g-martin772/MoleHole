@@ -45,7 +45,9 @@ namespace MoleHole
                     },
                     .Set = [field](GPP::Scene& scene, const entt::entity entity, const Value& value)
                     {
-                        if (field.Set) { field.Set(scene.Registry(), entity, value); }
+                        if (!field.Set) { return; }
+                        field.Set(scene.Registry(), entity, value);
+                        if (field.Meta.Exclusive) { GPP::EnforceExclusiveFlags(scene, scene.GuidOf(entity)); }
                     },
                 });
             }

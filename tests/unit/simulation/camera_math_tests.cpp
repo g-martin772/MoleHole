@@ -87,3 +87,13 @@ TEST_CASE("Entity presets spawn with the requested guid and the first camera bec
     CHECK_FALSE(scene.IsValid(SpawnPreset(scene, 13, "Nope", {})));
     CHECK_FALSE(scene.IsValid(SpawnPreset(scene, 11, "Empty", {})));
 }
+
+TEST_CASE("Camera Primary is an exclusive field", "[simulation][camera]")
+{
+    RegisterComponents();
+    const auto* info = ComponentRegistry::Instance().FindByName("Camera");
+    REQUIRE(info != nullptr);
+    const auto field = std::ranges::find(info->Fields, "Primary", &FieldInfo::Name);
+    REQUIRE(field != info->Fields.end());
+    CHECK(field->Meta.Exclusive);
+}
