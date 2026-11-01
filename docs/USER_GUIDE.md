@@ -287,7 +287,7 @@ Premade, prewired groups. Add menu → Combos, fill few fields.
 ## Scripting (Luau)
 - Files in `scripts/*.luau`
 - Attach: select entity → Scripts → Add Script
-- Returns table: `properties`, `OnStart(self)`, `OnTick(self, dt)`
+- Returns table: `properties`, `OnStart(self)`, `OnTick(self, dt)`, optional `OnFixedTick(self, dt)`, `OnLateTick(self, dt)`, `OnStop(self)`, `OnEvent(self, name, ...)`, `OnContact(self, other, point, normal, impulse, relative_velocity, material, other_material)`, `OnTrigger(self, other, entered)`
 - `self.entity`, `self.props.X`; own fields on `self`
 - Property types: `float`, `bool`, `entity`, vectors…
 - Props show in inspector, saved in scene
@@ -306,6 +306,8 @@ return {
 - `scene.exists(e)`, `scene.get(e, comp, field)`, `scene.set(e, comp, field, v)`
 - `scene.find(name)`, `scene.name(e)`, `scene.query(...)`, `scene.look_at(...)`
 - `render.set(key, value)`, `render.get(key)`: change or read a render setting (see `./build/MoleHole --list-settings`) for the running simulation only. The profile is not edited; it reverts on Stop or scene load. Unknown keys or bad values are script errors
+- `events.emit(name, ...)`, `events.on(name, fn)`, `events.off(name, fn)`: named events between scripts, delivered in emit order at the end of the tick pass
+- Contacts and triggers: give a body a Collider (Is Trigger makes it a zone, Material Id tags the surface); scripts on either body get `OnContact` when they touch and `OnTrigger` when a body enters or leaves a zone. `normal` points from `other` toward you. Contact, trigger, `OnLateTick` and `OnStop`-on-Stop run in `--test-scripts` and `--simulate --scripts`, not in the GUI yet
 - `vector.create(x,y,z)`, `vec2()`, `vec4()`
 - `math.random` is seeded by the sim (deterministic)
 - Sandboxed: no io / os

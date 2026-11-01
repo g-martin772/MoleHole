@@ -243,12 +243,35 @@ runner.EnqueueCommand(cmd, CommandOptions{.Undoable = runner.IsPaused(), .Label 
 - Or in editor: Save selection as combo
 
 ## Add a Luau script component
-- Drop `scripts/foo.luau` → returns `{properties, OnStart, OnTick}`
+- Drop `scripts/foo.luau` → returns `{properties, OnStart, OnTick, ...}` (callbacks below)
 - Dir list: `config.json` `GPP.Assets.Scripts`
 - Annotate: `OnTick = function(self: ScriptSelf, dt: number)`
 - Shared code: `scripts/lib/<name>.luau`, `require("lib/<name>")`. Resolver is `MakeScriptModuleLoader` (luau_bindings.cpp); the VM installs `require` only for loads given a `LuauModuleTrace` (ScriptHost, ScriptCatalog) and `LuauVm::ModulesStale(trace)` drives hot reload of dependents
 - Profiling: `ScriptHost::Statuses()[i].Profile` (`ScriptProfile`: tick time, allocs/bytes from `LuauVm::AllocStats()` deltas); shown by the Inspector Scripts section
 - Bindings (add Luau API): `gpp/src/scripting/luau_bindings.cpp` (`vm.Register("scene", "name", fn)`)
+
+## Script lifecycle, events, contacts
+Host: `ScriptHost` (gpp `src/scripting/script_host.*`), driven in simulations by `ScriptSimulationModule` (`script_module.*`). Callbacks are all optional and take `self` first:
+
+| Callback | When |
+|---|---|
+| `OnStart(self)` | once per instance (a coroutine: may `task.wait`); again after a hot reload |
+| `OnFixedTick(self, dt)` | every sim tick, before `OnTick` (tasks resume first) |
+| `OnTick(self, dt)` | every sim tick (PreSim) |
+| `OnContact(self, other, point, normal, impulse, relative_velocity, material, other_material)` | a touch began this tick (late pass) |
+| `OnTrigger(self, other, entered)` | a body entered/left a trigger collider (late pass) |
+| `OnEvent(self, name, ...)` | every event on the bus |
+| `OnLateTick(self, dt)` | after every module ticked, so after physics, gravity and geodesics (late pass) |
+| `OnStop(self)` | entity or script removed, hot reload, simulation shut down (runner stop, `sim.stop()` in tests) |
+
+- Order per tick: for each instance in (entity guid, slot) order: tasks, `OnFixedTick`, `OnTick`; events drained; all other modules tick; `OnContact`/`OnTrigger` sorted by guid pair (events for the lower guid first, then its partner); events drained; `OnLateTick` per instance; events drained. Scene writes (`scene.set`) apply after each of the two module calls, so a script never sees its own writes within a pass
+- Mechanics: `ISimulationModule::OnLateTick` (runner calls it for every module after all `OnTick`s). `ScriptSimulationModule::SetPhysics(physics)` turns on `PhysicsSimulationModule::SetEventCapture` and takes its events after each tick; without it no contact/trigger callbacks fire. Wire it wherever both modules exist (`simulate_cli.cppm` does; the script test runner finds the physics module itself)
+- Contacts: `PhysicsContactEvent` (physics_module.cppm) A = lower guid, normal B to A, `RelativeVelocity` = vA - vB before the solver, `Impulse` = summed contact impulse in N s, `Point` world metres, `MaterialA/B` from `Collider.MaterialId`. Scripts get the pair mirrored: `normal` points from `other` toward `self`, `relative_velocity` is self minus other, `material` is self's. Only touch-begin is reported (no persist/lost). The same events are still published on the `EventDispatcher`. Points and velocities reach Luau as float32 vectors (EN-8 widens them)
+- Triggers: `Collider.IsTrigger` (existing) makes the shape non-solid and reports enter/exit; PhysX needs one of the pair to be dynamic or kinematic. Both the trigger's and the other body's scripts get `OnTrigger` with the counterpart as `other`
+- Events: `events.emit(name, ...)` (args: number, bool, string, vector, entity), `events.on(name, fn)` / `events.off(name, fn)` (inside any callback, handler gets the args, not self), `OnEvent` for everything. Emit only queues; the host drains the queue FIFO at the end of each pass, handlers see events in (entity, slot, registration) order and what they emit queues behind. 4096 events per drain, the rest are dropped with a script error ("events"). Subscriptions die with the instance (`OnStop`, reload, destroy). Events emitted during shutdown reach native subscribers only
+- Native side: `ScriptHost::Events()` is a `ScriptEventBus`: `Emit(name, args)`, `Subscribe(name or "", fn)`, `Unsubscribe(token)`, `Dispatch()`. The graph runtime can emit/subscribe there; `events.emit` called from a graph script already lands on the same bus when a `ScriptHost` exists. Sim thread only, not thread-safe
+- Replay: nothing is recorded. Contacts are derived from the deterministic physics step, sorted, and delivered in tick order, so a replay re-derives the same callbacks; script-private state (`self` fields, task state) is not in `SaveState`, so replay from a mid-run checkpoint does not restore it (existing limit). Adding `Collider.MaterialId` changed `state_hash` of every scene with a collider once
+- GUI: the app still runs scripts through the graph runtime in the UI process (`ScriptRuntime`): it gets `OnFixedTick`, `OnEvent`/`events.*`, and `OnStop` on removal/reload, but no `OnLateTick`, `OnContact`, `OnTrigger`, or `OnStop` at Play->Stop, because it is not a simulation module. Use `--test-scripts` / `--simulate --scripts` for those
 
 ## Test a Luau script
 Headless, no GUI. Tests live in `tests/scripts/*.luau` (recursive), one file per script or `scripts/lib/` module.
@@ -272,6 +295,7 @@ test("camera sits on the arm", function()
 end)
 ```
 - Asserts (failure points at the calling line): `assert(cond, msg)`, `assert_eq(a, b, msg?)` (deep for tables), `assert_ne`, `assert_near(a, b, tol=1e-6, msg?)` and `assert_rel` (numbers or vectors, absolute / relative), `expect_error(fn, substring?)` (returns the message; script errors raised inside `sim.step` can be expected too)
+- Test world extras: `sim.define_script(name, source)` (per-test script, hot-reloads when redefined), `sim.stop()` (runs `OnStop`, then `sim.step` errors), `sim.emit(name, ...)`, `sim.set_velocity(entity, linear, angular?)` (Velocity fields are read-only to `scene.set`), `sim.events(name?)` (list of `{name, tick, args}` for every bus event so far, in delivery order, tick = 0-based tick index). Physics modules from `options.MakeModules` are wired to the script module, so contact/trigger tests need nothing else (see `tests/scripts/physics_events.luau`)
 - World: `sim.spawn(name, {Component = {Field = value}})` (adds missing components, entities start with Transform), `sim.create`, `sim.destroy`, `sim.add_component`, `sim.attach(entity, script, props?)`, `scene.*` (get/set/get_xyz/find/query/...; writes apply immediately)
 - Time: `sim.step(n)` ticks all attached scripts (a script error fails the test with its `script:line`), `sim.ticks()`, `sim.dt()`, `sim.set_dt(s)` (default 1/60), `time.elapsed()`, `time.sim_time()`
 - Determinism: `math.random` draws from the seeded stream (`sim.seed(n)` restarts it, `--seed` sets the default, 1), `sim.state_hash()` hashes the scene. Never read a wall clock

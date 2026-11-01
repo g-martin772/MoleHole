@@ -134,6 +134,10 @@ export namespace MoleHole
         {
             assets.emplace(MakeScriptAssetOptions(args.ScriptsDir));
             scripts = std::make_shared<GPP::ScriptSimulationModule>(*assets);
+            for (const auto& module : modules)
+            {
+                if (auto physics = std::dynamic_pointer_cast<GPP::PhysicsSimulationModule>(module)) scripts->SetPhysics(physics);
+            }
             modules.insert(modules.begin(), scripts);
             options.OnRunnerCreated = [&scripts](GPP::SimulationRunner& runner) { scripts->SetRandom(runner.Random()); };
         }
