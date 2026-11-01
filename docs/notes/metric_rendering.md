@@ -228,8 +228,10 @@ former acceleration look-up table, which had M = 2/3 baked in and saturated at h
 critical impact parameter is exactly 3√3 M. Two details keep it scale invariant and exact at the camera:
 
 - The step is proportional to M (`stepSize * mass`), like the integrated path.
-- The pixel direction is the direction a static observer sees (sin ψ = b √(1 − 2M/D) / D); the integrator works
-  with sin ψ′ = b / D, so the launch direction is converted once (`staticObserverDirection`).
+- The pixel direction is the direction a static observer sees (sin ψ = b √(1 − 2M/D) / D); the Binet orbit starts
+  with tan ψ′ = tan ψ / √(1 − 2M/D), so the launch direction is converted once (`staticObserverDirection`).
+  An earlier sin ψ′ = sin ψ / √(1 − 2M/D) clamped at 1 and collapsed a band of view angles around 90° from the hole
+  into one direction: a smeared strip of sky across the image.
 
 Measured on `Termination` exports with the disk off (960x540, 60° vertical field of view, Schwarzschild, camera at
 44.8 M): shadow equivalent radius 53.09 px against 53.36 px predicted, −0.5 % for M = 0.5, 1, 5 and 20 M☉

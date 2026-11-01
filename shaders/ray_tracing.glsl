@@ -345,9 +345,7 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
     return color;
 }
 
-// A static observer at distance D from a mass M sees a photon of impact parameter b under
-// sin(psi) = b sqrt(1 - 2M/D) / D, while the Binet integrator below works with sin(psi') = b / D.
-// Converts the pixel direction (psi) into the integrator's direction (psi'), keeping its sense along the radius.
+// tan(psi') = tan(psi) / sqrt(1 - 2M/D): Binet orbit start for a static observer
 vec3 staticObserverDirection(vec3 origin, vec3 dir) {
     if (u_renderBlackHoles == 0 || u_numBlackHoles == 0) return dir;
     vec3 rel = origin - u_blackHoles[0].position;
@@ -357,11 +355,8 @@ vec3 staticObserverDirection(vec3 origin, vec3 dir) {
     vec3 inward = -rel / distance;
     float cosPsi = dot(dir, inward);
     vec3 perpendicular = dir - cosPsi * inward;
-    float sinPsi = length(perpendicular);
-    if (sinPsi < 1e-6) return dir;
-    float sinNew = min(sinPsi / sqrt(k), 1.0);
-    float cosNew = (cosPsi < 0.0 ? -1.0 : 1.0) * sqrt(1.0 - sinNew * sinNew);
-    return normalize(cosNew * inward + sinNew * perpendicular / sinPsi);
+    if (dot(perpendicular, perpendicular) < 1e-12) return dir;
+    return normalize(cosPsi * inward + perpendicular / sqrt(k));
 }
 
 vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bool hitSolid) {
