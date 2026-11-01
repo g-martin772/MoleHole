@@ -10,6 +10,7 @@ primary camera), never from .gpp/molehole_state.yaml or .gpp/scene_cameras.yaml,
   tools/bench.py --compare .gpp/golden --min-psnr 60   # exit 1 when an image drifted
   tools/bench.py --runs 3 --json .gpp/bench-baseline.json    # record a baseline
   tools/bench.py --runs 3 --check .gpp/bench-baseline.json   # exit 1 when median GPU ms regressed > 10%
+  tools/bench.py --build-dir build-release --runs 3         # Release: cmake --preset release-vcpkg && cmake --build --preset release-vcpkg
 
 Baselines are machine and build specific: keep them untracked (.gpp/ is gitignored).
 """
@@ -28,8 +29,8 @@ BINARY = os.path.join(ROOT, "build", "MoleHole")
 BUILTIN = ["Flat", "Lensed", "Traced", "Reference"]
 
 
-def export(profile, scene, width, height, extra, out_png, timeout):
-    cmd = [BINARY, "--export-image", out_png, "--width", str(width), "--height", str(height), "--scene", scene,
+def export(profile, scene, width, height, extra, out_png, timeout, binary=BINARY):
+    cmd = [binary, "--export-image", out_png, "--width", str(width), "--height", str(height), "--scene", scene,
            "--profile", profile]
     for pair in extra:
         cmd += ["--set", pair]
@@ -80,6 +81,7 @@ def main():
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="extra setting, repeatable")
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--build-dir", default="build", help="build directory holding MoleHole, e.g. build-release")
     parser.add_argument("--json", help="write the results here")
     parser.add_argument("--save-golden", metavar="DIR")
     parser.add_argument("--compare", metavar="DIR")
@@ -95,7 +97,8 @@ def main():
             runs = []
             image = os.path.join(tmp, f"{profile}.png")
             for _ in range(args.runs):
-                runs.append(export(profile, args.scene, args.width, args.height, args.set, image, args.timeout))
+                runs.append(export(profile, args.scene, args.width, args.height, args.set, image, args.timeout,
+                                   os.path.join(ROOT, args.build_dir, "MoleHole")))
             row = {"profile": profile, "width": args.width, "height": args.height, "scene": args.scene,
                    "gpu_ms": statistics.median(r["gpu_ms"] for r in runs),
                    "wall_s": statistics.median(r["wall_s"] for r in runs)}
