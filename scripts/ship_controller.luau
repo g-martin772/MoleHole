@@ -22,6 +22,8 @@ local function config(self, props)
         boost = props.Boost,
         retro_stop = props.RetroStop,
         assist = self.assist,
+        max_speed = props.MaxSpeed,
+        hold_speed = self.hold_speed,
     }
 end
 
@@ -53,12 +55,21 @@ return {
         { name = "RetroStop", type = "float", default = 0.5, min = 0, max = 1e12 },
         { name = "MouseSensitivity", type = "float", default = 0.04, min = 0, max = 10 },
         { name = "InvertPitch", type = "bool", default = false },
+        { name = "ControlMode", type = "int", default = 0, min = 0, max = 1 },
+        { name = "KeyTurn", type = "float", default = 1, min = 0, max = 1 },
+        { name = "KeySlew", type = "float", default = 0, min = 0, max = 1000 },
+        { name = "MaxSpeed", type = "float", unit = "m/s", default = 0, min = 0, max = 1e12 },
+        { name = "ThrottleRate", type = "float", default = 0.5, min = 0, max = 100 },
+        { name = "ThrottleMin", type = "float", default = 0, min = -1, max = 0 },
     },
 
     OnStart = function(self: ScriptSelf)
         local props = self.props
         self.assist = props.Assist
         self.controlled = true
+        self.control_mode = self.control_mode or props.ControlMode
+        self.throttle = self.throttle or 0
+        self.hold_speed = self.hold_speed or -1
         self.inertia = resolve_inertia(self.entity, props)
         self.map = input_map.new({
             axes = {
@@ -89,13 +100,20 @@ return {
             self.assist = (self.assist + 1) % 4
             events.emit("assist_mode", self.assist)
         end
+        if input.pressed("control_mode") then
+            self.control_mode = 1 - self.control_mode
+        end
         self.inertia = resolve_inertia(entity, props)
-        flight.configure(self.flight, config(self, props))
 
         local command = { boost = false }
         if self.controlled then
+            local axes = self.map.axes
+            for _, name in { "pitch", "yaw", "roll" } do
+                axes[name].sensitivity = props.KeyTurn
+                axes[name].slew = props.KeySlew > 0 and props.KeySlew or nil
+            end
             input_map.update(self.map, dt)
-            local mouse = input.mouse_delta()
+            local mouse = self.control_mode == 0 and input.mouse_delta() or vector.zero
             local look = props.MouseSensitivity
             command.x = input_map.axis(self.map, "x")
             command.y = input_map.axis(self.map, "y")
@@ -104,7 +122,31 @@ return {
             command.yaw = input_map.axis(self.map, "yaw") + mouse.x * look
             command.roll = input_map.axis(self.map, "roll")
             command.boost = input.held("boost")
+            command.kill = input.held("kill_velocity")
+
+            local ramp = input.axis("throttle")
+            if math.abs(ramp) > 1e-4 then
+                self.throttle = math.clamp(self.throttle + ramp * props.ThrottleRate * dt, props.ThrottleMin, 1)
+                self.hold_speed = -1
+            end
+            if input.pressed("throttle_cut") then
+                self.throttle = 0
+            end
+            if input.pressed("speed_hold") then
+                if self.hold_speed >= 0 then
+                    self.hold_speed = -1
+                else
+                    self.hold_speed = dvec3.length(scene.get64(entity, "Velocity", "Linear") or dvec3.new(0, 0, 0))
+                    self.throttle = 0
+                end
+            end
+            if command.kill then
+                self.throttle, self.hold_speed = 0, -1
+            end
         end
-        flight.apply(entity, self.flight, command, dt * time.scale())
+        command.throttle = self.throttle
+        flight.configure(self.flight, config(self, props))
+        local info = flight.apply(entity, self.flight, command, dt * time.scale())
+        events.emit("ship_status", self.throttle, self.assist, info.boosted and 1 or 0, info.g, self.control_mode, self.hold_speed, info.killing and 1 or 0)
     end,
 }

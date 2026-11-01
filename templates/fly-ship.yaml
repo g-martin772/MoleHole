@@ -5,10 +5,18 @@ Input:
   Actions:
     move_y: [key:space, -key:ctrl]
     roll: [key:e, -key:q]
-    pitch: [key:up, -key:down]
-    yaw: [key:right, -key:left]
+    pitch: [key:up, -key:down, key:i, -key:k]
+    yaw: [key:right, -key:left, key:l, -key:j]
     assist: [key:f]
     camera: [key:c]
+    throttle: [key:z, -key:x]
+    throttle_cut: [key:r]
+    speed_hold: [key:v]
+    kill_velocity: [key:b]
+    control_mode: [key:m]
+    hud: [key:h]
+    cam_yaw: [key:period, -key:comma]
+    cam_pitch: [key:semicolon, -key:slash]
 Entities:
   - Guid: 5101000000000000001
     Components:
@@ -61,6 +69,7 @@ Entities:
             Assist: 1
             Boost: 2.5
             GLimit: 4.0e+6
+            KeySlew: 6
             MaxRate: 4500
             ResponseTime: 0.005
             RetroStop: 1.0e+4
@@ -70,6 +79,9 @@ Entities:
             TorquePitch: 2.0e+11
             TorqueRoll: 2.0e+11
             TorqueYaw: 2.0e+11
+        - Name: telemetry_hud
+          Props:
+            Target: 5101000000000000001
   - Guid: 5101000000000000003
     Components:
       Metadata:
@@ -136,7 +148,7 @@ Entities:
           Props:
             Boost: 5
             LookSpeed: 0.15
-            Next: 5101000000000000003
+            Next: 5101000000000000008
             Speed: 200
             Target: 5101000000000000002
   - Guid: 5101000000000000006
@@ -171,3 +183,27 @@ Entities:
         Color: [0.7, 0.8, 1]
         ColorMode: Rgb
         AngularDiameter: 0.533
+  - Guid: 5101000000000000008
+    Components:
+      Metadata:
+        Guid: 5101000000000000008
+        Name: Frame Camera
+        TypeTag: Camera
+      Transform:
+        Position: [738312.5191252009, 80, 300]
+        Rotation: [-0.0569, 0, 0, 0.99838]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 60
+        NearPlane: 5
+        FarPlane: 5000000
+        Primary: false
+      Scripts:
+        - Name: frame_camera
+          Props:
+            Distance: 300
+            Height: 60
+            Next: 5101000000000000003
+            SmoothTime: 0.25
+            StartActive: false
+            Target: 5101000000000000002

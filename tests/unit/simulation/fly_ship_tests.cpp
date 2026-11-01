@@ -14,6 +14,8 @@ namespace
     constexpr std::uint64_t kShip = 5101000000000000002ULL;
     constexpr std::uint64_t kChase = 5101000000000000003ULL;
     constexpr std::uint64_t kCockpit = 5101000000000000004ULL;
+    constexpr std::uint64_t kFly = 5101000000000000005ULL;
+    constexpr std::uint64_t kFrame = 5101000000000000008ULL;
 
     struct FlyShip
     {
@@ -83,12 +85,12 @@ namespace
     }
 }
 
-TEST_CASE("The fly-ship template runs its four scripts without errors and stays in orbit", "[simulation][scripts][fly-ship]")
+TEST_CASE("The fly-ship template runs its six scripts without errors and stays in orbit", "[simulation][scripts][fly-ship]")
 {
     FlyShip f;
     f.Runner->StepAndWait(300);
     CHECK(f.Modules.Scripts->TakeErrors().empty());
-    CHECK(f.Modules.Scripts->Host().InstanceCount() == 4);
+    CHECK(f.Modules.Scripts->Host().InstanceCount() == 6);
     const auto radius = glm::length(f.ShipPosition());
     CHECK(radius > 100.0 * 1476.0);
     CHECK(radius < 600.0 * 1476.0);
@@ -105,6 +107,62 @@ TEST_CASE("Pressing C on the fly-ship template cycles the camera", "[simulation]
     CHECK_FALSE(f.Primary(kChase));
     CHECK(f.Primary(kCockpit));
     CHECK(f.Modules.Scripts->TakeErrors().empty());
+}
+
+TEST_CASE("C walks chase, cockpit, fly and frame lock and comes back", "[simulation][scripts][fly-ship]")
+{
+    FlyShip f;
+    f.Runner->StepAndWait(5);
+    for (const auto guid : {kCockpit, kFly, kFrame, kChase})
+    {
+        f.Tap("camera");
+        f.Runner->StepAndWait(3);
+        CHECK(f.Primary(guid));
+    }
+    CHECK(f.Modules.Scripts->TakeErrors().empty());
+}
+
+TEST_CASE("The telemetry HUD publishes commands the viewport can draw", "[simulation][scripts][fly-ship][hud]")
+{
+    FlyShip f;
+    f.Runner->StepAndWait(5);
+    const auto frame = f.Modules.Scripts->HudSnapshot();
+    CHECK(f.Modules.Scripts->TakeErrors().empty());
+    REQUIRE(frame->Commands.size() > 40);
+    const auto has = [&](const std::string_view needle)
+    {
+        return std::ranges::any_of(frame->Commands, [&](const HudCommand& command)
+        {
+            return command.Kind == HudKind::Text && command.Text.find(needle) != std::string::npos;
+        });
+    };
+    CHECK(has("SPEED"));
+    CHECK(has("Mm/s"));
+    CHECK(has("THR"));
+    CHECK(has("HDG"));
+    f.Tap("hud");
+    f.Tap("hud");
+    f.Runner->StepAndWait(2);
+    CHECK(f.Modules.Scripts->HudSnapshot()->Commands.empty());
+}
+
+TEST_CASE("Throttle, speed hold and kill velocity act on the template ship", "[simulation][scripts][fly-ship]")
+{
+    FlyShip coast;
+    coast.Runner->StepAndWait(120);
+    FlyShip throttled;
+    throttled.Runner->Input()->Set("throttle", 1.0f);
+    throttled.Runner->StepAndWait(60);
+    throttled.Runner->Input()->Set("throttle", 0.0f);
+    throttled.Runner->StepAndWait(60);
+    CHECK(throttled.Modules.Scripts->TakeErrors().empty());
+    CHECK(glm::length(throttled.ShipVelocity()) > glm::length(coast.ShipVelocity()) * 1.01);
+
+    FlyShip braked;
+    braked.Runner->Input()->Set("kill_velocity", 1.0f);
+    braked.Runner->StepAndWait(120);
+    CHECK(braked.Modules.Scripts->TakeErrors().empty());
+    CHECK(glm::length(braked.ShipVelocity()) < glm::length(coast.ShipVelocity()) * 0.98);
 }
 
 TEST_CASE("Thrust input changes the orbit of the fly-ship template", "[simulation][scripts][fly-ship]")
@@ -134,6 +192,18 @@ TEST_CASE("Recorded flight input replays to the same hash twice", "[simulation][
     f.Runner->Input()->Set("move_x", -1.0f);
     f.Runner->StepAndWait(30);
     f.Tap("assist");
+    f.Tap("camera");
+    f.Tap("control_mode");
+    f.Tap("speed_hold");
+    f.Runner->Input()->Set("throttle", 1.0f);
+    f.Runner->Input()->Set("cam_yaw", 1.0f);
+    f.Runner->StepAndWait(10);
+    f.Runner->Input()->Set("throttle", 0.0f);
+    f.Runner->Input()->Set("cam_yaw", 0.0f);
+    f.Runner->Input()->Set("kill_velocity", 1.0f);
+    f.Runner->StepAndWait(10);
+    f.Runner->Input()->Set("kill_velocity", 0.0f);
+    f.Tap("hud");
     f.Tap("camera");
     f.Runner->Input()->Set("pitch", 0.0f);
     f.Runner->Input()->Set("move_x", 0.0f);

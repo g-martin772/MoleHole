@@ -87,6 +87,72 @@ namespace
         line(apex, center);
     }
 
+    ImU32 HudColor(const std::array<float, 4>& color)
+    {
+        return ImGui::GetColorU32(ImVec4(color[0], color[1], color[2], color[3]));
+    }
+
+    void DrawScriptHud(ImDrawList* list, const HudFrame& frame, const glm::vec2& min, const glm::vec2& max)
+    {
+        const float width = max.x - min.x;
+        const float height = max.y - min.y;
+        const auto point = [&](const HudCommand& command, const float x, const float y)
+        {
+            switch (command.Space)
+            {
+                case HudSpace::Left: return ImVec2(min.x + x * height, min.y + y * height);
+                case HudSpace::Center: return ImVec2(min.x + width * 0.5f + x * height, min.y + y * height);
+                case HudSpace::Right: return ImVec2(max.x + x * height, min.y + y * height);
+                case HudSpace::Screen: break;
+            }
+            return ImVec2(min.x + x * width, min.y + y * height);
+        };
+        const float textScale = height / 720.0f;
+        ImFont* font = ImGui::GetFont();
+        for (const auto& command : frame.Commands)
+        {
+            const ImU32 color = HudColor(command.Color);
+            const float unitX = command.Space == HudSpace::Screen ? width : height;
+            const ImVec2 origin = point(command, command.X, command.Y);
+            switch (command.Kind)
+            {
+                case HudKind::Text:
+                {
+                    const float size = std::max(command.Size * textScale, 6.0f);
+                    const ImVec2 extent = font->CalcTextSizeA(size, FLT_MAX, 0.0f, command.Text.c_str());
+                    ImVec2 at = origin;
+                    if (command.Align == HudAlign::Center) at.x -= extent.x * 0.5f;
+                    else if (command.Align == HudAlign::Right) at.x -= extent.x;
+                    list->AddText(font, size, ImVec2(at.x, at.y - extent.y * 0.5f), color, command.Text.c_str());
+                    break;
+                }
+                case HudKind::Line:
+                    list->AddLine(origin, point(command, command.A, command.B), color, command.Thickness);
+                    break;
+                case HudKind::Rect:
+                {
+                    const ImVec2 corner(origin.x + command.A * unitX, origin.y + command.B * height);
+                    if (command.Filled) list->AddRectFilled(origin, corner, color);
+                    else list->AddRect(origin, corner, color, 0.0f, 0, command.Thickness);
+                    break;
+                }
+                case HudKind::Circle:
+                    if (command.Filled) list->AddCircleFilled(origin, command.A * height, color, 48);
+                    else list->AddCircle(origin, command.A * height, color, 48, command.Thickness);
+                    break;
+                case HudKind::Arc:
+                {
+                    constexpr float kQuarter = 1.5707963f;
+                    const float from = glm::radians(command.B) - kQuarter;
+                    const float to = glm::radians(command.C) - kQuarter;
+                    list->PathArcTo(origin, command.A * height, std::min(from, to), std::max(from, to), 32);
+                    list->PathStroke(color, 0, command.Thickness);
+                    break;
+                }
+            }
+        }
+    }
+
     struct ViewportHudLayer final : public HotReloadableLayer
     {
         using Dependencies = std::tuple<Logger, SceneManager, UiState, RenderSettingsService>;
@@ -152,8 +218,17 @@ namespace
                 }
             }
 
+            const auto scripts = runner->GetModule<ScriptSimulationModule>();
+            const auto drawScriptHud = [&]
+            {
+                if (!scripts) return;
+                if (const auto frame = scripts->HudSnapshot(); !frame->Commands.empty())
+                    DrawScriptHud(drawList, *frame, min, max);
+            };
+
             if (!m_UiState->ShowViewportHud)
             {
+                drawScriptHud();
                 drawList->PopClipRect();
                 return;
             }
@@ -203,6 +278,7 @@ namespace
                 }
             }
 
+            drawScriptHud();
             drawList->PopClipRect();
         }
 

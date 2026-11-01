@@ -27,6 +27,8 @@ local DEFAULTS = {
     boost = 2,
     retro_stop = 0.5,
     assist = flight.RATE,
+    max_speed = 0,
+    hold_speed = -1,
 }
 
 local function clamp1(x: number?): number
@@ -37,6 +39,7 @@ function flight.new(config: { [string]: number }?)
     local state = {
         hold = { v_set = false, vx = 0, vy = 0, vz = 0, q_set = false, qx = 0, qy = 0, qz = 0, qw = 1 },
         rate_pid = {},
+        speed_pid = pid.new({ out_min = -1, out_max = 1, i_limit = 1 }),
         last_assist = -1,
     }
     for key, value in DEFAULTS do
@@ -174,6 +177,14 @@ local function manual_torques(state, command)
     }
 end
 
+local function clamp_body(local_force, limits)
+    return {
+        math.clamp(local_force.x, -limits[1], limits[1]),
+        math.clamp(local_force.y, -limits[2], limits[2]),
+        math.clamp(local_force.z, -limits[3], limits[3]),
+    }
+end
+
 local function hold_force(state, body, qi, mass: number, dt: number, limits)
     local hold = state.hold
     local v = body.velocity
@@ -181,13 +192,39 @@ local function hold_force(state, body, qi, mass: number, dt: number, limits)
         hold.v_set, hold.vx, hold.vy, hold.vz = true, v.x, v.y, v.z
     end
     local wanted = dvec3.new(hold.vx, hold.vy, hold.vz) - v
-    local force = wanted * (mass / math.max(dt, state.response))
-    local local_force = dquat.rotate(qi, force)
-    return {
-        math.clamp(local_force.x, -limits[1], limits[1]),
-        math.clamp(local_force.y, -limits[2], limits[2]),
-        math.clamp(local_force.z, -limits[3], limits[3]),
-    }
+    return clamp_body(dquat.rotate(qi, wanted * (mass / math.max(dt, state.response))), limits)
+end
+
+local function kill_force(state, body, qi, mass: number, dt: number, limits)
+    return clamp_body(dquat.rotate(qi, -body.velocity * (mass / math.max(dt, state.response))), limits)
+end
+
+local function speed_force(state, body, qi, mass: number, dt: number, limits)
+    local speed = dvec3.length(body.velocity)
+    local direction = speed > 1e-9 and body.velocity / speed or dquat_lib.forward(body.rotation)
+    local reach = math.max(limits[1], limits[2], limits[3])
+    local p = state.speed_pid
+    p.kp = mass / state.response
+    local near = math.abs(state.hold_speed - speed) < 0.01 * math.max(state.hold_speed, 1)
+    p.ki = near and p.kp / (4 * state.response) or 0
+    p.out_min, p.out_max, p.i_limit = -reach, reach, reach
+    local push = pid.step(p, state.hold_speed, speed, dt)
+    return clamp_body(dquat.rotate(qi, direction * push), limits)
+end
+
+local function cap_speed(state, body, q, qi, force_body, mass: number, dt: number)
+    local velocity = body.velocity
+    local speed = dvec3.length(velocity)
+    local push = dquat.rotate(q, dvec3.new(force_body[1], force_body[2], force_body[3]))
+    local next_velocity = velocity + push * (dt / mass)
+    local next_speed = dvec3.length(next_velocity)
+    local allowed = math.max(state.max_speed, speed)
+    if next_speed <= allowed then
+        return force_body
+    end
+    local limited = (next_velocity * (allowed / next_speed) - velocity) * (mass / dt)
+    local local_force = dquat.rotate(qi, limited)
+    return { local_force.x, local_force.y, local_force.z }
 end
 
 function flight.step(state, body, command, dt: number)
@@ -210,12 +247,24 @@ function flight.step(state, body, command, dt: number)
 
     local boost = command.boost and state.boost or 1
     local limits = { state.thrust_x * boost, state.thrust_y * boost, state.thrust_z * boost }
-    local cx, cy, cz = clamp1(command.x), clamp1(command.y), clamp1(command.z)
+    local throttle = clamp1(command.throttle)
+    local cx, cy, cz = clamp1(command.x), clamp1(command.y), math.clamp(clamp1(command.z) + throttle, -1, 1)
     local translating = math.abs(cx) + math.abs(cy) + math.abs(cz) > 1e-4
+    local killing = command.kill == true
+    local cruising = state.hold_speed >= 0 and not translating and not killing
+    if not cruising then
+        pid.reset(state.speed_pid)
+    end
     local force_body
-    if translating then
+    if killing then
+        hold.v_set = false
+        force_body = kill_force(state, body, qi, mass, dt, limits)
+    elseif translating then
         hold.v_set = false
         force_body = { cx * limits[1], cy * limits[2], -cz * limits[3] }
+    elseif cruising then
+        hold.v_set = false
+        force_body = speed_force(state, body, qi, mass, dt, limits)
     elseif assist >= flight.HOLD then
         force_body = { 0, 0, 0 }
         local braking = false
@@ -238,6 +287,9 @@ function flight.step(state, body, command, dt: number)
     else
         force_body = { 0, 0, 0 }
     end
+    if state.max_speed > 0 then
+        force_body = cap_speed(state, body, q, qi, force_body, mass, dt)
+    end
 
     local accel = math.sqrt(force_body[1] ^ 2 + force_body[2] ^ 2 + force_body[3] ^ 2) / mass
     local limit = state.g_limit * flight.G
@@ -250,7 +302,7 @@ function flight.step(state, body, command, dt: number)
 
     local force = dquat.rotate(q, dvec3.new(force_body[1], force_body[2], force_body[3])) * scale
     local torque = dquat.rotate(q, dvec3.new(torque_body[1], torque_body[2], torque_body[3])) * scale
-    return force, torque, { accel = accel, g = accel / flight.G, clamped = clamped, assist = assist, boosted = command.boost == true and boost > 1 }
+    return force, torque, { accel = accel, g = accel / flight.G, clamped = clamped, assist = assist, boosted = command.boost == true and boost > 1, cruising = cruising, killing = killing, throttle = throttle }
 end
 
 function flight.apply(entity: Entity, state, command, dt: number)
