@@ -1,0 +1,217 @@
+Scene: Waypoint Demo
+SchemaVersion: 2
+Entities:
+  - Guid: 4200000000000000001
+    Components:
+      Metadata:
+        Guid: 4200000000000000001
+        Name: Earth
+        TypeTag: Sphere
+      Transform:
+        Position: [149597870700.0, 0.0, 0.0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Sphere:
+        Radius: 6371000.0
+        Spin: 0
+        Color: [1, 1, 1]
+        SpinAxis: [0.397789, 0.917477, 0]
+        TexturePath: ""
+      Surface:
+        Albedo: assets/textures/earth/albedo_8k.jpg
+        Normal: assets/textures/earth/normal_8k.png
+        Emissive: assets/textures/earth/night_8k.jpg
+        EmissiveStrength: 0.04
+        RotationPeriod: 86164.1
+        PrimeMeridian: 0
+
+  - Guid: 4200000000000000002
+    Components:
+      Metadata:
+        Guid: 4200000000000000002
+        Name: Moon
+        TypeTag: Sphere
+      Transform:
+        Position: [149982270700.0, 0.0, 0.0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Sphere:
+        Radius: 1737400.0
+        Spin: 0
+        Color: [1, 1, 1]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+      Surface:
+        Albedo: assets/textures/moon/albedo_8k.jpg
+        RoughnessFactor: 1
+        RotationPeriod: 2360591.5
+        PrimeMeridian: 0
+
+  - Guid: 4200000000000000003
+    Components:
+      Metadata:
+        Guid: 4200000000000000003
+        Name: Probe
+        TypeTag: Sphere
+      Transform:
+        Position: [149613870700.0, 0.0, 0.0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Sphere:
+        Radius: 1500000.0
+        Spin: 0
+        Color: [1, 1, 1]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+      Surface:
+        Albedo: assets/textures/mars/albedo_8k.jpg
+        RoughnessFactor: 1
+        RotationPeriod: 0
+        PrimeMeridian: 0
+      Scripts:
+        - Name: waypoint_path
+          Props:
+            Closed: true
+            Mode: 1
+            Name: probe
+            Points: "149613870700.0 0.0 0.0; 149605870700.0 4000000.0 13860000.0; 149589870700.0 4000000.0 13860000.0; 149581870700.0 0.0 0.0; 149589870700.0 -4000000.0 -13860000.0; 149605870700.0 -4000000.0 -13860000.0"
+            Speed: 2000000
+
+  - Guid: 4200000000000000010
+    Components:
+      Metadata:
+        Guid: 4200000000000000010
+        Name: Gate 1
+        TypeTag: Body
+      Transform:
+        Position: [149567870700.0, 12000000.0, 45000000.0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+
+  - Guid: 4200000000000000011
+    Components:
+      Metadata:
+        Guid: 4200000000000000011
+        Name: Gate 2
+        TypeTag: Body
+      Transform:
+        Position: [149582870700.0, 5000000.0, 22000000.0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+
+  - Guid: 4200000000000000012
+    Components:
+      Metadata:
+        Guid: 4200000000000000012
+        Name: Gate 3
+        TypeTag: Body
+      Transform:
+        Position: [149617870700.0, -4000000.0, 18000000.0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+
+  - Guid: 4200000000000000013
+    Components:
+      Metadata:
+        Guid: 4200000000000000013
+        Name: Gate 4
+        TypeTag: Body
+      Transform:
+        Position: [149717870700.0, 20000000.0, 100000000.0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+
+  - Guid: 4200000000000000014
+    Components:
+      Metadata:
+        Guid: 4200000000000000014
+        Name: Gate 5
+        TypeTag: Body
+      Transform:
+        Position: [149937870700.0, 6000000.0, 15000000.0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+
+  - Guid: 4200000000000000015
+    Components:
+      Metadata:
+        Guid: 4200000000000000015
+        Name: Gate 6
+        TypeTag: Body
+      Transform:
+        Position: [150027870700.0, 4000000.0, -25000000.0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+
+  - Guid: 4200000000000000020
+    Components:
+      Metadata:
+        Guid: 4200000000000000020
+        Name: Focus
+        TypeTag: Body
+      Transform:
+        Position: [149597870700.0, 0.0, 0.0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Scripts:
+        - Name: waypoint_path
+          Props:
+            Duration: 28
+            Ease: smoothstep
+            Name: focus
+            Waypoints: "4200000000000000001; 4200000000000000002"
+
+  - Guid: 4200000000000000021
+    Components:
+      Metadata:
+        Guid: 4200000000000000021
+        Name: Flyby Camera
+        TypeTag: Camera
+      Transform:
+        Position: [149567870700.0, 12000000.0, 45000000.0]
+        Rotation: [-0.104280, -0.288059, -0.031573, 0.951394]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 50
+        NearPlane: 1000
+        FarPlane: 2.0e+09
+        Primary: true
+      Scripts:
+        - Name: waypoint_path
+          Props:
+            FovKeys: "0 50; 14 35 smoothstep; 28 25"
+            Name: flyby
+            Target: 4200000000000000020
+            TimeLaw: "0 0; 4 1 smoothstep; 10 2; 16 3; 22 4; 28 5"
+            Waypoints: "Gate 1; Gate 2; Gate 3; Gate 4; Gate 5; Gate 6"
+
+  - Guid: 4200000000000000030
+    Components:
+      Metadata:
+        Guid: 4200000000000000030
+        Name: Sun
+        TypeTag: Light
+      Transform:
+        Position: [0.0, 0.0, 0.0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Light:
+        Kind: Directional
+        Color: [1, 0.96, 0.9]
+        Intensity: 3.14159
+        Direction: [0.80044, 0.150083, 0.580319]
+        ReferenceDistance: 1.495978707e11
+
+Render:
+  Version: 1
+  Contexts:
+    Edit: Bodies
+    Play: Bodies
+    Reference: Reference
+    Export: Bodies
+  Profiles:
+    - Name: Bodies
+      Description: Geodesic integration, tone mapped so the sunlit planets show at display brightness.
+      Base: Traced
+      Set:
+        post.tonemap: Aces
