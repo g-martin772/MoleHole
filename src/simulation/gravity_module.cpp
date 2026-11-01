@@ -79,7 +79,8 @@ namespace MoleHole
             auto* dynamic = actor ? actor->is<physx::PxRigidDynamic>() : nullptr;
             if (!dynamic) continue;
 
-            const glm::dvec3 accelerationMs2 = NewtonianAcceleration(precision, sources, transform.Position, multiplier);
+            const glm::dvec3 accelerationMs2 =
+                NewtonianAcceleration(precision, sources, transform.Position, multiplier) * body.GravityScale;
             const bool finite = std::isfinite(accelerationMs2.x) && std::isfinite(accelerationMs2.y)
                                 && std::isfinite(accelerationMs2.z);
             if (!finite)
