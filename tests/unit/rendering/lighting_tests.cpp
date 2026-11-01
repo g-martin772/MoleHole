@@ -244,3 +244,28 @@ TEST_CASE("The physical camera maps sunny 16 to a unit-order exposure of an illu
     CHECK(displayed > 0.5);
     CHECK(displayed < 2.0);
 }
+
+TEST_CASE("Mesh lighting build cost per call", "[.bench][lighting]")
+{
+    RegisterComponents();
+    Scene scene;
+    constexpr int entities = 100;
+    for (int i = 0; i < entities; ++i) AddEntity(scene, std::format("Body{}", i), {1.0e9 * i, 0.0, 0.0});
+    const auto star = AddEntity(scene, "Sun", {Units::kAstronomicalUnit, 0.0, 0.0});
+    scene.Registry().emplace<StarComponent>(star);
+    const auto hole = AddEntity(scene, "Hole", {0.0, 0.0, 0.0});
+    scene.Registry().emplace<BlackHoleComponent>(hole, BlackHoleComponent{.Mass = 1.0e31, .Spin = 0.5});
+    for (int i = 0; i < 6; ++i)
+        scene.Registry().emplace<PointLightComponent>(AddEntity(scene, std::format("Lamp{}", i), {1.0e8 * i, 0.0, 0.0}),
+                                                      PointLightComponent{.Intensity = 50.0});
+
+    DiskLightCache cache;
+    RenderSettings settings;
+    settings.DiskLight = true;
+    constexpr int calls = 20000;
+    std::size_t sink = 0;
+    const auto start = std::chrono::steady_clock::now();
+    for (int i = 0; i < calls; ++i) sink += BuildMeshLighting(scene, UnitFrame(), settings, cache, true).Lights.Count;
+    const double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count() / calls;
+    std::printf("BuildMeshLighting %.2f us/call (%zu lights, %d entities, disk cache misses %d)\n", us, sink / calls, entities, cache.Misses);
+}
