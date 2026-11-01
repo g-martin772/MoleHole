@@ -242,7 +242,6 @@ namespace MoleHole
                 m_AwaitPlay = false;
                 m_LastProgress = std::chrono::steady_clock::now();
                 m_Stepping = runner != nullptr;
-                m_UiState->ExportStepDelta = 1.0f / static_cast<float>(std::max(1, m_Request.Framerate));
             }
             else
             {
@@ -361,6 +360,7 @@ namespace MoleHole
                 m_UiState->PendingSnapshotForPlay = true;
             }
             m_AwaitPlay = true;
+            m_UiState->ExportStepDelta = 1.0f / static_cast<float>(std::max(1, request.Framerate));
         }
 
         if (request.RequestKind == ExportRequest::Kind::Video)
