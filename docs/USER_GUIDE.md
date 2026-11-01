@@ -307,12 +307,28 @@ return {
 - `scene.find(name)`, `scene.name(e)`, `scene.query(...)`, `scene.look_at(...)`
 - `render.set(key, value)`, `render.get(key)`: change or read a render setting (see `./build/MoleHole --list-settings`) for the running simulation only. The profile is not edited; it reverts on Stop or scene load. Unknown keys or bad values are script errors
 - `events.emit(name, ...)`, `events.on(name, fn)`, `events.off(name, fn)`: named events between scripts, delivered in emit order at the end of the tick pass
-- Contacts and triggers: give a body a Collider (Is Trigger makes it a zone, Material Id tags the surface); scripts on either body get `OnContact` when they touch and `OnTrigger` when a body enters or leaves a zone. `normal` points from `other` toward you. Contact, trigger, `OnLateTick` and `OnStop`-on-Stop run in `--test-scripts` and `--simulate --scripts`, not in the GUI yet
+- Contacts and triggers: give a body a Collider (Is Trigger makes it a zone, Material Id tags the surface); scripts on either body get `OnContact` when they touch and `OnTrigger` when a body enters or leaves a zone. `normal` points from `other` toward you. They run in the app, in `--test-scripts` and in `--simulate --scripts`. Scripts start when Play starts and get `OnStop` when you press Stop (the scene then goes back to how it was)
+- `input.axis(action)` (-1 to 1), `input.held(action)`, `input.pressed(action)`, `input.released(action)`, `input.mouse_delta()` (a `vec2` of pixels since the last tick, +y down): see Script input below. Unknown actions read 0
 - `vector.create(x,y,z)`, `vec2()`, `vec4()`
 - `math.random` is seeded by the sim (deterministic)
 - Sandboxed: no io / os
 - `require("lib/name")` loads `scripts/lib/name.luau` (subfolders ok: `lib/a/b`). Only that form is accepted: no `..`, absolute paths, extensions or symlinks leaving `scripts/lib`. A module runs once per script and returns a value (shared state across the entities using that script); cycles are an error. Modules run in the same sandbox. Editing a lib while playing reloads every script that uses it. Files under `lib/` are not offered by Add Script
 - Inspector, Scripts: while playing each script shows the last tick time (avg, max), allocations and bytes of the last tick, and the memory of the whole script VM
+
+### Script input
+- Scripts read named actions, not keys. Built-in actions: `move_x` (D / A), `move_y` (E / Q), `move_z` (W / S), `jump` (Space), `boost` (Shift), `fire` (left mouse), `aim` (right mouse). Scripts never see input in the editor
+- While you play a scene whose scripts read input and the Viewport has focus, keys and the mouse go to the scripts and the viewport shows "Script input captured - Esc to release". The fly-camera keys, picking, the gizmo and the global shortcuts are off then. Esc hands them back; click the viewport to capture again. Clicking another window or typing in a text field also releases it. Scenes that never call `input.*` keep the normal viewport keys while playing
+- A scene can ship its own bindings in its yaml, no other file needed:
+```yaml
+Input:
+  Actions:
+    thrust: [key:w, -key:s]       # -key:s pushes the axis negative
+    fire: [mouse:left, key:space]
+```
+  Bindings are `key:<name>` (letters, digits, space, enter, tab, up/down/left/right, shift, ctrl, alt, f1-f12, ...) or `mouse:left|right|middle`, optionally `-` (negative) or `0.5*` (scaled). Your rebinds (Settings > Script input: click a binding to change it, right-click to remove, + / - to add, Default to reset) win over the scene's and are saved with your settings
+- Input is recorded with `SimulationRecording`, so a replay with the same recording gives the same state hash
+- Mouse look has no pointer lock yet: motion stops when the cursor reaches the window edge
+- Headless tests inject input with `sim.input(action, value?)`, `sim.input_tap(action)`, `sim.input_mouse(dx, dy)`, `sim.input_clear()` (see `tests/scripts/input.luau`)
 
 ### Example
 - `scripts/spring_arm_camera.luau` – orbit camera around target
