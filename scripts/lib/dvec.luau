@@ -1,3 +1,6 @@
+local curves = require("lib/curves")
+local dquat_lib = require("lib/dquat")
+
 local dvec = {}
 
 dvec.new = dvec3.new
@@ -9,6 +12,8 @@ dvec.length = dvec3.length
 dvec.normalize = dvec3.normalize
 dvec.distance = dvec3.distance
 dvec.lerp = dvec3.lerp
+dvec.damp = curves.damp
+dvec.smooth_damp = curves.smooth_damp
 
 dvec.ZERO = dvec3.new(0, 0, 0)
 dvec.ONE = dvec3.new(1, 1, 1)
@@ -76,6 +81,36 @@ end
 
 function dvec.near(a: DVec3, b: DVec3, epsilon: number): boolean
     return dvec3.distance(a, b) <= epsilon
+end
+
+function dvec.set_length(v: DVec3, length: number): DVec3
+    return dvec3.normalize(v) * length
+end
+
+function dvec.perpendicular(v: DVec3): DVec3
+    local axis = math.abs(v.x) <= math.abs(v.y) and math.abs(v.x) <= math.abs(v.z) and dvec.X
+        or math.abs(v.y) <= math.abs(v.z) and dvec.Y
+        or dvec.Z
+    return dvec3.normalize(dvec3.cross(v, axis))
+end
+
+function dvec.signed_angle(a: DVec3, b: DVec3, axis: DVec3): number
+    local angle = dvec.angle(a, b)
+    return dvec3.dot(dvec3.cross(a, b), axis) < 0 and -angle or angle
+end
+
+function dvec.rotate_towards(from: DVec3, to: DVec3, max_radians: number, max_length_delta: number): DVec3
+    local from_length, to_length = dvec3.length(from), dvec3.length(to)
+    local length = from_length + math.clamp(to_length - from_length, -max_length_delta, max_length_delta)
+    if from_length == 0 then
+        return to_length == 0 and from or dvec3.normalize(to) * length
+    elseif to_length == 0 then
+        return from * (length / from_length)
+    end
+    local angle = dvec.angle(from, to)
+    local step = angle <= max_radians and 1 or max_radians / angle
+    local turn = dquat.slerp(dquat_lib.IDENTITY, dquat_lib.from_to(from, to), step)
+    return dquat.rotate(turn, from) * (length / from_length)
 end
 
 return dvec
