@@ -134,6 +134,7 @@ namespace
             const auto dockspaceId = m_Renderer->GetMainDockspaceId();
             if (dockspaceId == 0) return;
             BuildDock(LayoutKind::Edit, dockspaceId);
+            ApplyVisibleWindows(*m_UiState, std::span<const std::string_view>(FindBuiltInLayout("Edit")->Windows));
             ImGui::MarkIniSettingsDirty();
             Notify(NotificationKind::Info, "Layout reset");
         }
