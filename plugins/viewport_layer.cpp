@@ -745,6 +745,7 @@ namespace
                 }
                 m_RenderSettings->LoadScene(result->RenderExtension, m_UiState->CurrentScenePath);
                 m_EditorViewPinned = false;
+                m_FrameOnLoad = false;
                 if (const auto cached = m_AppState->LookupSceneCamera(m_UiState->CurrentScenePath))
                 {
                     m_UiState->CameraPositionM = cached->PositionM;
@@ -761,6 +762,7 @@ namespace
                     m_UiState->CameraFov = view->Fov;
                     if (view->SpeedMs) m_UiState->CameraSpeedMs = *view->SpeedMs;
                 }
+                else m_FrameOnLoad = !m_UiState->ExitWhenExportDone;
                 m_TrackedPose = CurrentCameraPose();
                 ResetBookmarks(result->Bookmarks);
                 for (const auto& warning : m_RenderSettings->Warnings())
@@ -1051,6 +1053,7 @@ namespace
             m_Camera.SetClipPlanes(0.1f, 10000.0f);
 
             if (m_FocusRequest.exchange(false, std::memory_order_relaxed)) BeginFocus();
+            if (std::exchange(m_FrameOnLoad, false)) FrameAll(true);
             ProcessViewRequests();
             const float scroll = m_PendingScroll.exchange(0.0f, std::memory_order_relaxed);
 
@@ -1242,7 +1245,7 @@ namespace
             m_Camera.SetYawPitch(snapped.Angles.Yaw, snapped.Angles.Pitch);
         }
 
-        void FrameAll()
+        void FrameAll(const bool quiet = false)
         {
             const auto sim = m_Sim.Load();
             if (!sim->Runner) return;
@@ -1253,6 +1256,7 @@ namespace
             }
             if (!bounds)
             {
+                if (quiet) return;
                 m_Logger->Notifications()->Post(NotificationKind::Info, "Nothing to frame", {}, 0.0f, "view-frame");
                 return;
             }
@@ -1386,6 +1390,7 @@ namespace
         std::shared_ptr<AppStateService> m_AppState;
         std::optional<SceneCameraPose> m_TrackedPose;
         bool m_EditorViewPinned = false;
+        bool m_FrameOnLoad = false;
         bool m_CameraPending = false;
         std::chrono::steady_clock::time_point m_CameraChangedAt;
         std::shared_ptr<RenderSettingsService> m_RenderSettings;
