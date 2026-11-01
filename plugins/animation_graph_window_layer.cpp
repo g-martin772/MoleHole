@@ -117,7 +117,7 @@ namespace
                                   std::shared_ptr<RenderSettingsService> renderSettings, std::shared_ptr<AppPaths> appPaths)
             : HotReloadableLayer(logger), m_Scenes(std::move(scenes)), m_UiState(std::move(uiState)),
               m_Assets(std::move(assets)), m_AssetOptions(std::move(assetOptions)), m_Dispatcher(std::move(dispatcher)),
-              m_RenderSettings(std::move(renderSettings)), m_AppPaths(std::move(appPaths))
+              m_RenderSettings(std::move(renderSettings)), m_AppPaths(std::move(appPaths)), m_Trace(*m_UiState->GraphTrace)
         {
         }
 
@@ -153,54 +153,27 @@ namespace
             if (m_UiState->CurrentSceneName != m_LastSceneName)
             {
                 m_LastSceneName = m_UiState->CurrentSceneName;
-                m_Executor.reset();
                 m_WasPaused = true;
                 LoadGraphFromScene();
             }
 
-            if (m_UiState->CurrentSceneName.empty()) return;
-            const auto runner = m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
+            std::shared_ptr<SimulationRunner> runner;
+            if (!m_UiState->CurrentSceneName.empty()) runner = m_Scenes->GetSimulation(m_UiState->CurrentSceneName);
+            {
+                std::scoped_lock lock(m_EventMutex);
+                m_GraphModule = runner ? runner->GetModule<GraphSimulationModule>() : nullptr;
+            }
             if (!runner) return;
 
             const bool paused = runner->IsPaused();
-            m_Random = runner->Random();
-
-            if (m_WasPaused && !paused)
+            if (m_WasPaused && !paused) m_LinkFlowTicks.clear();
+            if (const auto graphs = runner->GetModule<GraphSimulationModule>()) graphs->SetUseLuau(m_UseLuau);
+            if (const auto scripts = runner->GetModule<ScriptSimulationModule>(); scripts && m_SeenScriptVersion != m_Assets->Version())
             {
-                m_Trace.ClearRuntime();
-                m_Trace.Continue();
-                m_LinkFlowTicks.clear();
-                RebuildExecutor();
-                auto sceneLock = runner->LockRenderScene();
-                ApplyWrites(*runner, m_Executor->ExecuteStartEvent(*sceneLock));
+                m_SeenScriptVersion = m_Assets->Version();
+                scripts->RequestReload();
             }
-            else if (!m_WasPaused && paused)
-            {
-                m_Executor.reset();
-                m_Trace.Continue();
-            }
-
-            float tickDelta = deltaTime;
-            bool tickDue = true;
-            if (m_UiState->ExportStepDelta > 0.0f)
-            {
-                tickDelta = m_UiState->ExportStepDelta;
-                tickDue = m_UiState->ExportStepSerial != m_LastExportStepSerial;
-                m_LastExportStepSerial = m_UiState->ExportStepSerial;
-            }
-
-            if (!paused && m_Executor && tickDue && m_Trace.ShouldRunTick())
-            {
-                ForwardEvents();
-                auto sceneLock = runner->LockRenderScene();
-                ApplyWrites(*runner, m_Executor->ExecuteTickEvent(*sceneLock, tickDelta));
-            }
-            else
-            {
-                DiscardEvents();
-            }
-            PublishScriptHealth();
-
+            PublishScriptHealth(*runner);
             m_WasPaused = paused;
         }
 
@@ -284,40 +257,43 @@ namespace
         }
 
     private:
+        std::shared_ptr<GraphSimulationModule> CurrentGraphModule() const
+        {
+            std::scoped_lock lock(m_EventMutex);
+            return m_GraphModule;
+        }
+
         void QueueEvent(std::string name, std::vector<LuauValue> args)
         {
             std::scoped_lock lock(m_EventMutex);
-            if (m_QueuedEvents.size() < 256) m_QueuedEvents.push_back({std::move(name), std::move(args)});
+            if (m_GraphModule) m_GraphModule->PostEvent(std::move(name), std::move(args));
         }
 
-        void ForwardEvents()
+        void PublishScriptHealth(SimulationRunner& runner)
         {
-            std::vector<std::pair<std::string, std::vector<LuauValue>>> events;
+            std::vector<ScriptStatus> statuses;
+            const auto log = [&](const std::vector<ScriptError>& errors)
             {
-                std::scoped_lock lock(m_EventMutex);
-                events = std::exchange(m_QueuedEvents, {});
-            }
-            for (auto& [name, args] : events) m_Executor->PostEvent(std::move(name), std::move(args));
-        }
-
-        void DiscardEvents()
-        {
-            std::scoped_lock lock(m_EventMutex);
-            m_QueuedEvents.clear();
-        }
-
-        void PublishScriptHealth()
-        {
-            if (!m_Executor)
+                for (const auto& error : errors)
+                {
+                    m_Logger->Error("[Script] {} on entity {}: {}", error.Script, error.Entity, error.Message);
+                }
+            };
+            const auto append = [&](std::vector<ScriptStatus> live)
             {
-                m_UiState->ScriptStatuses.Publish({});
-                return;
-            }
-            for (const auto& error : m_Executor->TakeScriptErrors())
+                statuses.insert(statuses.end(), std::make_move_iterator(live.begin()), std::make_move_iterator(live.end()));
+            };
+            if (const auto graphs = runner.GetModule<GraphSimulationModule>())
             {
-                m_Logger->Error("[Script] {} on entity {}: {}", error.Script, error.Entity, error.Message);
+                log(graphs->TakeErrors());
+                append(graphs->Statuses());
             }
-            m_UiState->ScriptStatuses.Publish(m_Executor->ScriptStatuses());
+            if (const auto scripts = runner.GetModule<ScriptSimulationModule>())
+            {
+                log(scripts->TakeErrors());
+                append(scripts->Statuses());
+            }
+            m_UiState->ScriptStatuses.Publish(std::move(statuses));
         }
 
         void LoadGraphFromScene()
@@ -378,57 +354,6 @@ namespace
             runner.EnqueueEdit([graphs = m_Graphs](Scene& scene) { StoreSceneGraphs(scene, graphs); });
         }
 
-        void RebuildExecutor()
-        {
-            const auto onPrint = [logger = m_Logger](std::string message)
-            {
-                logger->Info("[AnimationGraph] {}", message);
-            };
-            m_RuntimeNote.clear();
-            m_Executor.reset();
-            if (m_UseLuau)
-            {
-                auto script = std::make_unique<ScriptRuntime>(m_Graphs, m_ScriptCache, onPrint, TranspileOptions{}, LuauLimits{},
-                                                              m_Assets.get());
-                if (script->Ok())
-                {
-                    script->SetRenderBridge(RenderBridge{
-                        .Set = [settings = m_RenderSettings](const std::string& key, const std::string& value)
-                        {
-                            auto error = RenderSettingsService::ValidateSetting(key, value);
-                            if (error.empty() && settings) settings->PostOverride(key, value);
-                            return error;
-                        },
-                        .Get = [settings = m_RenderSettings](const std::string& key)
-                        {
-                            return settings ? settings->ReadSetting(key) : std::nullopt;
-                        }});
-                    m_Executor = std::move(script);
-                }
-                else
-                {
-                    m_RuntimeNote = "Luau runtime unavailable, using the interpreter: " + script->Error();
-                    m_Logger->Warn("[AnimationGraph] {}", m_RuntimeNote);
-                }
-            }
-            if (!m_Executor) m_Executor = std::make_unique<GraphSetExecutor>(m_Graphs, onPrint);
-            if (dynamic_cast<ScriptRuntime*>(m_Executor.get()) == nullptr && AnyLuauOnly())
-            {
-                const std::string note = "The interpreter cannot run latent, event or flow-control nodes marked Luau runtime only; reaching one reports an error.";
-                m_RuntimeNote = m_RuntimeNote.empty() ? note : m_RuntimeNote + "\n" + note;
-            }
-            m_Executor->SetTraceSink(&m_Trace);
-            m_Executor->SetRandom(m_Random);
-        }
-
-        bool AnyLuauOnly() const
-        {
-            return std::ranges::any_of(m_Graphs.Items, [](const NamedGraph& item)
-            {
-                return item.Enabled && std::ranges::any_of(item.Graph.Nodes, [](const Node& n) { return IsLuauOnly(n); });
-            });
-        }
-
         AnimationGraphData& CurrentGraph()
         {
             return m_Current < m_Graphs.Items.size() ? m_Graphs.Items[m_Current].Graph : m_EmptyGraph;
@@ -447,7 +372,6 @@ namespace
 
         void StructureChanged()
         {
-            if (m_Executor) RebuildExecutor();
             MarkDirty();
         }
 
@@ -672,7 +596,8 @@ namespace
 
         void RenderDebugToolbar()
         {
-            const bool running = m_Executor != nullptr;
+            const auto graphModule = CurrentGraphModule();
+            const bool running = graphModule && graphModule->Running();
             ImGui::TextDisabled("Runtime");
             ImGui::SameLine();
             ImGui::BeginDisabled(running);
@@ -763,7 +688,10 @@ namespace
 
         void RenderGeneratedLuau()
         {
-            if (!m_RuntimeNote.empty()) ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", m_RuntimeNote.c_str());
+            if (const auto module = CurrentGraphModule())
+            {
+                if (const auto note = module->Note(); !note.empty()) ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", note.c_str());
+            }
             if (m_Current >= m_Graphs.Items.size() || m_Graphs.Items[m_Current].IsFunction)
             {
                 ImGui::TextDisabled("Select an event graph. Functions are emitted into every graph that calls them.");
@@ -859,39 +787,8 @@ namespace
                 source = 0;
                 for (const auto& link : CurrentGraph().Links) if (link.EndPinId == pin.Id) { source = link.StartPinId; break; }
             }
-            const Value* value = source != 0 ? m_Trace.PinValue(graph, source) : nullptr;
+            const auto value = source != 0 ? m_Trace.PinValue(graph, source) : std::nullopt;
             return value ? ValueToString(*value) : std::string{};
-        }
-
-        // ---- live execution -------------------------------------------------------------------
-
-        void ApplyWrites(SimulationRunner& runner, PendingWrites writes)
-        {
-            std::vector<Command> commands;
-            const auto flush = [&]
-            {
-                if (commands.empty()) return;
-                CommandOptions options;
-                options.OnlyWhilePlaying = true;
-                runner.EnqueueCommands(std::exchange(commands, {}), std::move(options));
-            };
-            for (auto& write : writes)
-            {
-                if (const auto& command = write.AsCommand())
-                {
-                    commands.push_back(*command);
-                    continue;
-                }
-                flush();
-                if (write.AsClosure())
-                {
-                    runner.EnqueueSystemEdit([fn = write.AsClosure(), r = &runner](Scene& scene)
-                    {
-                        if (!r->IsPaused()) fn(scene);
-                    }, false);
-                }
-            }
-            flush();
         }
 
         // ---- node-editor canvas ----------------------------------------------------------------
@@ -2557,7 +2454,7 @@ namespace
         };
         ParamEdit m_ParamEdit;
 
-        TraceRecorder m_Trace;
+        TraceRecorder& m_Trace;
         std::map<std::string, std::vector<Diagnostic>> m_Problems;
         std::uint64_t m_Revision = 1;
         std::uint64_t m_ProblemsRevision = 0;
@@ -2568,14 +2465,11 @@ namespace
         bool m_TraceOnlyProblems = false;
 
         std::string m_LastSceneName;
-        std::uint64_t m_LastExportStepSerial{0};
+        std::uint64_t m_SeenScriptVersion{~0ull};
         bool m_WasPaused = true;
-        std::unique_ptr<IGraphRuntime> m_Executor;
         ScriptCache m_ScriptCache;
         bool m_UseLuau = true;
-        std::shared_ptr<SimulationRandom> m_Random;
         bool m_InlineLuauView = false;
-        std::string m_RuntimeNote;
         std::string m_LuauViewText;
         std::shared_ptr<const TranspiledScript> m_LuauViewScript;
         std::uint64_t m_LuauViewRevision = 0;
@@ -2590,8 +2484,8 @@ namespace
         std::shared_ptr<AppPaths> m_AppPaths;
         EventSubscription m_KeySubscription;
         EventSubscription m_TriggerSubscription;
-        std::mutex m_EventMutex;
-        std::vector<std::pair<std::string, std::vector<LuauValue>>> m_QueuedEvents;
+        mutable std::mutex m_EventMutex;
+        std::shared_ptr<GraphSimulationModule> m_GraphModule;
         std::string m_EventRename;
         std::pair<int, std::string> m_EventParamRename;
     };

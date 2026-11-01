@@ -10,6 +10,7 @@ import :Application.Autosave;
 import :Simulation.ObserverReadout;
 import :UI.EditLogic;
 import :UI.TransportLogic;
+import :Simulation.GraphTrace;
 import :UI.CreateCatalog;
 import :UI.ActionLogic;
 import :UI.ViewportNav;
@@ -125,6 +126,8 @@ export namespace MoleHole
     {
     public:
         ScriptStatusBoard ScriptStatuses;
+        std::atomic<bool> ScriptInputCaptured{false};
+        std::shared_ptr<TraceRecorder> GraphTrace = std::make_shared<TraceRecorder>();
         bool ShowCameraWindow = false;
         bool ShowSystemWindow = false;
         bool ShowImGuiMetrics = false;

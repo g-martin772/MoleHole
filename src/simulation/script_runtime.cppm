@@ -17,6 +17,13 @@ export namespace MoleHole
         std::function<std::optional<std::string>(const std::string& key)> Get;
     };
 
+    using EventForward = std::function<void(const std::string& name, const std::vector<GPP::LuauValue>& args)>;
+
+    void RegisterRenderBindings(GPP::LuauVm& vm, std::function<const RenderBridge&()> bridge);
+
+    [[nodiscard]] std::shared_ptr<GPP::ScriptSimulationModule> MakeScriptModule(const GPP::AssetDirectories& assets,
+                                                                                RenderBridge render = {});
+
     class ScriptRuntime final : public IGraphRuntime
     {
     public:
@@ -32,6 +39,7 @@ export namespace MoleHole
         [[nodiscard]] const std::string& LastRuntimeError() const;
 
         void SetRenderBridge(RenderBridge bridge);
+        void SetEventForward(EventForward forward);
         void SetGuidSource(const std::function<std::uint64_t()>& source) override;
         void SetTraceSink(ITraceSink* sink) override;
         void SetRandom(std::shared_ptr<GPP::SimulationRandom> random) override;

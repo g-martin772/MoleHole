@@ -90,11 +90,12 @@ export namespace MoleHole
         bool PopupOpen = false;
         bool AnyItemActive = false;
         bool GraphEditorFocused = false;
+        bool ScriptInputCaptured = false;
     };
 
     [[nodiscard]] inline bool HotkeyAllowed(const HotkeyBinding& binding, const HotkeyFrame& frame) noexcept
     {
-        if (frame.TextInput || frame.PopupOpen) return false;
+        if (frame.TextInput || frame.PopupOpen || frame.ScriptInputCaptured) return false;
         if (frame.GraphEditorFocused && !binding.GraphSafe) return false;
         if (frame.AnyItemActive && !binding.Command) return false;
         return true;

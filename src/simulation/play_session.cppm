@@ -4,6 +4,7 @@ import std;
 import GPP;
 import :Rendering.Settings;
 import :UI.TransportLogic;
+import :Simulation.GraphModule;
 
 export namespace MoleHole
 {
@@ -72,6 +73,8 @@ export namespace MoleHole
             m_Active = false;
             runner->EnqueueSystemEdit([self = shared_from_this(), runner = runner.get(), renderExtension = std::move(renderExtension)](GPP::Scene& scene)
             {
+                if (const auto graphs = runner->GetModule<GraphSimulationModule>()) graphs->Stop(scene);
+                if (const auto scripts = runner->GetModule<GPP::ScriptSimulationModule>()) scripts->Stop(scene);
                 std::optional<GPP::Scene> snapshot;
                 std::optional<GPP::RunnerState> hidden;
                 std::optional<GPP::HistoryState> history;

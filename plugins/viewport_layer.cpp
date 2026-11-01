@@ -43,7 +43,7 @@ namespace
     {
         using Dependencies =
             std::tuple<Logger, Renderer, IFileSystem, EventDispatcher, SceneManager, InputState, UiState,
-                       AppStateService, RenderSettingsService, AppPaths>;
+                       AppStateService, RenderSettingsService, AppPaths, AssetDirectories>;
 
         ViewportLayer(const std::shared_ptr<Logger>& logger,
                       const std::shared_ptr<Renderer>& renderer,
@@ -54,8 +54,10 @@ namespace
                       const std::shared_ptr<UiState>& uiState,
                       const std::shared_ptr<AppStateService>& appState,
                       const std::shared_ptr<RenderSettingsService>& renderSettings,
-                      const std::shared_ptr<AppPaths>& appPaths)
+                      const std::shared_ptr<AppPaths>& appPaths,
+                      const std::shared_ptr<AssetDirectories>& assets)
             : HotReloadableLayer(logger), m_Renderer(renderer), m_Scenes(scenes), m_Input(input), m_UiState(uiState),
+              m_Assets(assets), m_ScriptInput(dispatcher, input),
               m_AppState(appState), m_RenderSettings(renderSettings),
               m_Meshes(std::make_shared<MeshCache>(renderer, fileSystem, logger)),
               m_Loader(scenes, m_Meshes, logger),
@@ -122,6 +124,7 @@ namespace
                 sceneId = id.Digest();
                 key.Value(published.Generation());
                 sceneKey = key.Digest();
+                SyncInputMap(*published, sceneId);
                 RecordPaths(render.ShowObjectPaths, !sim->Runner->IsPaused(), sceneKey, *published);
                 m_UiState->SceneState.Observe(published.ContentRevision());
                 SyncBookmarkExtension(*sim->Runner, *published);
@@ -184,9 +187,10 @@ namespace
             m_UiState->ViewportVisible = viewportOpen;
             const bool viewportFocused =
                 viewportOpen && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-            m_CameraKeysEnabled.store(viewportFocused && !ImGui::GetIO().WantTextInput, std::memory_order_relaxed);
+            const bool scriptInput = m_ScriptInput.Captured();
+            m_CameraKeysEnabled.store(viewportFocused && !ImGui::GetIO().WantTextInput && !scriptInput, std::memory_order_relaxed);
             m_CameraMouseHover.store(false, std::memory_order_relaxed);
-            if (viewportFocused)
+            if (viewportFocused && !scriptInput)
             {
                 if (!ImGui::GetIO().WantTextInput)
                 {
@@ -206,6 +210,7 @@ namespace
             m_Renderer->SetBufferTargetVisible(m_LayerTarget.Id, viewportOpen || m_UiState->ExportActive);
             if (!viewportOpen)
             {
+                UpdateScriptInput(false, false);
                 m_UiState->ViewportScreenMin = {0.0f, 0.0f};
                 m_UiState->ViewportScreenMax = {0.0f, 0.0f};
                 ImGui::End();
@@ -225,8 +230,9 @@ namespace
             {
                 ImGui::Image(reinterpret_cast<ImTextureID>(target->ImGuiTexture), avail);
                 const bool imageHovered = ImGui::IsItemHovered();
-                m_CameraMouseHover.store(imageHovered, std::memory_order_relaxed);
-                if (imageHovered) m_PendingScroll.fetch_add(ImGui::GetIO().MouseWheel, std::memory_order_relaxed);
+                const bool scriptCaptured = UpdateScriptInput(viewportFocused, imageHovered);
+                m_CameraMouseHover.store(imageHovered && !scriptCaptured, std::memory_order_relaxed);
+                if (imageHovered && !scriptCaptured) m_PendingScroll.fetch_add(ImGui::GetIO().MouseWheel, std::memory_order_relaxed);
                 const ImVec2 min = ImGui::GetItemRectMin();
                 const ImVec2 max = ImGui::GetItemRectMax();
                 m_UiState->ViewportScreenMin = {min.x, min.y};
@@ -236,15 +242,17 @@ namespace
                                            m_UiState->RenderScaleApplied, m_Pipeline.Refinement(), m_LastStep);
 
                 DrawFlySpeedReadout(min, max);
+                DrawScriptInputBadge(min, max, scriptCaptured);
                 m_UiState->ViewportToolbarLeft = max.x;
                 if (!m_UiState->ExportActive)
                 {
                     const bool toolbarHovered = RenderGizmoToolbar(min, max) || DrawAxisGizmo(min, max);
-                    UpdateGizmoAndPicking(min, max, imageHovered, toolbarHovered);
+                    if (!scriptCaptured) UpdateGizmoAndPicking(min, max, imageHovered, toolbarHovered);
                 }
             }
             else
             {
+                UpdateScriptInput(false, false);
                 ImGui::TextUnformatted("Viewport buffer not ready yet.");
             }
 
@@ -267,6 +275,42 @@ namespace
         }
 
     private:
+        bool UpdateScriptInput(const bool viewportFocused, const bool imageHovered)
+        {
+            const auto sim = m_Sim.Load();
+            ScriptInputFrame frame;
+            if (sim->Runner && !m_UiState->ExportActive)
+            {
+                frame.Playing = !sim->Runner->IsPaused();
+                frame.ScriptsUseInput = sim->Runner->Input()->Used();
+            }
+            frame.ViewportFocused = viewportFocused;
+            frame.TextInput = ImGui::GetIO().WantTextInput;
+            frame.ViewportClicked = imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+            const bool captured = m_ScriptInput.Update(frame);
+            m_UiState->ScriptInputCaptured.store(captured, std::memory_order_relaxed);
+            return captured;
+        }
+
+        void DrawScriptInputBadge(const ImVec2 min, const ImVec2 max, const bool captured)
+        {
+            if (!captured && !m_ScriptInput.WaitingForClick()) return;
+            const char* text = captured ? "Script input captured  -  Esc to release" : "Script input released  -  click the viewport to capture";
+            const ImVec2 size = ImGui::CalcTextSize(text);
+            const ImVec2 pad(12.0f, 6.0f);
+            const ImVec2 origin(min.x + 12.0f + pad.x, max.y - 12.0f - pad.y - size.y);
+            auto* drawList = ImGui::GetWindowDrawList();
+            const ImVec4 accent = ImGui::GetStyle().Colors[ImGuiCol_CheckMark];
+            drawList->AddRectFilled(ImVec2(origin.x - pad.x, origin.y - pad.y), ImVec2(origin.x + size.x + pad.x, origin.y + size.y + pad.y),
+                                    ImGui::GetColorU32(ImVec4(0.08f, 0.08f, 0.08f, 0.85f)), 6.0f);
+            if (captured)
+            {
+                drawList->AddRect(ImVec2(origin.x - pad.x, origin.y - pad.y), ImVec2(origin.x + size.x + pad.x, origin.y + size.y + pad.y),
+                                  ImGui::GetColorU32(ImVec4(accent.x, accent.y, accent.z, 0.9f)), 6.0f, 0, 1.5f);
+            }
+            drawList->AddText(origin, ImGui::GetColorU32(captured ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.7f, 0.7f, 0.7f, 1.0f)), text);
+        }
+
         void DrawFlySpeedReadout(const ImVec2 min, const ImVec2 max)
         {
             constexpr float kHoldSeconds = 1.2f;
@@ -815,6 +859,22 @@ namespace
             }
         }
 
+        void SyncInputMap(const Scene& scene, const std::uint64_t sceneId)
+        {
+            auto& settings = ScriptInputSettings::Instance();
+            SignatureHasher key;
+            key.Value(sceneId);
+            key.Value(scene.ExtensionRevision());
+            key.Value(settings.Revision());
+            if (key.Digest() == std::exchange(m_InputMapKey, key.Digest())) return;
+            std::string problem;
+            m_ScriptInput.SetMap(EffectiveActionMap(&scene, settings.User(), &problem));
+            if (!problem.empty())
+            {
+                m_Logger->Notifications()->Post(NotificationKind::Warning, "Scene input bindings ignored", problem, 0.0f, "script-input");
+            }
+        }
+
         void StartSimulationFor(const std::string& sceneName)
         {
             if (const auto previous = m_Sim.Load(); previous->Runner && !m_UiState->CurrentSceneName.empty())
@@ -823,18 +883,25 @@ namespace
                 m_Scenes->DestroySimulationAsync(m_UiState->CurrentSceneName);
             }
 
-            auto physics = std::make_shared<PhysicsSimulationModule>(m_Dispatcher, m_Logger);
-            auto gravity = std::make_shared<GravitySimulationModule>(physics, m_Dispatcher, m_Logger);
-            gravity->SetGravityMultiplier(m_UiState->GravityMultiplier);
+            auto modules = MakeAppSimulationModules(
+                m_Dispatcher, m_Logger, *m_Assets,
+                RenderBridge{
+                    .Set = [settings = m_RenderSettings](const std::string& key, const std::string& value)
+                    {
+                        auto error = RenderSettingsService::ValidateSetting(key, value);
+                        if (error.empty()) settings->PostOverride(key, value);
+                        return error;
+                    },
+                    .Get = [settings = m_RenderSettings](const std::string& key) { return settings->ReadSetting(key); }},
+                [logger = m_Logger](std::string message) { logger->Info("[AnimationGraph] {}", message); }, m_UiState->GraphTrace);
+            modules.Gravity->SetGravityMultiplier(m_UiState->GravityMultiplier);
             SimulationOptions options;
             options.FixedTimestep = std::chrono::duration<float>(1.0f / std::max(m_UiState->SimulationTickRate, 1.0f));
             options.UseFixedTimestep = m_UiState->SimulationFixedTimestep;
-            auto geodesics = std::make_shared<GeodesicSimulationModule>(m_Logger);
-            auto rotation = std::make_shared<BodyRotationModule>();
-            auto nbody = std::make_shared<NBodySimulationModule>(m_Logger);
-            auto runner = m_Scenes->CreateSimulation(
-                sceneName, std::vector<std::shared_ptr<ISimulationModule>>{gravity, physics, geodesics, nbody, rotation},
-                options);
+            auto runner = m_Scenes->CreateSimulation(sceneName, modules.All(), options);
+            modules.Attach(*runner);
+            m_ScriptInput.SetTarget(runner->Input());
+            m_InputMapKey = 0;
             runner->Start();
             runner->SetPaused(true);
             m_Sim.Publish(SimBinding{runner});
@@ -1388,6 +1455,9 @@ namespace
         std::shared_ptr<InputState> m_Input;
         std::shared_ptr<UiState> m_UiState;
         std::shared_ptr<AppStateService> m_AppState;
+        std::shared_ptr<AssetDirectories> m_Assets;
+        ScriptInputBridge m_ScriptInput;
+        std::uint64_t m_InputMapKey{0};
         std::optional<SceneCameraPose> m_TrackedPose;
         bool m_EditorViewPinned = false;
         bool m_FrameOnLoad = false;

@@ -4,6 +4,7 @@ module MoleHole;
 
 import :Application.State;
 import :UI.TutorialState;
+import :Application.ScriptInput;
 import std;
 import glm;
 import GPP;
@@ -139,6 +140,11 @@ namespace MoleHole
                         raw[entry.first.as<std::string>()] = entry.second.IsNull() ? std::string() : entry.second.as<std::string>();
                 }
                 ShortcutOverrideStore::Instance().Set(SanitizeShortcutOverrides(raw, DefaultActions()));
+            }
+            if (const auto input = node["ScriptInput"]; input && input.IsMap())
+            {
+                if (auto map = ActionMap::FromYaml(YAML::Dump(input))) ScriptInputSettings::Instance().SetUser(std::move(*map));
+                else m_Logger->Warn("Ignoring saved script input bindings: {}", map.error());
             }
             if (const auto recent = node["RecentActions"]; recent && recent.IsSequence())
             {
@@ -294,6 +300,8 @@ namespace MoleHole
             root["UI"]["UndoHistoryCapacity"] = m_UiState->UndoHistoryCapacity;
 
             for (const auto& [id, chord] : ShortcutOverrideStore::Instance().Overrides()) root["Shortcuts"][id] = chord;
+
+            if (const auto user = ScriptInputSettings::Instance().User(); !user.Empty()) root["ScriptInput"] = YAML::Load(user.ToYaml());
 
             for (const auto& id : m_UiState->RecentActionIds.Ids()) root["RecentActions"].push_back(id);
 

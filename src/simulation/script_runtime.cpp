@@ -47,6 +47,40 @@ namespace MoleHole
         }
     }
 
+    void RegisterRenderBindings(GPP::LuauVm& vm, std::function<const RenderBridge&()> bridge)
+    {
+        vm.Register("render", "set", [bridge](GPP::LuauNativeCall& call)
+        {
+            const auto key = call.String(1);
+            if (!bridge().Set) throw std::runtime_error("render.set: no renderer is attached");
+            const auto value = call.ToValueAuto(2);
+            std::string text;
+            if (const auto* flag = std::get_if<bool>(&value)) text = *flag ? "true" : "false";
+            else if (const auto* number = std::get_if<float>(&value)) text = std::format("{}", *number);
+            else if (const auto* word = std::get_if<std::string>(&value)) text = *word;
+            else throw std::runtime_error("render.set: '" + key + "' needs a boolean, number or string");
+            if (const auto error = bridge().Set(key, text); !error.empty()) throw std::runtime_error("render.set: " + error);
+            return 0;
+        });
+        vm.Register("render", "get", [bridge](GPP::LuauNativeCall& call)
+        {
+            const auto key = call.String(1);
+            if (!bridge().Get) throw std::runtime_error("render.get: no renderer is attached");
+            const auto text = bridge().Get(key);
+            if (!text) throw std::runtime_error("render.get: unknown setting '" + key + "'");
+            if (*text == "true" || *text == "false")
+            {
+                call.PushBoolean(*text == "true");
+                return 1;
+            }
+            double number = 0.0;
+            const auto result = std::from_chars(text->data(), text->data() + text->size(), number);
+            if (result.ec == std::errc{} && result.ptr == text->data() + text->size()) call.PushNumber(number);
+            else call.PushString(*text);
+            return 1;
+        });
+    }
+
     struct ScriptRuntime::Impl
     {
         struct Script
@@ -88,6 +122,7 @@ namespace MoleHole
         std::function<void(std::string)> OnPrint;
         std::function<std::uint64_t()> GuidSource{&GPP::GenerateGuid};
         RenderBridge Render;
+        EventForward Forward;
         std::shared_ptr<GPP::SimulationRandom> Random;
         const GPP::Scene* Scene{nullptr};
         PendingWrites* Writes{nullptr};
@@ -113,36 +148,7 @@ namespace MoleHole
         void RegisterNatives()
         {
             auto& vm = Vm;
-            vm.Register("render", "set", [this](GPP::LuauNativeCall& call)
-            {
-                const auto key = call.String(1);
-                if (!Render.Set) throw std::runtime_error("render.set: no renderer is attached");
-                const auto value = call.ToValueAuto(2);
-                std::string text;
-                if (const auto* flag = std::get_if<bool>(&value)) text = *flag ? "true" : "false";
-                else if (const auto* number = std::get_if<float>(&value)) text = std::format("{}", *number);
-                else if (const auto* word = std::get_if<std::string>(&value)) text = *word;
-                else throw std::runtime_error("render.set: '" + key + "' needs a boolean, number or string");
-                if (const auto error = Render.Set(key, text); !error.empty()) throw std::runtime_error("render.set: " + error);
-                return 0;
-            });
-            vm.Register("render", "get", [this](GPP::LuauNativeCall& call)
-            {
-                const auto key = call.String(1);
-                if (!Render.Get) throw std::runtime_error("render.get: no renderer is attached");
-                const auto text = Render.Get(key);
-                if (!text) throw std::runtime_error("render.get: unknown setting '" + key + "'");
-                if (*text == "true" || *text == "false")
-                {
-                    call.PushBoolean(*text == "true");
-                    return 1;
-                }
-                double number = 0.0;
-                const auto result = std::from_chars(text->data(), text->data() + text->size(), number);
-                if (result.ec == std::errc{} && result.ptr == text->data() + text->size()) call.PushNumber(number);
-                else call.PushString(*text);
-                return 1;
-            });
+            RegisterRenderBindings(vm, [this]() -> const RenderBridge& { return Render; });
             vm.Register("host", "enter", [this](GPP::LuauNativeCall& call)
             {
                 const int id = static_cast<int>(call.Number(1));
@@ -589,6 +595,7 @@ namespace MoleHole
                     if (Sink) Sink->OnDiagnostic(error.Script, 0, TraceSeverity::Error, error.Message);
                 }
             }
+            if (!Host && Forward) HostContext->Events->Dispatch();
             Delivering.clear();
             Scene = nullptr;
             Writes = nullptr;
@@ -622,6 +629,10 @@ namespace MoleHole
             return;
         }
         impl.RegisterNatives();
+        (void)impl.HostContext->Events->Subscribe({}, [&impl](const GPP::ScriptEvent& event)
+        {
+            if (!impl.Host && impl.Forward) impl.Forward(event.Name, event.Args);
+        });
         if (auto prelude = impl.Vm.RunTrusted(GraphRuntimePrelude(), "=graph_runtime"); !prelude)
         {
             impl.Error = "graph runtime prelude failed: " + prelude.error().Message;
@@ -672,6 +683,7 @@ namespace MoleHole
     const std::string& ScriptRuntime::LastRuntimeError() const { return m_Impl->LastRuntimeError; }
 
     void ScriptRuntime::SetRenderBridge(RenderBridge bridge) { m_Impl->Render = std::move(bridge); }
+    void ScriptRuntime::SetEventForward(EventForward forward) { m_Impl->Forward = std::move(forward); }
     void ScriptRuntime::SetGuidSource(const std::function<std::uint64_t()>& source) { m_Impl->GuidSource = source; }
     void ScriptRuntime::SetTraceSink(ITraceSink* sink) { m_Impl->Sink = sink; }
 
@@ -692,6 +704,7 @@ namespace MoleHole
 
     void ScriptRuntime::PostEvent(std::string name, std::vector<GPP::LuauValue> args)
     {
+        if (m_Impl->Forward) m_Impl->Forward(name, args);
         std::scoped_lock lock(m_Impl->EventMutex);
         m_Impl->Events.push_back(Impl::PendingEvent{std::move(name), std::move(args)});
     }
@@ -717,5 +730,103 @@ namespace MoleHole
             if (script.Sched) count += script.Sched->Active();
         }
         return count;
+    }
+
+    namespace
+    {
+        std::uint64_t NextGuid(const GPP::Scene& scene, std::uint64_t& counter)
+        {
+            auto bits = std::bit_cast<std::uint64_t>(scene.Clock().Elapsed) ^ (++counter * 0x9E3779B97F4A7C15ull);
+            for (;; ++bits)
+            {
+                std::uint64_t z = (bits ^ (bits >> 30)) * 0xBF58476D1CE4E5B9ull;
+                z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+                z ^= z >> 31;
+                if (z != 0 && !scene.IsValid(scene.FindByGuid(z))) return z;
+            }
+        }
+
+        void RegisterModuleSceneBindings(GPP::LuauVm& vm, const std::shared_ptr<GPP::SceneBindings>& bindings)
+        {
+            auto counter = std::make_shared<std::uint64_t>(0);
+            const auto queue = [bindings](std::function<void(GPP::Scene&)> write)
+            {
+                if (bindings->Write) bindings->Write(std::move(write));
+            };
+            vm.Register("scene", "spawn", [bindings, counter, queue](GPP::LuauNativeCall& call)
+            {
+                const auto preset = call.ToValue(1, GPP::LuauType::String);
+                const auto position = call.ToValue(2, GPP::LuauType::Vec3);
+                const auto name = call.ToValue(3, GPP::LuauType::String);
+                const std::string presetName = std::holds_alternative<std::string>(preset) ? std::get<std::string>(preset) : "Empty";
+                const glm::vec3 at = std::holds_alternative<glm::vec3>(position) ? std::get<glm::vec3>(position) : glm::vec3(0.0f);
+                const std::string label = std::holds_alternative<std::string>(name) ? std::get<std::string>(name) : "";
+                if (!bindings->Read) return 0;
+                const std::uint64_t guid = NextGuid(*bindings->Read, *counter);
+                if (FindEntityPreset(presetName))
+                {
+                    queue([guid, presetName, at, label](GPP::Scene& live) { SpawnPreset(live, guid, presetName, at, label); });
+                }
+                else
+                {
+                    std::uint64_t source = 0;
+                    for (auto [entity, metadata] : bindings->Read->Registry().view<const GPP::MetadataComponent>().each())
+                    {
+                        if (metadata.Name == presetName) { source = metadata.Guid; break; }
+                    }
+                    if (source == 0) throw std::runtime_error("scene.spawn: no preset or entity named '" + presetName + "'");
+                    queue([guid, source, at, label](GPP::Scene& live)
+                    {
+                        (void)GPP::ApplyCommand(live, GPP::CloneEntityCommand{source, guid});
+                        (void)GPP::ApplyCommand(live, GPP::SetFieldCommand{guid, "Transform", "Position", at});
+                        if (!label.empty()) (void)GPP::ApplyCommand(live, GPP::SetFieldCommand{guid, "Metadata", "Name", label});
+                    });
+                }
+                call.PushEntity(guid);
+                return 1;
+            });
+            vm.Register("scene", "clone", [bindings, counter, queue](GPP::LuauNativeCall& call)
+            {
+                const auto position = call.ToValue(2, GPP::LuauType::Vec3);
+                if (!bindings->Read) return 0;
+                const std::uint64_t source = call.Entity(1);
+                if (source == 0 || !bindings->Read->IsValid(bindings->Read->FindByGuid(source)))
+                {
+                    throw std::runtime_error("scene.clone: the source entity does not exist");
+                }
+                const std::uint64_t guid = NextGuid(*bindings->Read, *counter);
+                const auto at = std::holds_alternative<glm::vec3>(position) ? std::optional(std::get<glm::vec3>(position)) : std::nullopt;
+                queue([guid, source, at](GPP::Scene& live)
+                {
+                    (void)GPP::ApplyCommand(live, GPP::CloneEntityCommand{source, guid});
+                    if (at) (void)GPP::ApplyCommand(live, GPP::SetFieldCommand{guid, "Transform", "Position", *at});
+                });
+                call.PushEntity(guid);
+                return 1;
+            });
+            vm.Register("scene", "destroy", [queue](GPP::LuauNativeCall& call)
+            {
+                const std::uint64_t guid = call.Entity(1);
+                if (guid == 0) throw std::runtime_error("scene.destroy: the entity is empty");
+                queue([guid](GPP::Scene& live) { (void)GPP::ApplyCommand(live, GPP::DestroyEntityCommand{guid}); });
+                return 0;
+            });
+        }
+    }
+
+    std::shared_ptr<GPP::ScriptSimulationModule> MakeScriptModule(const GPP::AssetDirectories& assets, RenderBridge render)
+    {
+        auto bridge = std::make_shared<RenderBridge>(std::move(render));
+        GPP::ScriptModuleOptions options;
+        options.DeferStart = true;
+        options.Extend = [bridge](GPP::LuauVm& vm)
+        {
+            RegisterRenderBindings(vm, [bridge]() -> const RenderBridge& { return *bridge; });
+        };
+        options.ExtendScene = [](GPP::LuauVm& vm, const std::shared_ptr<GPP::SceneBindings>& bindings)
+        {
+            RegisterModuleSceneBindings(vm, bindings);
+        };
+        return std::make_shared<GPP::ScriptSimulationModule>(assets, std::move(options));
     }
 }

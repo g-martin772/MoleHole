@@ -77,7 +77,8 @@ namespace
             }
             const ImGuiIO& io = ImGui::GetIO();
             const HotkeyFrame frame{io.WantTextInput, ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel),
-                                    ImGui::IsAnyItemActive(), graphEditor};
+                                    ImGui::IsAnyItemActive(), graphEditor,
+                                    m_UiState->ScriptInputCaptured.load(std::memory_order_relaxed)};
             const auto id = PollHotkey(m_Hotkeys, frame);
             if (!id) return;
             const auto runner = CurrentRunner();

@@ -64,11 +64,11 @@ TEST_CASE("The trace sink sees executed nodes, traversed links and evaluated pin
         const bool flow = FindPin(graphs.Items[0].Graph, link.StartPinId)->Type == PinType::Flow;
         if (flow) CHECK(trace.LinkTick("Main", link.Id) == 1);
     }
-    const auto* dt = trace.PinValue("Main", graphs.Items[0].Graph.Nodes[0].Outputs[1].Id);
-    REQUIRE(dt != nullptr);
+    const auto dt = trace.PinValue("Main", graphs.Items[0].Graph.Nodes[0].Outputs[1].Id);
+    REQUIRE(dt.has_value());
     CHECK(std::get<float>(*dt) == 0.1f);
-    const auto* constant = trace.PinValue("Main", graphs.Items[0].Graph.Nodes[1].Outputs[0].Id);
-    REQUIRE(constant != nullptr);
+    const auto constant = trace.PinValue("Main", graphs.Items[0].Graph.Nodes[1].Outputs[0].Id);
+    REQUIRE(constant.has_value());
     CHECK(std::get<std::string>(*constant) == "hi");
     CHECK(trace.Entries().size() >= 3);
 

@@ -11,6 +11,7 @@ namespace
 {
     constexpr const char* kPopup = "Settings";
     constexpr const char* kRebindPopup = "Rebind Shortcut";
+    constexpr const char* kInputPopup = "Bind Input";
 
     struct SettingsWindowLayer final : public HotReloadableLayer
     {
@@ -44,6 +45,7 @@ namespace
                 DrawAbout();
                 DrawInterface();
                 DrawKeyboard();
+                DrawScriptInput();
                 DrawEditing();
                 DrawRendering();
                 DrawUnits();
@@ -58,6 +60,7 @@ namespace
                 ImGui::CloseCurrentPopup();
             }
             DrawRebindPopup();
+            DrawInputPopup();
             ImGui::EndPopup();
         }
 
@@ -221,6 +224,160 @@ namespace
             ImGui::EndTable();
         }
 
+        struct InputTarget
+        {
+            std::string Action;
+            int Index{-1};
+            float Scale{1.0f};
+        };
+
+        void DrawScriptInput()
+        {
+            auto& settings = ScriptInputSettings::Instance();
+            if (SectionHeaderWithReset("SCRIPT INPUT", "scriptinput", "Restore every default binding")) settings.SetUser({});
+            TextDisabledWrapped("Actions that scripts read with input.axis, held, pressed and released. A scene may ship its own "
+                                "bindings; yours win. Scripts only see input while a playing scene reads it and the viewport "
+                                "has focus; Esc gives the keys back to the editor.");
+            if (const auto key = settings.TakeCaptured()) ApplyInputBinding(*key);
+
+            const auto user = settings.User();
+            const auto defaults = ActionMap::Defaults();
+            const auto effective = EffectiveActionMap(nullptr, user);
+            if (!ImGui::BeginTable("##scriptInput", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) return;
+            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+            ImGui::TableSetupColumn("Bindings", ImGuiTableColumnFlags_WidthStretch, 2.5f);
+            ImGui::TableSetupColumn("##buttons", ImGuiTableColumnFlags_WidthFixed);
+            for (const auto& action : effective.Actions())
+            {
+                const bool overridden = user.Find(action.Name) != nullptr;
+                ImGui::PushID(action.Name.c_str());
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Indent();
+                if (overridden) ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.3f, 1.0f), "%s", action.Name.c_str());
+                else ImGui::TextUnformatted(action.Name.c_str());
+                ImGui::Unindent();
+                ImGui::TableNextColumn();
+                int removeAt = -1;
+                for (std::size_t i = 0; i < action.Bindings.size(); ++i)
+                {
+                    const auto& binding = action.Bindings[i];
+                    ImGui::PushID(static_cast<int>(i));
+                    const std::string label = (binding.Scale == 1.0f ? std::string() : binding.Scale == -1.0f ? std::string("-")
+                                                                                       : std::format("{:g} ", binding.Scale)) +
+                                              SourceLabel(binding.Source);
+                    if (ImGui::SmallButton(label.c_str())) OpenInputBinding({action.Name, static_cast<int>(i), binding.Scale});
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click to rebind; right-click to remove");
+                    if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) removeAt = static_cast<int>(i);
+                    ImGui::PopID();
+                    ImGui::SameLine();
+                }
+                if (action.Bindings.empty()) ImGui::TextDisabled("unbound");
+                if (ImGui::SmallButton("+")) OpenInputBinding({action.Name, -1, 1.0f});
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add a binding");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("-")) OpenInputBinding({action.Name, -1, -1.0f});
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add a binding that pushes the axis negative");
+                ImGui::TableNextColumn();
+                ImGui::BeginDisabled(!overridden);
+                if (ImGui::SmallButton("Default"))
+                {
+                    auto next = user;
+                    next.Remove(action.Name);
+                    settings.SetUser(std::move(next));
+                }
+                ImGui::EndDisabled();
+                if (removeAt >= 0)
+                {
+                    auto bindings = action.Bindings;
+                    bindings.erase(bindings.begin() + removeAt);
+                    StoreInputBindings(action.Name, std::move(bindings));
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+
+            ImGui::SetNextItemWidth(160.0f);
+            ImGui::InputTextWithHint("##newAction", "new action name", m_NewAction.data(), m_NewAction.size());
+            ImGui::SameLine();
+            const std::string name = m_NewAction.data();
+            ImGui::BeginDisabled(!ActionMap::ValidName(name) || effective.Find(name));
+            if (ImGui::SmallButton("Add action"))
+            {
+                StoreInputBindings(name, {});
+                m_NewAction.fill('\0');
+            }
+            ImGui::EndDisabled();
+        }
+
+        void StoreInputBindings(const std::string& action, std::vector<InputBinding> bindings)
+        {
+            auto& settings = ScriptInputSettings::Instance();
+            auto user = settings.User();
+            const auto* base = ActionMap::Defaults().Find(action);
+            if (base && base->Bindings == bindings) user.Remove(action);
+            else user.Set(action, std::move(bindings));
+            settings.SetUser(std::move(user));
+        }
+
+        void OpenInputBinding(InputTarget target)
+        {
+            m_InputTarget = std::move(target);
+            ScriptInputSettings::Instance().ArmCapture();
+            m_InputRequested = true;
+        }
+
+        void ApplyInputBinding(const std::string& source)
+        {
+            if (!m_InputTarget) return;
+            const auto target = std::exchange(m_InputTarget, std::nullopt);
+            auto bindings = EffectiveActionMap(nullptr, ScriptInputSettings::Instance().User()).Find(target->Action)->Bindings;
+            if (target->Index >= 0 && static_cast<std::size_t>(target->Index) < bindings.size()) bindings[static_cast<std::size_t>(target->Index)].Source = source;
+            else bindings.push_back({source, target->Scale});
+            StoreInputBindings(target->Action, std::move(bindings));
+        }
+
+        void DrawInputPopup()
+        {
+            if (std::exchange(m_InputRequested, false)) ImGui::OpenPopup(kInputPopup);
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSize(ImVec2(420, 0), ImGuiCond_Appearing);
+            if (!ImGui::BeginPopupModal(kInputPopup, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize))
+                return;
+            auto& settings = ScriptInputSettings::Instance();
+            ImGui::TextUnformatted(m_InputTarget ? m_InputTarget->Action.c_str() : "");
+            ImGui::Spacing();
+            ImGui::TextWrapped("Press a key. Esc cancels. Mouse buttons are picked below.");
+            const auto pick = [&](const char* label, const char* source)
+            {
+                if (ImGui::Button(label, ImVec2(120, 0)))
+                {
+                    settings.CancelCapture();
+                    ApplyInputBinding(source);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+            };
+            ImGui::Spacing();
+            pick("Mouse left", "mouse:left");
+            pick("Mouse right", "mouse:right");
+            pick("Mouse middle", "mouse:middle");
+            ImGui::NewLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                settings.CancelCapture();
+                m_InputTarget.reset();
+                ImGui::CloseCurrentPopup();
+            }
+            if (!settings.Capturing())
+            {
+                m_InputTarget.reset();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+
         void DrawShortcutRow(const ActionDescriptor& action, const std::vector<ActionDescriptor>& effective)
         {
             const auto* live = FindAction(effective, action.Id);
@@ -347,6 +504,9 @@ namespace
         std::string m_Attempt;
         std::string m_Problem;
         bool m_RebindRequested = false;
+        std::optional<InputTarget> m_InputTarget;
+        bool m_InputRequested = false;
+        std::array<char, 48> m_NewAction{};
     };
 }
 

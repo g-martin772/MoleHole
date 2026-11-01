@@ -74,31 +74,40 @@ export namespace MoleHole
 
         void OnTickBegin(const std::string_view event) override
         {
+            std::scoped_lock lock(m_Mutex);
             ++m_Tick;
             m_Event = std::string(event);
         }
 
-        void OnTickEnd() override { m_IgnoreBreakpoints = false; }
+        void OnTickEnd() override
+        {
+            std::scoped_lock lock(m_Mutex);
+            m_IgnoreBreakpoints = false;
+        }
 
         void OnNodeExecuted(const std::string_view graph, const int nodeId) override
         {
+            std::scoped_lock lock(m_Mutex);
             m_NodeTicks[Key(graph, nodeId)] = m_Tick;
             Push({m_Tick, TraceKind::NodeExecuted, TraceSeverity::Info, std::string(graph), nodeId, m_Event});
         }
 
         void OnLinkTraversed(const std::string_view graph, const int linkId) override
         {
+            std::scoped_lock lock(m_Mutex);
             m_LinkTicks[Key(graph, linkId)] = m_Tick;
         }
 
         void OnPinEvaluated(const std::string_view graph, const int pinId, const Value& value) override
         {
+            std::scoped_lock lock(m_Mutex);
             m_PinValues[Key(graph, pinId)] = value;
         }
 
         void OnDiagnostic(const std::string_view graph, const int nodeId, const TraceSeverity severity,
                           const std::string_view message) override
         {
+            std::scoped_lock lock(m_Mutex);
             auto& list = m_Diagnostics[Key(graph, nodeId)];
             const auto it = std::ranges::find(list, message, &NodeDiagnostic::Message);
             if (it != list.end())
@@ -113,6 +122,7 @@ export namespace MoleHole
 
         [[nodiscard]] bool ShouldBreakBefore(const std::string_view graph, const int nodeId) override
         {
+            std::scoped_lock lock(m_Mutex);
             if (m_IgnoreBreakpoints || !m_Breakpoints.contains(Key(graph, nodeId))) return false;
             m_Hit = BreakpointHit{std::string(graph), nodeId};
             m_Paused = true;
@@ -123,6 +133,7 @@ export namespace MoleHole
         // Called once per frame before ticking; false while paused unless a step was requested.
         [[nodiscard]] bool ShouldRunTick()
         {
+            std::scoped_lock lock(m_Mutex);
             if (!m_Paused) return true;
             if (!m_StepPending) return false;
             m_StepPending = false;
@@ -130,49 +141,73 @@ export namespace MoleHole
             return true;
         }
 
-        void Pause() { m_Paused = true; }
+        void Pause()
+        {
+            std::scoped_lock lock(m_Mutex);
+            m_Paused = true;
+        }
         void Continue()
         {
+            std::scoped_lock lock(m_Mutex);
             m_Paused = false;
             m_StepPending = false;
             m_Hit.reset();
         }
         void Step()
         {
+            std::scoped_lock lock(m_Mutex);
             if (m_Paused) m_StepPending = true;
         }
 
-        [[nodiscard]] bool Paused() const { return m_Paused; }
-        [[nodiscard]] const std::optional<BreakpointHit>& Hit() const { return m_Hit; }
+        [[nodiscard]] bool Paused() const
+        {
+            std::scoped_lock lock(m_Mutex);
+            return m_Paused;
+        }
+        [[nodiscard]] std::optional<BreakpointHit> Hit() const
+        {
+            std::scoped_lock lock(m_Mutex);
+            return m_Hit;
+        }
 
         void ToggleBreakpoint(const std::string_view graph, const int nodeId)
         {
+            std::scoped_lock lock(m_Mutex);
             const auto key = Key(graph, nodeId);
             if (!m_Breakpoints.erase(key)) m_Breakpoints.insert(key);
         }
         [[nodiscard]] bool HasBreakpoint(const std::string_view graph, const int nodeId) const
         {
+            std::scoped_lock lock(m_Mutex);
             return m_Breakpoints.contains(Key(graph, nodeId));
         }
 
-        [[nodiscard]] std::uint64_t Tick() const { return m_Tick; }
+        [[nodiscard]] std::uint64_t Tick() const
+        {
+            std::scoped_lock lock(m_Mutex);
+            return m_Tick;
+        }
         [[nodiscard]] std::uint64_t NodeTick(const std::string_view graph, const int nodeId) const
         {
+            std::scoped_lock lock(m_Mutex);
             return Lookup(m_NodeTicks, Key(graph, nodeId));
         }
         [[nodiscard]] std::uint64_t LinkTick(const std::string_view graph, const int linkId) const
         {
+            std::scoped_lock lock(m_Mutex);
             return Lookup(m_LinkTicks, Key(graph, linkId));
         }
-        [[nodiscard]] const Value* PinValue(const std::string_view graph, const int pinId) const
+        [[nodiscard]] std::optional<Value> PinValue(const std::string_view graph, const int pinId) const
         {
+            std::scoped_lock lock(m_Mutex);
             const auto it = m_PinValues.find(Key(graph, pinId));
-            return it != m_PinValues.end() ? &it->second : nullptr;
+            return it != m_PinValues.end() ? std::optional<Value>(it->second) : std::nullopt;
         }
 
         // Diagnostics that were reported during the latest tick (so fixed problems disappear).
         [[nodiscard]] std::vector<NodeDiagnostic> ActiveDiagnostics(const std::string_view graph, const int nodeId) const
         {
+            std::scoped_lock lock(m_Mutex);
             std::vector<NodeDiagnostic> result;
             const auto it = m_Diagnostics.find(Key(graph, nodeId));
             if (it == m_Diagnostics.end()) return result;
@@ -182,6 +217,7 @@ export namespace MoleHole
 
         [[nodiscard]] std::vector<GraphNodeDiagnostic> AllActiveDiagnostics() const
         {
+            std::scoped_lock lock(m_Mutex);
             std::vector<GraphNodeDiagnostic> result;
             for (const auto& [key, list] : m_Diagnostics)
             {
@@ -190,10 +226,15 @@ export namespace MoleHole
             return result;
         }
 
-        [[nodiscard]] const std::deque<TraceEntry>& Entries() const { return m_Entries; }
+        [[nodiscard]] std::deque<TraceEntry> Entries() const
+        {
+            std::scoped_lock lock(m_Mutex);
+            return m_Entries;
+        }
 
         void ClearRuntime()
         {
+            std::scoped_lock lock(m_Mutex);
             m_Entries.clear();
             m_NodeTicks.clear();
             m_LinkTicks.clear();
@@ -222,6 +263,7 @@ export namespace MoleHole
             if (m_Entries.size() > kMaxEntries) m_Entries.pop_front();
         }
 
+        mutable std::mutex m_Mutex;
         std::uint64_t m_Tick{0};
         std::string m_Event;
         bool m_Paused{false};
