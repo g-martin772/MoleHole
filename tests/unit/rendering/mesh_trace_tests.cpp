@@ -4,6 +4,7 @@
 import GPP;
 import MoleHole;
 import glm;
+import vulkan;
 import std;
 
 using namespace MoleHole;
@@ -90,6 +91,38 @@ TEST_CASE("Two scenes share one material table with offset indices and a shared 
     CHECK(library.Materials().size() == 6);
     CHECK(GPP::GltfTextureCapacity(GPP::GpuCapabilities{.DescriptorIndexing = true}) == GPP::kGltfIndexedTextureCapacity);
     CHECK(GPP::GltfTextureCapacity(GPP::GpuCapabilities{}) == GPP::kGltfFallbackTextureCapacity);
+}
+
+TEST_CASE("The material table hands replaced buffers to the retire callback", "[rendering][mesh-trace][gpu]")
+{
+    const auto logger = std::make_shared<GPP::Logger>();
+    const auto device = GPP::CreateHeadlessDevice(logger);
+    if (!device) SKIP("no Vulkan device");
+
+    std::vector<std::shared_ptr<void>> retired;
+    MeshMaterialTable table(device, logger, [&retired](std::shared_ptr<void> object) { retired.push_back(std::move(object)); });
+    GPP::VulkanImage fallback(device, GPP::VulkanImageSpecification{.usage = vk::ImageUsageFlagBits::eSampled,
+                                                                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                                                                    .createSampler = true},
+                              logger);
+
+    table.Sync(fallback);
+    CHECK(retired.empty());
+    table.Sync(fallback);
+    CHECK(retired.empty());
+
+    GPP::GltfSceneData scene;
+    scene.Materials = {GPP::GltfMaterial{}, GPP::GltfMaterial{}};
+    for (int reload = 1; reload <= 3; ++reload)
+    {
+        (void)table.BaseMaterial(scene);
+        table.Sync(fallback);
+        CHECK(retired.size() == static_cast<std::size_t>(reload));
+        table.Reset();
+    }
+    const auto live = table.Buffer();
+    CHECK(live != vk::Buffer{});
+    for (const auto& object : retired) CHECK(std::static_pointer_cast<GPP::VulkanBuffer>(object)->GetBuffer() != live);
 }
 
 TEST_CASE("The mesh shader blocks mirror the C++ records", "[rendering][mesh-trace]")

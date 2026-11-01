@@ -53,7 +53,8 @@ export namespace MoleHole
         MeshScene(std::shared_ptr<GPP::VulkanDevice> device, std::shared_ptr<MeshCache> meshes,
                   std::shared_ptr<GPP::Logger> logger, GPP::VulkanCommandPool& uploadPool)
             : m_Device(std::move(device)), m_Meshes(std::move(meshes)), m_Logger(std::move(logger)),
-              m_UploadPool(&uploadPool), m_Materials(m_Device, m_Logger)
+              m_UploadPool(&uploadPool),
+              m_Materials(m_Device, m_Logger, [meshes = m_Meshes](std::shared_ptr<void> object) { meshes->Retire(std::move(object)); })
         {
         }
 
@@ -161,7 +162,7 @@ export namespace MoleHole
             const auto bytes = static_cast<vk::DeviceSize>(records.size() * sizeof(MeshInstanceGpu));
             if (!slot.Records || slot.Records->GetSize() < bytes)
             {
-                if (slot.Records) m_RetiredBuffers.push_back(std::move(slot.Records));
+                if (slot.Records) m_Meshes->Retire(std::move(slot.Records));
                 slot.Records = std::make_shared<GPP::VulkanBuffer>(
                     m_Device, GPP::MakeStorageBufferSpecification(std::bit_ceil(bytes), true), m_Logger);
             }
@@ -364,6 +365,5 @@ export namespace MoleHole
         std::array<Slot, kSlots> m_Slots;
         std::size_t m_NextSlot = 0;
         std::uint64_t m_SeenGeneration = 0;
-        std::vector<std::shared_ptr<GPP::VulkanBuffer>> m_RetiredBuffers;
     };
 }

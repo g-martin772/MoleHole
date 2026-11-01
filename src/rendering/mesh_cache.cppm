@@ -258,8 +258,11 @@ export namespace MoleHole
     class MeshMaterialTable
     {
     public:
-        MeshMaterialTable(std::shared_ptr<GPP::VulkanDevice> device, std::shared_ptr<GPP::Logger> logger)
-            : m_Device(std::move(device)), m_Logger(std::move(logger)),
+        using RetireFunction = std::function<void(std::shared_ptr<void>)>;
+
+        MeshMaterialTable(std::shared_ptr<GPP::VulkanDevice> device, std::shared_ptr<GPP::Logger> logger,
+                          RetireFunction retire)
+            : m_Device(std::move(device)), m_Logger(std::move(logger)), m_Retire(std::move(retire)),
               m_Library(GPP::GltfTextureCapacity(m_Device->GetCapabilities()))
         {
             AddFallback();
@@ -296,7 +299,7 @@ export namespace MoleHole
         void Sync(const GPP::VulkanImage& fallbackTexture)
         {
             if (!m_Dirty && m_Buffer) return;
-            if (m_Buffer) m_Retired.push_back(std::move(m_Buffer));
+            if (m_Buffer) m_Retire(std::move(m_Buffer));
             m_Buffer = std::make_shared<GPP::VulkanBuffer>(GPP::CreateMaterialBuffer(m_Device, m_Library, m_Logger));
             m_Textures = std::make_shared<const std::vector<vk::DescriptorImageInfo>>(
                 GPP::MakeTextureDescriptors(m_Library, fallbackTexture));
@@ -324,9 +327,9 @@ export namespace MoleHole
 
         std::shared_ptr<GPP::VulkanDevice> m_Device;
         std::shared_ptr<GPP::Logger> m_Logger;
+        RetireFunction m_Retire;
         GPP::GltfMaterialLibrary m_Library;
         std::shared_ptr<GPP::VulkanBuffer> m_Buffer;
-        std::vector<std::shared_ptr<GPP::VulkanBuffer>> m_Retired; // frames in flight may still read the old table
         std::shared_ptr<const std::vector<vk::DescriptorImageInfo>> m_Textures;
         bool m_Dirty = true;
         bool m_WarnedOverflow = false;
