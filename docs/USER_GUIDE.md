@@ -350,6 +350,13 @@ Input:
 - The assist keeps the ship from tumbling: rate damping stops rotation, hold also keeps heading and cruise velocity after you let go, retro turns the nose against your velocity and burns until you stop. Inside the free-fly camera the ship does not react to your keys
 - Add it to your own scene: `ship_controller` on a Dynamic rigid body with a collider, `chase_camera`, `cockpit_camera` or `fly_camera` on camera entities with Target set to the ship and Next set to the next camera. Properties (thrust, torque, max rate, assist, mass override, G limit, boost) are in the Inspector; values are SI per physical second, so scale thrust with the scene's Time Scale
 
+### Waypoint paths
+- Open `templates/waypoint-demo.yaml` and press Play: a camera flies a spline past Earth to the Moon while looking at a marker that glides between them, its field of view narrows, and a small Mars-textured probe circles Earth at constant speed. To render the flight use `--export-sequence <dir> --duration 28 --fps 1`; a single `--export-image` shows the first frame only
+- Add it to your own scene: Add Script `waypoint_path` on any entity (or a Camera). Give it `Waypoints` (names or guids of marker entities separated by `;`) or `Points` (`x y z; x y z` in metres, good at any distance)
+- Timing: `Speed` (m/s, constant), or `Duration` (seconds for the whole path, `Ease` for the feel), or `TimeLaw` such as `0 0; 4 1 smoothstep; 10 2` (at time 4 s be at the second waypoint, at 10 s at the third). `StartTime` delays the start. `Mode`: 0 once (fires `waypoint_path_done`), 1 loop, 2 pingpong. `Closed` joins the ends, `Tension` (-1 to 1) loosens or tightens the curve
+- Aiming: `Target` (look at an entity), `FaceTravel`, or `Orientation` keys `time pitch yaw roll; ...` in degrees. On a camera `FovKeys` (`time fov; ...`) animate the field of view and `MakePrimary` takes over the view when Play starts
+- The pose is a pure function of the simulation clock, so pausing, scrubbing, Stop and replays always put the entity in the same place
+
 ### Example
 - `scripts/spring_arm_camera.luau` – orbit camera around target
 - Demo scene: `templates/spring-arm-demo.yaml`
@@ -417,4 +424,5 @@ Graphs: ...
 - Templates in `templates/`
 - 
 - `templates/m1-orbits.yaml`: milestone M1 demo. Kerr hole (10^6 Msun, a* = 0.9), prograde and retrograde circular orbits at 10 M (frame dragging: different periods), an inclined eccentric orbit (periapsis and nodal precession), a raindrop, and a scene camera riding its own orbit with an animation graph that keeps the hole in view. Its "M1 Orbits" render profile turns on both orbit overlays
+- `templates/waypoint-demo.yaml`: scripted camera flight (Earth to Moon at 1 AU from the origin), a look-at marker and a probe on a constant-speed orbit, all with `waypoint_path`
 - `templates/gargantua-orbits.yaml`: near-extremal Gargantua with orbiting bodies and an orbiting camera
