@@ -6,6 +6,14 @@ return {
 }
 ]]
 
+local WIDE_PROBE = [[
+return {
+    OnContact = function(self, other, point, normal, impulse, velocity, material, otherMaterial, point64, velocity64)
+        events.emit("wide", self.entity, point, point64, velocity, velocity64)
+    end,
+}
+]]
+
 local TRIGGER_PROBE = [[
 return {
     OnTrigger = function(self, other, entered) events.emit("trigger", self.entity, other, entered) end,
@@ -54,6 +62,35 @@ test("two falling bodies deliver OnContact to both with mirrored, sane data", fu
     assert_eq(first[8], 9)
     assert_eq(second[7], 9)
     assert_eq(second[8], 7)
+end)
+
+test("OnContact also hands over point and relative velocity as dvec3", function()
+    sim.define_script("wide_probe", WIDE_PROBE)
+    local base = dvec3.new(1e11, -4e10, 2.5e11)
+    local upper = ball("Upper", vector.create(0, 0, 0), vector.create(0, 0, 0))
+    local lower = ball("Lower", vector.create(0, 0, 0), vector.create(0, 0, 0))
+    scene.set64(upper, "Transform", "Position", base + dvec3.new(0, 3, 0))
+    scene.set64(lower, "Transform", "Position", base)
+    sim.step(1)
+    physics.set_velocity(upper, dvec3.new(0, -4, 0))
+    physics.set_velocity(lower, dvec3.new(0, -1, 0))
+    sim.attach(upper, "wide_probe")
+    sim.attach(lower, "wide_probe")
+    sim.step(120)
+    local wide = sim.events("wide")
+    assert_eq(#wide, 2)
+    local first, second = wide[1].args, wide[2].args
+    assert_eq(first[1], upper)
+    assert_eq(typeof(first[3]), "dvec3")
+    assert_eq(typeof(first[5]), "dvec3")
+    assert_eq(typeof(first[2]), "vector")
+    assert_near(first[3].x, base.x, 0.1)
+    assert_near(first[3].z, base.z, 0.1)
+    assert(math.abs(first[3].y - (base.y - 1 / 6)) < 0.15, "point y " .. (first[3].y - base.y))
+    assert_near(first[5], dvec3.new(0, -3, 0), 0.05)
+    assert_near(second[5], dvec3.new(0, 3, 0), 0.05)
+    assert_near(dvec3.to_vec(first[5]), first[4], 1e-3)
+    assert_eq(first[3] == second[3], true)
 end)
 
 test("OnContact fires once per touch, not every tick", function()

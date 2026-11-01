@@ -15,8 +15,8 @@ return {
         end
         local props = self.props
         local dx, dy, dz = orbit.direction(props.Yaw, props.Pitch)
-        local x, y, z = scene.get_xyz(self.entity, "Transform", "Position")
-        local hit = physics.raycast({ x = x, y = y, z = z }, vector.create(dx, dy, dz), props.Range, props.Mask)
+        local origin = scene.get64(self.entity, "Transform", "Position")
+        local hit = physics.raycast(origin, vector.create(dx, dy, dz), props.Range, props.Mask)
         if hit == nil then
             return
         end
