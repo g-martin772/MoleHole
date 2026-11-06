@@ -18,6 +18,7 @@ namespace
     constexpr const char* kIconAtom = "\xef\x97\x92"; // U+F5D2 (general relativity)
     constexpr const char* kIconBrain = "\xef\x97\x9c"; // U+F5DC (science)
     constexpr const char* kIconAnimGraph = "\xef\x95\x82"; // U+F542 (project-diagram)
+    constexpr const char* kIconScripts = "\xef\x87\x89";
     constexpr const char* kIconLog = "\xef\x84\xa0"; // U+F120 (terminal)
     constexpr const char* kIconSettings = "\xef\x80\x93"; // U+F013 (gear)
 
@@ -77,6 +78,7 @@ namespace
                     {kIconAtom, "GR", "General Relativity", &m_UiState->ShowGeneralRelativityWindow},
                     {kIconBrain, "SCI", "Science", &m_UiState->ShowScienceWindow},
                     {kIconAnimGraph, "ANM", "Animation Graph", &m_UiState->ShowAnimationGraphWindow},
+                    {kIconScripts, "LIB", "Script Library", &m_UiState->ShowScriptLibraryWindow},
                     {kIconLog, "LOG", "Log", &m_UiState->ShowLogWindow},
                 };
 
