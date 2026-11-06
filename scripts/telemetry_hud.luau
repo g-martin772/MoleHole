@@ -1,7 +1,9 @@
 local hud = require("lib/hud")
+local orbit = require("lib/orbit")
 
 local ASSIST_NAMES = { [0] = "OFF", "RATE", "HOLD", "RETRO" }
-local WHITE, DIM, GOLD, GREEN, RED, CYAN = "#e8f0ff", "#9fb0c8", "#ffc040", "#50ff80", "#ff6060", "#60d8ff"
+local AUTOPILOT_NAMES = { [0] = "HOLD", "GO-TO", "ORBIT", "MATCH" }
+local WHITE, DIM, GOLD, GREEN, RED, CYAN, VIOLET = "#e8f0ff", "#9fb0c8", "#ffc040", "#50ff80", "#ff6060", "#60d8ff", "#c090ff"
 local ZERO = dvec3.new(0, 0, 0)
 local REFRESH_TICKS = 15
 
@@ -66,6 +68,80 @@ local function draw_markers(self, props, center, position, velocity, ref_velocit
     end
 end
 
+local function autopilot_lines(status): (string, string)
+    local head = "AUTOPILOT " .. (AUTOPILOT_NAMES[status.mode] or "?") .. "  " .. status.phase
+    if status.mode == 2 then
+        local detail = status.phase == "COAST" and ("BURN IN " .. hud.format_duration(status.a)) or ("dR " .. hud.format_distance(status.a))
+        return head, detail .. string.format("  e %.4f", status.b)
+    elseif status.mode == 3 then
+        return head, "REL " .. hud.format_speed(status.b)
+    end
+    return head, "DIST " .. hud.format_distance(status.a) .. "  REL " .. hud.format_speed(status.b)
+end
+
+local function orbit_body(self, subject: Entity, position: DVec3)
+    local body = self.orbit_body
+    if body == nil or not scene.exists(body.entity) or self.tick % REFRESH_TICKS == 1 then
+        local found = orbit.dominant(position, subject)
+        body = found and { entity = found.entity, mass = found.mass, mu = found.mu } or nil
+        self.orbit_body = body
+    end
+    return body
+end
+
+local function draw_orbit(self, center, subject: Entity, position: DVec3, velocity: DVec3, text_size: number, line, full: boolean)
+    local body = orbit_body(self, subject, position)
+    if body == nil then
+        return
+    end
+    local r = position - scene.get64(body.entity, "Transform", "Position")
+    if dvec3.length_squared(r) == 0 then
+        return
+    end
+    local v = velocity - velocity_of(body.entity)
+    local el = orbit.elements(body.mu, r, v)
+    local in_rg = scene.get(body.entity, "BlackHole", "Mass") ~= nil
+    local function radius_text(radius: number): string
+        local text = hud.format_distance(radius)
+        if in_rg then
+            text ..= string.format("  %.1f rg", radius * hud.C * hud.C / body.mu)
+        end
+        return text
+    end
+    local apoapsis = el.apoapsis and radius_text(el.apoapsis) or "escape"
+    if full then
+        line("ORBIT " .. (scene.name(body.entity) or "body") .. string.format("   e %.4f  i %.1f", el.e, math.deg(el.inclination)), VIOLET)
+        line("PE " .. radius_text(el.periapsis), VIOLET)
+        line("AP " .. apoapsis, VIOLET)
+        if el.period then
+            line("T " .. hud.format_duration(el.period) .. "   to PE " .. hud.format_duration(orbit.time_to_periapsis(el)), VIOLET)
+        end
+    else
+        line("PE " .. radius_text(el.periapsis) .. "  AP " .. apoapsis, VIOLET, text_size)
+    end
+
+    local camera = primary_camera(self)
+    if camera == nil then
+        return
+    end
+    local camera_q = scene.get64(camera, "Transform", "Rotation")
+    local fov = scene.get(camera, "Camera", "Fov")
+    local eye = scene.get64(camera, "Transform", "Position") - scene.get64(body.entity, "Transform", "Position")
+    local points = orbit.sample(el, { eye = eye, max_radius = 10 * math.max(el.radius, el.periapsis) })
+    hud.polyline(center, points, eye, camera_q, fov, { color = hud.fade(VIOLET, 0.8), thickness = 2 })
+    local function label(nu: number, text: string, color: string)
+        local point, _, front = hud.project(orbit.position(el, nu) - eye, camera_q, fov)
+        if front and point ~= nil and math.abs(point.x) < 0.9 and point.y > 0.03 and point.y < 0.97 then
+            center.circle(point.x, point.y, 0.008, { color = color, thickness = 2 })
+            center.text(point.x + 0.014, point.y - 0.012, text, { size = text_size * 0.9, color = color })
+        end
+    end
+    label(0, "PE", GREEN)
+    if el.apoapsis then
+        label(math.pi, "AP", GOLD)
+    end
+end
+
 return {
     properties = {
         { name = "Subject", type = "entity" },
@@ -77,12 +153,14 @@ return {
         { name = "Attitude", type = "bool", default = true },
         { name = "Markers", type = "bool", default = true },
         { name = "Environment", type = "bool", default = true },
+        { name = "Orbit", type = "bool", default = true },
     },
 
     OnStart = function(self: ScriptSelf)
         self.level = self.level or self.props.Level
         self.status = self.status or { throttle = 0, assist = 1, boost = 0, g = 0, mode = 0, hold = -1, kill = 0 }
         self.camera_mode = self.camera_mode or "-"
+        self.autopilot = self.autopilot or { on = false, mode = 0, phase = "", a = 0, b = 0 }
         self.tick = self.tick or 0
         self.age = self.age or 0
         self.proper = self.proper or 0
@@ -94,6 +172,9 @@ return {
             status.throttle, status.assist, status.boost, status.g, status.mode, status.hold, status.kill = a, b, c, d, e, f, g
         elseif name == "camera_mode" then
             self.camera_mode = a
+        elseif name == "autopilot_status" and a == (self.props.Subject or self.entity) then
+            local pilot = self.autopilot
+            pilot.on, pilot.mode, pilot.phase, pilot.a, pilot.b = b == 1, c, d, e, f
         end
     end,
 
@@ -199,6 +280,11 @@ return {
         elseif status.hold >= 0 then
             info("SPEED HOLD " .. hud.format_speed(status.hold), GREEN)
         end
+        if self.autopilot.on then
+            local head, detail = autopilot_lines(self.autopilot)
+            info(head, GREEN)
+            info(detail, GREEN)
+        end
         if full then
             info("CAMERA " .. string.upper(self.camera_mode))
             info(status.mode == 1 and "CONTROL keys only" or "CONTROL mouse + keys", DIM)
@@ -209,6 +295,10 @@ return {
             hud.attitude_ball(center, cx, cy, r, att, hud.to_body(rotation, velocity - ref_velocity))
             hud.triad(center, cx - 0.17, cy, 0.04, att, text_size * 0.8)
             center.text(cx, cy + r + 0.028, string.format("HDG %03d   PIT %s   ROL %s", math.floor(att.heading + 0.5) % 360, hud.format_angle(att.pitch), hud.format_angle(att.roll)), { size = text_size, align = "center", color = WHITE })
+        end
+
+        if props.Orbit then
+            draw_orbit(self, center, subject, position, velocity, text_size, line, full)
         end
 
         if props.Markers then

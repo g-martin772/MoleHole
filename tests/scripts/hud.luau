@@ -1,4 +1,5 @@
 local hud = require("lib/hud")
+local orbit = require("lib/orbit")
 
 local function recorder()
     local calls = {}
@@ -329,4 +330,85 @@ test("offsets format in us, ms, s and h", function()
     assert_eq(hud.format_offset(-12.5), "-12.50 s")
     assert_eq(hud.format_offset(-7200), "-2.00 h")
     assert_eq(hud.format_rate(0), "0 (frozen)")
+end)
+
+test("durations format from microseconds to days", function()
+    assert_eq(hud.format_duration(5e-4), "500.0 us")
+    assert_eq(hud.format_duration(0.25), "250.0 ms")
+    assert_eq(hud.format_duration(35.2), "35.20 s")
+    assert_eq(hud.format_duration(754), "12 m 34 s")
+    assert_eq(hud.format_duration(7200 * 2), "4.00 h")
+    assert_eq(hud.format_duration(3 * 86400), "3.00 d")
+end)
+
+test("a world polyline projects, clips behind the camera and to the screen box", function()
+    local camera = dquat.new(0, 0, 0, 1)
+    local eye = dvec3.new(0, 0, 0)
+    local h, calls = recorder()
+    local drawn = hud.polyline(h, { dvec3.new(-1, 0, -10), dvec3.new(1, 0, -10) }, eye, camera, 90)
+    assert_eq(drawn, 1)
+    assert_near(calls[1][1], -0.05, 1e-9)
+    assert_near(calls[1][2], 0.5, 1e-9)
+    assert_near(calls[1][3], 0.05, 1e-9)
+
+    h, calls = recorder()
+    assert_eq(hud.polyline(h, { dvec3.new(0, 0, 5), dvec3.new(1, 0, 10) }, eye, camera, 90), 0)
+
+    h, calls = recorder()
+    assert_eq(hud.polyline(h, { dvec3.new(0, 0, 10), dvec3.new(0, 0, -10) }, eye, camera, 90), 1)
+    assert_near(calls[1][1], 0, 1e-9)
+    assert_near(calls[1][2], 0.5, 1e-6)
+
+    h, calls = recorder()
+    hud.polyline(h, { dvec3.new(-1e6, 0, -1), dvec3.new(1e6, 0, -1) }, eye, camera, 90)
+    assert(math.abs(calls[1][1]) <= 2 + 1e-9 and math.abs(calls[1][3]) <= 2 + 1e-9)
+end)
+
+test("the HUD draws the predicted orbit with periapsis, apoapsis and period", function()
+    local hole, rg = hole_at_origin()
+    local radius = 500 * rg
+    local mu = orbit.mu(units.const("Msun"))
+    camera_at(dvec3.new(radius, 0, 300))
+    local ship = spawn_ship(vector.create(0, 0, 0), nil, { Attitude = false, Markers = false })
+    scene.set64(ship, "Transform", "Position", dvec3.new(radius, 0, 0))
+    local v = orbit.launch_circular(mu, dvec3.new(radius, 0, 0), dvec3.new(0, 1, 0)) * 0.8
+    sim.set_velocity(ship, vector.create(v.x, v.y, v.z))
+    sim.step(3)
+    local commands = sim.hud()
+    assert(any_text(commands, "ORBIT Hole"))
+    assert(any_text(commands, "PE "))
+    assert(any_text(commands, "AP "))
+    assert(any_text(commands, " rg"))
+    assert(any_text(commands, "to PE"))
+    local lines = 0
+    for _, command in commands do
+        if command.kind == "line" and command.space == "center" and command.color.r > 0.7 and command.color.b > 0.9 then
+            lines += 1
+        end
+    end
+    assert(lines > 20, lines)
+end)
+
+test("the orbit readout can be switched off and stays quiet without a body", function()
+    local hole, rg = hole_at_origin()
+    camera_at(dvec3.new(1e6, 0, 100))
+    local ship = spawn_ship(vector.create(0, 0, -1e6), nil, { Orbit = false })
+    scene.set64(ship, "Transform", "Position", dvec3.new(1e6, 0, 0))
+    sim.step(3)
+    assert(not any_text(sim.hud(), "ORBIT"))
+    sim.destroy(hole)
+    sim.step(3)
+    assert(any_text(sim.hud(), "SPEED"))
+end)
+
+test("an engaged autopilot is named in the readout", function()
+    local target = sim.spawn("Target", {})
+    scene.set64(target, "Transform", "Position", dvec3.new(0, 0, -800))
+    camera_at(dvec3.new(0, 0, 100))
+    local ship = spawn_ship(vector.create(0, 0, 0), nil, { Orbit = false })
+    sim.attach(ship, "ship_controller", { ThrustX = 500, ThrustY = 500, ThrustZ = 500 })
+    sim.attach(ship, "autopilot", { Mode = 1, Target = target, Engaged = true })
+    sim.step(5)
+    assert(any_text(sim.hud(), "AUTOPILOT GO-TO  APPROACH"))
+    assert(any_text(sim.hud(), "DIST "))
 end)

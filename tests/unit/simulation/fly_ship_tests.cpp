@@ -85,12 +85,12 @@ namespace
     }
 }
 
-TEST_CASE("The fly-ship template runs its six scripts without errors and stays in orbit", "[simulation][scripts][fly-ship]")
+TEST_CASE("The fly-ship template runs its seven scripts without errors and stays in orbit", "[simulation][scripts][fly-ship]")
 {
     FlyShip f;
     f.Runner->StepAndWait(300);
     CHECK(f.Modules.Scripts->TakeErrors().empty());
-    CHECK(f.Modules.Scripts->Host().InstanceCount() == 6);
+    CHECK(f.Modules.Scripts->Host().InstanceCount() == 7);
     const auto radius = glm::length(f.ShipPosition());
     CHECK(radius > 100.0 * 1476.0);
     CHECK(radius < 600.0 * 1476.0);
@@ -225,4 +225,38 @@ TEST_CASE("Recorded flight input replays to the same hash twice", "[simulation][
     auto tampered = recording;
     tampered.Inputs.clear();
     CHECK_FALSE(Verify(tampered, f).Ok);
+}
+
+TEST_CASE("The autopilot circularises the template orbit and replays to the same hash", "[simulation][scripts][fly-ship][replay]")
+{
+    constexpr double kHoleMass = 1.9884098706980507e30;
+    const double mu = Units::kGravitationalConstant * kHoleMass;
+    const auto eccentricity = [&](FlyShip& flight)
+    {
+        const auto r = flight.ShipPosition();
+        const auto v = flight.ShipVelocity();
+        const auto h = glm::cross(r, v);
+        const double energy = 0.5 * glm::dot(v, v) - mu / glm::length(r);
+        return std::sqrt(std::max(0.0, 1.0 + 2.0 * energy * glm::dot(h, h) / (mu * mu)));
+    };
+
+    FlyShip f;
+    f.Runner->BeginRecording(60);
+    f.Runner->StepAndWait(300);
+    CHECK(eccentricity(f) > 0.3);
+    f.Tap("autopilot");
+    f.Runner->StepAndWait(3600);
+    CHECK(f.Modules.Scripts->TakeErrors().empty());
+    CHECK(eccentricity(f) < 0.05);
+    const auto frame = f.Modules.Scripts->HudSnapshot();
+    CHECK(std::ranges::any_of(frame->Commands, [](const HudCommand& command)
+    {
+        return command.Kind == HudKind::Text && command.Text.find("AUTOPILOT ORBIT") != std::string::npos;
+    }));
+    const auto recording = f.Runner->EndRecording();
+    REQUIRE(recording.FinalHash.has_value());
+    const auto first = Verify(recording, f);
+    INFO(first.Message);
+    CHECK(first.Ok);
+    CHECK(first.FinalHash == *recording.FinalHash);
 }

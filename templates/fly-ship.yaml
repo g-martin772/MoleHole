@@ -15,6 +15,8 @@ Input:
     kill_velocity: [key:b]
     control_mode: [key:m]
     hud: [key:h]
+    autopilot: [key:t]
+    autopilot_mode: [key:y]
     cam_yaw: [key:period, -key:comma]
     cam_pitch: [key:semicolon, -key:slash]
 Entities:
@@ -81,6 +83,15 @@ Entities:
             TorqueYaw: 2.0e+11
         - Name: telemetry_hud
           Props:
+            Target: 5101000000000000001
+        - Name: autopilot
+          Props:
+            Mode: 2
+            ResponseTime: 0.005
+            TurnTime: 0.02
+            Tolerance: 1000
+            Standoff: 7.0e+5
+            SpeedTolerance: 1000
             Target: 5101000000000000001
   - Guid: 5101000000000000003
     Components:

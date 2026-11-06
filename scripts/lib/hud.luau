@@ -56,6 +56,22 @@ function hud.format_distance(m: number): string
     return string.format("%.3f ly", m / units.const("ly"))
 end
 
+function hud.format_duration(seconds: number): string
+    local a = math.abs(seconds)
+    if a < 1e-3 then
+        return string.format("%.1f us", seconds * 1e6)
+    elseif a < 1 then
+        return string.format("%.1f ms", seconds * 1e3)
+    elseif a < 120 then
+        return string.format("%.2f s", seconds)
+    elseif a < 7200 then
+        return string.format("%d m %02d s", math.floor(a / 60), math.floor(a % 60))
+    elseif a < 172800 then
+        return string.format("%.2f h", seconds / 3600)
+    end
+    return string.format("%.2f d", seconds / 86400)
+end
+
 function hud.format_angle(degrees: number): string
     return string.format("%+.1f", degrees)
 end
@@ -109,6 +125,68 @@ function hud.project(direction: DVec3, camera: DQuat, fov_degrees: number)
     local x = 0.5 * local_dir.x / (depth * tan_half)
     local y = 0.5 - 0.5 * local_dir.y / (depth * tan_half)
     return { x = x, y = y }, math.atan2(local_dir.x, local_dir.y), true
+end
+
+local function clip_segment(x1: number, y1: number, x2: number, y2: number, left: number, top: number, right: number, bottom: number)
+    local t0, t1 = 0, 1
+    local dx, dy = x2 - x1, y2 - y1
+    for _, edge in { { -dx, x1 - left }, { dx, right - x1 }, { -dy, y1 - top }, { dy, bottom - y1 } } do
+        local p, q = edge[1], edge[2]
+        if p == 0 then
+            if q < 0 then
+                return nil
+            end
+        else
+            local t = q / p
+            if p < 0 then
+                if t > t1 then
+                    return nil
+                end
+                t0 = math.max(t0, t)
+            else
+                if t < t0 then
+                    return nil
+                end
+                t1 = math.min(t1, t)
+            end
+        end
+    end
+    return x1 + dx * t0, y1 + dy * t0, x1 + dx * t1, y1 + dy * t1
+end
+
+function hud.polyline(h, points: { DVec3 }, eye: DVec3, camera: DQuat, fov_degrees: number, options)
+    local opts = options or {}
+    local near = opts.near or 0.1
+    local reach = opts.reach or 2
+    local scale = 0.5 / math.tan(math.rad(fov_degrees) * 0.5)
+    local inverse = dquat.inverse(camera)
+    local previous
+    local drawn = 0
+    for _, point in points do
+        local local_point = dquat.rotate(inverse, point - eye)
+        if previous ~= nil then
+            local a, b = previous, local_point
+            local depth_a, depth_b = -a.z, -b.z
+            if depth_a >= near or depth_b >= near then
+                if depth_a < near then
+                    a = a + (b - a) * ((near - depth_a) / (depth_b - depth_a))
+                    depth_a = near
+                elseif depth_b < near then
+                    b = a + (b - a) * ((near - depth_a) / (depth_b - depth_a))
+                    depth_b = near
+                end
+                local x1, y1 = scale * a.x / depth_a, 0.5 - scale * a.y / depth_a
+                local x2, y2 = scale * b.x / depth_b, 0.5 - scale * b.y / depth_b
+                local cx1, cy1, cx2, cy2 = clip_segment(x1, y1, x2, y2, -reach, -reach, reach, 1 + reach)
+                if cx1 ~= nil then
+                    h.line(cx1, cy1, cx2, cy2, { color = opts.color or GOLD, thickness = opts.thickness or 2 })
+                    drawn += 1
+                end
+            end
+        end
+        previous = local_point
+    end
+    return drawn
 end
 
 function hud.body_marker(body: DVec3, span_degrees: number?)
