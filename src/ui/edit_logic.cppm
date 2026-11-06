@@ -35,6 +35,23 @@ export namespace MoleHole
         std::vector<EditAction> m_Pending;
     };
 
+    [[nodiscard]] constexpr std::uint64_t TogglePin(const std::uint64_t pinned, const std::uint64_t selected) noexcept
+    {
+        return pinned != 0 ? 0 : selected;
+    }
+
+    [[nodiscard]] constexpr std::uint64_t ReconcilePin(const std::uint64_t pinned, const std::uint64_t selected,
+                                                       const bool selectedExists) noexcept
+    {
+        return pinned != 0 && selected != 0 && selectedExists ? selected : 0;
+    }
+
+    [[nodiscard]] constexpr std::uint64_t ViewportSelection(const std::uint64_t pinned, const std::uint64_t current,
+                                                            const std::uint64_t requested) noexcept
+    {
+        return pinned != 0 ? current : requested;
+    }
+
     constexpr std::size_t kMaxMenuLabel = 40;
 
     [[nodiscard]] inline std::string ShortenLabel(const std::string_view text, const std::size_t limit = kMaxMenuLabel)

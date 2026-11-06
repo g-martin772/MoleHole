@@ -58,6 +58,7 @@ export namespace MoleHole
         ActionContext context;
         context.HasScene = runner != nullptr;
         context.HasSelection = runner && ui.SelectedEntityGuid != 0;
+        context.Pinned = ui.PinnedEntityGuid != 0;
         context.Paused = !runner || runner->IsPaused();
         context.CanUndo = runner && runner->CanUndo();
         context.CanRedo = runner && runner->CanRedo();
@@ -188,10 +189,14 @@ export namespace MoleHole
             b.Edit("edit.delete", "Delete", "Del", EditAction::Delete);
             b.Edit("edit.rename", "Rename", "F2", EditAction::Rename);
             b.Edit("edit.frame", "Frame Selected", "F", EditAction::FrameSelected);
-            b.Edit("edit.deselect", "Deselect", "Esc", EditAction::Deselect);
+            b.Edit("edit.deselect", "Deselect", "Esc", EditAction::Deselect).Needs = ActionNeed::Scene | ActionNeed::Selection | ActionNeed::Unpinned;
             b.Edit("edit.select_children", "Select Children", "", EditAction::SelectChildren);
             b.Edit("edit.hide", "Hide / Show Selected", "H", EditAction::ToggleHidden).Scope.clear();
             b.Edit("edit.lock", "Lock / Unlock Selected", "L", EditAction::ToggleLocked).Scope.clear();
+            auto& pin = b.Key("edit.pin", "Pin / Unpin Selection", "Edit", "Alt+P", "Scene / Viewport",
+                              [ui] { if (ui) ui->PinnedEntityGuid = TogglePin(ui->PinnedEntityGuid, ui->SelectedEntityGuid); });
+            pin.Needs = ActionNeed::Scene | ActionNeed::Selection;
+            pin.Keywords = "pin lock keep inspector selection";
             auto& showAll = b.Edit("edit.show_all", "Show All", "Alt+H", EditAction::ShowAll);
             showAll.Scope.clear();
             showAll.Needs = ActionNeed::Scene;

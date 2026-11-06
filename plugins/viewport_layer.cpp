@@ -132,6 +132,9 @@ namespace
                 {
                     m_UiState->SelectedEntityGuid = std::exchange(m_UiState->PendingSelectGuid, 0);
                 }
+                const auto selected = m_UiState->SelectedEntityGuid;
+                m_UiState->PinnedEntityGuid = ReconcilePin(m_UiState->PinnedEntityGuid, selected,
+                                                           published->IsValid(published->FindByGuid(selected)));
             }
             const auto step = StepRefinement(render, sceneKey);
             render.ResolutionScale *= step.Scale;
@@ -486,7 +489,8 @@ namespace
                     m_UiState->ActiveGizmoOperation = GizmoOperation::Rotate;
                 if (ImGui::IsKeyChordPressed(ImGuiKey_3) || ImGui::IsKeyChordPressed(ImGuiKey_S))
                     m_UiState->ActiveGizmoOperation = GizmoOperation::Scale;
-                if (ImGui::IsKeyPressed(ImGuiKey_Escape)) m_UiState->SelectedEntityGuid = 0;
+                if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+                    m_UiState->SelectedEntityGuid = ViewportSelection(m_UiState->PinnedEntityGuid, m_UiState->SelectedEntityGuid, 0);
             }
 
             ImGuizmo::SetOrthographic(false);
@@ -510,10 +514,13 @@ namespace
             if (imageHovered && !toolbarHovered && !gizmoActive && !ImGuizmo::IsOver() && sim->Runner &&
                 ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
-                PickEntityUnderMouse(min, max, *sim);
-                m_BoxCandidate = true;
-                m_BoxActive = false;
-                m_BoxStart = ImGui::GetMousePos();
+                if (m_UiState->PinnedEntityGuid == 0)
+                {
+                    PickEntityUnderMouse(min, max, *sim);
+                    m_BoxCandidate = true;
+                    m_BoxActive = false;
+                    m_BoxStart = ImGui::GetMousePos();
+                }
             }
             if (m_BoxCandidate && sim->Runner) UpdateBoxSelect(min, max, *sim);
 

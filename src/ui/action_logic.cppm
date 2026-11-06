@@ -13,6 +13,7 @@ export namespace MoleHole
         Paused = 1u << 2,
         CanUndo = 1u << 3,
         CanRedo = 1u << 4,
+        Unpinned = 1u << 5,
     };
 
     [[nodiscard]] constexpr ActionNeed operator|(const ActionNeed a, const ActionNeed b) noexcept
@@ -32,6 +33,7 @@ export namespace MoleHole
         bool Paused = true;
         bool CanUndo = false;
         bool CanRedo = false;
+        bool Pinned = false;
     };
 
     [[nodiscard]] inline std::string DisabledReason(const ActionNeed needs, const ActionContext& context)
@@ -41,6 +43,7 @@ export namespace MoleHole
         if (HasNeed(needs, ActionNeed::Paused) && !context.Paused) return "Pause the simulation first";
         if (HasNeed(needs, ActionNeed::CanUndo) && !context.CanUndo) return "Nothing to undo";
         if (HasNeed(needs, ActionNeed::CanRedo) && !context.CanRedo) return "Nothing to redo";
+        if (HasNeed(needs, ActionNeed::Unpinned) && context.Pinned) return "Selection is pinned (unpin first)";
         return {};
     }
 

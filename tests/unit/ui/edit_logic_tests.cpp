@@ -157,3 +157,22 @@ TEST_CASE("Gizmo matrix change ignores float noise but not real moves", "[ui][ed
     scaled[1][1] = 1.01f;
     CHECK(GizmoMatrixChanged(before, scaled));
 }
+
+TEST_CASE("Pinned selection ignores viewport picks and follows explicit selection", "[ui][pin]")
+{
+    CHECK(TogglePin(0, 7) == 7);
+    CHECK(TogglePin(7, 7) == 0);
+    CHECK(TogglePin(7, 9) == 0);
+    CHECK(TogglePin(0, 0) == 0);
+
+    CHECK(ViewportSelection(0, 7, 9) == 9);
+    CHECK(ViewportSelection(0, 7, 0) == 0);
+    CHECK(ViewportSelection(7, 7, 9) == 7);
+    CHECK(ViewportSelection(7, 7, 0) == 7);
+
+    CHECK(ReconcilePin(0, 7, true) == 0);
+    CHECK(ReconcilePin(7, 7, true) == 7);
+    CHECK(ReconcilePin(7, 9, true) == 9);
+    CHECK(ReconcilePin(7, 0, false) == 0);
+    CHECK(ReconcilePin(7, 7, false) == 0);
+}

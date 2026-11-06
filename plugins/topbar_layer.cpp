@@ -672,6 +672,14 @@ namespace
             entry("Hide / Show Selected", "edit.hide", EditAction::ToggleHidden);
             entry("Lock / Unlock Selected", "edit.lock", EditAction::ToggleLocked);
             entry("Show All", "edit.show_all", EditAction::ShowAll);
+            {
+                const auto reason = ActionDisabledReason("edit.pin", context);
+                const bool pinned = m_UiState->PinnedEntityGuid != 0;
+                if (ImGui::MenuItem("Pin Selection", ActionShortcut("edit.pin").c_str(), pinned, reason.empty()))
+                    m_UiState->PinnedEntityGuid = TogglePin(m_UiState->PinnedEntityGuid, m_UiState->SelectedEntityGuid);
+                if (!reason.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", reason.c_str());
+                else if (ImGui::IsItemHovered()) ImGui::SetTooltip("Viewport clicks keep the pinned entity selected");
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Preferences...")) m_UiState->ShowSettingsWindow = true;
             ImGui::EndMenu();

@@ -162,6 +162,7 @@ export namespace MoleHole
 
         std::uint64_t SelectedEntityGuid = 0;
         std::uint64_t PendingSelectGuid = 0;
+        std::uint64_t PinnedEntityGuid = 0;
         std::optional<BoxSelectRequest> PendingBoxSelect;
         CreatePopupRequest CreatePopup;
         bool OpenAddMeshDialog = false;

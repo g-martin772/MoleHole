@@ -780,6 +780,30 @@ namespace
                              ImVec2(x + flagWidth * 0.5f, midY), 12.0f,
                              on ? ToU32(HexColor(0xffc080)) : (ToU32(HexColor(0xc8c8c8)) & 0x00ffffffu) | (alpha << 24));
                 }
+                const bool pinnedRow = m_UiState->PinnedEntityGuid == row.Guid;
+                if (pinnedRow || hovered || row.Guid == m_UiState->SelectedEntityGuid)
+                {
+                    const float x = pos.x + width - flagWidth * 3.0f;
+                    ImGui::SetCursorScreenPos(ImVec2(x, pos.y));
+                    ImGui::PushID("pin");
+                    const bool toggled = ImGui::InvisibleButton("##pin", ImVec2(flagWidth, kRowHeight));
+                    const bool over = ImGui::IsItemHovered();
+                    ImGui::PopID();
+                    if (toggled)
+                    {
+                        if (!pinnedRow)
+                        {
+                            m_Selection = {row.Guid};
+                            m_Anchor = row.Guid;
+                            m_UiState->SelectedEntityGuid = row.Guid;
+                        }
+                        m_UiState->PinnedEntityGuid = pinnedRow ? 0 : row.Guid;
+                    }
+                    if (over) Tooltip(pinnedRow ? "Unpin selection" : "Pin selection (viewport clicks keep it selected)");
+                    const unsigned alpha = pinnedRow ? 255u : (over ? 200u : 90u);
+                    DrawIcon(list, icons, Icon::Pin, "P", ImVec2(x + flagWidth * 0.5f, midY), 12.0f,
+                             pinnedRow ? ToU32(HexColor(0xffc080)) : (ToU32(HexColor(0xc8c8c8)) & 0x00ffffffu) | (alpha << 24));
+                }
                 ImGui::SetCursorScreenPos(afterRow);
 
                 const ImVec2 textPos(iconX + 14.0f, pos.y + (kRowHeight - ImGui::GetTextLineHeight()) * 0.5f);
@@ -810,7 +834,7 @@ namespace
                 {
                     const ImU32 nameColor = entry.Hidden ? ToU32(HexColor(0x7a7a7a))
                                             : ToU32(HexColor(selected ? 0xffffff : 0xdcdcdc));
-                    const ImVec4 clip(textPos.x, pos.y, pos.x + width - flagWidth * 2.0f - 4.0f, pos.y + kRowHeight);
+                    const ImVec4 clip(textPos.x, pos.y, pos.x + width - flagWidth * 3.0f - 4.0f, pos.y + kRowHeight);
                     list->AddText(nullptr, 0.0f, textPos, nameColor, entry.Name.c_str(), nullptr, 0.0f, &clip);
                 }
                 ImGui::PopID();
@@ -1099,6 +1123,11 @@ namespace
             const auto* metadata = scene.Registry().try_get<MetadataComponent>(entity);
 
             SectionHeader("INSPECTOR");
+            if (m_UiState->PinnedEntityGuid == guid)
+            {
+                if (Chip("Pinned", Palette::Accent, true) != 0) m_UiState->PinnedEntityGuid = 0;
+                Tooltip("Viewport clicks keep this entity selected. Click to unpin");
+            }
             if (multi)
             {
                 ImGui::Text("%zu entities selected", targets.size());

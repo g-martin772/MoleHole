@@ -258,6 +258,16 @@ TEST_CASE("BuildActions adds dynamic templates, profiles and create entries and 
     CHECK(ActionDisabledReason("edit.copy", context) == "No entity selected");
     CHECK(ActionDisabledReason("edit.paste", context).empty());
 
+    ui.SelectedEntityGuid = 5;
+    FindAction(actions, "edit.pin")->Invoke();
+    CHECK(ui.PinnedEntityGuid == 5);
+    context.HasSelection = true;
+    context.Pinned = true;
+    CHECK(ActionDisabledReason("edit.deselect", context) == "Selection is pinned (unpin first)");
+    CHECK(ActionDisabledReason("edit.pin", context).empty());
+    FindAction(actions, "edit.pin")->Invoke();
+    CHECK(ui.PinnedEntityGuid == 0);
+
     FindAction(actions, "help.shortcuts")->Invoke();
     CHECK(ui.ShowShortcutSheet);
 }
