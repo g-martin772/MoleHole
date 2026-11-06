@@ -1,6 +1,7 @@
 local camera_cycle = require("lib/camera_cycle")
 local curves = require("lib/curves")
 local dquat_lib = require("lib/dquat")
+local zoom = require("lib/zoom")
 
 return {
     properties = {
@@ -11,6 +12,10 @@ return {
         { name = "LookAhead", type = "float", unit = "m", default = 400, min = 0, max = 1e12 },
         { name = "SmoothTime", type = "float", unit = "s", default = 0.25, min = 0, max = 60 },
         { name = "TurnTime", type = "float", unit = "s", default = 0.15, min = 0, max = 60 },
+        { name = "ZoomMin", type = "float", default = 0.1, min = 1e-6, max = 1e6 },
+        { name = "ZoomMax", type = "float", default = 10, min = 1e-6, max = 1e6 },
+        { name = "ZoomSpeed", type = "float", default = 0.1, min = 0, max = 10 },
+        { name = "ZoomSmooth", type = "float", unit = "s", default = 0.12, min = 0, max = 60 },
     },
 
     OnStart = function(self: ScriptSelf)
@@ -30,7 +35,8 @@ return {
         local entity = self.entity
         local anchor = scene.get64(target, "Transform", "Position")
         local rotation = scene.get64(target, "Transform", "Rotation")
-        local want = rotation * dvec3.new(0, props.Height, props.Distance)
+        local scale = zoom.step(self, props, dt)
+        local want = rotation * dvec3.new(0, props.Height * scale, props.Distance * scale)
         if self.rel == nil then
             self.rel = dvec3.to_vec(scene.get64(entity, "Transform", "Position") - anchor)
         end

@@ -7,7 +7,7 @@ return {
             input.axis("move_x"),
             input.held("fire") and 1 or 0,
             (input.pressed("fire") and 1 or 0) + (input.released("fire") and 2 or 0))
-        scene.set_xyz(e, "Transform", "Scale", m.x, m.y, 1)
+        scene.set_xyz(e, "Transform", "Scale", m.x, m.y, 1 + input.scroll())
     end,
 }
 ]]
@@ -92,4 +92,16 @@ test("input_clear drops held actions", function()
     sim.input_clear()
     sim.step(1)
     assert_eq(pos(e), 0)
+end)
+
+test("scroll is the wheel delta summed over the tick and then clears", function()
+    local e = setup()
+    sim.input_scroll(2)
+    sim.input_scroll(-0.5)
+    sim.step(1)
+    local _, _, z = scene.get_xyz(e, "Transform", "Scale")
+    assert_near(z, 2.5)
+    sim.step(1)
+    _, _, z = scene.get_xyz(e, "Transform", "Scale")
+    assert_near(z, 1)
 end)

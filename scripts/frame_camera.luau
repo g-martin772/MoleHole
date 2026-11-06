@@ -1,5 +1,6 @@
 local camera_cycle = require("lib/camera_cycle")
 local curves = require("lib/curves")
+local zoom = require("lib/zoom")
 
 local function aim(yaw: number, pitch: number)
     return dquat.mul(dquat.from_axis_angle(dvec3.new(0, 1, 0), math.rad(yaw)), dquat.from_axis_angle(dvec3.new(1, 0, 0), math.rad(pitch)))
@@ -16,6 +17,10 @@ return {
         { name = "OrbitSpeed", type = "float", default = 0.15, min = 0, max = 10 },
         { name = "KeyOrbitRate", type = "float", unit = "deg/s", default = 60, min = 0, max = 1000 },
         { name = "StartActive", type = "bool", default = false },
+        { name = "ZoomMin", type = "float", default = 0.1, min = 1e-6, max = 1e6 },
+        { name = "ZoomMax", type = "float", default = 10, min = 1e-6, max = 1e6 },
+        { name = "ZoomSpeed", type = "float", default = 0.1, min = 0, max = 10 },
+        { name = "ZoomSmooth", type = "float", unit = "s", default = 0.12, min = 0, max = 60 },
     },
 
     OnStart = function(self: ScriptSelf)
@@ -63,13 +68,14 @@ return {
         self.pitch = math.clamp(self.pitch, -89, 89)
         local rotation = aim(self.yaw, self.pitch)
         scene.set64(entity, "Transform", "Rotation", rotation)
+        local scale = zoom.step(self, props, dt)
 
         local target = props.Target
         if target == nil or not scene.exists(target) then
             return
         end
         local anchor = scene.get64(target, "Transform", "Position")
-        local want = rotation * dvec3.new(0, props.Height, props.Distance)
+        local want = rotation * dvec3.new(0, props.Height * scale, props.Distance * scale)
         if self.rel == nil then
             self.rel = dvec3.to_vec(scene.get64(entity, "Transform", "Position") - anchor)
         end

@@ -233,6 +233,7 @@ namespace
                 const bool scriptCaptured = UpdateScriptInput(viewportFocused, imageHovered);
                 m_CameraMouseHover.store(imageHovered && !scriptCaptured, std::memory_order_relaxed);
                 if (imageHovered && !scriptCaptured) m_PendingScroll.fetch_add(ImGui::GetIO().MouseWheel, std::memory_order_relaxed);
+                if (imageHovered && scriptCaptured) m_ScriptInput.AddScroll(ImGui::GetIO().MouseWheel);
                 const ImVec2 min = ImGui::GetItemRectMin();
                 const ImVec2 max = ImGui::GetItemRectMax();
                 m_UiState->ViewportScreenMin = {min.x, min.y};

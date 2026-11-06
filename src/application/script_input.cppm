@@ -202,6 +202,10 @@ export namespace MoleHole
         }
 
         [[nodiscard]] bool Captured() const noexcept { return m_Captured.load(std::memory_order_relaxed); }
+        void AddScroll(const float delta)
+        {
+            if (m_Captured.load(std::memory_order_relaxed)) m_Router.AddScroll(delta);
+        }
         [[nodiscard]] bool WaitingForClick() const noexcept
         {
             return m_Wants.load(std::memory_order_relaxed) && m_EscReleased.load(std::memory_order_relaxed);

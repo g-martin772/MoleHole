@@ -1,4 +1,5 @@
 local camera_cycle = require("lib/camera_cycle")
+local zoom = require("lib/zoom")
 
 local function aim(yaw: number, pitch: number)
     return dquat.mul(dquat.from_axis_angle(dvec3.new(0, 1, 0), math.rad(yaw)), dquat.from_axis_angle(dvec3.new(1, 0, 0), math.rad(pitch)))
@@ -11,6 +12,10 @@ return {
         { name = "Speed", type = "float", default = 150, min = 0, max = 1e12 },
         { name = "Boost", type = "float", default = 4, min = 1, max = 1000 },
         { name = "LookSpeed", type = "float", default = 0.15, min = 0, max = 10 },
+        { name = "ZoomMin", type = "float", default = 0.05, min = 1e-6, max = 1e6 },
+        { name = "ZoomMax", type = "float", default = 50, min = 1e-6, max = 1e6 },
+        { name = "ZoomSpeed", type = "float", default = 0.1, min = 0, max = 10 },
+        { name = "ZoomSmooth", type = "float", unit = "s", default = 0.12, min = 0, max = 60 },
     },
 
     OnEvent = function(self: ScriptSelf, name: string, from: any, to: any)
@@ -43,7 +48,7 @@ return {
         self.pitch = math.clamp(self.pitch - mouse.y * props.LookSpeed, -89, 89)
         local rotation = aim(self.yaw, self.pitch)
 
-        local speed = props.Speed * (input.held("boost") and props.Boost or 1) * dt
+        local speed = props.Speed * zoom.step(self, props, dt, true) * (input.held("boost") and props.Boost or 1) * dt
         local move = dquat.rotate(rotation, dvec3.new(input.axis("move_x"), input.axis("move_y"), -input.axis("move_z"))) * speed
 
         local target = props.Target

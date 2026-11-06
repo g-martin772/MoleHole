@@ -240,6 +240,11 @@ TEST_CASE("Script input is captured only while playing, focused and not released
     CHECK(first.Values.at("move_z") == 1.0f);
     CHECK(first.Values.at("fire") == 1.0f);
     CHECK(first.Mouse == glm::vec2(3.0f, -1.0f));
+    CHECK(first.Scroll == 0.0f);
+
+    bridge.AddScroll(1.0f);
+    bridge.AddScroll(0.5f);
+    CHECK(sample().Scroll == 1.5f);
 
     key(KeyCode::Escape, true);
     CHECK_FALSE(bridge.Captured());
@@ -250,6 +255,8 @@ TEST_CASE("Script input is captured only while playing, focused and not released
     CHECK(released.Released.contains("move_z"));
     key(KeyCode::D, true);
     CHECK(sample().Values.empty());
+    bridge.AddScroll(3.0f);
+    CHECK(sample().Scroll == 0.0f);
 
     frame.ViewportClicked = true;
     CHECK(bridge.Update(frame));
