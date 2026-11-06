@@ -15,6 +15,7 @@ Input:
     kill_velocity: [key:b]
     control_mode: [key:m]
     hud: [key:h]
+    controls: [key:f1]
     autopilot: [key:t]
     autopilot_mode: [key:y]
     cam_yaw: [key:period, -key:comma]

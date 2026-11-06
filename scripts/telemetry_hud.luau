@@ -1,3 +1,4 @@
+local controls = require("lib/controls")
 local hud = require("lib/hud")
 local orbit = require("lib/orbit")
 
@@ -164,6 +165,7 @@ return {
         self.tick = self.tick or 0
         self.age = self.age or 0
         self.proper = self.proper or 0
+        self.help = self.help or controls.new()
     end,
 
     OnEvent = function(self: ScriptSelf, name: string, a: any, b: any, c: any, d: any, e: any, f: any, g: any)
@@ -191,6 +193,16 @@ return {
         local seconds = dt * time.scale()
         self.age += seconds
         self.proper += rate * seconds
+        local captured = input.captured()
+        local panel = controls.update(self.help, captured, input.pressed("controls") and self.level > 0, time.elapsed())
+        if captured == false then
+            local text_size = 18 * props.Scale
+            local bound = controls.read("controls")
+            controls.draw_hint(ui.hud.at("center"), "Click the viewport to capture controls", text_size, 0.62)
+            if bound ~= nil then
+                ui.hud.at("center").text(0, 0.62 + text_size / 720 * 1.35 + 0.05, bound .. " shows the key list once captured", { size = text_size * 0.8, align = "center", color = DIM })
+            end
+        end
         if self.level == 0 then
             return
         end
@@ -289,6 +301,10 @@ return {
             info("CAMERA " .. string.upper(self.camera_mode))
             info(status.mode == 1 and "CONTROL keys only" or "CONTROL mouse + keys", DIM)
         end
+        local help_keys = controls.read("controls")
+        if captured == true and help_keys ~= nil and not panel then
+            info(help_keys .. " controls", DIM)
+        end
 
         if props.Attitude then
             local cx, cy, r = 0, 0.83, 0.075
@@ -303,6 +319,10 @@ return {
 
         if props.Markers then
             draw_markers(self, props, center, position, velocity, ref_velocity, text_size * 0.9)
+        end
+
+        if panel then
+            controls.draw(center, controls.collect(), { size = text_size, aspect = props.Aspect, top = 0.2 })
         end
     end,
 }

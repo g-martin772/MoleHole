@@ -198,6 +198,7 @@ export namespace MoleHole
             m_Wants.store(wants, std::memory_order_relaxed);
             const bool captured = wants && !m_EscReleased.load(std::memory_order_relaxed) && frame.ViewportFocused && !frame.TextInput;
             Set(captured);
+            m_Router.SetCaptured(captured);
             return captured;
         }
 
