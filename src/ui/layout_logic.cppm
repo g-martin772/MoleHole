@@ -23,6 +23,7 @@ export namespace MoleHole
         LayoutWindow{"General Relativity", &UiState::ShowGeneralRelativityWindow},
         LayoutWindow{"Science", &UiState::ShowScienceWindow},
         LayoutWindow{"Animation Graph", &UiState::ShowAnimationGraphWindow},
+        LayoutWindow{"Script Library", &UiState::ShowScriptLibraryWindow},
     };
 
     inline constexpr int kFocusEscGraceFrames = 2;

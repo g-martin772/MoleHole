@@ -220,6 +220,7 @@ export namespace MoleHole
             b.Window("view.gr", "General Relativity", flag(&UiState::ShowGeneralRelativityWindow));
             b.Window("view.science", "Science", flag(&UiState::ShowScienceWindow));
             b.Window("view.graph", "Animation Graph", flag(&UiState::ShowAnimationGraphWindow));
+            b.Window("view.script_library", "Script Library", flag(&UiState::ShowScriptLibraryWindow));
             b.Key("view.frame_all", "Frame All", "View", "Home", "Viewport",
                   [ui] { if (ui) ui->View.Push({ViewRequest::Kind::FrameAll}); }).Needs = ActionNeed::Scene;
             for (const auto axis : kViewAxes)

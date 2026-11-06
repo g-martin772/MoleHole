@@ -128,6 +128,7 @@ namespace MoleHole
                 if (const auto v = ui["ShowAnimationGraphWindow"])
                     m_UiState->ShowAnimationGraphWindow = v.as<bool>();
                 if (const auto v = ui["ShowUndoHistoryWindow"]) m_UiState->ShowUndoHistoryWindow = v.as<bool>();
+                if (const auto v = ui["ShowScriptLibraryWindow"]) m_UiState->ShowScriptLibraryWindow = v.as<bool>();
                 if (const auto v = ui["ShowStatusBar"]) m_UiState->ShowStatusBar = v.as<bool>();
                 if (const auto v = ui["UndoHistoryCapacity"]) m_UiState->UndoHistoryCapacity = ClampUndoCapacity(v.as<int>());
             }
@@ -296,6 +297,7 @@ namespace MoleHole
             root["UI"]["DisplayUnits"] = std::string(Units::DisplayPresetName(Units::GetDisplayPreset()));
             root["UI"]["ShowAnimationGraphWindow"] = m_UiState->ShowAnimationGraphWindow;
             root["UI"]["ShowUndoHistoryWindow"] = m_UiState->ShowUndoHistoryWindow;
+            root["UI"]["ShowScriptLibraryWindow"] = m_UiState->ShowScriptLibraryWindow;
             root["UI"]["ShowStatusBar"] = m_UiState->ShowStatusBar;
             root["UI"]["UndoHistoryCapacity"] = m_UiState->UndoHistoryCapacity;
 

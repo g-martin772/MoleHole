@@ -93,7 +93,7 @@ namespace MoleHole
                                    "simulation-window", "render-window", "system-window", "profiler-window", "viewport-hud",
                                    "simulation-controls", "general-relativity-window", "science-window",
                                    "animation-graph-window", "tutorial-overlay", "log-window", "undo-history-window",
-                                   "settings-window", "notifications", "command-palette"})
+                                   "script-library-window", "settings-window", "notifications", "command-palette"})
             {
                 addWindowLayer(id);
             }

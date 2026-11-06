@@ -60,6 +60,7 @@ set(MOLEHOLE_UI_PLUGINS
         general_relativity_window_layer
         science_window_layer
         animation_graph_window_layer
+        script_library_window_layer
         tutorial_overlay_layer)
 
 foreach (plugin ${MOLEHOLE_UI_PLUGINS})

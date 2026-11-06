@@ -149,6 +149,7 @@ export namespace MoleHole
         bool ShowScienceWindow = false;
         bool ShowAnimationGraphWindow = false;
         bool ShowUndoHistoryWindow = false;
+        bool ShowScriptLibraryWindow = false;
         bool ShowStatusBar = true;
         bool PlaySessionActive = false;
 

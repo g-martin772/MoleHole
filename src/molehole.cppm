@@ -46,6 +46,7 @@ export import :Simulation.ScriptRuntime;
 export import :Simulation.GraphModule;
 export import :Simulation.AppModules;
 export import :Application.ScriptInput;
+export import :Application.ScriptLibrary;
 export import :Rendering.Metric;
 export import :Rendering.DiskPhase;
 export import :Rendering.OrbitOverlays;

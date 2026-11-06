@@ -49,7 +49,7 @@ namespace
             DockAll(rightTop, {"System", "Camera"});
             DockAll(rightBottom, {"Scene", "Render", "Simulation", "Undo History"});
             DockAll(center, {"Viewport"});
-            DockAll(bottom, {"General Relativity", "Science", "Log", "Profiler", "Animation Graph"});
+            DockAll(bottom, {"General Relativity", "Science", "Log", "Profiler", "Animation Graph", "Script Library"});
             break;
         case LayoutKind::Render:
             ImGui::DockBuilderSplitNode(dockspaceId, ImGuiDir_Right, 0.30f, &right, &center);
@@ -58,7 +58,7 @@ namespace
             DockAll(rightTop, {"Render"});
             DockAll(rightBottom, {"Camera", "System", "General Relativity", "Simulation", "Scene", "Undo History"});
             DockAll(center, {"Viewport"});
-            DockAll(bottom, {"Log", "Profiler", "Science", "Animation Graph"});
+            DockAll(bottom, {"Log", "Profiler", "Science", "Animation Graph", "Script Library"});
             break;
         case LayoutKind::Graph:
             ImGui::DockBuilderSplitNode(dockspaceId, ImGuiDir_Right, 0.22f, &right, &center);
@@ -67,7 +67,7 @@ namespace
             DockAll(rightTop, {"Scene", "Camera"});
             DockAll(rightBottom, {"Simulation", "Log", "Render", "System", "Undo History"});
             DockAll(center, {"Viewport"});
-            DockAll(bottom, {"Animation Graph", "General Relativity", "Science", "Profiler"});
+            DockAll(bottom, {"Animation Graph", "General Relativity", "Science", "Profiler", "Script Library"});
             break;
         }
         ImGui::DockBuilderFinish(dockspaceId);

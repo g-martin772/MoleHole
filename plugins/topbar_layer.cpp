@@ -500,6 +500,7 @@ namespace
                 ImGui::MenuItem("General Relativity", nullptr, &m_UiState->ShowGeneralRelativityWindow);
                 ImGui::MenuItem("Science", nullptr, &m_UiState->ShowScienceWindow);
                 ImGui::MenuItem("Animation Graph", nullptr, &m_UiState->ShowAnimationGraphWindow);
+                ImGui::MenuItem("Script Library", nullptr, &m_UiState->ShowScriptLibraryWindow);
                 ImGui::Separator();
                 RenderViewportMenu();
                 ImGui::Separator();
