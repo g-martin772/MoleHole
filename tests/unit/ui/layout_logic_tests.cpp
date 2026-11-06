@@ -105,3 +105,20 @@ TEST_CASE("Layout actions are registered and queue requests", "[ui][layout][acti
     FindAction(actions, "layout.save")->Invoke();
     CHECK(ui.LayoutSaveRequested);
 }
+
+TEST_CASE("Focus mode Esc yields to a capture release and to open popups", "[ui][layout]")
+{
+    int grace = 0;
+    CHECK_FALSE(FocusExitRequested(grace, false, false, false));
+    CHECK(FocusExitRequested(grace, true, false, false));
+    CHECK_FALSE(FocusExitRequested(grace, true, false, true));
+
+    CHECK_FALSE(FocusExitRequested(grace, true, true, false));
+    CHECK_FALSE(FocusExitRequested(grace, true, false, false));
+    CHECK(FocusExitRequested(grace, true, false, false));
+    CHECK(grace == 0);
+
+    CHECK_FALSE(FocusExitRequested(grace, false, true, false));
+    CHECK_FALSE(FocusExitRequested(grace, false, false, false));
+    CHECK(FocusExitRequested(grace, true, false, false));
+}

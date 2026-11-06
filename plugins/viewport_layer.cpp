@@ -183,7 +183,29 @@ namespace
         {
             ImGuizmo::BeginFrame();
             if (!m_UiState->Edits.Take({EditAction::FrameSelected}).empty()) m_FocusRequest.store(true, std::memory_order_relaxed);
-            const bool viewportOpen = ImGui::Begin("Viewport");
+            const bool escRelease = m_ScriptInput.TakeEscRelease();
+            const bool exitFocus = FocusExitRequested(
+                m_FocusEscGrace, ImGui::IsKeyPressed(ImGuiKey_Escape, false), escRelease,
+                ImGui::GetIO().WantTextInput || ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel));
+            if (exitFocus) m_UiState->ViewportFocusMode = false;
+            const bool focusMode = m_UiState->ViewportFocusMode;
+            ImGuiWindowFlags windowFlags = 0;
+            if (focusMode)
+            {
+                const ImGuiViewport* main = ImGui::GetMainViewport();
+                ImGui::SetNextWindowPos(main->Pos);
+                ImGui::SetNextWindowSize(main->Size);
+                if (!m_FocusShown) EnterFocusMode();
+                windowFlags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                              ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
+                              ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings;
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+            }
+            else if (m_FocusShown) ExitFocusMode();
+            const bool viewportOpen = ImGui::Begin("Viewport", nullptr, windowFlags);
+            if (focusMode) ImGui::PopStyleVar(3);
             m_UiState->ViewportVisible = viewportOpen;
             const bool viewportFocused =
                 viewportOpen && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
@@ -247,7 +269,7 @@ namespace
                 m_UiState->ViewportToolbarLeft = max.x;
                 if (!m_UiState->ExportActive)
                 {
-                    const bool toolbarHovered = RenderGizmoToolbar(min, max) || DrawAxisGizmo(min, max);
+                    const bool toolbarHovered = !focusMode && (RenderGizmoToolbar(min, max) || DrawAxisGizmo(min, max));
                     if (!scriptCaptured) UpdateGizmoAndPicking(min, max, imageHovered, toolbarHovered);
                 }
             }
@@ -276,6 +298,29 @@ namespace
         }
 
     private:
+        void EnterFocusMode()
+        {
+            m_FocusShown = true;
+            std::size_t size = 0;
+            const char* ini = ImGui::SaveIniSettingsToMemory(&size);
+            m_FocusLayout.assign(ini, size);
+            ImGuiIO& io = ImGui::GetIO();
+            m_SavedIniFile = io.IniFilename;
+            io.IniFilename = nullptr;
+            ImGui::SetNextWindowFocus();
+        }
+
+        void ExitFocusMode()
+        {
+            m_FocusShown = false;
+            ImGui::GetIO().IniFilename = m_SavedIniFile;
+            m_Renderer->RunBeforeUiFrame([layout = std::move(m_FocusLayout)]
+            {
+                ImGui::LoadIniSettingsFromMemory(layout.c_str(), layout.size());
+                ImGui::MarkIniSettingsDirty();
+            });
+        }
+
         bool UpdateScriptInput(const bool viewportFocused, const bool imageHovered)
         {
             const auto sim = m_Sim.Load();
@@ -1458,6 +1503,10 @@ namespace
         std::shared_ptr<AppStateService> m_AppState;
         std::shared_ptr<AssetDirectories> m_Assets;
         ScriptInputBridge m_ScriptInput;
+        int m_FocusEscGrace = 0;
+        bool m_FocusShown = false;
+        std::string m_FocusLayout;
+        const char* m_SavedIniFile = nullptr;
         std::uint64_t m_InputMapKey{0};
         std::optional<SceneCameraPose> m_TrackedPose;
         bool m_EditorViewPinned = false;

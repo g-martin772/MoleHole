@@ -25,6 +25,19 @@ export namespace MoleHole
         LayoutWindow{"Animation Graph", &UiState::ShowAnimationGraphWindow},
     };
 
+    inline constexpr int kFocusEscGraceFrames = 2;
+
+    [[nodiscard]] inline bool FocusExitRequested(int& grace, const bool escPressed, const bool captureReleased, const bool blocked) noexcept
+    {
+        if (captureReleased) grace = kFocusEscGraceFrames;
+        if (grace > 0)
+        {
+            --grace;
+            return false;
+        }
+        return escPressed && !blocked;
+    }
+
     enum class LayoutKind { Edit, Render, Graph };
 
     struct BuiltInLayout

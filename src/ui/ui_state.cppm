@@ -155,6 +155,7 @@ export namespace MoleHole
         bool IntroActive = false;
         bool IntroEnabled = true;
         bool ViewportVisible = false;
+        bool ViewportFocusMode = false;
         bool TutorialActive = false;
         int TutorialStep = 0;
 

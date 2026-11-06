@@ -245,6 +245,9 @@ export namespace MoleHole
                 recall.Needs = ActionNeed::Scene;
                 recall.Keywords = "view load camera position goto";
             }
+            auto& focus = b.Key("view.focus_mode", "Viewport Focus Mode", "View", "F11", {}, [ui] { if (ui) ui->ViewportFocusMode = !ui->ViewportFocusMode; });
+            focus.Toggle = flag(&UiState::ViewportFocusMode);
+            focus.Keywords = "fullscreen maximize hide panels distraction free";
             b.Defer("layout.reset", "Reset Layout", "View").Keywords = "layout dock windows default arrange";
             b.Add("layout.save", "Save Layout As...", "View", [ui] { if (ui) ui->LayoutSaveRequested = true; }).Keywords =
                 "layout dock windows preset store";

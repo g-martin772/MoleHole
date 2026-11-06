@@ -206,6 +206,7 @@ export namespace MoleHole
         {
             if (m_Captured.load(std::memory_order_relaxed)) m_Router.AddScroll(delta);
         }
+        [[nodiscard]] bool TakeEscRelease() noexcept { return m_EscEvent.exchange(false, std::memory_order_relaxed); }
         [[nodiscard]] bool WaitingForClick() const noexcept
         {
             return m_Wants.load(std::memory_order_relaxed) && m_EscReleased.load(std::memory_order_relaxed);
@@ -241,6 +242,7 @@ export namespace MoleHole
             {
                 if (!event.Down) return;
                 m_EscReleased.store(true, std::memory_order_relaxed);
+                m_EscEvent.store(true, std::memory_order_relaxed);
                 Set(false);
                 return;
             }
@@ -273,6 +275,7 @@ export namespace MoleHole
         std::atomic<bool> m_Captured{false};
         std::atomic<bool> m_Wants{false};
         std::atomic<bool> m_EscReleased{false};
+        std::atomic<bool> m_EscEvent{false};
         std::vector<GPP::EventSubscription> m_Subscriptions;
     };
 }

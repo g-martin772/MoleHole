@@ -50,6 +50,7 @@ namespace
 
         void OnUiRender() override
         {
+            if (m_UiState->ViewportFocusMode) return;
             constexpr float sidebarWidth = 72.0f;
             constexpr float buttonHeight = 44.0f;
 

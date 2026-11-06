@@ -56,7 +56,7 @@ namespace
             ApplyHistoryCapacity();
             HandleHotkeys();
             HandleActionRequests();
-            RenderMenuBar();
+            if (!m_UiState->ViewportFocusMode) RenderMenuBar();
             RenderCreatePopup();
             RenderLayoutSavePopup();
             RenderExportDialog();
@@ -609,6 +609,7 @@ namespace
             if (ImGui::MenuItem("Frame All", ActionShortcut("view.frame_all").c_str(), false, reason.empty()))
                 m_UiState->View.Push({ViewRequest::Kind::FrameAll});
             if (!reason.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", reason.c_str());
+            ImGui::MenuItem("Viewport Focus Mode", ActionShortcut("view.focus_mode").c_str(), &m_UiState->ViewportFocusMode);
             if (ImGui::BeginMenu("Snap View", reason.empty()))
             {
                 for (const auto axis : kViewAxes)

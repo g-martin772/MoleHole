@@ -61,7 +61,7 @@ namespace
             const double now = ImGui::GetTime();
             m_Notifications.Observe(m_Logger->Notifications()->Toasts(), now);
             RefreshShaderFailures();
-            if (!m_UiState->ShowStatusBar) return;
+            if (!m_UiState->ShowStatusBar || m_UiState->ViewportFocusMode) return;
 
             const auto model = BuildModel();
             const auto items = BuildStatusItems(model);
