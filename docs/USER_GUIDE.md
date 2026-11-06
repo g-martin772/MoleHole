@@ -16,6 +16,7 @@ Open from sidebar or View menu.
 | General Relativity | theory + metric info |
 | Science | science info |
 | Animation Graph | graph editor |
+| Script Library | every script and library in `scripts/`: properties, events, requires, templates using it, source preview |
 | Settings | UI scale, font, intro, units, export folder (Edit > Preferences) |
 
 ## Basics
@@ -287,6 +288,7 @@ Premade, prewired groups. Add menu → Combos, fill few fields.
 ## Scripting (Luau)
 - Files in `scripts/*.luau`
 - Attach: select entity → Scripts → Add Script
+- Browse: View > Script Library (or the palette). Search by name, property, event or `require`; pick a script to see its properties, events handled/emitted, required libs and the templates using it, or its source; Add to Selected Entity (undoable), Copy Path, Open Folder. Rescans on file changes
 - Returns table: `properties`, `OnStart(self)`, `OnTick(self, dt)`, optional `OnFixedTick(self, dt)`, `OnLateTick(self, dt)`, `OnStop(self)`, `OnEvent(self, name, ...)`, `OnContact(self, other, point, normal, impulse, relative_velocity, material, other_material, point64, relative_velocity64)`, `OnTrigger(self, other, entered)`
 - `self.entity`, `self.props.X`; own fields on `self`
 - Property types: `float`, `bool`, `entity`, vectors…
