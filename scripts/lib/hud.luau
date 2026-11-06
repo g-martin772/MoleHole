@@ -21,6 +21,25 @@ function hud.format_beta(v: number): string
     return string.format("%.4f c", beta)
 end
 
+function hud.format_rate(rate: number): string
+    if rate <= 0 then
+        return "0 (frozen)"
+    end
+    return string.format("%.6f", rate)
+end
+
+function hud.format_offset(seconds: number): string
+    local a = math.abs(seconds)
+    if a < 1e-3 then
+        return string.format("%+.1f us", seconds * 1e6)
+    elseif a < 1 then
+        return string.format("%+.2f ms", seconds * 1e3)
+    elseif a < 3600 then
+        return string.format("%+.2f s", seconds)
+    end
+    return string.format("%+.2f h", seconds / 3600)
+end
+
 function hud.format_distance(m: number): string
     local a = math.abs(m)
     if a < 1e3 then

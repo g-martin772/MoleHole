@@ -81,6 +81,15 @@ namespace MoleHole
         });
     }
 
+    void RegisterRelativityBindings(GPP::LuauVm& vm, const std::shared_ptr<GPP::SceneBindings>& bindings)
+    {
+        vm.Register("time", "clockrate", [bindings](GPP::LuauNativeCall& call)
+        {
+            call.PushNumber(bindings->Read ? EntityClockRate(*bindings->Read, call.Entity(1)) : 1.0);
+            return 1;
+        });
+    }
+
     struct ScriptRuntime::Impl
     {
         struct Script
@@ -826,6 +835,7 @@ namespace MoleHole
         options.ExtendScene = [](GPP::LuauVm& vm, const std::shared_ptr<GPP::SceneBindings>& bindings)
         {
             RegisterModuleSceneBindings(vm, bindings);
+            RegisterRelativityBindings(vm, bindings);
         };
         return std::make_shared<GPP::ScriptSimulationModule>(assets, std::move(options));
     }

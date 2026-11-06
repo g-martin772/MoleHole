@@ -3,6 +3,7 @@ export module MoleHole:Application.ScriptTestCli;
 import std;
 import GPP;
 import :Application.ReplayCli;
+import :Simulation.ScriptRuntime;
 
 export namespace MoleHole
 {
@@ -67,6 +68,10 @@ export namespace MoleHole
         GPP::ScriptTestOptions options;
         options.Assets = &assets;
         options.MakeModules = [] { return MakeHeadlessModules(); };
+        options.ExtendScene = [](GPP::LuauVm& vm, const std::shared_ptr<GPP::SceneBindings>& bindings)
+        {
+            RegisterRelativityBindings(vm, bindings);
+        };
         return options;
     }
 

@@ -20,6 +20,7 @@ export namespace MoleHole
     using EventForward = std::function<void(const std::string& name, const std::vector<GPP::LuauValue>& args)>;
 
     void RegisterRenderBindings(GPP::LuauVm& vm, std::function<const RenderBridge&()> bridge);
+    void RegisterRelativityBindings(GPP::LuauVm& vm, const std::shared_ptr<GPP::SceneBindings>& bindings);
 
     [[nodiscard]] std::shared_ptr<GPP::ScriptSimulationModule> MakeScriptModule(const GPP::AssetDirectories& assets,
                                                                                 RenderBridge render = {});

@@ -84,6 +84,8 @@ return {
         self.status = self.status or { throttle = 0, assist = 1, boost = 0, g = 0, mode = 0, hold = -1, kill = 0 }
         self.camera_mode = self.camera_mode or "-"
         self.tick = self.tick or 0
+        self.age = self.age or 0
+        self.proper = self.proper or 0
     end,
 
     OnEvent = function(self: ScriptSelf, name: string, a: any, b: any, c: any, d: any, e: any, f: any, g: any)
@@ -101,7 +103,14 @@ return {
             self.level = (self.level + 2) % 3
         end
         local subject = props.Subject or self.entity
-        if self.level == 0 or not scene.exists(subject) then
+        if not scene.exists(subject) then
+            return
+        end
+        local rate = time.clockrate(subject)
+        local seconds = dt * time.scale()
+        self.age += seconds
+        self.proper += rate * seconds
+        if self.level == 0 then
             return
         end
         self.tick += 1
@@ -134,6 +143,9 @@ return {
         if speed > 1e5 then
             line(hud.format_beta(speed) .. "   gamma " .. string.format("%.4f", hud.gamma(speed)), CYAN)
         end
+        if math.abs(rate - 1) > 1e-12 then
+            line("dtau/dt " .. hud.format_rate(rate), CYAN)
+        end
         if has_reference then
             local relative = velocity - ref_velocity
             line("REL " .. title(reference) .. "  " .. hud.format_speed(dvec3.length(relative)), GOLD)
@@ -142,6 +154,9 @@ return {
             local body_rate = hud.to_body(rotation, scene.get64(subject, "Velocity", "Angular") or ZERO)
             line(string.format("G %.2f   ACC %s", status.g, hud.format_accel(status.g * 9.80665)), WHITE)
             line(string.format("RATE  P %+.1f  Y %+.1f  R %+.1f deg/s", math.deg(body_rate.x), math.deg(-body_rate.y), math.deg(-body_rate.z)), DIM)
+            if math.abs(rate - 1) > 1e-12 then
+                line("CLOCK " .. hud.format_offset(self.proper - self.age) .. " vs far", DIM)
+            end
             if props.Environment then
                 if self.tick % REFRESH_TICKS == 1 or self.nearest == nil then
                     self.nearest = hud.nearest_body(position, subject)
