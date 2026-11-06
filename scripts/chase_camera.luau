@@ -1,6 +1,5 @@
 local camera_cycle = require("lib/camera_cycle")
-local curves = require("lib/curves")
-local dquat_lib = require("lib/dquat")
+local rigs = require("lib/camera_rigs")
 local zoom = require("lib/zoom")
 
 return {
@@ -16,11 +15,21 @@ return {
         { name = "ZoomMax", type = "float", default = 10, min = 1e-6, max = 1e6 },
         { name = "ZoomSpeed", type = "float", default = 0.1, min = 0, max = 10 },
         { name = "ZoomSmooth", type = "float", unit = "s", default = 0.12, min = 0, max = 60 },
+        { name = "Seed", type = "int", default = 0, min = 0, max = 1073741824 },
+        { name = "ShakeAngle", type = "float", default = 2, min = 0, max = 90 },
+        { name = "ShakeOffset", type = "float", unit = "m", default = 0, min = 0, max = 1e9 },
+        { name = "ShakeDecay", type = "float", default = 1.5, min = 0, max = 100 },
+        { name = "Handheld", type = "float", default = 0, min = 0, max = 45 },
+        { name = "LensKeys", type = "string", default = "" },
     },
 
     OnStart = function(self: ScriptSelf)
         self.vel = vector.zero
         self.turn = vector.zero
+    end,
+
+    OnEvent = function(self: ScriptSelf, name: string, a: any)
+        rigs.on_shake(self, name, a)
     end,
 
     OnLateTick = function(self: ScriptSelf, dt: number)
@@ -32,22 +41,12 @@ return {
         if target == nil or not scene.exists(target) then
             return
         end
-        local entity = self.entity
         local anchor = scene.get64(target, "Transform", "Position")
         local rotation = scene.get64(target, "Transform", "Rotation")
         local scale = zoom.step(self, props, dt)
-        local want = rotation * dvec3.new(0, props.Height * scale, props.Distance * scale)
-        if self.rel == nil then
-            self.rel = dvec3.to_vec(scene.get64(entity, "Transform", "Position") - anchor)
-        end
-        local rel, vel = curves.smooth_damp(dvec3.from_vec(self.rel), want, dvec3.from_vec(self.vel), props.SmoothTime, dt)
-        self.rel, self.vel = dvec3.to_vec(rel), dvec3.to_vec(vel)
-        scene.set64(entity, "Transform", "Position", anchor + rel)
-
-        local aim = dquat_lib.look_rotation(dquat_lib.forward(rotation) * props.LookAhead - rel, dquat_lib.up(rotation))
-        local current = scene.get64(entity, "Transform", "Rotation")
-        local turned, omega = dquat_lib.smooth_damp(current, aim, dvec3.from_vec(self.turn), props.TurnTime, dt)
-        self.turn = dvec3.to_vec(omega)
-        scene.set64(entity, "Transform", "Rotation", turned)
+        local rel, position = rigs.follow(self, anchor, rotation, props.Height * scale, props.Distance * scale, props.SmoothTime, dt)
+        local view = rigs.chase_aim(self, rotation, rel, props.LookAhead, props.TurnTime, dt)
+        rigs.lens(self, props.LensKeys, dt)
+        rigs.effects(self, props, dt, position, view)
     end,
 }

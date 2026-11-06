@@ -1,10 +1,6 @@
 local camera_cycle = require("lib/camera_cycle")
-local curves = require("lib/curves")
+local rigs = require("lib/camera_rigs")
 local zoom = require("lib/zoom")
-
-local function aim(yaw: number, pitch: number)
-    return dquat.mul(dquat.from_axis_angle(dvec3.new(0, 1, 0), math.rad(yaw)), dquat.from_axis_angle(dvec3.new(1, 0, 0), math.rad(pitch)))
-end
 
 return {
     properties = {
@@ -21,6 +17,11 @@ return {
         { name = "ZoomMax", type = "float", default = 10, min = 1e-6, max = 1e6 },
         { name = "ZoomSpeed", type = "float", default = 0.1, min = 0, max = 10 },
         { name = "ZoomSmooth", type = "float", unit = "s", default = 0.12, min = 0, max = 60 },
+        { name = "Seed", type = "int", default = 0, min = 0, max = 1073741824 },
+        { name = "ShakeAngle", type = "float", default = 2, min = 0, max = 90 },
+        { name = "ShakeOffset", type = "float", unit = "m", default = 0, min = 0, max = 1e9 },
+        { name = "ShakeDecay", type = "float", default = 1.5, min = 0, max = 100 },
+        { name = "Handheld", type = "float", default = 0, min = 0, max = 45 },
     },
 
     OnStart = function(self: ScriptSelf)
@@ -32,9 +33,9 @@ return {
     end,
 
     OnEvent = function(self: ScriptSelf, name: string, a: any, b: any, c: any, d: any, e: any)
-        if name == "camera_switch" and b == self.entity then
-            self.from = a
-        elseif name == "ship_status" then
+        rigs.on_switch(self, name, a, b)
+        rigs.on_shake(self, name, a)
+        if name == "ship_status" then
             self.mouse_free = e == 1
         end
     end,
@@ -45,28 +46,20 @@ return {
             return
         end
         local entity = self.entity
-        if self.from ~= nil then
-            if scene.exists(self.from) then
-                scene.set64(entity, "Transform", "Position", scene.get64(self.from, "Transform", "Position"))
-                scene.set64(entity, "Transform", "Rotation", scene.get64(self.from, "Transform", "Rotation"))
-            end
-            self.from, self.yaw, self.rel = nil, nil, nil
+        if rigs.handover(self) then
             return
         end
-        if self.yaw == nil then
-            local f = dquat.rotate(scene.get64(entity, "Transform", "Rotation"), dvec3.new(0, 0, -1))
-            self.yaw, self.pitch = math.deg(math.atan2(-f.x, -f.z)), math.deg(math.asin(math.clamp(f.y, -1, 1)))
-        end
+        rigs.read_aim(self)
 
-        self.yaw -= input.axis("cam_yaw") * props.KeyOrbitRate * dt
-        self.pitch += input.axis("cam_pitch") * props.KeyOrbitRate * dt
+        local dyaw = -input.axis("cam_yaw") * props.KeyOrbitRate * dt
+        local dpitch = input.axis("cam_pitch") * props.KeyOrbitRate * dt
         if props.MouseOrbit and self.mouse_free then
             local mouse = input.mouse_delta()
-            self.yaw -= mouse.x * props.OrbitSpeed
-            self.pitch -= mouse.y * props.OrbitSpeed
+            dyaw -= mouse.x * props.OrbitSpeed
+            dpitch -= mouse.y * props.OrbitSpeed
         end
-        self.pitch = math.clamp(self.pitch, -89, 89)
-        local rotation = aim(self.yaw, self.pitch)
+        rigs.turn(self, dyaw, dpitch)
+        local rotation = rigs.aim(self.yaw, self.pitch)
         scene.set64(entity, "Transform", "Rotation", rotation)
         local scale = zoom.step(self, props, dt)
 
@@ -75,12 +68,7 @@ return {
             return
         end
         local anchor = scene.get64(target, "Transform", "Position")
-        local want = rotation * dvec3.new(0, props.Height * scale, props.Distance * scale)
-        if self.rel == nil then
-            self.rel = dvec3.to_vec(scene.get64(entity, "Transform", "Position") - anchor)
-        end
-        local rel, vel = curves.smooth_damp(dvec3.from_vec(self.rel), want, dvec3.from_vec(self.vel), props.SmoothTime, dt)
-        self.rel, self.vel = dvec3.to_vec(rel), dvec3.to_vec(vel)
-        scene.set64(entity, "Transform", "Position", anchor + rel)
+        local _, position = rigs.follow(self, anchor, rotation, props.Height * scale, props.Distance * scale, props.SmoothTime, dt)
+        rigs.effects(self, props, dt, position, rotation)
     end,
 }
