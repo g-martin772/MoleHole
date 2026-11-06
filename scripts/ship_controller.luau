@@ -2,6 +2,7 @@ local flight = require("lib/flight")
 local input_map = require("lib/input_map")
 
 local DYNAMIC = 2
+local AUTOPILOT_STALE = 3
 
 local function config(self, props)
     local inertia = self.inertia
@@ -21,7 +22,7 @@ local function config(self, props)
         g_limit = props.GLimit,
         boost = props.Boost,
         retro_stop = props.RetroStop,
-        assist = self.assist,
+        assist = self.assist_override or self.assist,
         max_speed = props.MaxSpeed,
         hold_speed = self.hold_speed,
     }
@@ -35,6 +36,42 @@ local function resolve_inertia(entity, props)
     local mass = scene.get(entity, "RigidBody", "Mass")
     local x, y, z = flight.collider_inertia(entity, mass)
     return vector.create(x, y, z)
+end
+
+local function accel_limits(self, props)
+    local mass = props.MassOverride > 0 and props.MassOverride or math.clamp(scene.get(self.entity, "RigidBody", "Mass"), 1e-4, 1e37)
+    local cap = props.GLimit > 0 and props.GLimit * flight.G or math.huge
+    return math.min(props.ThrustX / mass, cap), math.min(props.ThrustY / mass, cap), math.min(props.ThrustZ / mass, cap), math.rad(props.MaxRate)
+end
+
+local function share(value: number, limit: number): number
+    return limit > 0 and value / limit or 0
+end
+
+local function steer(self, command, ax: number, ay: number, az: number, rate: number)
+    local ap = self.ap
+    local function free(value: number?): boolean
+        return math.abs(value or 0) < 1e-4
+    end
+    if free(command.x) then
+        command.x = share(ap.x, ax)
+    end
+    if free(command.y) then
+        command.y = share(ap.y, ay)
+    end
+    if free(command.z) and free(self.throttle) then
+        command.z = -share(ap.z, az)
+        command.throttle = 0
+    end
+    if free(command.pitch) then
+        command.pitch = share(ap.wx, rate)
+    end
+    if free(command.yaw) then
+        command.yaw = -share(ap.wy, rate)
+    end
+    if free(command.roll) then
+        command.roll = -share(ap.wz, rate)
+    end
 end
 
 return {
@@ -81,12 +118,16 @@ return {
                 roll = { action = "roll" },
             },
         })
+        self.ap = self.ap or { x = 0, y = 0, z = 0, wx = 0, wy = 0, wz = 0, age = AUTOPILOT_STALE + 1, active = false, on = false }
         self.flight = flight.new(config(self, props))
     end,
 
-    OnEvent = function(self: ScriptSelf, name: string, mode: string)
+    OnEvent = function(self: ScriptSelf, name: string, a: any, b: any, c: any, d: any, e: any, f: any, g: any, h: any)
         if name == "camera_mode" then
-            self.controlled = mode ~= "fly"
+            self.controlled = a ~= "fly"
+        elseif name == "autopilot_command" and a == self.entity then
+            local ap = self.ap
+            ap.active, ap.x, ap.y, ap.z, ap.wx, ap.wy, ap.wz, ap.age = b == 1, c, d, e, f, g, h, 0
         end
     end,
 
@@ -145,6 +186,26 @@ return {
             end
         end
         command.throttle = self.throttle
+        local ap = self.ap
+        local ax, ay, az, rate = accel_limits(self, props)
+        ap.age += 1
+        local steered = ap.active and ap.age <= AUTOPILOT_STALE and not command.kill
+        if steered then
+            if not ap.on then
+                self.throttle, self.hold_speed = 0, -1
+                command.throttle = 0
+            end
+            steer(self, command, ax, ay, az, rate)
+            self.assist_override = flight.RATE
+        else
+            self.assist_override = nil
+        end
+        ap.on = steered
+        local limits = self.limits
+        if limits == nil or limits[1] ~= ax or limits[2] ~= ay or limits[3] ~= az or limits[4] ~= rate then
+            self.limits = { ax, ay, az, rate }
+            events.emit("ship_limits", self.entity, ax, ay, az, rate)
+        end
         flight.configure(self.flight, config(self, props))
         local info = flight.apply(entity, self.flight, command, dt * time.scale())
         events.emit("ship_status", self.throttle, self.assist, info.boosted and 1 or 0, info.g, self.control_mode, self.hold_speed, info.killing and 1 or 0)

@@ -392,6 +392,20 @@ local function body_mass(entity: Entity): number
     return scene.get(entity, "RigidBody", "Mass") or 0
 end
 
+function orbit.body(entity: Entity)
+    local mass = body_mass(entity)
+    if mass <= 0 then
+        return nil
+    end
+    return {
+        entity = entity,
+        mass = mass,
+        mu = orbit.mu(mass),
+        position = scene.get64(entity, "Transform", "Position"),
+        velocity = scene.get64(entity, "Velocity", "Linear") or dvec3.new(0, 0, 0),
+    }
+end
+
 function orbit.dominant(position: DVec3, exclude: Entity?)
     local best, best_pull
     local seen = {}
