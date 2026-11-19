@@ -15,7 +15,7 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
     float u_cubeSize;
 
     int u_isPhysicallyAccurate;
-    int u_debugMode; // 0 off, 1 step count, 2 termination reason
+    int u_debugMode; // DebugView in src/rendering/render_settings.cppm
     int u_metric_type;
     int u_gravitationalLensingEnabled;
 
@@ -42,7 +42,7 @@ layout(set = 0, binding = 1, std140) uniform RaytraceParamsBlock
     float u_adaptiveStepRate;
     int u_numBlackHoles;
     int u_numSpheres;
-    float _pad0;
+    int u_skyMode; // 0 star map, 1 checkerboard (debug.sky)
 
     BlackHoleData u_blackHoles[8];
     SphereData u_spheres[MAX_SPHERES];
@@ -158,3 +158,14 @@ vec4 traceObserverVelocity() { return (PROBE_PASS || g_bodyObserver) ? g_probeVe
 int traceDebugMode() { return PROBE_PASS ? 0 : u_debugMode; }
 bool traceOrbitOverlay() { return !PROBE_PASS && u_orbitRadii2.z > 0.5f; }
 bool traceThirdPerson() { return !PROBE_PASS && u_enableThirdPerson == 1; }
+
+// Per-ray bookkeeping for the image-order and redshift debug views (shaders/debug_view.glsl). The disk functions set
+// g_lastDiskG*, diskAccumulate weights them by how much each sample contributes to the pixel.
+int g_equatorCrossings = 0;      // crossings of the first hole's equatorial plane inside the integration region
+float g_lastDiskG = 1.0;         // g = nu_camera / nu_emitted of the latest disk sample, toggles ignored
+float g_lastDiskGGravity = 1.0;  // its gravitational part (lapse ratio)
+float g_diskWeight = 0.0;        // summed opacity weight alpha (1 - e^-dTau) of the disk samples
+float g_diskLog2G = 0.0;         // weighted sum of log2 g
+float g_diskLog2GGravity = 0.0;  // weighted sum of log2 g_gravity
+int g_diskOrder = 0;             // equator crossings when the disk first covered a tenth of the pixel; 0 = no disk
+

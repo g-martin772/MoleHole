@@ -374,11 +374,54 @@ namespace MoleHole
                            "Step count: heat map of ray march steps per pixel.\n"
                            "Termination: why each ray ended (sky, horizon, object, disk, ran out of steps).\n"
                            "Constraint drift (integrated only): how far each ray strays from a light path.\n"
-                           "Ergosphere & ISCO (integrated only): ergosphere tinted, innermost stable orbit as a ring.",
+                           "Ergosphere & ISCO (integrated only): ergosphere tinted, innermost stable orbit as a ring.\n"
+                           "Image order: how often the ray crossed the disk plane: direct image, lensed image, photon rings.\n"
+                           "Redshift: g = observed / emitted frequency of the disk light, red below 1, blue above;\n"
+                           "the gravitational and Doppler parts separately (integrated only).",
                 .Doc = kDoc,
-                .Options = {"None", "StepCount", "Termination", "ConstraintDrift", "Ergosphere"},
+                .Options = {"None", "StepCount", "Termination", "ConstraintDrift", "Ergosphere", "ImageOrder", "Redshift",
+                            "GravitationalRedshift", "DopplerShift"},
                 .OptionLabels = {"Off", "Step count heat map", "Termination reason", "Geodesic constraint drift",
-                                 "Ergosphere & ISCO"}}));
+                                 "Ergosphere & ISCO", "Image order (equator crossings)", "Redshift g of the disk",
+                                 "Gravitational part of g", "Doppler part of g"}}));
+            registry.Add(Setting("debug.sky", &R::Sky, {
+                .Label = "Sky", .Group = "Debug",
+                .Tooltip = "Stars: the star map.\n"
+                           "Checkerboard: a 10 degree latitude/longitude grid around the first hole's spin axis, one colour per\n"
+                           "quadrant, brighter in the northern hemisphere, with the celestial equator and the quadrant meridians\n"
+                           "drawn white. Lensing shows as stretched, mirrored and repeated cells; the Einstein ring is where\n"
+                           "the cells pile up. Bodies lit by sky probes see it too.",
+                .Doc = kDoc,
+                .Options = {"Stars", "Checkerboard"},
+                .OptionLabels = {"Star map", "Checkerboard grid"}}));
+            registry.Add(Setting("debug.stage", &R::Stage, {
+                .Label = "Pipeline stage", .Group = "Debug",
+                .Tooltip = "Shows one intermediate image of the render pipeline instead of the final frame.\n"
+                           "Traced: the tracer's output, before glow and flares.\n"
+                           "Bright pass: what the bloom extracts above its threshold.\n"
+                           "Bloom / Lens flare: what each of them adds.\n"
+                           "Post added: final minus traced, everything post-processing contributes.\n"
+                           "Mosaic: all of them side by side, labelled with their GPU time.\n"
+                           "Rasterised overlays are hidden in these views.",
+                .Doc = kDoc,
+                .Options = {"Final", "Traced", "BrightPass", "Bloom", "LensFlare", "PostAdded", "Mosaic"},
+                .OptionLabels = {"Final image", "Traced (before post)", "Bloom bright pass", "Bloom", "Lens flare",
+                                 "Post added", "Mosaic of all stages"}}));
+
+            registry.Add(Setting("compare.profile", &R::CompareProfile, {
+                .Label = "Compare with profile", .Group = "Compare",
+                .Tooltip = "A/B split: the right side of the viewport renders the same frame with this profile.\n"
+                           "Empty: the current settings, changed only by the overrides below.",
+                .Doc = kDoc}));
+            registry.Add(Setting("compare.overrides", &R::CompareOverrides, {
+                .Label = "Compare overrides", .Group = "Compare",
+                .Tooltip = "Settings the right side changes, as key=value pairs separated by ';',\n"
+                           "e.g. radiometry.doppler=false; radiometry.redshift=false",
+                .Doc = kDoc}));
+            registry.Add(Setting("compare.split", &R::CompareSplit, {
+                .Label = "Split position", .Group = "Compare",
+                .Tooltip = "Where the right side starts, as a fraction of the image width. Drag the divider in the viewport.",
+                .Doc = kDoc, .Min = 0.0, .Max = 1.0, .Format = "%.2f"}));
 
             return registry;
         }
@@ -748,5 +791,81 @@ namespace MoleHole
             }
         }
         return set;
+    }
+
+    std::vector<std::pair<std::string, std::string>> ParseSettingOverrides(const std::string_view text,
+                                                                           std::vector<std::string>* errors)
+    {
+        std::vector<std::pair<std::string, std::string>> out;
+        for (const auto part : std::views::split(text, std::string_view(";")))
+        {
+            for (const auto line : std::views::split(std::string_view(part), '\n'))
+            {
+                std::string_view entry(line);
+                while (!entry.empty() && std::isspace(static_cast<unsigned char>(entry.front()))) entry.remove_prefix(1);
+                while (!entry.empty() && std::isspace(static_cast<unsigned char>(entry.back()))) entry.remove_suffix(1);
+                if (entry.empty()) continue;
+                const auto equals = entry.find('=');
+                if (equals == std::string_view::npos || equals == 0)
+                {
+                    if (errors) errors->push_back(std::format("'{}' is not key=value", entry));
+                    continue;
+                }
+                std::string_view key = entry.substr(0, equals);
+                std::string_view value = entry.substr(equals + 1);
+                while (!key.empty() && std::isspace(static_cast<unsigned char>(key.back()))) key.remove_suffix(1);
+                while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) value.remove_prefix(1);
+                out.emplace_back(std::string(key), std::string(value));
+            }
+        }
+        return out;
+    }
+
+    CompareResolution ResolveCompareSettings(const RenderSettings& a, const RenderProfileSet& profiles)
+    {
+        CompareResolution out;
+        out.Settings = a;
+        out.Label = a.CompareProfile.empty() ? std::string("Current") : a.CompareProfile;
+        if (!a.CompareProfile.empty())
+        {
+            if (const auto* profile = profiles.Find(a.CompareProfile)) out.Settings = profile->Settings;
+            else out.Errors.push_back(std::format("no render profile named '{}'", a.CompareProfile));
+        }
+
+        auto& b = out.Settings;
+        b.ResolutionScale = a.ResolutionScale;
+        b.FrameGovernor = a.FrameGovernor;
+        b.FrameBudgetMs = a.FrameBudgetMs;
+        b.Accumulate = a.Accumulate;
+        b.AccumulateMax = a.AccumulateMax;
+        b.LengthUnit = a.LengthUnit;
+        b.ThirdPerson = a.ThirdPerson;
+        b.ThirdPersonDistance = a.ThirdPersonDistance;
+        b.ThirdPersonHeight = a.ThirdPersonHeight;
+        b.Debug = a.Debug;
+        b.Stage = a.Stage;
+
+        std::string applied;
+        for (const auto& [key, value] : ParseSettingOverrides(a.CompareOverrides, &out.Errors))
+        {
+            if (key.starts_with("compare."))
+            {
+                out.Errors.push_back(std::format("{}: the compare settings cannot be compared", key));
+                continue;
+            }
+            const auto result = RenderSettingRegistry().SetFromText(b, key, value);
+            if (!result)
+            {
+                out.Errors.push_back(result.error());
+                continue;
+            }
+            applied += std::format("{}{}={}", applied.empty() ? "" : ", ", key, value);
+        }
+        if (!applied.empty()) out.Label += " + " + applied;
+
+        b.CompareProfile.clear();
+        b.CompareOverrides.clear();
+        b.CompareSplit = RenderSettings{}.CompareSplit;
+        return out;
     }
 }

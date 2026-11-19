@@ -11,7 +11,16 @@ export namespace MoleHole
 {
     enum class Spacetime : int { Schwarzschild = 0, Kerr = 1, ReissnerNordstrom = 2, KerrNewman = 3 };
     enum class Transport : int { Straight = 0, AnalyticLens = 1, Integrated = 2 };
-    enum class DebugView : int { None = 0, StepCount = 1, Termination = 2, ConstraintDrift = 3, Ergosphere = 4 };
+    enum class DebugView : int
+    {
+        None = 0, StepCount = 1, Termination = 2, ConstraintDrift = 3, Ergosphere = 4,
+        ImageOrder = 5, Redshift = 6, GravitationalRedshift = 7, DopplerShift = 8
+    };
+    // What a ray that escapes shows: the star map, or a coloured latitude/longitude checkerboard around the first hole's
+    // spin axis that makes the lens mapping readable (shaders/debug_view.glsl, checkerboardSky)
+    enum class SkyBackground : int { Stars = 0, Checkerboard = 1 };
+    // Which intermediate image of the pipeline the viewport shows (shaders/blackhole_display.frag). Mosaic tiles them.
+    enum class StageView : int { Final = 0, Traced = 1, BrightPass = 2, Bloom = 3, LensFlare = 4, PostAdded = 5, Mosaic = 6 };
     enum class MeshMode : int { Raster = 0, Traced = 1 };
     // Fixed: one white light from (1, 1, 1). Probe: what each body's sky probe sees, plus Light components.
     enum class BodyLighting : int { Fixed = 0, Probe = 1 };
@@ -103,9 +112,18 @@ export namespace MoleHole
         float TidalAxesScale = 3.0f; // glyph half-length of the strongest axis, in body radii
 
         DebugView Debug = DebugView::None;
+        SkyBackground Sky = SkyBackground::Stars;
+        StageView Stage = StageView::Final;
+
+        // A/B split: right of CompareSplit (fraction of the width) the viewport shows the same frame rendered with
+        // CompareProfile (empty: these settings) plus CompareOverrides ("key=value; key=value"). Off while both are empty.
+        std::string CompareProfile;
+        std::string CompareOverrides;
+        float CompareSplit = 0.5f;
 
         [[nodiscard]] bool UsesBloomChain() const noexcept { return Bloom || LensFlare || BloomDebug; }
         [[nodiscard]] bool Lensing() const noexcept { return TransportMode != Transport::Straight; }
+        [[nodiscard]] bool Comparing() const noexcept { return !CompareProfile.empty() || !CompareOverrides.empty(); }
     };
 
     [[nodiscard]] const GPP::SettingRegistry<RenderSettings>& RenderSettingRegistry();
@@ -251,4 +269,20 @@ export namespace MoleHole
         std::vector<RenderProfile> m_Profiles;
         std::array<std::string, kRenderContextCount> m_Context;
     };
+
+    // "key=value; key=value" (';' or newlines separate entries) as (key, value) pairs; malformed entries go to `errors`
+    [[nodiscard]] std::vector<std::pair<std::string, std::string>> ParseSettingOverrides(std::string_view text,
+                                                                                        std::vector<std::string>* errors = nullptr);
+
+    struct CompareResolution
+    {
+        RenderSettings Settings;          // what the right side of the split renders with
+        std::string Label;                // "Traced", "Lensed + radiometry.doppler=false", ...
+        std::vector<std::string> Errors;  // unknown profile, unreadable overrides
+    };
+
+    // The B side of an A/B split: CompareProfile's settings (A's own when empty), A's view settings (resolution,
+    // governor, accumulation, length unit, third person, debug and stage view) so both halves show the same pixels,
+    // then CompareOverrides on top. The compare keys themselves are cleared.
+    [[nodiscard]] CompareResolution ResolveCompareSettings(const RenderSettings& a, const RenderProfileSet& profiles);
 }

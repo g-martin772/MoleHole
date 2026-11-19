@@ -47,8 +47,9 @@ Open from sidebar or View menu.
 | 1 or T | translate gizmo |
 | 2 or R | rotate gizmo |
 | 3 or S | scale gizmo |
-| Esc | deselect |
-| LMB | pick object |
+| Esc | deselect; also leaves the ray inspector and clears its path |
+| LMB | pick object (with the ray inspector on: trace that pixel's ray) |
+| I | ray inspector on / off |
 
 ### Scene window
 | Key | Action |
@@ -109,6 +110,7 @@ Edit → Preferences (or the gear in the sidebar). Each section has a Reset butt
 
 ### Overlays and debug
 - Overlays (gravity grid, collider wireframe, object paths) and the debug view of the active profile: Render window (groups Overlays, Debug)
+- Ray inspector, A/B split and pipeline stage view: see [Seeing what the renderer does](#seeing-what-the-renderer-does)
 - Display units: Settings. CPU simulation precision: Simulation window
 - Dear ImGui metrics: System window, DEBUG section
 - View menu → Camera Gizmos
@@ -176,7 +178,7 @@ Render:
 - `camera.observer`: ZAMO (default) / Static / Orbiting / Raindrop (free fall). Sets how the camera moves relative to the black hole, Integrated transport only. A moving camera sees the sky aberrated (shifted towards its direction of motion) and the disk Doppler shifted; the sky background itself is not colour- or brightness-shifted. Where the observer cannot exist (Static inside the ergosphere, Orbiting inside the photon orbit) the camera falls back to the ZAMO. `camera.observer_orbit` (Prograde / Retrograde) picks the direction for Orbiting. Background: `docs/notes/observers.md`
 - `sampling.resolution_scale` (25-200 %): the tracer renders at that share of the viewport and the image is scaled. Bloom width is kept the same on screen
 - `sampling.governor` + `sampling.budget_ms`: while editing or playing, lowers the resolution scale (to 25 % at worst) when the frame time exceeds the budget and restores it with headroom; never in reference views or exports
-- `debug.view`: step count heat map, termination reason (sky, horizon, object, opaque disk, ran out of steps, crosshair), geodesic constraint drift and ergosphere & ISCO (Integrated only). Bloom, flare, FXAA and tone mapping are off in debug views
+- `debug.view`: step count heat map, termination reason (sky, horizon, object, opaque disk, ran out of steps, crosshair), geodesic constraint drift and ergosphere & ISCO (Integrated only), image order, and the disk redshift g with its gravitational and Doppler parts. Bloom, flare, FXAA and tone mapping are off in debug views. See [Seeing what the renderer does](#seeing-what-the-renderer-does)
 - Disk physics: inner edge at the ISCO, Page-Thorne temperature from the hole's mass and `disk.accretion_rate` (Eddington ratio), Keplerian rotation of the active metric, redshift and beaming from the metric. `disk.volumetric` off = thin disk shaded where rays cross the plane, on = flared gas with radiative transfer (`disk.height` = scale height in M at r = 10 M). Background: `docs/notes/disk_rendering.md`
 - Disk look: `disk.opacity` (translucent to opaque), `disk.hot_spots`, `disk.noise_scale` / `disk.noise_lod` (turbulence), `disk.speed` (multiplier of the simulation clock for the disk only: 1 = the physical rotation at the scene's Time Scale, 0 = frozen). `disk.display_temperature` (K) colours the hottest gas like an exposure for colour: all temperatures scale together, so ratios and shifts stay physical; 0 = physical colour (stellar-mass holes are ~10^7 K, blue-white)
 - `post.tonemap` (None / Reinhard / ACES) with `post.exposure_mode` (Manual / Auto), `post.exposure` (EV) and `post.exposure_key`. Bloom and flare thresholds apply to the exposed image. None shows the raw tracer output like before HDR
@@ -189,6 +191,22 @@ Render:
 - `overlay.tidal_axes`: principal axes of the tidal tensor each free-falling Geodesic Body feels (red = stretch, blue = squeeze, arrowheads out or in, length relative to the strongest axis), plus a gizmo in the viewport's lower-left corner for the camera's own observer. `overlay.tidal_axes_scale` sets the glyph size in body radii. The camera window's Observer section shows the stretch and squeeze in s⁻² and the stretch across 2 m in Earth gravities; with the HUD on, each body's label shows its stretch. Background: `docs/notes/tidal_forces.md`
 - Like the other overlays, these are rasterised: not lensed or aberrated
 - Disk brightness: exposure is anchored to the hottest gas as seen from far away (face-on), not to its rest-frame peak. Schwarzschild disks look as before; spinning disks are brighter (about 1.4× at a* = 0.5, 3× at 0.9, 20× at 0.998) and near-extremal disks look like Thorne-limit ones. Lower `post.exposure` for old high-spin scenes if needed. Background: `docs/notes/near_extremal.md`, `docs/notes/orbit_overlays_and_nodes.md`
+
+### Seeing what the renderer does
+Tools that explain an image rather than make it prettier. All of them are render settings (so `--set`, scripts and the sidecar know them) except the ray inspector, which is a viewport mode.
+
+- **Ray inspector** (viewport toolbar `Ray`, or `I`): click a pixel and its light ray is traced backwards on the CPU exactly the way the Integrated tracer does it: straight to 50 M around the first hole, along the null geodesic of the render metric (adaptive Dormand-Prince, `src/rendering/ray_inspector.cppm`), then straight on to the sky or the object it meets. The path is drawn into the scene (grey straight parts, yellow to red along the bent part, cyan crosses where it pierces the disk); orbit the camera to look at it from the side. The panel lists what happened to the ray, its impact parameter b = L/E and Carter constant Q/E², the closest approach next to the horizon and photon orbit radii, windings and equator crossings, the bending angle, and for every disk crossing its radius and redshift g split into gravity and Doppler. With the Analytic lens transport it still shows the exact geodesic, which the image only approximates. Esc clears
+- **Checkerboard sky** (`debug.sky: Checkerboard`): replaces the star map with a 10° latitude/longitude grid around the first hole's spin axis, one colour per quadrant, darker in the south, with the celestial equator and quadrant meridians in white. Lensing becomes readable: cells near the shadow are stretched and mirrored, the whole sky repeats in thinner and thinner rings towards the shadow edge, and the Einstein ring is where cells pile up. The test pattern of James et al. (2015)
+- **Image order** (`debug.view: ImageOrder`): colours the disk by the order of the image each pixel shows, counted as crossings of the first hole's equatorial plane up to the disk: 1 (orange) the direct image, 2 (blue) the image of its far side bent under or over the hole, 3 (green) and more (white) the photon rings. Pixels without disk are drawn dim by how often their ray crossed the plane at all, darkest where it fell in. Lensed and Integrated transports
+- **Redshift** (`debug.view: Redshift`, `GravitationalRedshift`, `DopplerShift`): the frequency ratio g = observed / emitted of the disk light, weighted by how much each crossing contributes: red below 1, white at 1, blue above, saturated at g = 0.5 and 2. The total works with both lensing transports; its two factors (lapse ratio and motion) need Integrated. Unlike the colour toggles `radiometry.redshift` / `radiometry.doppler`, these always show the physical value
+- **Pipeline stage** (`debug.stage`): shows one intermediate image of the pipeline instead of the frame: the traced image before post-processing, the bloom bright pass, the bloom glow, the lens flare, or everything post-processing added. `Mosaic` shows all six side by side, labelled in the viewport with each stage's GPU time. Rasterised overlays are hidden in these views
+- **A/B split** (Render window → Compare): the right part of the viewport renders the same frame with another profile and/or overrides (`radiometry.doppler=false; post.bloom=false`); the buttons under it set common comparisons (without Doppler, redshift, bloom, lensing, disk). Drag the white divider. Costs a second render and turns accumulation off while on. In the window it is a view setting: it is not saved with the scene. As settings: `compare.profile`, `compare.overrides`, `compare.split`; exports render the split too, e.g. `--set compare.profile=Flat` for a lensed vs unlensed image
+
+```sh
+build/MoleHole --export-image split.png --scene templates/gargantua-film.yaml --profile Traced --set "compare.overrides=radiometry.doppler=false"
+build/MoleHole --export-image order.png --profile Traced --set debug.view=ImageOrder
+build/MoleHole --export-image pipeline.png --set debug.stage=Mosaic
+```
 
 ### Environment
 - `GPP_GPU=<name part>`: choose the GPU by name instead of the highest score

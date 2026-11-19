@@ -82,7 +82,7 @@ export namespace MoleHole
         float AdaptiveStepRate{0.8f};
         std::int32_t NumBlackHoles{0};
         std::int32_t NumSpheres{0};
-        float _Pad0{0.0f};
+        std::int32_t SkyMode{0}; // SkyBackground: 0 star map, 1 checkerboard
 
         std::array<BlackHoleGpuData, kMaxBlackHoles> BlackHoles{};
         std::array<SphereGpuData, kMaxSpheres> Spheres{};

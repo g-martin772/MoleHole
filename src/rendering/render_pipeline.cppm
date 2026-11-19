@@ -27,7 +27,30 @@ export namespace MoleHole
         std::uint64_t SceneKey = 0;
         std::uint64_t SceneId = 0; // constant while the same scene runs
         bool Interactive = true; // false: every frame is drawn, never skipped or accumulated (exports)
+        // Lines in world metres drawn over the image like the other rasterised overlays (the ray inspector's path)
+        std::vector<OverlaySegment> ExtraLines;
+        // A/B split: the settings of the right side (ResolveCompareSettings); Settings.CompareSplit places the divider
+        std::optional<RenderSettings> Compare;
     };
+
+    // Tiles of StageView::Mosaic in reading order (shaders/blackhole_display.frag), with the GPU scopes (stage names)
+    // whose time each tile shows
+    struct MosaicTile
+    {
+        StageView Stage;
+        std::string_view Label;
+        std::array<std::string_view, 3> Scopes;
+    };
+    inline constexpr int kMosaicColumns = 3;
+    inline constexpr int kMosaicRows = 2;
+    inline constexpr std::array<MosaicTile, 6> kMosaicTiles{{
+        {StageView::Traced, "Traced", {"Trace", "Accumulate", ""}},
+        {StageView::BrightPass, "Bloom bright pass", {"", "", ""}},
+        {StageView::Bloom, "Bloom", {"Bloom", "", ""}},
+        {StageView::LensFlare, "Lens flare", {"LensFlare", "", ""}},
+        {StageView::PostAdded, "Post added", {"Exposure", "Bloom", "LensFlare"}},
+        {StageView::Final, "Final", {"Composite", "", ""}},
+    }};
 
     struct MeshTraceFrame
     {
@@ -102,6 +125,9 @@ export namespace MoleHole
         virtual ~IRenderStage() = default;
         [[nodiscard]] virtual std::string_view Name() const = 0;
         [[nodiscard]] virtual bool Enabled(const RenderSettings&) const { return true; }
+        [[nodiscard]] virtual bool EnabledFor(const RenderFrameContext& context) const { return Enabled(context.Settings); }
+        // Draws over the final image in world space; left out while a pipeline stage view shows another image
+        [[nodiscard]] virtual bool RasterOverlay() const { return false; }
         virtual void Record(RenderFrameContext& context) = 0;
         [[nodiscard]] virtual bool Ready() const { return true; }
         [[nodiscard]] virtual std::optional<std::string> Failure() const { return std::nullopt; }
@@ -133,6 +159,12 @@ export namespace MoleHole
         [[nodiscard]] RefinementStatus Refinement() const;
 
     private:
+        // Records this pipeline's passes into the graph's primary targets. `keepWhenIdle`: a frame the planner would
+        // skip is drawn anyway instead of discarding the graph (another pipeline's passes share it). Returns whether
+        // passes were recorded.
+        bool BuildSingle(GPP::RenderGraph& graph, const RenderInputs& inputs, bool keepWhenIdle);
+        void BuildCompare(GPP::RenderGraph& graph, const RenderInputs& inputs);
+
         struct Impl;
         std::unique_ptr<Impl> m_Impl;
     };

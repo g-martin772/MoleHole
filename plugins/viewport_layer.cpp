@@ -30,6 +30,8 @@ namespace
         std::uint64_t SceneKey = 0;
         std::uint64_t SceneId = 0;
         bool Interactive = true;
+        std::optional<RenderSettings> Compare; // right side of the A/B split
+        std::shared_ptr<const std::vector<OverlaySegment>> ExtraLines; // ray inspector path
     };
 
     struct SimBinding
@@ -143,8 +145,16 @@ namespace
             LogRefinement(step);
             PublishObserverReadout(render, sceneKey);
             const bool interactive = m_ActiveContext != RenderContext::Export;
+            std::optional<RenderSettings> compare;
+            if (render.Comparing())
+            {
+                auto resolved = ResolveCompareSettings(render, m_RenderSettings->Profiles());
+                (void)SanitizeForDevice(resolved.Settings, m_RenderSettings->Capabilities());
+                compare = std::move(resolved.Settings);
+            }
             RequestFrameOnChange(sceneKey, interactive, step);
-            m_FrameParams.Publish(ViewportFrameParams{m_Camera, std::move(render), m_ObserverGuid, sceneKey, sceneId, interactive});
+            m_FrameParams.Publish(ViewportFrameParams{m_Camera, std::move(render), m_ObserverGuid, sceneKey, sceneId, interactive,
+                                                      std::move(compare), m_RayLines});
         }
 
         void OnRender() override
@@ -177,6 +187,8 @@ namespace
             inputs.SceneKey = frameParams->SceneKey;
             inputs.SceneId = frameParams->SceneId;
             inputs.Interactive = frameParams->Interactive;
+            inputs.Compare = frameParams->Compare;
+            if (frameParams->ExtraLines) inputs.ExtraLines = *frameParams->ExtraLines;
             const auto sceneLock = sim->Runner->AcquireSnapshot();
             inputs.Scene = &*sceneLock;
             m_Pipeline.Build(graph, inputs);
@@ -269,11 +281,14 @@ namespace
 
                 DrawFlySpeedReadout(min, max);
                 DrawScriptInputBadge(min, max, scriptCaptured);
+                DrawStageLabels(min, max);
                 m_UiState->ViewportToolbarLeft = max.x;
                 if (!m_UiState->ExportActive)
                 {
+                    const bool splitHovered = DrawCompareDivider(min, max, imageHovered);
                     const bool toolbarHovered = !focusMode && (RenderGizmoToolbar(min, max) || DrawAxisGizmo(min, max));
-                    if (!scriptCaptured) UpdateGizmoAndPicking(min, max, imageHovered, toolbarHovered);
+                    const bool inspectorHovered = DrawRayInspection(min, max);
+                    if (!scriptCaptured) UpdateGizmoAndPicking(min, max, imageHovered, toolbarHovered || splitHovered || inspectorHovered);
                 }
             }
             else
@@ -446,7 +461,9 @@ namespace
             }
             const float modeWidth = ViewportToolbar::TextButtonWidth(modeLabel);
             const float snapWidth = ViewportToolbar::TextButtonWidth(snapLabel);
-            contentWidth += modeWidth + spacing + snapWidth;
+            const char* rayLabel = "Ray";
+            const float rayWidth = ViewportToolbar::TextButtonWidth(rayLabel);
+            contentWidth += modeWidth + spacing + snapWidth + spacing + rayWidth;
 
             const ImVec2 panelSize(ViewportToolbar::BarWidth(contentWidth), ViewportToolbar::Height());
             const ImVec2 panelMin(std::max(viewportMax.x - panelSize.x - ViewportToolbar::kMargin, viewportMin.x + ViewportToolbar::kMargin),
@@ -473,6 +490,13 @@ namespace
                 if (ViewportToolbar::Button(snapLabel, snapWidth, m_UiState->GizmoSnapEnabled))
                     m_UiState->GizmoSnapEnabled = !m_UiState->GizmoSnapEnabled;
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Snap the gizmo to the configured steps");
+                ImGui::SameLine();
+                if (ViewportToolbar::Button(rayLabel, rayWidth, m_RayInspect)) m_RayInspect = !m_RayInspect;
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Ray inspector (I): click a pixel to trace its light ray backwards through the metric\n"
+                                      "and draw it. Orbit the camera to see the path from the side. Esc clears.");
+                }
             }
             ViewportToolbar::End();
 
@@ -511,6 +535,18 @@ namespace
                 m_UiState->CreatePopup.RequestAtMouse();
             }
 
+            if (imageHovered && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_I, false)) m_RayInspect = !m_RayInspect;
+            if (imageHovered && ImGui::IsKeyPressed(ImGuiKey_Escape) && (m_RayInspect || m_Inspection.Valid))
+            {
+                m_RayInspect = false;
+                ClearRayInspection();
+            }
+            if (m_RayInspect && imageHovered && !toolbarHovered && !ImGuizmo::IsOver() && sim->Runner &&
+                ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                InspectRayUnderMouse(min, max, *sim);
+                return;
+            }
             if (imageHovered && !toolbarHovered && !gizmoActive && !ImGuizmo::IsOver() && sim->Runner &&
                 ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
@@ -693,6 +729,199 @@ namespace
             }
 
             return ImGuizmo::IsOver() || ImGuizmo::IsUsing();
+        }
+
+        void ClearRayInspection()
+        {
+            m_Inspection = {};
+            m_RayLines.reset();
+        }
+
+        void InspectRayUnderMouse(const ImVec2 min, const ImVec2 max, const SimBinding& sim)
+        {
+            const glm::vec2 size{max.x - min.x, max.y - min.y};
+            if (size.x <= 0.0f || size.y <= 0.0f) return;
+            const ImVec2 mouse = ImGui::GetMousePos();
+            m_InspectedPixel = {(mouse.x - min.x) / size.x, (mouse.y - min.y) / size.y};
+            const glm::dvec2 ndc{2.0 * m_InspectedPixel.x - 1.0, 1.0 - 2.0 * m_InspectedPixel.y};
+            const auto direction = CameraPixelDirection(m_Camera, static_cast<double>(size.x / size.y), ndc);
+            const auto sceneLock = sim.Runner->AcquireSnapshot();
+            m_Inspection = InspectRay(*sceneLock, m_Camera.GetPosition(), direction, m_RenderSettings->Effective(), m_ObserverGuid);
+            m_InspectedFrom = m_Camera.GetPosition();
+            m_RayLines = std::make_shared<const std::vector<OverlaySegment>>(RayInspectionOverlay(m_Inspection));
+        }
+
+        // The clicked pixel (while the camera has not moved) and a panel with what the ray did. Returns whether the mouse
+        // is over the panel.
+        bool DrawRayInspection(const ImVec2 min, const ImVec2 max)
+        {
+            if (!m_Inspection.Valid && !m_RayInspect) return false;
+            auto* drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRect(min, max, true);
+            const ImU32 accent = ImGui::GetColorU32(ImVec4(1.0f, 0.85f, 0.3f, 1.0f));
+            if (m_Inspection.Valid && m_InspectedFrom == m_Camera.GetPosition())
+            {
+                const ImVec2 at(min.x + m_InspectedPixel.x * (max.x - min.x), min.y + m_InspectedPixel.y * (max.y - min.y));
+                drawList->AddCircle(at, 7.0f, accent, 24, 2.0f);
+                drawList->AddLine(ImVec2(at.x - 12.0f, at.y), ImVec2(at.x - 4.0f, at.y), accent, 1.5f);
+                drawList->AddLine(ImVec2(at.x + 4.0f, at.y), ImVec2(at.x + 12.0f, at.y), accent, 1.5f);
+                drawList->AddLine(ImVec2(at.x, at.y - 12.0f), ImVec2(at.x, at.y - 4.0f), accent, 1.5f);
+                drawList->AddLine(ImVec2(at.x, at.y + 4.0f), ImVec2(at.x, at.y + 12.0f), accent, 1.5f);
+            }
+            drawList->PopClipRect();
+
+            std::vector<std::string> lines;
+            if (!m_Inspection.Valid)
+            {
+                lines.emplace_back("Ray inspector: click a pixel");
+            }
+            else
+            {
+                const auto& ray = m_Inspection;
+                std::string fate(RayFateName(ray.Fate));
+                if (ray.Fate == RayFate::Object && !ray.ObjectName.empty()) fate += ": " + ray.ObjectName;
+                lines.push_back(std::format("Ray {}", fate));
+                if (ray.Curved && std::isfinite(ray.ImpactParameterGeo))
+                {
+                    lines.push_back(std::format("Impact parameter b = {:.3f} M   Carter Q = {:.3f} M^2", ray.ImpactParameterGeo, ray.CarterGeo2));
+                    lines.push_back(std::format("Closest approach r = {:.3f} M  (horizon {:.3f}, photon orbits {:.3f} / {:.3f})",
+                                                ray.ClosestRadiusGeo, ray.HorizonGeo, ray.PhotonOrbitProgradeGeo,
+                                                ray.PhotonOrbitRetrogradeGeo));
+                    lines.push_back(std::format("Windings {:.2f}   Equator crossings {}   Steps {}", ray.Windings,
+                                                ray.EquatorCrossings, ray.Steps));
+                }
+                if (ray.Fate == RayFate::Sky) lines.push_back(std::format("Bent by {:.2f} deg", ray.DeflectionDeg));
+                for (const auto& crossing : ray.DiskCrossings)
+                {
+                    lines.push_back(std::format("Disk at r = {:.2f} M (order {}): g = {:.3f}  (gravity {:.3f} x Doppler {:.3f})",
+                                                crossing.RadiusGeo, crossing.Order, crossing.G, crossing.GGravity,
+                                                crossing.G / crossing.GGravity));
+                }
+                for (const auto& note : ray.Notes) lines.push_back(note);
+                lines.emplace_back(m_RayInspect ? "Click another pixel, Esc to stop" : "Esc clears");
+            }
+
+            const ImVec2 pad(10.0f, 6.0f);
+            const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+            float width = 0.0f;
+            for (const auto& line : lines) width = std::max(width, ImGui::CalcTextSize(line.c_str()).x);
+            const ImVec2 size(width + 2.0f * pad.x, static_cast<float>(lines.size()) * lineHeight + 2.0f * pad.y);
+            const ImVec2 origin(min.x + 12.0f, max.y - 12.0f - size.y - 40.0f);
+            drawList->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), ImGui::GetColorU32(ImVec4(0.06f, 0.06f, 0.06f, 0.85f)), 6.0f);
+            drawList->AddRect(origin, ImVec2(origin.x + size.x, origin.y + size.y), accent, 6.0f, 0, 1.0f);
+            float y = origin.y + pad.y;
+            for (std::size_t i = 0; i < lines.size(); ++i, y += lineHeight)
+            {
+                const bool last = i + 1 == lines.size() && m_Inspection.Valid;
+                drawList->AddText(ImVec2(origin.x + pad.x, y),
+                                  ImGui::GetColorU32(i == 0 ? ImVec4(1.0f, 0.9f, 0.5f, 1.0f)
+                                                     : last ? ImVec4(0.6f, 0.6f, 0.6f, 1.0f)
+                                                            : ImVec4(0.92f, 0.92f, 0.92f, 1.0f)),
+                                  lines[i].c_str());
+            }
+            return ImGui::IsMouseHoveringRect(origin, ImVec2(origin.x + size.x, origin.y + size.y));
+        }
+
+        // The A/B divider: labels for both sides and a handle to drag. Returns whether the mouse is on it.
+        bool DrawCompareDivider(const ImVec2 min, const ImVec2 max, const bool imageHovered)
+        {
+            const auto& settings = m_RenderSettings->Effective();
+            if (!settings.Comparing())
+            {
+                m_SplitDragging = false;
+                return false;
+            }
+            const float width = max.x - min.x;
+            const float x = min.x + std::clamp(settings.CompareSplit, 0.0f, 1.0f) * width;
+            const ImVec2 mouse = ImGui::GetMousePos();
+            const bool near = imageHovered && std::abs(mouse.x - x) <= 6.0f && mouse.y >= min.y && mouse.y <= max.y;
+            if (near && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) m_SplitDragging = true;
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) m_SplitDragging = false;
+            if (m_SplitDragging)
+            {
+                const float split = std::clamp((mouse.x - min.x) / std::max(width, 1.0f), 0.0f, 1.0f);
+                if (std::abs(split - settings.CompareSplit) > 0.5f / std::max(width, 1.0f))
+                    m_RenderSettings->PostOverride("compare.split", std::format("{}", split));
+            }
+            if (near || m_SplitDragging) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+
+            auto* drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRect(min, max, true);
+            const float handleY = 0.5f * (min.y + max.y);
+            const ImU32 white = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, near || m_SplitDragging ? 1.0f : 0.8f));
+            drawList->AddCircleFilled(ImVec2(x, handleY), 9.0f, ImGui::GetColorU32(ImVec4(0.1f, 0.1f, 0.1f, 0.85f)), 24);
+            drawList->AddCircle(ImVec2(x, handleY), 9.0f, white, 24, 2.0f);
+            drawList->AddTriangleFilled(ImVec2(x - 6.0f, handleY), ImVec2(x - 2.0f, handleY - 4.0f), ImVec2(x - 2.0f, handleY + 4.0f), white);
+            drawList->AddTriangleFilled(ImVec2(x + 6.0f, handleY), ImVec2(x + 2.0f, handleY - 4.0f), ImVec2(x + 2.0f, handleY + 4.0f), white);
+
+            const auto label = [&](const ImVec2 at, const std::string& text, const bool right)
+            {
+                const ImVec2 size = ImGui::CalcTextSize(text.c_str());
+                const ImVec2 pos(right ? at.x + 8.0f : at.x - 8.0f - size.x, at.y);
+                drawList->AddRectFilled(ImVec2(pos.x - 5.0f, pos.y - 3.0f), ImVec2(pos.x + size.x + 5.0f, pos.y + size.y + 3.0f),
+                                        ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.65f)), 4.0f);
+                drawList->AddText(pos, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.95f)), text.c_str());
+            };
+            const float labelY = max.y - ImGui::GetTextLineHeight() - 14.0f;
+            label(ImVec2(x, labelY), std::format("A: {}", m_RenderSettings->ProfileFor(m_RenderSettings->ActiveContext()).Name), false);
+            label(ImVec2(x, labelY), std::format("B: {}", ResolveCompareSettings(settings, m_RenderSettings->Profiles()).Label), true);
+            drawList->PopClipRect();
+            return near || m_SplitDragging;
+        }
+
+        // Names (and GPU time) of what a pipeline stage view shows
+        void DrawStageLabels(const ImVec2 min, const ImVec2 max)
+        {
+            const auto stage = m_RenderSettings->Effective().Stage;
+            if (stage == StageView::Final) return;
+            const auto stats = m_Renderer->GetBufferTargetStats(kViewportBufferId);
+            const auto scopeMs = [&](const MosaicTile& tile) -> std::optional<double>
+            {
+                if (!stats) return std::nullopt;
+                double total = 0.0;
+                bool any = false;
+                for (const auto scope : tile.Scopes)
+                {
+                    if (scope.empty()) continue;
+                    for (const auto& pass : stats->Passes)
+                    {
+                        if (pass.Name != scope) continue;
+                        total += pass.Ms;
+                        any = true;
+                    }
+                }
+                if (!any) return std::nullopt;
+                return total;
+            };
+            auto* drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRect(min, max, true);
+            const auto label = [&](const ImVec2 at, const MosaicTile& tile)
+            {
+                const auto ms = scopeMs(tile);
+                const std::string text = ms ? std::format("{}  {:.2f} ms", tile.Label, *ms) : std::string(tile.Label);
+                const ImVec2 size = ImGui::CalcTextSize(text.c_str());
+                drawList->AddRectFilled(ImVec2(at.x - 4.0f, at.y - 2.0f), ImVec2(at.x + size.x + 4.0f, at.y + size.y + 2.0f),
+                                        ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.65f)), 3.0f);
+                drawList->AddText(at, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.95f)), text.c_str());
+            };
+            const float top = ViewportToolbar::Top(min.y) + ViewportToolbar::Height() + 8.0f;
+            if (stage == StageView::Mosaic)
+            {
+                const float tileW = (max.x - min.x) / static_cast<float>(kMosaicColumns);
+                const float tileH = (max.y - min.y) / static_cast<float>(kMosaicRows);
+                for (std::size_t i = 0; i < kMosaicTiles.size(); ++i)
+                {
+                    const auto column = static_cast<float>(i % kMosaicColumns);
+                    const auto row = static_cast<float>(i / kMosaicColumns);
+                    const float y = row == 0.0f ? top : min.y + row * tileH + 8.0f;
+                    label(ImVec2(min.x + column * tileW + 10.0f, y), kMosaicTiles[i]);
+                }
+            }
+            else if (const auto it = std::ranges::find(kMosaicTiles, stage, &MosaicTile::Stage); it != kMosaicTiles.end())
+            {
+                label(ImVec2(min.x + 10.0f, top), *it);
+            }
+            drawList->PopClipRect();
         }
 
         void PickEntityUnderMouse(ImVec2 min, ImVec2 max, const SimBinding& sim)
@@ -1094,6 +1323,7 @@ namespace
             inputs.Value(m_ObserverGuid);
             inputs.Value(sceneKey);
             inputs.Value(interactive);
+            inputs.Pointer(m_RayLines.get());
             if (inputs.Digest() == std::exchange(m_LastInputs, inputs.Digest())) return;
             m_Renderer->RequestViewportFrame();
         }
@@ -1571,6 +1801,12 @@ namespace
         ImVec2 m_BoxStart{0.0f, 0.0f};
         glm::vec2 m_LastPickMouse{0.0f};
         bool m_LastPickValid{false};
+        bool m_RayInspect{false};
+        RayInspection m_Inspection;
+        glm::vec2 m_InspectedPixel{0.0f};
+        glm::dvec3 m_InspectedFrom{0.0};
+        std::shared_ptr<const std::vector<OverlaySegment>> m_RayLines;
+        bool m_SplitDragging{false};
         CameraBookmarks m_Bookmarks;
         bool m_BookmarksDirty{false};
         std::uint64_t m_BookmarkRevision{0};

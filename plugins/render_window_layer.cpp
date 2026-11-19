@@ -46,6 +46,7 @@ namespace
             DrawContexts();
             DrawProfileBar();
             DrawActions();
+            DrawCompare();
             DrawSettings();
             ImGui::End();
         }
@@ -165,6 +166,88 @@ namespace
             }
         }
 
+        // A/B split of the viewport. A view setting, not part of the look: it goes in as runtime overrides (like
+        // Luau's render.set), so it neither forks the profile nor is saved with the scene. compare.* keys still work
+        // in profiles, --set and scripts.
+        void DrawCompare()
+        {
+            SectionHeader("COMPARE (A/B SPLIT)");
+            const RenderSettings& effective = m_Settings->Effective();
+            const auto& set = m_Settings->Profiles();
+            const auto post = [&](const char* key, const std::string& value) { m_Settings->PostOverride(key, value); };
+
+            const bool comparing = effective.Comparing();
+            const std::string preview = !comparing ? std::string("Off")
+                                        : effective.CompareProfile.empty() ? std::string("Current settings")
+                                                                           : effective.CompareProfile;
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
+            if (ImGui::BeginCombo("Right side", preview.c_str()))
+            {
+                if (ImGui::Selectable("Off", !comparing))
+                {
+                    post("compare.profile", "");
+                    post("compare.overrides", "");
+                }
+                if (ImGui::Selectable("Current settings", comparing && effective.CompareProfile.empty()))
+                {
+                    post("compare.profile", "");
+                    if (effective.CompareOverrides.empty()) post("compare.overrides", "radiometry.doppler=false");
+                }
+                for (const auto& profile : set.Profiles())
+                {
+                    if (ImGui::Selectable(profile.Name.c_str(), profile.Name == effective.CompareProfile))
+                        post("compare.profile", profile.Name);
+                    if (ImGui::IsItemHovered() && !profile.Description.empty()) ImGui::SetTooltip("%s", profile.Description.c_str());
+                }
+                ImGui::EndCombo();
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("The right part of the viewport renders the same frame with this profile, plus the overrides below.\n"
+                                  "Drag the white divider in the viewport to move it. Costs a second render while on.");
+
+            ImGui::TextDisabled("Without:");
+            struct Preset { const char* Label; const char* Overrides; };
+            constexpr std::array<Preset, 5> kPresets{{
+                {"Doppler", "radiometry.doppler=false"},
+                {"Redshift", "radiometry.redshift=false"},
+                {"Bloom & flare", "post.bloom=false; post.lens_flare=false"},
+                {"Lensing", "transport.mode=Straight"},
+                {"Disk", "disk.enabled=false"},
+            }};
+            for (const auto& preset : kPresets)
+            {
+                ImGui::SameLine();
+                if (ImGui::SmallButton(preset.Label))
+                {
+                    post("compare.profile", "");
+                    post("compare.overrides", preset.Overrides);
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Right side: the current settings with %s", preset.Overrides);
+            }
+
+            if (m_OverridesFor != effective.CompareOverrides)
+            {
+                m_OverridesFor = effective.CompareOverrides;
+                m_OverridesBuffer = effective.CompareOverrides;
+            }
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
+            TextValue("Overrides", m_OverridesBuffer, "key=value; key=value");
+            if (ImGui::IsItemDeactivatedAfterEdit()) post("compare.overrides", m_OverridesBuffer);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Render settings the right side changes, e.g. radiometry.doppler=false; disk.volumetric=true.\n"
+                                  "--list-settings prints every key.");
+            if (comparing)
+            {
+                float split = effective.CompareSplit;
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
+                if (ImGui::SliderFloat("Split", &split, 0.0f, 1.0f, "%.2f")) post("compare.split", std::format("{}", split));
+                const auto resolved = ResolveCompareSettings(effective, set);
+                ImGui::TextDisabled("Left: %s   Right: %s", m_Settings->ProfileFor(m_Settings->ActiveContext()).Name.c_str(),
+                                    resolved.Label.c_str());
+                for (const auto& error : resolved.Errors) ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.3f, 1.0f), "%s", error.c_str());
+            }
+        }
+
         void DrawSettings()
         {
             const auto& registry = RenderSettingRegistry();
@@ -189,7 +272,7 @@ namespace
                     if (!m_Search.empty() && !FuzzyScore(m_Search, setting->Meta.Label + " " + setting->Key + " " + group)) continue;
                     rows.push_back(setting);
                 }
-                if (rows.empty()) continue;
+                if (rows.empty() || group == "Compare") continue; // DrawCompare
                 if (!BeginSection(icons, group.c_str(), group != "Debug" && group != "Overlays")) continue;
                 for (const auto* setting : rows)
                 {
@@ -197,6 +280,7 @@ namespace
                     changed |= DrawRenderSetting(icons, registry, *setting, edited, baseline, caps);
                     ImGui::PopID();
                     if (setting->Key == "debug.view") DrawDebugViewLegend(edited.Debug);
+                    if (setting->Key == "debug.sky") DrawSkyLegend(edited.Sky);
                 }
                 if (group == "Overlays") DrawOverlayLegends(edited);
                 EndSection();
@@ -211,6 +295,8 @@ namespace
         std::string m_Search;
         std::string m_NameBuffer;
         std::string m_RenamedFor;
+        std::string m_OverridesBuffer;
+        std::string m_OverridesFor;
     };
 }
 

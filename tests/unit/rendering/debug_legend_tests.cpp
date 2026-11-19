@@ -252,3 +252,79 @@ TEST_CASE("The constraint drift legend matches the shader's log scale", "[render
     CHECK(kConstraintDriftLowLabel == "1e-6");
     CHECK(kConstraintDriftHighLabel == "1");
 }
+
+TEST_CASE("The image order legend matches the shader colours", "[rendering][legend]")
+{
+    const auto shader = ReadShaders();
+    for (const auto& entry : kImageOrderLegend)
+    {
+        INFO(entry.Id);
+        const auto color = ColorAfter(shader, std::string(entry.Id) + " = vec3", '(', ')');
+        CHECK(entry.Color.R == Approx(color.R));
+        CHECK(entry.Color.G == Approx(color.G));
+        CHECK(entry.Color.B == Approx(color.B));
+    }
+    CHECK(shader.contains(std::format("const float IMAGE_ORDER_SKY_DIMMING = {:.1f};", kImageOrderSkyDimming)));
+    CHECK(shader.contains(std::format("const float IMAGE_ORDER_CAPTURED_DIMMING = {:.1f};", kImageOrderCapturedDimming)));
+    CHECK(shader.contains(std::format("if (u_debugMode == {}) {{", static_cast<int>(DebugView::ImageOrder))));
+    CHECK(shader.contains(std::format("if (u_debugMode >= {} && u_debugMode <= {}) {{", static_cast<int>(DebugView::Redshift),
+                                      static_cast<int>(DebugView::DopplerShift))));
+    CHECK(shader.contains(std::format("float value = mode == {} ? total : mode == {} ? gravity : total - gravity;",
+                                      static_cast<int>(DebugView::Redshift), static_cast<int>(DebugView::GravitationalRedshift))));
+}
+
+TEST_CASE("The checkerboard sky legend matches the shader colours", "[rendering][legend]")
+{
+    const auto shader = ReadShaders();
+    for (const auto& entry : kSkyCheckerboardLegend)
+    {
+        INFO(entry.Id);
+        const auto color = ColorAfter(shader, std::string(entry.Id) + " = vec3", '(', ')');
+        CHECK(entry.Color.R == Approx(color.R));
+        CHECK(entry.Color.G == Approx(color.G));
+        CHECK(entry.Color.B == Approx(color.B));
+    }
+    CHECK(shader.contains(std::format("if (u_skyMode == {}) return checkerboardSky(direction);",
+                                      static_cast<int>(SkyBackground::Checkerboard))));
+}
+
+TEST_CASE("DebugDiverging reproduces debugDiverging of the shader", "[rendering][legend]")
+{
+    const auto shader = ReadShaders();
+    const auto expect = [&](const char* name, const LegendColor& color)
+    {
+        INFO(name);
+        const auto parsed = ColorAfter(shader, std::string(name) + " = vec3", '(', ')');
+        CHECK(color.R == Approx(parsed.R));
+        CHECK(color.G == Approx(parsed.G));
+        CHECK(color.B == Approx(parsed.B));
+    };
+    expect("REDSHIFT_RED", kRedshiftRed);
+    expect("REDSHIFT_NEUTRAL", kRedshiftNeutral);
+    expect("REDSHIFT_BLUE", kRedshiftBlue);
+    CHECK(shader.contains(std::format("const float REDSHIFT_LOG2_RANGE = {:.1f};", kRedshiftLog2Range)));
+    CHECK(shader.contains("t < 0.0 ? mix(REDSHIFT_NEUTRAL, REDSHIFT_RED, -t) : mix(REDSHIFT_NEUTRAL, REDSHIFT_BLUE, t)"));
+
+    CHECK(DebugDiverging(0.0f) == kRedshiftNeutral);
+    CHECK(DebugDiverging(-1.0f) == kRedshiftRed);
+    CHECK(DebugDiverging(1.0f) == kRedshiftBlue);
+    CHECK(DebugDiverging(-5.0f) == kRedshiftRed);
+    CHECK(DebugDiverging(0.5f).B == Approx(0.5f * (kRedshiftNeutral.B + kRedshiftBlue.B)));
+}
+
+TEST_CASE("Every debug view has a legend", "[rendering][legend]")
+{
+    const auto& options = RenderSettingRegistry().Find("debug.view")->Meta.Options;
+    CHECK(options.size() == static_cast<std::size_t>(DebugView::DopplerShift) + 1);
+    // Mosaic labels follow the shader's tile order: traced, bright pass, bloom / lens flare, post added, final
+    const auto composite = ReadSource("shaders/blackhole_display.frag");
+    CHECK(composite.contains(std::format("const int MOSAIC_COLUMNS = {};", kMosaicColumns)));
+    CHECK(composite.contains(std::format("const int MOSAIC_ROWS = {};", kMosaicRows)));
+    for (std::size_t i = 0; i < kMosaicTiles.size(); ++i)
+    {
+        INFO(kMosaicTiles[i].Label);
+        const int stage = static_cast<int>(i) + 1;
+        const auto expected = kMosaicTiles[i].Stage == StageView::Final ? 0 : stage;
+        CHECK(static_cast<int>(kMosaicTiles[i].Stage) == expected);
+    }
+}

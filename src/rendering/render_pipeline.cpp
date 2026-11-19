@@ -510,6 +510,7 @@ namespace MoleHole
                 UploadBodies(ctx, params);
 
                 params.DebugMode = static_cast<std::int32_t>(render.Debug);
+                params.SkyMode = static_cast<std::int32_t>(render.Sky);
                 params.MetricType = static_cast<std::int32_t>(render.Solution);
                 params.DiskAccretionRate = render.DiskAccretionRate;
                 params.DiskOpacity = render.DiskOpacity;
@@ -695,7 +696,7 @@ namespace MoleHole
 
             [[nodiscard]] static bool SceneHasMeshes(const Scene& scene)
             {
-                for (const auto [entity, mesh] : scene.Registry().view<const MeshComponent>.each())
+                for (const auto [entity, mesh] : scene.Registry().view<const MeshComponent>().each())
                 {
                     if (!mesh.AssetPath.empty()) return true;
                 }
@@ -1120,6 +1121,8 @@ namespace MoleHole
                                                        vk::ImageLayout::eGeneral)
                             .WriteCombinedImageSampler(set, 3, res->ExposureImage->GetImageView(), res->ExposureImage->GetSampler(),
                                                        vk::ImageLayout::eGeneral)
+                            .WriteCombinedImageSampler(set, 4, res->BloomBrightImage->GetImageView(),
+                                                       res->BloomBrightImage->GetSampler(), vk::ImageLayout::eGeneral)
                             .Update();
                         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->GetLayout(), 0, set, {});
                         struct
@@ -1133,10 +1136,13 @@ namespace MoleHole
                             float RtWidth;
                             float RtHeight;
                             std::int32_t ToneMapping;
+                            std::int32_t StageView;
+                            std::int32_t BloomChain;
                         } push{settings.Fxaa ? 1 : 0, settings.Bloom ? 1 : 0, settings.BloomIntensity,
                                settings.BloomDebug ? 1 : 0, settings.LensFlare ? 1 : 0, settings.LensFlareIntensity,
                                static_cast<float>(traceExtent.width), static_cast<float>(traceExtent.height),
-                               static_cast<std::int32_t>(settings.ToneMapping)};
+                               static_cast<std::int32_t>(settings.ToneMapping), static_cast<std::int32_t>(settings.Stage),
+                               settings.UsesBloomChain() ? 1 : 0};
                         cmd.pushConstants(pipeline->GetLayout(), vk::ShaderStageFlagBits::eFragment, 0, sizeof(push), &push);
                         cmd.draw(3, 1, 0, 0);
                     });
@@ -1160,6 +1166,7 @@ namespace MoleHole
             }
 
             [[nodiscard]] std::string_view Name() const override { return "GravityGrid"; }
+            [[nodiscard]] bool RasterOverlay() const override { return true; }
             [[nodiscard]] bool Enabled(const RenderSettings& settings) const override { return settings.ShowGravityGrid; }
 
             void Record(RenderFrameContext& ctx) override
@@ -1267,6 +1274,7 @@ namespace MoleHole
             PhysicsDebugStage(RenderResources& res, DebugLines& lines) : m_Res(res), m_Lines(lines) {}
 
             [[nodiscard]] std::string_view Name() const override { return "PhysicsDebug"; }
+            [[nodiscard]] bool RasterOverlay() const override { return true; }
             // Also runs once when switched off so PhysX stops producing the lines
             [[nodiscard]] bool Enabled(const RenderSettings& settings) const override
             {
@@ -1337,6 +1345,10 @@ namespace MoleHole
                 return settings.ShowObjectPaths || settings.ShowCharacteristicRadii || settings.ShowPredictedOrbits
                        || settings.ShowTidalAxes || settings.ShowBodyOrbits;
             }
+            [[nodiscard]] bool EnabledFor(const RenderFrameContext& ctx) const override
+            {
+                return Enabled(ctx.Settings) || !ctx.Inputs.ExtraLines.empty();
+            }
 
             void Record(RenderFrameContext& ctx) override
             {
@@ -1374,6 +1386,8 @@ namespace MoleHole
                     const auto glyphs = TidalAxesOverlay(ctx.Scene, ctx.Settings.TidalAxesScale, ctx.Inputs.ObserverGuid);
                     m_Radii.insert(m_Radii.end(), glyphs.begin(), glyphs.end());
                 }
+                // The ray inspector's path is a world curve like the radii: rasterised, unlensed
+                m_Radii.insert(m_Radii.end(), ctx.Inputs.ExtraLines.begin(), ctx.Inputs.ExtraLines.end());
                 std::vector<OverlaySegment> trails;
                 if (ctx.Settings.ShowPredictedOrbits)
                 {
@@ -1534,7 +1548,7 @@ namespace MoleHole
             {
                 // A re-launched body starts again at λ = 0, so position is part of the key
                 std::vector<std::array<double, 4>> key;
-                for (auto [entity, body] : scene.Registry().view<const GeodesicBodyComponent>.each())
+                for (auto [entity, body] : scene.Registry().view<const GeodesicBodyComponent>().each())
                 {
                     const bool moving = body.Status == GeodesicBodyStatus::FreeFall;
                     key.push_back({static_cast<double>(scene.GuidOf(entity)), moving ? body.State.Lambda : -1.0, body.State.R,
@@ -1574,10 +1588,15 @@ namespace MoleHole
             OverlayLineStage(RenderResources& res, DebugLines& lines) : m_Res(res), m_Lines(lines) {}
 
             [[nodiscard]] std::string_view Name() const override { return "OverlayLines"; }
+            [[nodiscard]] bool RasterOverlay() const override { return true; }
             [[nodiscard]] bool Enabled(const RenderSettings& settings) const override
             {
                 return settings.ShowObjectPaths || settings.ShowCharacteristicRadii || settings.ShowPredictedOrbits
                        || settings.ShowTidalAxes || settings.ShowBodyOrbits;
+            }
+            [[nodiscard]] bool EnabledFor(const RenderFrameContext& ctx) const override
+            {
+                return Enabled(ctx.Settings) || !ctx.Inputs.ExtraLines.empty();
             }
 
             void Record(RenderFrameContext& ctx) override
@@ -1608,6 +1627,7 @@ namespace MoleHole
             }
 
             [[nodiscard]] std::string_view Name() const override { return "Meshes"; }
+            [[nodiscard]] bool RasterOverlay() const override { return true; }
             [[nodiscard]] bool Enabled(const RenderSettings& settings) const override
             {
                 return settings.RenderMeshes && !m_Res.MeshTrace.Active;
@@ -1720,6 +1740,16 @@ namespace MoleHole
         bool Initialized = false;
         std::chrono::steady_clock::time_point InitializeStart{};
         mutable std::atomic<bool> ReadyLogged{false};
+
+        // A/B split (BuildCompare): the right side's pipeline, its colour and depth targets, and the pass that lays
+        // it over the left side. Created the first time a split is drawn.
+        std::unique_ptr<RenderPipeline> Compare;
+        std::unique_ptr<VulkanImage> CompareColor;
+        std::unique_ptr<VulkanImage> CompareDepth;
+        vk::ImageLayout CompareLayout{vk::ImageLayout::eUndefined};
+        std::shared_ptr<ShaderPipeline> SplitPipeline;
+        vk::Format SplitFormat{vk::Format::eUndefined};
+        bool WasComparing = false;
     };
 
     RenderPipeline::RenderPipeline(std::shared_ptr<Renderer> renderer, std::shared_ptr<IFileSystem> fileSystem,
@@ -1788,11 +1818,131 @@ namespace MoleHole
     {
         GPP_ZONE("Pipeline.Build");
         auto& impl = *m_Impl;
+        if (inputs.Compare && impl.Initialized && inputs.Scene && graph.GetPrimaryColorTarget() != kInvalidRenderGraphHandle)
+        {
+            BuildCompare(graph, inputs);
+            impl.WasComparing = true;
+            return;
+        }
+        // Leaving a split: the left side's planner may be idle, but the right half must be drawn over once
+        BuildSingle(graph, inputs, std::exchange(impl.WasComparing, false));
+    }
+
+    // Two pipelines share the graph: the right side (B) renders into its own targets first, then the left side (A)
+    // into the real ones, then the split pass lays B over A right of the divider. When B changed, A is drawn even
+    // if its own planner would skip the frame, so B's passes are never discarded with A's; when only A changed, B's
+    // image from an earlier frame is reused. Accumulation is off on both sides.
+    void RenderPipeline::BuildCompare(RenderGraph& graph, const RenderInputs& inputs)
+    {
+        auto& impl = *m_Impl;
         auto& res = impl.Res;
         const auto colorTarget = graph.GetPrimaryColorTarget();
-        if (!impl.Initialized || !inputs.Scene || colorTarget == kInvalidRenderGraphHandle) return;
+        const auto depthTarget = graph.GetPrimaryDepthTarget();
         const auto extent = graph.GetImageExtent(colorTarget);
         if (extent.width == 0 || extent.height == 0) return;
+        const auto colorFormat = graph.GetImageFormat(colorTarget);
+
+        if (!impl.Compare)
+        {
+            impl.Compare = std::make_unique<RenderPipeline>(res.Renderer, res.FileSystem, res.Dispatcher, res.Logger, res.Meshes);
+            impl.Compare->Initialize();
+            res.Logger->Info("RenderPipeline: A/B split pipeline created");
+        }
+        const auto matches = [&](const std::unique_ptr<VulkanImage>& image, const vk::Format format)
+        {
+            if (!image) return false;
+            const auto& spec = image->GetSpecification();
+            return spec.extent.width == extent.width && spec.extent.height == extent.height && spec.format == format;
+        };
+        if (!matches(impl.CompareColor, colorFormat))
+        {
+            impl.CompareColor = std::make_unique<VulkanImage>(
+                res.Device,
+                VulkanImageSpecification{.extent = {extent.width, extent.height, 1}, .format = colorFormat,
+                                         .usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+                                         .aspectMask = vk::ImageAspectFlagBits::eColor, .createSampler = true,
+                                         .samplerFilter = vk::Filter::eNearest,
+                                         .samplerAddressMode = vk::SamplerAddressMode::eClampToEdge,
+                                         .debugName = "CompareColor"},
+                res.Logger);
+            impl.CompareLayout = vk::ImageLayout::eUndefined;
+        }
+        RenderGraphHandle compareDepth = kInvalidRenderGraphHandle;
+        if (depthTarget != kInvalidRenderGraphHandle)
+        {
+            const auto depthFormat = graph.GetImageFormat(depthTarget);
+            if (!matches(impl.CompareDepth, depthFormat))
+            {
+                impl.CompareDepth = std::make_unique<VulkanImage>(
+                    res.Device,
+                    VulkanImageSpecification{.extent = {extent.width, extent.height, 1}, .format = depthFormat,
+                                             .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                                             .aspectMask = GetImageAspectMask(depthFormat), .debugName = "CompareDepth"},
+                    res.Logger);
+            }
+            // B's composite clears its depth, nothing of it is kept between frames
+            compareDepth = graph.ImportImage("Compare.Depth", *impl.CompareDepth, vk::ImageLayout::eUndefined);
+        }
+        const auto compareColor = graph.ImportImage("Compare.Color", *impl.CompareColor, impl.CompareLayout);
+
+        RenderInputs right = inputs;
+        right.Settings = *inputs.Compare;
+        right.Settings.Accumulate = false;
+        right.Compare.reset();
+        graph.SetPrimaryColorTarget(compareColor);
+        graph.SetPrimaryDepthTarget(compareDepth);
+        const bool rightDrawn = impl.Compare->BuildSingle(graph, right, false);
+        graph.SetPrimaryColorTarget(colorTarget);
+        graph.SetPrimaryDepthTarget(depthTarget);
+        if (!rightDrawn && impl.CompareLayout == vk::ImageLayout::eUndefined) return; // nothing to show yet
+
+        RenderInputs left = inputs;
+        left.Settings.Accumulate = false;
+        left.Compare.reset();
+        if (!BuildSingle(graph, left, rightDrawn || !impl.WasComparing)) return;
+
+        if (!impl.SplitPipeline || impl.SplitFormat != colorFormat)
+        {
+            impl.SplitPipeline = MakeRasterPipeline(res, colorFormat, vk::Format::eUndefined, false,
+                                                    vk::PrimitiveTopology::eTriangleList, "blackhole_display.vert",
+                                                    "compare_split.frag", "compare split");
+            impl.SplitFormat = colorFormat;
+        }
+        const auto device = res.Device;
+        const auto split = impl.SplitPipeline;
+        const auto* image = impl.CompareColor.get();
+        struct { float Split; float HalfLine; } push{std::clamp(inputs.Settings.CompareSplit, 0.0f, 1.0f),
+                                                       1.0f / static_cast<float>(std::max(extent.width, 1u))};
+        graph.BeginScope("CompareSplit");
+        graph.AddGraphicsPass(
+            "CompareSplit", {RenderGraphImageUse{.Handle = compareColor, .Layout = vk::ImageLayout::eShaderReadOnlyOptimal}}, {},
+            {RenderGraphAttachment{.Handle = colorTarget, .LoadOp = vk::AttachmentLoadOp::eLoad}}, std::nullopt,
+            [device, split, image, push](const vk::CommandBuffer cmd, RenderGraph& g)
+            {
+                const auto pipeline = split->GetPipeline();
+                if (!pipeline) return;
+                cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->GetPipeline());
+                const auto set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
+                DescriptorSetWriter(device->GetDevice())
+                    .WriteCombinedImageSampler(set, 0, image->GetImageView(), image->GetSampler(),
+                                               vk::ImageLayout::eShaderReadOnlyOptimal)
+                    .Update();
+                cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->GetLayout(), 0, set, {});
+                cmd.pushConstants(pipeline->GetLayout(), vk::ShaderStageFlagBits::eFragment, 0, sizeof(push), &push);
+                cmd.draw(3, 1, 0, 0);
+            });
+        graph.EndScope();
+        impl.CompareLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    }
+
+    bool RenderPipeline::BuildSingle(RenderGraph& graph, const RenderInputs& inputs, const bool keepWhenIdle)
+    {
+        auto& impl = *m_Impl;
+        auto& res = impl.Res;
+        const auto colorTarget = graph.GetPrimaryColorTarget();
+        if (!impl.Initialized || !inputs.Scene || colorTarget == kInvalidRenderGraphHandle) return false;
+        const auto extent = graph.GetImageExtent(colorTarget);
+        if (extent.width == 0 || extent.height == 0) return false;
 
         Camera camera = inputs.ViewCamera;
         camera.SetAspect(static_cast<float>(extent.width) / static_cast<float>(extent.height));
@@ -1865,7 +2015,8 @@ namespace MoleHole
         std::vector<std::string> recorded;
         for (const auto& stage : impl.Stages)
         {
-            if (!stage->Enabled(settings)) continue;
+            if (!stage->EnabledFor(context)) continue;
+            if (settings.Stage != StageView::Final && stage->RasterOverlay()) continue;
             ProfileZone stageZone(Profiler::IsEnabled() ? Profiler::Intern(std::format("Stage.{}", stage->Name())) : "Stage");
             graph.BeginScope(std::string(stage->Name()));
             stage->Record(context);
@@ -1895,10 +2046,12 @@ namespace MoleHole
         impl.RefinementIdle.store(!res.Plan.Render, std::memory_order_relaxed);
         if (!res.Plan.Render)
         {
+            if (keepWhenIdle) return true;
             graph.DiscardPasses();
-            return;
+            return false;
         }
         if (res.Plan.Accumulate) impl.Trace->ApplyJitter(res.Plan.Jitter);
+        return true;
     }
 
     bool RenderPipeline::AllStagesReady() const

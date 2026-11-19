@@ -274,6 +274,13 @@ vec3 rayMarchInfluenceZone(int closestHole, vec3 rayOrigin, vec3 rayDirection, o
             newDirection = normalize(newDirection);
         }
 
+        if (closestBH == 0) {
+            vec3 equatorAxis = normalize(u_blackHoles[0].spinAxis);
+            if (dot(relativePos, equatorAxis) * dot(relativePos + newDirection * currentStepSize, equatorAxis) < 0.0) {
+                g_equatorCrossings++;
+            }
+        }
+
         if (u_accretionDiskEnabled == 1) {
             BlackHoleData bh = u_blackHoles[closestBH];
             Spacetime st = spacetimeOf(bh, u_holePrecision[closestBH]);
@@ -449,13 +456,13 @@ vec3 hybridRayTrace(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             }
 
             segmentLayers(currentOrigin, currentDir, 1e10, layerAdd, layerTransmit);
-            color += alpha * (layerAdd + layerTransmit * texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb);
+            color += alpha * (layerAdd + layerTransmit * skyRadiance(currentDir));
             return color;
         }
     }
 
     g_termination = TERM_STEPS;
-    color += alpha * texture(u_skyboxTexture, directionToSpherical(currentDir)).rgb;
+    color += alpha * skyRadiance(currentDir);
     return color;
 }
 
@@ -492,6 +499,8 @@ float integratedDiskG(Spacetime st, real r, real theta, real E, real L, float ca
     diskRedshift(st, r, theta, E, L, gLaunch, alphaEmitter);
     float gTotal = gLaunch * cameraEnergy;
     float gGravity = alphaEmitter / max(cameraAlpha, 1e-6f);
+    g_lastDiskG = gTotal;
+    g_lastDiskGGravity = gGravity;
     return (u_gravitationalRedshiftEnabled == 1 ? gGravity : 1.0f)
          * (u_dopplerBeamingEnabled > 0.5f ? gTotal / max(gGravity, 1e-6f) : 1.0f);
 }
@@ -513,7 +522,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     vec3 dir = normalize(rayDirection);
 
     if (u_numBlackHoles == 0 || u_blackHoles[0].mass <= 0.0f) {
-        vec3 sky = texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
+        vec3 sky = skyRadiance(dir);
         if (!objects) return sky;
         return composeLayers(segmentObjectHit(rayOrigin, dir, 1e10f, objectColor, hitPoint, hitSolid) ? objectColor : sky);
     }
@@ -548,7 +557,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
             float b = dot(rel, dir);
             float disc = b * b - (dot(rel, rel) - enterRadius * enterRadius);
             if (b >= 0.0f || disc < 0.0f) {
-                vec3 sky = texture(u_skyboxTexture, directionToSpherical(dir)).rgb;
+                vec3 sky = skyRadiance(dir);
                 if (!objects) return sky;
                 return composeLayers(segmentObjectHit(rayOrigin, dir, 1e10f, objectColor, hitPoint, hitSolid) ? objectColor : sky);
             }
@@ -705,6 +714,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
         // Equatorial-plane crossing of this step, linearly interpolated in cos(theta).
         real ct = rcos(y.y);
         bool crossed = sign(ct) != sign(ct0);
+        if (crossed) g_equatorCrossings++;
         real f = crossed ? ct0 / (ct0 - ct) : real(0.0);
         real rCross = mix(r0, y.x, f);
 
@@ -776,7 +786,7 @@ vec3 rk4RayMarching(vec3 rayOrigin, vec3 rayDirection, out vec3 hitPoint, out bo
     geodesicRhs(st, E, L, y, dy, dphi, K);
     vec3 skyDirection = normalize(frame * -blVelocityToCartesian(y.x, y.y, phi, st.a, dy.x, dy.y, dphi));
 
-    vec3 sky = texture(u_skyboxTexture, directionToSpherical(skyDirection)).rgb;
+    vec3 sky = skyRadiance(skyDirection);
     if (objects && g_termination == TERM_SKY) {
         bool hit = segmentObjectHit(bh.position + frame * blToCartesian(y.x, y.y, phi, st.a), skyDirection, 1e10f, objectColor,
                                     hitPoint, hitSolid);

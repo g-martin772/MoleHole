@@ -7,6 +7,7 @@ layout(set = 0, binding = 0) uniform sampler2D u_raytracedImage;
 layout(set = 0, binding = 1) uniform sampler2D u_bloomImage;
 layout(set = 0, binding = 2) uniform sampler2D u_lensFlareImage;
 layout(set = 0, binding = 3) uniform sampler2D u_exposureImage;
+layout(set = 0, binding = 4) uniform sampler2D u_bloomBrightImage; // bloom extract, before the blur
 
 layout(push_constant) uniform PushConstants
 {
@@ -19,6 +20,8 @@ layout(push_constant) uniform PushConstants
     float rt_w;
     float rt_h;
     int u_toneMap; // 0 none (raw), 1 Reinhard, 2 ACES
+    int u_stageView; // StageView: 0 final, 1 traced, 2 bright pass, 3 bloom, 4 lens flare, 5 post added, 6 mosaic
+    int u_bloomChain; // 1 when the bloom images hold this frame (bloom, lens flare or bloom debug on)
 };
 
 #include "output_transform.glsl"
@@ -66,7 +69,51 @@ vec3 FxaaPixelShader(vec2 uv, sampler2D tex, vec2 rcpFrame) {
     return rgbB;
 }
 
+// Mosaic layout: 3 x 2 tiles, traced / bright pass / bloom on top, lens flare / post added / final below.
+// MosaicTileStage in src/rendering/render_pipeline.cppm lists the same order for the labels.
+const int MOSAIC_COLUMNS = 3;
+const int MOSAIC_ROWS = 2;
+// Behind everything, but in front of the cleared depth of 1: the composite's depth test is LESS
+const float STAGE_VIEW_DEPTH = 0.999999;
+
+// Linear colour of one stage at uv, before the display transform
+vec3 stageColor(int stage, vec2 uv) {
+    vec3 traced = texture(u_raytracedImage, uv).rgb;
+    if (stage == 1) return traced;
+    vec3 bloom = u_bloomChain == 1 ? texture(u_bloomImage, uv).rgb : vec3(0.0);
+    vec3 flare = u_bloomChain == 1 && u_lensFlareEnabled == 1 ? texture(u_lensFlareImage, uv).rgb * u_lensFlareIntensity : vec3(0.0);
+    vec3 glow = u_bloomEnabled == 1 ? bloom * u_bloomIntensity : vec3(0.0);
+    if (stage == 2) return u_bloomChain == 1 ? texture(u_bloomBrightImage, uv).rgb : vec3(0.0);
+    if (stage == 3) return glow;
+    if (stage == 4) return flare;
+    if (stage == 5) return glow + flare;
+    return traced + glow + flare;
+}
+
 void main() {
+    if (u_stageView != 0) {
+        float exposure = texelFetch(u_exposureImage, ivec2(0), 0).r;
+        vec2 uv = TexCoord;
+        int stage = u_stageView;
+        if (u_stageView == 6) {
+            vec2 grid = vec2(MOSAIC_COLUMNS, MOSAIC_ROWS);
+            ivec2 tile = min(ivec2(floor(TexCoord * grid)), ivec2(MOSAIC_COLUMNS - 1, MOSAIC_ROWS - 1));
+            uv = fract(TexCoord * grid);
+            stage = tile.y * MOSAIC_COLUMNS + tile.x + 1;
+            if (stage == 6) stage = 0;
+            // A one-pixel gap between the tiles
+            vec2 edge = min(uv, 1.0 - uv) * vec2(rt_w, rt_h) / grid;
+            if (min(edge.x, edge.y) < 0.5) {
+                FragColor = vec4(0.25, 0.25, 0.25, 1.0);
+                gl_FragDepth = STAGE_VIEW_DEPTH;
+                return;
+            }
+        }
+        FragColor = vec4(displayColor(stageColor(stage, uv), exposure, u_toneMap), 1.0);
+        gl_FragDepth = STAGE_VIEW_DEPTH;
+        return;
+    }
+
     gl_FragDepth = texelFetch(u_raytracedImage, min(ivec2(TexCoord * vec2(rt_w, rt_h)), ivec2(rt_w, rt_h) - 1), 0).a;
 
     vec3 color;

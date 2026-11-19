@@ -126,7 +126,7 @@ void main() {
 
     float tOpaque = 1e30f;
     bool solid = false;
-    vec3 background = texture(u_skyboxTexture, directionToSpherical(rayDir)).rgb;
+    vec3 background = skyRadiance(rayDir);
     g_termination = TERM_SKY;
 
     if (u_renderBlackHoles == 1) {

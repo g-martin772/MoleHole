@@ -86,6 +86,57 @@ export namespace MoleHole
         {"ISCO_RING_COLOR", "ISCO", "innermost stable circular orbit, where rays cross the equatorial plane", {0.0f, 1.0f, 0.0f}},
     }};
 
+    // IMAGE_ORDER_* in shaders/debug_view.glsl
+    inline constexpr std::array<LegendEntry, 5> kImageOrderLegend{{
+        {"IMAGE_ORDER_0", "0", "no disk; the ray never crossed the equatorial plane near the hole", {0.06f, 0.06f, 0.14f}},
+        {"IMAGE_ORDER_1", "1", "direct image: the disk as you would see it without the hole", {0.95f, 0.55f, 0.10f}},
+        {"IMAGE_ORDER_2", "2", "secondary image: the far side of the disk bent under or over the hole", {0.20f, 0.65f, 1.00f}},
+        {"IMAGE_ORDER_3", "3", "first photon ring: light that went once around the hole", {0.35f, 0.95f, 0.35f}},
+        {"IMAGE_ORDER_4", "4 or more", "higher photon rings, exponentially thinner", {1.00f, 1.00f, 1.00f}},
+    }};
+    inline constexpr float kImageOrderSkyDimming = 0.4f;
+    inline constexpr float kImageOrderCapturedDimming = 0.2f;
+    inline constexpr std::string_view kImageOrderNote = "Bright: the disk, by the order of the image it shows (equator crossings up to it). "
+                                                        "Dim: everything else, by how often its ray crossed the plane; darkest where the ray "
+                                                        "fell in. Counted within 50 M of the first hole.";
+
+    // SKY_QUADRANT_* / SKY_LINE_COLOR in shaders/debug_view.glsl
+    inline constexpr std::array<LegendEntry, 5> kSkyCheckerboardLegend{{
+        {"SKY_QUADRANT_0", "Longitude -180..-90", "longitude about the spin axis, from the hole frame's x axis", {0.48f, 0.13f, 0.10f}},
+        {"SKY_QUADRANT_1", "Longitude -90..0", "next quadrant", {0.11f, 0.40f, 0.14f}},
+        {"SKY_QUADRANT_2", "Longitude 0..90", "next quadrant", {0.13f, 0.21f, 0.53f}},
+        {"SKY_QUADRANT_3", "Longitude 90..180", "last quadrant", {0.50f, 0.42f, 0.08f}},
+        {"SKY_LINE_COLOR", "Lines", "celestial equator (the disk plane) and the four quadrant meridians", {0.55f, 0.55f, 0.55f}},
+    }};
+    inline constexpr std::string_view kSkyCheckerboardNote = "10 degree cells alternate in brightness; the southern hemisphere is darker.";
+
+    // REDSHIFT_* in shaders/debug_view.glsl: debugDiverging(log2 g / REDSHIFT_LOG2_RANGE)
+    inline constexpr LegendColor kRedshiftRed{0.85f, 0.12f, 0.08f};
+    inline constexpr LegendColor kRedshiftNeutral{0.95f, 0.95f, 0.95f};
+    inline constexpr LegendColor kRedshiftBlue{0.10f, 0.35f, 0.95f};
+    inline constexpr float kRedshiftLog2Range = 1.0f;
+
+    [[nodiscard]] constexpr LegendColor DebugDiverging(float t) noexcept
+    {
+        t = std::clamp(t, -1.0f, 1.0f);
+        const auto mix = [](const LegendColor& a, const LegendColor& b, const float f)
+        {
+            return LegendColor{a.R * (1.0f - f) + b.R * f, a.G * (1.0f - f) + b.G * f, a.B * (1.0f - f) + b.B * f};
+        };
+        return t < 0.0f ? mix(kRedshiftNeutral, kRedshiftRed, -t) : mix(kRedshiftNeutral, kRedshiftBlue, t);
+    }
+
+    inline constexpr std::string_view kRedshiftLowLabel = "g = 0.5 (redder)";
+    inline constexpr std::string_view kRedshiftMiddleLabel = "g = 1";
+    inline constexpr std::string_view kRedshiftHighLabel = "g = 2 (bluer)";
+    inline constexpr std::string_view kRedshiftNote = "g = observed / emitted frequency of the disk light, weighted by how much each disk "
+                                                      "crossing contributes. The whole shift, Doppler and gravity together. Pixels without disk "
+                                                      "are grey. Lensed and Integrated transports.";
+    inline constexpr std::string_view kGravitationalRedshiftNote = "Only the gravitational part: the ratio of the clock rates (ZAMO lapses) "
+                                                                   "of the gas and the camera. Always red, deepest at the inner edge.";
+    inline constexpr std::string_view kDopplerShiftNote = "Only the motion part, g divided by its gravitational part: blue where the gas "
+                                                          "comes towards you, red where it recedes.";
+
     inline constexpr std::array<LegendEntry, 6> kTerminationLegend{{
         {"TERM_SKY", "Sky", "ray escaped to the background", {0.04f, 0.08f, 0.22f}},
         {"TERM_HORIZON", "Horizon", "ray fell into a black hole", {0.9f, 0.05f, 0.05f}},

@@ -165,6 +165,8 @@ float analyticLensDiskG(Spacetime st, vec3 relativePos, vec3 rayDirection, vec3 
     float L = dot(cross(relativePos, -rayDirection), normalize(spinAxis));
     float gTotal, alphaEmitter;
     diskRedshift(st, real(length(relativePos)), real(R_PI) * real(0.5), real(1.0), real(L), gTotal, alphaEmitter);
+    g_lastDiskG = gTotal;
+    g_lastDiskGGravity = alphaEmitter;
     return (u_gravitationalRedshiftEnabled == 1 ? alphaEmitter : 1.0)
          * (u_dopplerBeamingEnabled > 0.5 ? gTotal / max(alphaEmitter, 1e-6) : 1.0);
 }
@@ -173,6 +175,11 @@ float analyticLensDiskG(Spacetime st, vec3 relativePos, vec3 rayDirection, vec3 
 // Exact for a constant source over the segment, so the result does not depend on the step size.
 void diskAccumulate(float dTau, vec3 source, inout vec3 color, inout float alpha) {
     float transmittance = exp(-dTau);
-    color += alpha * source * (1.0 - transmittance);
+    float weight = alpha * (1.0 - transmittance);
+    color += source * weight;
     alpha *= transmittance;
+    g_diskWeight += weight;
+    g_diskLog2G += weight * log2(max(g_lastDiskG, 1e-6));
+    g_diskLog2GGravity += weight * log2(max(g_lastDiskGGravity, 1e-6));
+    if (g_diskOrder == 0 && g_diskWeight > 0.1) g_diskOrder = max(g_equatorCrossings, 1);
 }

@@ -126,6 +126,14 @@ export namespace MoleHole
                 }
                 break;
             }
+            case FieldType::String:
+            {
+                // Applied once the field loses focus, so every keystroke does not re-render the frame
+                std::string text = std::get<std::string>(setting.Get(value));
+                TextValue("##v", text);
+                if (ImGui::IsItemDeactivatedAfterEdit()) changed = setting.Set(value, GPP::FieldValue{text});
+                break;
+            }
             default: ImGui::TextDisabled("(unsupported)"); break;
             }
             if (wholeUnavailable) ImGui::EndDisabled();
@@ -191,6 +199,38 @@ export namespace MoleHole
         TextDisabledWrapped(note);
     }
 
+    // Red - white - blue bar of debugDiverging for log2 g in [-range, range]
+    inline void DrawDivergingLegend(const std::string_view note)
+    {
+        constexpr int kSegments = 48;
+        const float width = ImGui::GetContentRegionAvail().x;
+        const float height = ImGui::GetTextLineHeight();
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        auto* list = ImGui::GetWindowDrawList();
+        for (int i = 0; i < kSegments; ++i)
+        {
+            const float t0 = static_cast<float>(i) / kSegments;
+            const float t1 = static_cast<float>(i + 1) / kSegments;
+            const ImU32 left = LegendU32(DebugDiverging(2.0f * t0 - 1.0f));
+            const ImU32 right = LegendU32(DebugDiverging(2.0f * t1 - 1.0f));
+            list->AddRectFilledMultiColor(ImVec2(pos.x + t0 * width, pos.y), ImVec2(pos.x + t1 * width, pos.y + height),
+                                          left, right, right, left);
+        }
+        list->AddRect(pos, ImVec2(pos.x + width, pos.y + height), ToU32(HexColor(0x808080)));
+        ImGui::Dummy(ImVec2(width, height));
+
+        const ImVec2 labels = ImGui::GetCursorScreenPos();
+        const ImU32 text = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+        const std::string low(kRedshiftLowLabel);
+        const std::string middle(kRedshiftMiddleLabel);
+        const std::string high(kRedshiftHighLabel);
+        list->AddText(labels, text, low.c_str());
+        list->AddText(ImVec2(labels.x + 0.5f * (width - ImGui::CalcTextSize(middle.c_str()).x), labels.y), text, middle.c_str());
+        list->AddText(ImVec2(labels.x + width - ImGui::CalcTextSize(high.c_str()).x, labels.y), text, high.c_str());
+        ImGui::Dummy(ImVec2(width, ImGui::GetTextLineHeight()));
+        TextDisabledWrapped(note);
+    }
+
     inline void DrawDebugViewLegend(const DebugView view)
     {
         if (view == DebugView::None) return;
@@ -203,8 +243,25 @@ export namespace MoleHole
             DrawHeatLegend(kConstraintDriftLowLabel, kConstraintDriftHighLabel, kConstraintDriftNote);
             break;
         case DebugView::Ergosphere: for (const auto& entry : kMetricStructureLegend) DrawLegendEntry(entry); break;
+        case DebugView::ImageOrder:
+            for (const auto& entry : kImageOrderLegend) DrawLegendEntry(entry);
+            TextDisabledWrapped(kImageOrderNote);
+            break;
+        case DebugView::Redshift: DrawDivergingLegend(kRedshiftNote); break;
+        case DebugView::GravitationalRedshift: DrawDivergingLegend(kGravitationalRedshiftNote); break;
+        case DebugView::DopplerShift: DrawDivergingLegend(kDopplerShiftNote); break;
         default: for (const auto& entry : kTerminationLegend) DrawLegendEntry(entry); break;
         }
+        ImGui::Spacing();
+    }
+
+    inline void DrawSkyLegend(const SkyBackground sky)
+    {
+        if (sky != SkyBackground::Checkerboard) return;
+        ImGui::Spacing();
+        ImGui::TextDisabled("LEGEND");
+        for (const auto& entry : kSkyCheckerboardLegend) DrawLegendEntry(entry);
+        TextDisabledWrapped(kSkyCheckerboardNote);
         ImGui::Spacing();
     }
 

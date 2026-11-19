@@ -71,6 +71,7 @@ export import :Rendering.MeshScene;
 export import :Rendering.Pipeline;
 export import :Rendering.Data;
 export import :Rendering.Camera;
+export import :Rendering.RayInspector;
 export import :Rendering.Lut;
 export import :Rendering.Latex;
 export import :UI.EditLogic;
