@@ -1,0 +1,66 @@
+# The four spacetimes of MoleHole side by side (README, tools/gen_readme_images.sh): the camera, disk and film look of
+# gargantua-film.yaml, but the hole has spin a* = 0.6 and charge q* = 0.7 (a*^2 + q*^2 = 0.85, below the extremal 1), so
+# every solution shows what its parameter does. spacetime.solution picks which of them the metric uses:
+#   Schwarzschild: neither; Kerr: the spin (a flattened, shifted shadow); Reissner-Nordstrom: the charge (a smaller
+#   shadow, horizon at 1.71 M instead of 2 M); Kerr-Newman: both (horizon at 1.39 M).
+# Export with --scene-camera --set spacetime.solution=<Schwarzschild|Kerr|ReissnerNordstrom|KerrNewman>.
+Scene: Four spacetimes
+SchemaVersion: 2
+TimeScale: 1.0
+Entities:
+  - Guid: 7900000000000000001
+    Components:
+      Metadata:
+        Guid: 7900000000000000001
+        Name: Black hole
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      BlackHole:
+        Mass: 1.98847e+38
+        Spin: 0.6
+        Charge: 0.7
+        SpinAxis: [0, 1, 0]
+  - Guid: 7900000000000000002
+    Components:
+      Metadata:
+        Guid: 7900000000000000002
+        Name: Camera
+        TypeTag: Camera
+      Transform:
+        Position: [-7.247413e+12, 4.636756e+11, -5.074694e+12]
+        Rotation: [0.012087, 0.886707, 0.023219, -0.461590]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 25
+        NearPlane: 1000000
+        FarPlane: 1.0e+15
+        Primary: true
+Render:
+  Version: 1
+  Contexts:
+    Edit: Film
+    Play: Film
+    Reference: Film
+    Export: Film
+  Profiles:
+    - Name: Film
+      Description: The film look of gargantua-film.yaml; the solution is set per export.
+      Base: Reference
+      Set:
+        spacetime.solution: Kerr
+        transport.step_size: 0.02
+        transport.max_steps: 4000
+        radiometry.redshift: false
+        radiometry.doppler: false
+        disk.volumetric: false
+        disk.noise_scale: 5
+        disk.display_temperature: 4400
+        disk.hot_spots: 0
+        disk.opacity: 2
+        post.tonemap: Aces
+        post.exposure: 1.5
+        post.bloom: false
+        post.lens_flare: false

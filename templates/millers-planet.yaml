@@ -1,0 +1,120 @@
+# Miller's planet in front of Gargantua, composed like the film rather than placed like the physics: the hole, camera
+# and colour of gargantua-film.yaml (a/M = 0.6 as in the film's images, Doppler and redshift colour off) with Miller's
+# planet (maps from tools/gen_planet_textures.py) as a static foreground body about 8e7 m from the camera, lit by what
+# its sky probe sees of the disk behind it and by a key light from behind the camera, as the film lit it for the shot. On its real orbit, r - M = 4e-5 M of a near-extremal hole, the planet sits
+# inside the disk plane and the whole sky is disk (interstellar-bodies.yaml, docs/notes/interstellar_planets.md).
+# Export with --scene-camera.
+Scene: Miller's planet (film composition)
+SchemaVersion: 2
+TimeScale: 1.0
+Entities:
+  - Guid: 7800000000000000001
+    Components:
+      Metadata:
+        Guid: 7800000000000000001
+        Name: Gargantua
+        TypeTag: BlackHole
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      BlackHole:
+        Mass: 1.98847e+38
+        Spin: 0.6
+        Charge: 0
+        SpinAxis: [0, 1, 0]
+  - Guid: 7800000000000000002
+    Components:
+      Metadata:
+        Guid: 7800000000000000002
+        Name: Camera
+        TypeTag: Camera
+      Transform:
+        Position: [-7.247413e+12, 4.636756e+11, -5.074694e+12]
+        Rotation: [0.012087, 0.886707, 0.023219, -0.461590]
+        Scale: [1, 1, 1]
+      Camera:
+        Fov: 25
+        NearPlane: 1000000
+        FarPlane: 1.0e+15
+        Primary: true
+  - Guid: 7800000000000000003
+    Components:
+      Metadata:
+        Guid: 7800000000000000003
+        Name: Miller's planet
+        TypeTag: Sphere
+      Transform:
+        Position: [-7.247359993e+12, 4.636625637e+11, -5.074633884e+12]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Sphere:
+        Radius: 6371000.0
+        Spin: 0
+        Color: [1, 1, 1]
+        SpinAxis: [0, 1, 0]
+        TexturePath: ""
+      Surface:
+        Albedo: assets/textures/miller/albedo.png
+        Roughness: assets/textures/miller/specular.png
+        RoughnessIsSpecular: true
+        GlossyRoughness: 0.3
+      Atmosphere:
+        Height: 80000.0
+        RayleighScattering: [5.802e-06, 1.3558e-05, 3.31e-05]
+        RayleighScaleHeight: 6200.0
+        MieScattering: 1.1988e-05
+        MieAbsorption: 1.32e-06
+        MieScaleHeight: 1500.0
+        MieAnisotropy: 0.75
+        OzoneAbsorption: [0, 0, 0]
+        OzoneCenter: 25000
+        OzoneWidth: 30000
+      CloudLayer:
+        Coverage: assets/textures/miller/clouds.png
+        Altitude: 2000.0
+        Opacity: 0.85
+        Color: [1, 1, 1]
+        RotationPeriod: 0.0
+  - Guid: 7800000000000000004
+    Components:
+      Metadata:
+        Guid: 7800000000000000004
+        Name: Key light
+        TypeTag: Light
+      Transform:
+        Position: [0, 0, 0]
+        Rotation: [0, 0, 0, 1]
+        Scale: [1, 1, 1]
+      Light:
+        Kind: Directional
+        Color: [0.85, 0.9, 1]
+        Intensity: 1.5
+        Direction: [0.427171, 0.349174, -0.834028]
+        ReferenceDistance: 1.495978707e11
+Render:
+  Version: 1
+  Contexts:
+    Edit: Film
+    Play: Film
+    Reference: Film
+    Export: Film
+  Profiles:
+    - Name: Film
+      Description: The film look of gargantua-film.yaml. Kerr a = 0.6, no Doppler or redshift colour, warm thin disk.
+      Base: Reference
+      Set:
+        spacetime.solution: Kerr
+        transport.step_size: 0.02
+        transport.max_steps: 4000
+        radiometry.redshift: false
+        radiometry.doppler: false
+        disk.volumetric: false
+        disk.noise_scale: 5
+        disk.display_temperature: 4400
+        disk.hot_spots: 0
+        disk.opacity: 2
+        post.tonemap: Aces
+        post.exposure: 1.5
+        post.bloom: false
+        post.lens_flare: false

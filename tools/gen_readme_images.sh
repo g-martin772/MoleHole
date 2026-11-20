@@ -25,6 +25,16 @@ shots=(
     "orbits|m1-orbits|--scene-camera --width 1280 --height 720"
     "planets|model-showcase|--scene-camera --width 2560 --height 1440|0.433,0.33,0.875,0.66"
     "near-horizon|gargantua-orbits|--scene-camera --width 1280 --height 720"
+    "millers-planet|millers-planet|--scene-camera --width 1920 --height 1080"
+    "spacetime-schwarzschild|four-spacetimes|--scene-camera --width 960 --height 540 --set spacetime.solution=Schwarzschild"
+    "spacetime-kerr|four-spacetimes|--scene-camera --width 960 --height 540 --set spacetime.solution=Kerr"
+    "spacetime-reissner-nordstrom|four-spacetimes|--scene-camera --width 960 --height 540 --set spacetime.solution=ReissnerNordstrom"
+    "spacetime-kerr-newman|four-spacetimes|--scene-camera --width 960 --height 540 --set spacetime.solution=KerrNewman"
+)
+
+# The same hole in the four spacetimes, 2 x 2 with a label on each (tools/readme_grid.py): name | shot=label;...
+grids=(
+    "spacetimes|spacetime-schwarzschild=Schwarzschild;spacetime-kerr=Kerr  (spin a* = 0.6);spacetime-reissner-nordstrom=Reissner-Nordström  (charge q* = 0.7);spacetime-kerr-newman=Kerr-Newman  (a* = 0.6, q* = 0.7)"
 )
 
 # The three debug views side by side
@@ -74,4 +84,10 @@ for i, im in enumerate(scaled):
 sheet.save(sys.argv[1], quality=88, optimize=True, progressive=True)
 EOF
     echo "== $name (strip)"
+done
+
+for grid in "${grids[@]}"; do
+    IFS='|' read -r name panels <<<"$grid"
+    if [[ $# -gt 0 && "$wanted" != *" $name "* ]]; then continue; fi
+    python3 tools/readme_grid.py "$out/$name.jpg" "$raw" 2 font/Roboto-Regular.ttf "$panels" && echo "== $name (grid)"
 done

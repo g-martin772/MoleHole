@@ -25,8 +25,11 @@ const float EPSILON = 0.00005f;
 #ifdef GPP_BODY_PROBE
 // Sky probe of every body: row band b of the output (PROBE_HEIGHT rows) is body b's equirectangular view of the light
 // arriving at its centre, traced like a camera there that moves with the body. Stars do not need one.
+// Dispatched in slices like the camera trace (SlicePushBlock): a probe ray that starts deep in a near-extremal throat
+// takes thousands of tiny steps, and one dispatch of every probe ran past the driver's GPU timeout.
 void main() {
-    ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    uint workgroup = u_firstWorkgroup + gl_WorkGroupID.x;
+    ivec2 texel = ivec2(uvec2(workgroup % u_workgroupsPerRow, workgroup / u_workgroupsPerRow) * 16u + gl_LocalInvocationID.xy);
     int body = texel.y / PROBE_HEIGHT;
     if (texel.x >= PROBE_WIDTH || body >= u_numSpheres || u_bodies[body].flags.x == 0) return;
 

@@ -621,18 +621,27 @@ namespace MoleHole
                 ++m_ProbeFrames;
                 const auto count = static_cast<std::uint32_t>(m_NumSpheres);
                 auto* probeImage = m_ProbeImage.get();
-                ctx.Graph.AddComputePass(
-                    "BodyProbes", {}, {},
-                    [probe, bindings, probeImage, count](const vk::CommandBuffer cmd, RenderGraph& g)
+                // Budgeted like the camera trace, so the probes are submitted in slices that each stay well under the
+                // driver's GPU timeout (rays starting deep in a near-extremal throat are expensive)
+                constexpr std::uint32_t kGroupsPerRow = kProbeWidth / 16;
+                const std::uint32_t groups = kGroupsPerRow * (count * kProbeHeight / 16);
+                ctx.Graph.AddBudgetedComputePass(
+                    "BodyProbes", {}, {}, groups,
+                    [probe, bindings, probeImage, set = vk::DescriptorSet{}](
+                        const vk::CommandBuffer cmd, RenderGraph& g, const RenderGraphWorkSlice& slice) mutable
                     {
                         const auto pipeline = probe->GetPipeline();
                         if (!pipeline) return;
                         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->GetPipeline());
-                        const auto set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
-                        WriteTraceSet(bindings, *probe, set, probeImage->GetImageView());
+                        if (!set)
+                        {
+                            set = g.AllocateDescriptorSet(pipeline->GetDescriptorSetLayouts()[0]);
+                            WriteTraceSet(bindings, *probe, set, probeImage->GetImageView());
+                        }
                         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline->GetLayout(), 0, set, {});
-                        // The probe main ignores the camera trace's work slicing, so it has no push constants
-                        cmd.dispatch(kProbeWidth / 16, count * kProbeHeight / 16, 1);
+                        const std::array<std::uint32_t, 2> push{slice.First, kGroupsPerRow};
+                        cmd.pushConstants(pipeline->GetLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(push), push.data());
+                        cmd.dispatch(slice.Count, 1, 1);
                     });
                 auto reduce = reduceCompiled;
                 auto* lighting = m_LightingBuffer.get();

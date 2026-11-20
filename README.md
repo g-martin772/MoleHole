@@ -1,10 +1,28 @@
 # MoleHole
 
-**Real-time black hole rendering and General Relativity sandbox.** MoleHole traces light along the null geodesics of Schwarzschild, Kerr, Reissner–Nordström and Kerr–Newman spacetimes on the GPU, lights an accretion disk from its physical temperature, redshift and Doppler beaming, and lets you build scenes around it in an editor with N-body and rigid-body physics, a visual node graph and Luau scripting. C++23 and Vulkan, built on the separate [`gpp`](https://github.com/g-martin772/gpp) framework.
+**Real-time black hole rendering and General Relativity sandbox.** 
+MoleHole traces light along the null geodesics of Schwarzschild, Kerr, Reissner–Nordström 
+and Kerr–Newman spacetimes on the GPU, lights an accretion disk from its physical 
+temperature, redshift and Doppler beaming, and lets you build scenes around it in an 
+editor with N-body and rigid-body physics, a visual node graph and Luau scripting. 
+C++23 and Vulkan, built on the separate [`gpp`](https://github.com/g-martin772/gpp) framework.
 
 ![Kerr black hole (a* = 0.6) with its lensed accretion disk, in the look of Interstellar](docs/home_picture.png)
 
-<p align="center"><sub>A Kerr black hole with a* = 0.6 in the look of <i>Interstellar</i>: like the film, Doppler beaming and gravitational redshift are switched off, which keeps the disk symmetric (<code>templates/gargantua-film.yaml</code>). Every picture on this page is rendered by MoleHole; <code>tools/gen_readme_images.sh</code> re-creates them.</sub></p>
+<p align="center"><sub>A Kerr black hole with a* = 0.6 in the look of <i>Interstellar</i>: like the film, 
+Doppler beaming and gravitational redshift are switched off, which keeps the disk symmetric 
+(<code>templates/gargantua-film.yaml</code>). Every picture on this page is rendered by MoleHole; 
+<code>tools/gen_readme_images.sh</code> re-creates them.</sub></p>
+
+## One hole, four spacetimes
+
+![The same black hole rendered in the Schwarzschild, Kerr, Reissner–Nordström and Kerr–Newman metrics](docs/img/readme/spacetimes.jpg)
+<sub>The same hole, camera and disk; only <code>spacetime.solution</code> changes 
+(<code>templates/four-spacetimes.yaml</code>). Charge pulls the horizon, the photon ring and the 
+innermost stable orbit inwards, so the shadow shrinks and the disk reaches closer (Reissner–Nordström). 
+Spin does the same on the side where the disk comes towards you and makes the shadow lopsided (Kerr). 
+Kerr–Newman has both; its inner edge gets so much hotter that the rest of the disk looks 
+redder by comparison.</sub>
 
 ## Gallery
 
@@ -18,6 +36,9 @@
     <td width="50%"><img src="docs/img/readme/planets.jpg" alt="Textured planets lined up"><br><sub><b>Planets.</b> Textured bodies with rings, each lit by what its own sky probe sees; atmospheres, clouds and terrain are components too.</sub></td>
   </tr>
 </table>
+
+![Miller's planet in front of Gargantua](docs/img/readme/millers-planet.jpg)
+<sub><b>Miller's planet and Gargantua</b>, composed like the film (<code>templates/millers-planet.yaml</code>): the a* = 0.6 hole of the film's images with an ocean world in the foreground, lit by a key light and by what its own sky probe sees of the disk. On its real orbit, only 4 × 10⁻⁵ M outside the horizon of a near-extremal hole, the planet sits in the plane of the disk and the whole sky turns into disk light; <code>templates/interstellar-bodies.yaml</code> renders that view.</sub>
 
 ## See what the renderer does
 
@@ -66,7 +87,7 @@ build/MoleHole
 build/MoleHole --scene templates/gargantua-film.yaml
 ```
 
-Example scenes are in `templates/`: `gargantua-film` (the picture at the top), `gargantua-orbits` (Thorne-limit spin, geodesic bodies), `interstellar-bodies` (Miller's planet near a near-extremal hole), `solar-system-black-hole` (the Sun swapped for a black hole of the same mass, planets on JPL ephemerides), `m1-orbits` (frame dragging on Kerr orbits), `sgr-a-star`, `model-showcase`. Planet maps are not in git: `python3 tools/fetch_textures.py` and `python3 tools/gen_planet_textures.py`.
+Example scenes are in `templates/`: `gargantua-film` (the picture at the top), `four-spacetimes` (one hole with spin and charge, for switching `spacetime.solution`), `millers-planet` (the film composition above), `gargantua-orbits` (Thorne-limit spin, geodesic bodies), `interstellar-bodies` (Miller's planet near a near-extremal hole), `solar-system-black-hole` (the Sun swapped for a black hole of the same mass, planets on JPL ephemerides), `m1-orbits` (frame dragging on Kerr orbits), `sgr-a-star`, `model-showcase`. Planet maps are not in git: `python3 tools/fetch_textures.py` and `python3 tools/gen_planet_textures.py`.
 
 ## Command line
 ```sh
