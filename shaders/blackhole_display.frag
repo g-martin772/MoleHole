@@ -98,13 +98,22 @@ void main() {
         if (u_stageView == 6) {
             vec2 grid = vec2(MOSAIC_COLUMNS, MOSAIC_ROWS);
             ivec2 tile = min(ivec2(floor(TexCoord * grid)), ivec2(MOSAIC_COLUMNS - 1, MOSAIC_ROWS - 1));
-            uv = fract(TexCoord * grid);
+            vec2 local = fract(TexCoord * grid);
             stage = tile.y * MOSAIC_COLUMNS + tile.x + 1;
             if (stage == 6) stage = 0;
             // A one-pixel gap between the tiles
-            vec2 edge = min(uv, 1.0 - uv) * vec2(rt_w, rt_h) / grid;
+            vec2 edge = min(local, 1.0 - local) * vec2(rt_w, rt_h) / grid;
             if (min(edge.x, edge.y) < 0.5) {
                 FragColor = vec4(0.25, 0.25, 0.25, 1.0);
+                gl_FragDepth = STAGE_VIEW_DEPTH;
+                return;
+            }
+            // Each tile shows the whole frame at its own aspect, fitted to the tile width: a tile is 1/COLUMNS of the
+            // width and 1/ROWS of the height, so the frame fills ROWS/COLUMNS of the tile height (letterboxed)
+            float fill = float(MOSAIC_ROWS) / float(MOSAIC_COLUMNS);
+            uv = vec2(local.x, (local.y - 0.5) / fill + 0.5);
+            if (uv.y < 0.0 || uv.y > 1.0) {
+                FragColor = vec4(0.0, 0.0, 0.0, 1.0);
                 gl_FragDepth = STAGE_VIEW_DEPTH;
                 return;
             }
