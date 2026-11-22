@@ -1,11 +1,30 @@
-# MoleHole
+<a id="top"></a>
+<h1 align="center">
+  <img src="assets/branding/molehole.svg" alt="MoleHole logo" width="120">
+  <br>
+  MoleHole
+</h1>
 
-**Real-time black hole rendering and General Relativity sandbox.** 
-MoleHole traces light along the null geodesics of Schwarzschild, Kerr, Reissner–Nordström 
-and Kerr–Newman spacetimes on the GPU, lights an accretion disk from its physical 
-temperature, redshift and Doppler beaming, and lets you build scenes around it in an 
-editor with N-body and rigid-body physics, a visual node graph and Luau scripting. 
-C++23 and Vulkan, built on the separate [`gpp`](https://github.com/g-martin772/gpp) framework.
+<h4 align="center">Real-time black hole rendering and General Relativity sandbox.</h4>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/g-martin772/MoleHole?style=flat-square" alt="License: GPL-3.0"></a>
+  <img src="https://img.shields.io/badge/C%2B%2B-23%20modules-00599C?style=flat-square&logo=cplusplus&logoColor=white" alt="C++23">
+  <img src="https://img.shields.io/badge/Vulkan-compute-AC162C?style=flat-square&logo=vulkan&logoColor=white" alt="Vulkan">
+  <a href="https://github.com/g-martin772/MoleHole/commits/master"><img src="https://img.shields.io/github/last-commit/g-martin772/MoleHole?style=flat-square&logo=github&logoColor=white" alt="Last commit"></a>
+  <a href="https://github.com/g-martin772/MoleHole/stargazers"><img src="https://img.shields.io/github/stars/g-martin772/MoleHole?style=flat-square&logo=github&logoColor=white" alt="Stars"></a>
+</p>
+
+<p align="center">
+  <a href="#-one-hole-four-spacetimes">Spacetimes</a> •
+  <a href="#-gallery">Gallery</a> •
+  <a href="#-see-what-the-renderer-does">Debug tools</a> •
+  <a href="#-features">Features</a> •
+  <a href="#-getting-started">Getting started</a> •
+  <a href="#-command-line">Command line</a> •
+  <a href="#-documentation">Docs</a> •
+  <a href="#-license">License</a>
+</p>
 
 ![Kerr black hole (a* = 0.6) with its lensed accretion disk, in the look of Interstellar](docs/home_picture.png)
 
@@ -14,7 +33,23 @@ Doppler beaming and gravitational redshift are switched off, which keeps the dis
 (<code>templates/gargantua-film.yaml</code>). Every picture on this page is rendered by MoleHole; 
 <code>tools/gen_readme_images.sh</code> re-creates them.</sub></p>
 
-## One hole, four spacetimes
+<table>
+<tr>
+<td>
+
+**MoleHole** traces light along the null geodesics of **Schwarzschild**, **Kerr**, **Reissner–Nordström**
+and **Kerr–Newman** spacetimes on the GPU. It lights an accretion disk from its physical
+temperature, redshift and Doppler beaming, and lets you build scenes around it in an
+editor with N-body and rigid-body physics, a visual node graph and Luau scripting.
+
+Written in C++23 and Vulkan, built on the separate [`gpp`](https://github.com/g-martin772/gpp) framework.
+The 1.0 goal is to [rebuild *Interstellar* scientifically](docs/RELEASE_1_GOAL.md).
+
+</td>
+</tr>
+</table>
+
+## 🌌 One hole, four spacetimes
 
 ![The same black hole rendered in the Schwarzschild, Kerr, Reissner–Nordström and Kerr–Newman metrics](docs/img/readme/spacetimes.jpg)
 <sub>The same hole, camera and disk; only <code>spacetime.solution</code> changes 
@@ -24,7 +59,7 @@ Spin does the same on the side where the disk comes towards you and makes the sh
 Kerr–Newman has both; its inner edge gets so much hotter that the rest of the disk looks 
 redder by comparison.</sub>
 
-## Gallery
+## 📸 Gallery
 
 <table>
   <tr>
@@ -40,23 +75,29 @@ redder by comparison.</sub>
 ![Miller's planet in front of Gargantua](docs/img/readme/millers-planet.jpg)
 <sub><b>Miller's planet and Gargantua</b>, composed like the film (<code>templates/millers-planet.yaml</code>): the a* = 0.6 hole of the film's images with an ocean world in the foreground, lit by a key light and by what its own sky probe sees of the disk. On its real orbit, only 4 × 10⁻⁵ M outside the horizon of a near-extremal hole, the planet sits in the plane of the disk and the whole sky turns into disk light; <code>templates/interstellar-bodies.yaml</code> renders that view.</sub>
 
-## See what the renderer does
+## 🔬 See what the renderer does
 
 MoleHole is built to explain the picture, not only to make it. Apart from the ray inspector, which is a viewport mode, every tool below is a render setting, so it works in the editor, in scripts and in headless exports.
 
 ![Checkerboard sky, disk redshift and image order of the same black hole](docs/img/readme/debug-views.jpg)
 <sub>Left: **checkerboard sky** — a latitude/longitude grid on the celestial sphere; lensing stretches, mirrors and repeats it in ever thinner rings around the shadow. Middle: **redshift** of the disk light — blue where the gas comes towards you, red where it recedes and deep in the gravity well. The scene's film look switches the colour shift off; the debug view still shows the physical one. Right: **image order** — the direct image of the disk (orange), its far side bent around the hole (blue), the photon rings (green, white).</sub>
 
-- **Ray inspector:** click any pixel and its light ray is traced backwards through the metric and drawn into the scene, with its impact parameter, closest approach, windings and the redshift at every disk crossing.
-- **A/B split:** compare two profiles, or one setting on and off (Doppler, redshift, bloom, lensing), on either side of a draggable divider.
-- **Pipeline stages:** look at every intermediate image of the render pipeline with its GPU time.
-- **Tracer diagnostics:** step count heat map, termination reason, geodesic constraint drift, ergosphere and ISCO.
-- **Overlays:** characteristic radii (horizon, ergosphere, photon orbit, ISCO), predicted geodesic orbits, osculating orbits, tidal-tensor axes, gravity grid, collider wireframes.
+| Tool | What it shows |
+|---|---|
+| 🎯 **Ray inspector** | Click any pixel and its light ray is traced backwards through the metric and drawn into the scene, with its impact parameter, closest approach, windings and the redshift at every disk crossing. |
+| ↔ **A/B split** | Two profiles, or one setting on and off (Doppler, redshift, bloom, lensing), on either side of a draggable divider. |
+| 🧩 **Pipeline stages** | Every intermediate image of the render pipeline with its GPU time. |
+| 🩺 **Tracer diagnostics** | Step count heat map, termination reason, geodesic constraint drift, ergosphere and ISCO. |
+| ⭕ **Overlays** | Characteristic radii (horizon, ergosphere, photon orbit, ISCO), predicted geodesic orbits, osculating orbits, tidal-tensor axes, gravity grid, collider wireframes. |
 
 ![All stages of the render pipeline side by side](docs/img/readme/pipeline-mosaic.jpg)
 <sub>The pipeline-stage mosaic: traced image, bloom bright pass, bloom, lens flare, everything post-processing adds, and the final frame (bloom and flares switched on for this picture; the film look keeps them off).</sub>
 
-## Features
+## ✨ Features
+
+<table>
+<tr>
+<td width="50%" valign="top">
 
 **Physics**
 - Null geodesics of the full Kerr–Newman family, integrated on the GPU in f32 or f64; an analytic lens for interactive frame rates and straight rays for editing
@@ -65,55 +106,148 @@ MoleHole is built to explain the picture, not only to make it. Apart from the ra
 - Bodies on exact timelike geodesics, N-body gravity with 1PN corrections, PhysX rigid bodies, tidal forces
 - SI units everywhere; near-extremal holes (a* up to 1 − 10⁻¹⁴) stay accurate
 
+</td>
+<td width="50%" valign="top">
+
 **Editor**
 - Scene outliner and inspector generated from reflected components, undo/redo, gizmos, camera bookmarks
 - Render profiles (Flat, Lensed, Traced, Reference) with every setting searchable, cost-rated and scriptable
 - Visual animation graph that transpiles to Luau, Luau script components, hot-reloaded UI plugins and shaders
 - Headless image, video and PNG-sequence export, each with a sidecar of every resolved setting for reproducibility
 
-## Build
-Needs `VCPKG_ROOT`, CMake >= 4.4, Ninja and GCC 16 (`import std`). The `gpp` framework is expected at `dependencies/gpp`.
+</td>
+</tr>
+</table>
+
+### Render profiles
+
+One scene, four built-in quality levels; pick per context (editing, playing, export) or fork your own.
+
+|                     | Flat              | Lensed               | Traced                  | Reference                        |
+|---------------------|:-----------------:|:--------------------:|:-----------------------:|:--------------------------------:|
+| **Light rays**      | straight          | analytic lens        | integrated geodesics    | integrated geodesics             |
+| **Step / max steps**| –                 | –                    | 0.05 / 4 000            | 0.01 / 100 000                   |
+| **Extras**          | no bloom          | bloom, lens flare    |                         | volumetric disk, no lens flare   |
+| **Cost**            | real time         | real time            | seconds per frame       | minutes per frame                |
+| **Made for**        | editing, placing  | interactive default  | cinematic preview       | final renders                    |
+
+## 🚀 Getting started
+
+> [!NOTE]
+> Needs `VCPKG_ROOT`, CMake ≥ 4.4, Ninja, a Vulkan driver and GCC 16 (`import std`).
+> The [`gpp`](https://github.com/g-martin772/gpp) framework is expected at `dependencies/gpp`.
 
 ```sh
+# Clone MoleHole and the gpp framework next to it
+git clone https://github.com/g-martin772/MoleHole.git && cd MoleHole
+git clone https://github.com/g-martin772/gpp.git dependencies/gpp
+
+# Configure and build (Debug, into build/)
 cmake --preset vcpkg && cmake --build --preset vcpkg
+
+# Run the tests
 build/molehole_tests
-```
 
-## Run
-From the repository root:
-
-```sh
+# Start the editor, empty or with a scene (from the repository root)
 build/MoleHole
 build/MoleHole --scene templates/gargantua-film.yaml
 ```
 
-Example scenes are in `templates/`: `gargantua-film` (the picture at the top), `four-spacetimes` (one hole with spin and charge, for switching `spacetime.solution`), `millers-planet` (the film composition above), `gargantua-orbits` (Thorne-limit spin, geodesic bodies), `interstellar-bodies` (Miller's planet near a near-extremal hole), `solar-system-black-hole` (the Sun swapped for a black hole of the same mass, planets on JPL ephemerides), `m1-orbits` (frame dragging on Kerr orbits), `sgr-a-star`, `model-showcase`. Planet maps are not in git: `python3 tools/fetch_textures.py` and `python3 tools/gen_planet_textures.py`.
+<details open>
+<summary><b>Example scenes</b> in <code>templates/</code></summary>
+<br>
 
-## Command line
+| Scene | What it shows |
+|---|---|
+| `gargantua-film` | the picture at the top |
+| `four-spacetimes` | one hole with spin and charge, for switching `spacetime.solution` |
+| `millers-planet` | the film composition above |
+| `gargantua-orbits` | Thorne-limit spin, geodesic bodies |
+| `interstellar-bodies` | Miller's planet near a near-extremal hole |
+| `solar-system-black-hole` | the Sun swapped for a black hole of the same mass, planets on JPL ephemerides |
+| `m1-orbits` | frame dragging on Kerr orbits |
+| `sgr-a-star` | Sagittarius A*, a scale test |
+| `model-showcase` | glTF models and textured planets |
+
+</details>
+
+> [!TIP]
+> Planet maps are not in git. Fetch them with `python3 tools/fetch_textures.py` and `python3 tools/gen_planet_textures.py` before opening the scenes with planets.
+
+## 💻 Command line
+
 ```sh
+# Headless still from the scene's own camera
 build/MoleHole --export-image out.png --width 1920 --height 1080 --scene templates/gargantua-film.yaml --scene-camera
+
+# Pick a profile and override any setting
 build/MoleHole --export-image out.png --profile Traced --set debug.view=Redshift
-build/MoleHole --export-image out.png --set compare.profile=Flat            # A/B split in an export
+
+# A/B split in an export
+build/MoleHole --export-image out.png --set compare.profile=Flat
+
+# Video (needs ffmpeg)
 build/MoleHole --export-video out.mp4 --duration 10 --fps 60
+```
+
+<details>
+<summary><b>Simulation, validation and introspection</b></summary>
+<br>
+
+```sh
+# Run the simulation without rendering and write the final state
 build/MoleHole --simulate templates/dev.yaml --ticks 600 --out state.yaml
+
+# Check a scene without opening a window (exit 1 on errors)
 build/MoleHole --validate-scene templates/dev.yaml
+
+# Every render setting key, and the scene schema
 build/MoleHole --list-settings
 build/MoleHole --dump-schema
 ```
 
+</details>
+
 Exports write a `.render.yaml` sidecar with every resolved setting next to the output. All flags and exit codes: [docs/export-instructions.md](docs/export-instructions.md).
 
-## Documentation
-- [User guide](docs/USER_GUIDE.md): windows, keybinds, render profiles, debug tools, components, animation graph, scripting, exports
-- [Developer guide](docs/DEV_GUIDE.md): architecture, units, adding components and render settings
-- [Export instructions](docs/export-instructions.md)
-- [Release 1.0 goal](docs/RELEASE_1_GOAL.md): recreating *Interstellar* scientifically
-- Physics notes in [`docs/notes/`](docs/notes) and the project paper in [`docs/paper/`](docs/paper)
+## 📚 Documentation
 
-## Layout
+| | |
+|---|---|
+| [User guide](docs/USER_GUIDE.md) | windows, keybinds, render profiles, debug tools, components, animation graph, scripting, exports |
+| [Developer guide](docs/DEV_GUIDE.md) | architecture, units, adding components and render settings |
+| [Export instructions](docs/export-instructions.md) | headless rendering, flags, exit codes |
+| [Release 1.0 goal](docs/RELEASE_1_GOAL.md) | recreating *Interstellar* scientifically |
+| [`docs/notes/`](docs/notes) · [`docs/paper/`](docs/paper) | physics notes and the project paper |
+
+<details>
+<summary><b>Repository layout</b></summary>
+<br>
+
 - `src/` app code as C++ modules, `plugins/` hot-reloadable UI layers
 - `scripts/` Luau script components, `combos/` graph templates, `templates/` example scenes, `shaders/`
 - `tests/unit/` Catch2 tests, `tools/` data generators, benchmarks and `gen_readme_images.sh`
 
-## License
-[GPL-3.0](LICENSE)
+</details>
+
+## 🧱 Built with
+
+[gpp](https://github.com/g-martin772/gpp) ·
+[Vulkan](https://www.vulkan.org/) ·
+[SDL3](https://github.com/libsdl-org/SDL) ·
+[Dear ImGui](https://github.com/ocornut/imgui) ·
+[EnTT](https://github.com/skypjack/entt) ·
+[PhysX](https://github.com/NVIDIA-Omniverse/PhysX) ·
+[Luau](https://github.com/luau-lang/luau) ·
+[GLM](https://github.com/g-truc/glm) ·
+[yaml-cpp](https://github.com/jbeder/yaml-cpp) ·
+[tinygltf](https://github.com/syoyo/tinygltf) ·
+[Catch2](https://github.com/catchorg/Catch2)
+
+## 📜 License
+
+MoleHole is free software under the [GPL-3.0](LICENSE).
+
+---
+
+<p align="center"><a href="#top">Back to top ↑</a></p>
